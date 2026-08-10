@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1550" viewBox="0 0 2400 1550" role="img" aria-labelledby="idx-title idx-desc">
+  <title id="idx-title">RanaMinder J-01 至 J-05 核心交互旅程索引</title>
+  <desc id="idx-desc">五条可点击低保真核心旅程；每个步骤链接到对应页面画板。</desc>
+  <style>
+    .bg{fill:#f2f0ea}.lane{fill:#faf9f5;stroke:#626c72;stroke-width:2}.node{fill:#fff;stroke:#30383d;stroke-width:2}.node:hover{fill:#e6eaeb}.arrow{stroke:#444e54;stroke-width:2;fill:none;marker-end:url(#arrow)}.title{font:700 32px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#20262a}.subtitle{font:15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#59636a}.laneTitle{font:700 22px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22292e}.body{font:14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#4a545a}.note{font:13px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#59636a}.nodeNum{font:700 13px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#6b747a}.nodeTitle{font:600 15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#242b2f}.micro{font:12px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#687178}.support{fill:#e4e1d9;stroke:#626c72;stroke-width:2}.link{font:600 16px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#232a2f;text-decoration:underline}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#444e54"/></marker></defs>
+  <rect width="2400" height="1550" class="bg"/>
+  <text x="40" y="58" class="title">RanaMinder · 核心交互旅程索引</text>
+  <text x="40" y="92" class="subtitle">J-01 至 J-05 · 点击步骤进入对应 PB-* 低保真画板 · 页面结果与授权始终以上游需求和服务端权威状态为准</text>
+  <text x="40" y="122" class="subtitle">43 个页面共用稳定画板 ID；同一页面只维护一个源画板，跨旅程通过链接复用。高保真和独立移动视觉稿由外部绘制。</text>
+  <g id="J-01" aria-label="J-01 首次登录可点击旅程">
+    <rect x="40" y="170" width="2320" height="210" rx="12" class="lane"/>
+    <text x="70" y="212" class="laneTitle">J-01 · 首次登录</text>
+    <text x="70" y="244" class="body">访客 / 首次登录用户</text>
+    <text x="70" y="336" class="note">P-GEN-03 为依赖不可用分支</text><path d="M 715 275 H 731" class="arrow"/><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-IDN-01" tabindex="0" aria-label="打开 P-IDN-01 登录画板">
+      <rect id="LINK-J-01-1" x="330" y="228" width="385" height="96" rx="9" class="node"/>
+      <text x="344" y="260" class="nodeNum">1</text>
+      <text x="344" y="288" class="nodeTitle">登录</text>
+      <text x="344" y="312" class="micro">P-IDN-01</text>
+    </a><path d="M 1116 275 H 1132" class="arrow"/><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-GEN-04" tabindex="0" aria-label="打开 P-GEN-04 资料门拦截画板">
+      <rect id="LINK-J-01-2" x="731" y="228" width="385" height="96" rx="9" class="node"/>
+      <text x="745" y="260" class="nodeNum">2</text>
+      <text x="745" y="288" class="nodeTitle">资料门拦截</text>
+      <text x="745" y="312" class="micro">P-GEN-04</text>
+    </a><path d="M 1517 275 H 1533" class="arrow"/><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-IDN-02" tabindex="0" aria-label="打开 P-IDN-02 个人资料画板">
+      <rect id="LINK-J-01-3" x="1132" y="228" width="385" height="96" rx="9" class="node"/>
+      <text x="1146" y="260" class="nodeNum">3</text>
+      <text x="1146" y="288" class="nodeTitle">个人资料</text>
+      <text x="1146" y="312" class="micro">P-IDN-02</text>
+    </a><path d="M 1918 275 H 1934" class="arrow"/><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-IDN-03" tabindex="0" aria-label="打开 P-IDN-03 全局个人中心画板">
+      <rect id="LINK-J-01-4" x="1533" y="228" width="385" height="96" rx="9" class="node"/>
+      <text x="1547" y="260" class="nodeNum">4</text>
+      <text x="1547" y="288" class="nodeTitle">全局个人中心</text>
+      <text x="1547" y="312" class="micro">P-IDN-03</text>
+    </a><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-GEN-03" tabindex="0" aria-label="打开 P-GEN-03 维护/故障降级画板">
+      <rect id="LINK-J-01-5" x="1934" y="228" width="385" height="96" rx="9" class="node"/>
+      <text x="1948" y="260" class="nodeNum">5</text>
+      <text x="1948" y="288" class="nodeTitle">维护/故障降级</text>
+      <text x="1948" y="312" class="micro">P-GEN-03</text>
+    </a></g>
+<g id="J-02" aria-label="J-02 普通招新可点击旅程">
+    <rect x="40" y="420" width="2320" height="210" rx="12" class="lane"/>
+    <text x="70" y="462" class="laneTitle">J-02 · 普通招新</text>
+    <text x="70" y="494" class="body">申请人 / 面试官 / 招新管理者</text>
+    <text x="70" y="586" class="note">评价与邀请使用管理者分支</text><path d="M 600 525 H 616" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-REC-08" tabindex="0" aria-label="打开 P-REC-08 公开活动详情画板">
+      <rect id="LINK-J-02-1" x="330" y="478" width="270" height="96" rx="9" class="node"/>
+      <text x="344" y="510" class="nodeNum">1</text>
+      <text x="344" y="538" class="nodeTitle">公开活动详情</text>
+      <text x="344" y="562" class="micro">P-REC-08</text>
+    </a><path d="M 886 525 H 902" class="arrow"/><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-GEN-04" tabindex="0" aria-label="打开 P-GEN-04 资料门拦截画板">
+      <rect id="LINK-J-02-2" x="616" y="478" width="270" height="96" rx="9" class="node"/>
+      <text x="630" y="510" class="nodeNum">2</text>
+      <text x="630" y="538" class="nodeTitle">资料门拦截</text>
+      <text x="630" y="562" class="micro">P-GEN-04</text>
+    </a><path d="M 1172 525 H 1188" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-REC-03" tabindex="0" aria-label="打开 P-REC-03 普通报名申请画板">
+      <rect id="LINK-J-02-3" x="902" y="478" width="270" height="96" rx="9" class="node"/>
+      <text x="916" y="510" class="nodeNum">3</text>
+      <text x="916" y="538" class="nodeTitle">普通报名申请</text>
+      <text x="916" y="562" class="micro">P-REC-03</text>
+    </a><path d="M 1458 525 H 1474" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-REC-04" tabindex="0" aria-label="打开 P-REC-04 普通面试排期画板">
+      <rect id="LINK-J-02-4" x="1188" y="478" width="270" height="96" rx="9" class="node"/>
+      <text x="1202" y="510" class="nodeNum">4</text>
+      <text x="1202" y="538" class="nodeTitle">普通面试排期</text>
+      <text x="1202" y="562" class="micro">P-REC-04</text>
+    </a><path d="M 1744 525 H 1760" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-REC-05" tabindex="0" aria-label="打开 P-REC-05 普通评价与结论画板">
+      <rect id="LINK-J-02-5" x="1474" y="478" width="270" height="96" rx="9" class="node"/>
+      <text x="1488" y="510" class="nodeNum">5</text>
+      <text x="1488" y="538" class="nodeTitle">普通评价与结论</text>
+      <text x="1488" y="562" class="micro">P-REC-05</text>
+    </a><path d="M 2030 525 H 2046" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-REC-06" tabindex="0" aria-label="打开 P-REC-06 普通录取邀请画板">
+      <rect id="LINK-J-02-6" x="1760" y="478" width="270" height="96" rx="9" class="node"/>
+      <text x="1774" y="510" class="nodeNum">6</text>
+      <text x="1774" y="538" class="nodeTitle">普通录取邀请</text>
+      <text x="1774" y="562" class="micro">P-REC-06</text>
+    </a><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-IDN-03" tabindex="0" aria-label="打开 P-IDN-03 全局个人中心画板">
+      <rect id="LINK-J-02-7" x="2046" y="478" width="270" height="96" rx="9" class="node"/>
+      <text x="2060" y="510" class="nodeNum">7</text>
+      <text x="2060" y="538" class="nodeTitle">全局个人中心</text>
+      <text x="2060" y="562" class="micro">P-IDN-03</text>
+    </a></g>
+<g id="J-03" aria-label="J-03 联合面试可点击旅程">
+    <rect x="40" y="670" width="2320" height="210" rx="12" class="lane"/>
+    <text x="70" y="712" class="laneTitle">J-03 · 联合面试</text>
+    <text x="70" y="744" class="body">参与社团 / 申请人 / 联合面试官</text>
+    <text x="70" y="836" class="note">各社团结论与邀请保持独立</text><path d="M 600 775 H 616" class="arrow"/><a href="J-03-联合面试-低保真状态画板-v1.0.svg#PB-JNT-01" tabindex="0" aria-label="打开 P-JNT-01 联合活动发起与管理画板">
+      <rect id="LINK-J-03-1" x="330" y="728" width="270" height="96" rx="9" class="node"/>
+      <text x="344" y="760" class="nodeNum">1</text>
+      <text x="344" y="788" class="nodeTitle">联合活动发起与管理</text>
+      <text x="344" y="812" class="micro">P-JNT-01</text>
+    </a><path d="M 886 775 H 902" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-REC-08" tabindex="0" aria-label="打开 P-REC-08 公开活动详情画板">
+      <rect id="LINK-J-03-2" x="616" y="728" width="270" height="96" rx="9" class="node"/>
+      <text x="630" y="760" class="nodeNum">2</text>
+      <text x="630" y="788" class="nodeTitle">公开活动详情</text>
+      <text x="630" y="812" class="micro">P-REC-08</text>
+    </a><path d="M 1172 775 H 1188" class="arrow"/><a href="J-03-联合面试-低保真状态画板-v1.0.svg#PB-JNT-02" tabindex="0" aria-label="打开 P-JNT-02 联合共享同意与报名画板">
+      <rect id="LINK-J-03-3" x="902" y="728" width="270" height="96" rx="9" class="node"/>
+      <text x="916" y="760" class="nodeNum">3</text>
+      <text x="916" y="788" class="nodeTitle">联合共享同意与报名</text>
+      <text x="916" y="812" class="micro">P-JNT-02</text>
+    </a><path d="M 1458 775 H 1474" class="arrow"/><a href="J-03-联合面试-低保真状态画板-v1.0.svg#PB-JNT-03" tabindex="0" aria-label="打开 P-JNT-03 联合面试排期与评价画板">
+      <rect id="LINK-J-03-4" x="1188" y="728" width="270" height="96" rx="9" class="node"/>
+      <text x="1202" y="760" class="nodeNum">4</text>
+      <text x="1202" y="788" class="nodeTitle">联合面试排期与评价</text>
+      <text x="1202" y="812" class="micro">P-JNT-03</text>
+    </a><path d="M 1744 775 H 1760" class="arrow"/><a href="J-03-联合面试-低保真状态画板-v1.0.svg#PB-JNT-04" tabindex="0" aria-label="打开 P-JNT-04 联合结论与邀请画板">
+      <rect id="LINK-J-03-5" x="1474" y="728" width="270" height="96" rx="9" class="node"/>
+      <text x="1488" y="760" class="nodeNum">5</text>
+      <text x="1488" y="788" class="nodeTitle">联合结论与邀请</text>
+      <text x="1488" y="812" class="micro">P-JNT-04</text>
+    </a><path d="M 2030 775 H 2046" class="arrow"/><a href="J-03-联合面试-低保真状态画板-v1.0.svg#PB-JNT-05" tabindex="0" aria-label="打开 P-JNT-05 联合活动结束确认画板">
+      <rect id="LINK-J-03-6" x="1760" y="728" width="270" height="96" rx="9" class="node"/>
+      <text x="1774" y="760" class="nodeNum">6</text>
+      <text x="1774" y="788" class="nodeTitle">联合活动结束确认</text>
+      <text x="1774" y="812" class="micro">P-JNT-05</text>
+    </a><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-IDN-03" tabindex="0" aria-label="打开 P-IDN-03 全局个人中心画板">
+      <rect id="LINK-J-03-7" x="2046" y="728" width="270" height="96" rx="9" class="node"/>
+      <text x="2060" y="760" class="nodeNum">7</text>
+      <text x="2060" y="788" class="nodeTitle">全局个人中心</text>
+      <text x="2060" y="812" class="micro">P-IDN-03</text>
+    </a></g>
+<g id="J-04" aria-label="J-04 成员换届可点击旅程">
+    <rect x="40" y="920" width="2320" height="210" rx="12" class="lane"/>
+    <text x="70" y="962" class="laneTitle">J-04 · 成员换届</text>
+    <text x="70" y="994" class="body">负责人 / 人事 / 成员</text>
+    <text x="70" y="1086" class="note">部分失败不回滚已成功新任</text><path d="M 648 1025 H 664" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-ORG-02" tabindex="0" aria-label="打开 P-ORG-02 管理工作台画板">
+      <rect id="LINK-J-04-1" x="330" y="978" width="318" height="96" rx="9" class="node"/>
+      <text x="344" y="1010" class="nodeNum">1</text>
+      <text x="344" y="1038" class="nodeTitle">管理工作台</text>
+      <text x="344" y="1062" class="micro">P-ORG-02</text>
+    </a><path d="M 982 1025 H 998" class="arrow"/><a href="J-04-成员换届-低保真状态画板-v1.0.svg#PB-MEM-06" tabindex="0" aria-label="打开 P-MEM-06 换届管理画板">
+      <rect id="LINK-J-04-2" x="664" y="978" width="318" height="96" rx="9" class="node"/>
+      <text x="678" y="1010" class="nodeNum">2</text>
+      <text x="678" y="1038" class="nodeTitle">换届管理</text>
+      <text x="678" y="1062" class="micro">P-MEM-06</text>
+    </a><path d="M 1316 1025 H 1332" class="arrow"/><a href="J-04-成员换届-低保真状态画板-v1.0.svg#PB-MEM-04" tabindex="0" aria-label="打开 P-MEM-04 任命调岗免职画板">
+      <rect id="LINK-J-04-3" x="998" y="978" width="318" height="96" rx="9" class="node"/>
+      <text x="1012" y="1010" class="nodeNum">3</text>
+      <text x="1012" y="1038" class="nodeTitle">任命调岗免职</text>
+      <text x="1012" y="1062" class="micro">P-MEM-04</text>
+    </a><path d="M 1650 1025 H 1666" class="arrow"/><a href="J-04-成员换届-低保真状态画板-v1.0.svg#PB-MEM-01" tabindex="0" aria-label="打开 P-MEM-01 成员经历与任期画板">
+      <rect id="LINK-J-04-4" x="1332" y="978" width="318" height="96" rx="9" class="node"/>
+      <text x="1346" y="1010" class="nodeNum">4</text>
+      <text x="1346" y="1038" class="nodeTitle">成员经历与任期</text>
+      <text x="1346" y="1062" class="micro">P-MEM-01</text>
+    </a><path d="M 1984 1025 H 2000" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-NTF-01" tabindex="0" aria-label="打开 P-NTF-01 站内信中心画板">
+      <rect id="LINK-J-04-5" x="1666" y="978" width="318" height="96" rx="9" class="node"/>
+      <text x="1680" y="1010" class="nodeNum">5</text>
+      <text x="1680" y="1038" class="nodeTitle">站内信中心</text>
+      <text x="1680" y="1062" class="micro">P-NTF-01</text>
+    </a><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-IDN-03" tabindex="0" aria-label="打开 P-IDN-03 全局个人中心画板">
+      <rect id="LINK-J-04-6" x="2000" y="978" width="318" height="96" rx="9" class="node"/>
+      <text x="2014" y="1010" class="nodeNum">6</text>
+      <text x="2014" y="1038" class="nodeTitle">全局个人中心</text>
+      <text x="2014" y="1062" class="micro">P-IDN-03</text>
+    </a></g>
+<g id="J-05" aria-label="J-05 招新发现可点击旅程">
+    <rect x="40" y="1170" width="2320" height="210" rx="12" class="lane"/>
+    <text x="70" y="1212" class="laneTitle">J-05 · 招新发现</text>
+    <text x="70" y="1244" class="body">访客 / 学生</text>
+    <text x="70" y="1336" class="note">普通与联合报名在资料门后分流</text><path d="M 715 1275 H 731" class="arrow"/><a href="J-05-招新发现-低保真状态画板-v1.0.svg#PB-REC-07" tabindex="0" aria-label="打开 P-REC-07 招新公开目录画板">
+      <rect id="LINK-J-05-1" x="330" y="1228" width="385" height="96" rx="9" class="node"/>
+      <text x="344" y="1260" class="nodeNum">1</text>
+      <text x="344" y="1288" class="nodeTitle">招新公开目录</text>
+      <text x="344" y="1312" class="micro">P-REC-07</text>
+    </a><path d="M 1116 1275 H 1132" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-REC-08" tabindex="0" aria-label="打开 P-REC-08 公开活动详情画板">
+      <rect id="LINK-J-05-2" x="731" y="1228" width="385" height="96" rx="9" class="node"/>
+      <text x="745" y="1260" class="nodeNum">2</text>
+      <text x="745" y="1288" class="nodeTitle">公开活动详情</text>
+      <text x="745" y="1312" class="micro">P-REC-08</text>
+    </a><path d="M 1517 1275 H 1533" class="arrow"/><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-GEN-04" tabindex="0" aria-label="打开 P-GEN-04 资料门拦截画板">
+      <rect id="LINK-J-05-3" x="1132" y="1228" width="385" height="96" rx="9" class="node"/>
+      <text x="1146" y="1260" class="nodeNum">3</text>
+      <text x="1146" y="1288" class="nodeTitle">资料门拦截</text>
+      <text x="1146" y="1312" class="micro">P-GEN-04</text>
+    </a><path d="M 1918 1275 H 1934" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-REC-03" tabindex="0" aria-label="打开 P-REC-03 普通报名申请画板">
+      <rect id="LINK-J-05-4" x="1533" y="1228" width="385" height="96" rx="9" class="node"/>
+      <text x="1547" y="1260" class="nodeNum">4</text>
+      <text x="1547" y="1288" class="nodeTitle">普通报名申请</text>
+      <text x="1547" y="1312" class="micro">P-REC-03</text>
+    </a><a href="J-03-联合面试-低保真状态画板-v1.0.svg#PB-JNT-02" tabindex="0" aria-label="打开 P-JNT-02 联合共享同意与报名画板">
+      <rect id="LINK-J-05-5" x="1934" y="1228" width="385" height="96" rx="9" class="node"/>
+      <text x="1948" y="1260" class="nodeNum">5</text>
+      <text x="1948" y="1288" class="nodeTitle">联合共享同意与报名</text>
+      <text x="1948" y="1312" class="micro">P-JNT-02</text>
+    </a></g>
+  <g id="SUPPORT-ASSET">
+    <rect x="40" y="1425" width="2320" height="82" rx="10" class="support"/>
+    <text x="70" y="1460" class="body">支撑与平台页面：17 个非核心旅程画板，包括组织接入、成员关系、表单、通知、审计、统计、配置、运维与通用安全收口。</text>
+    <a href="S-01-支撑与平台页面-低保真状态画板-v1.0.svg" tabindex="0" aria-label="打开支撑与平台页面画板"><text x="70" y="1490" class="link">打开 S-01 支撑与平台页面画板 →</text></a>
+  </g>
+  <text x="1850" y="1534" class="micro">正式低保真设计基线 · 代码开工门关闭</text>
+</svg>

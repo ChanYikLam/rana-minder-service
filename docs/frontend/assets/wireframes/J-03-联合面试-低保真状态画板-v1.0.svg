@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="2260" viewBox="0 0 2400 2260" role="img" aria-labelledby="asset-title asset-desc">
+  <title id="asset-title">RanaMinder J-03 联合面试低保真状态画板</title>
+  <desc id="asset-desc">5 个页面主低保真帧及正常、加载、空数据、失败、无权限五状态；高保真与独立移动视觉稿由外部绘制。</desc>
+  <style>
+    .bg{fill:#f2f0ea}.ink{fill:#22272b}.muted{fill:#667078}.board{fill:#faf9f5;stroke:#68727a;stroke-width:2}.frame{fill:#ffffff;stroke:#2d3439;stroke-width:2}.chrome{fill:#d9dde0}.ghost{fill:#eef0f1;stroke:#9aa2a8;stroke-width:1.5}.solid{fill:#39434a}.danger{fill:#676164}.flowbar{fill:#e5e2da;stroke:#747d83;stroke-width:1.5}.flowNode{fill:#fff;stroke:#333b40;stroke-width:2}.flowNode:hover{fill:#e8ebec}.arrow{stroke:#4a545a;stroke-width:2;marker-end:url(#arrow);fill:none}.state{fill:#fff;stroke-width:2}.stateN{stroke:#4d565c}.stateL{stroke:#7c858b;stroke-dasharray:6 4}.stateE{stroke:#90979c}.stateF{stroke:#5b5050}.stateA{stroke:#363b3f;stroke-dasharray:3 3}.title{font:700 29px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b}.subtitle{font:15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#59636a}.boardTitle{font:700 18px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b}.label{font:600 17px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#2c3338}.nodeTitle{font:600 14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b}.body{font:15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#404a50}.stateTitle{font:700 15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#252b2f}.stateBody{font:13px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#3f484e}.overlay{font:12px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#273036}.micro{font:11px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#59636a}.linkText{font:600 14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b;text-decoration:underline}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4a545a"/></marker></defs>
+  <rect width="2400" height="2260" class="bg"/>
+  <text x="40" y="48" class="title">J-03 联合面试 · 低保真状态画板</text>
+  <text x="40" y="78" class="subtitle">5 个唯一页面 · 每页 1 个主低保真帧 + N/L/E/F/A 五状态 · 响应式以行为注释验收</text>
+  <a href="核心交互旅程索引-v1.0.svg" tabindex="0" aria-label="返回核心交互旅程索引"><text x="2070" y="48" class="linkText">← 核心旅程索引</text></a>
+  <g aria-label="J-03 联合面试可点击旅程"><path d="M 391 157 H 409" class="arrow"/><a href="#PB-JNT-01" tabindex="0" aria-label="打开 P-JNT-01 联合活动发起与管理">
+      <rect id="STEP-J-03-1" x="90" y="122" width="301" height="70" rx="8" class="flowNode"/>
+      <text x="104" y="149" class="nodeTitle">1 · 联合活动发起与管理</text>
+      <text x="104" y="176" class="micro">P-JNT-01</text>
+    </a><path d="M 710 157 H 728" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-REC-08" tabindex="0" aria-label="打开 P-REC-08 公开活动详情">
+      <rect id="STEP-J-03-2" x="409" y="122" width="301" height="70" rx="8" class="flowNode"/>
+      <text x="423" y="149" class="nodeTitle">2 · 公开活动详情</text>
+      <text x="423" y="176" class="micro">P-REC-08</text>
+    </a><path d="M 1029 157 H 1047" class="arrow"/><a href="#PB-JNT-02" tabindex="0" aria-label="打开 P-JNT-02 联合共享同意与报名">
+      <rect id="STEP-J-03-3" x="728" y="122" width="301" height="70" rx="8" class="flowNode"/>
+      <text x="742" y="149" class="nodeTitle">3 · 联合共享同意与报名</text>
+      <text x="742" y="176" class="micro">P-JNT-02</text>
+    </a><path d="M 1348 157 H 1366" class="arrow"/><a href="#PB-JNT-03" tabindex="0" aria-label="打开 P-JNT-03 联合面试排期与评价">
+      <rect id="STEP-J-03-4" x="1047" y="122" width="301" height="70" rx="8" class="flowNode"/>
+      <text x="1061" y="149" class="nodeTitle">4 · 联合面试排期与评价</text>
+      <text x="1061" y="176" class="micro">P-JNT-03</text>
+    </a><path d="M 1667 157 H 1685" class="arrow"/><a href="#PB-JNT-04" tabindex="0" aria-label="打开 P-JNT-04 联合结论与邀请">
+      <rect id="STEP-J-03-5" x="1366" y="122" width="301" height="70" rx="8" class="flowNode"/>
+      <text x="1380" y="149" class="nodeTitle">5 · 联合结论与邀请</text>
+      <text x="1380" y="176" class="micro">P-JNT-04</text>
+    </a><path d="M 1986 157 H 2004" class="arrow"/><a href="#PB-JNT-05" tabindex="0" aria-label="打开 P-JNT-05 联合活动结束确认">
+      <rect id="STEP-J-03-6" x="1685" y="122" width="301" height="70" rx="8" class="flowNode"/>
+      <text x="1699" y="149" class="nodeTitle">6 · 联合活动结束确认</text>
+      <text x="1699" y="176" class="micro">P-JNT-05</text>
+    </a><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-IDN-03" tabindex="0" aria-label="打开 P-IDN-03 全局个人中心">
+      <rect id="STEP-J-03-7" x="2004" y="122" width="301" height="70" rx="8" class="flowNode"/>
+      <text x="2018" y="149" class="nodeTitle">7 · 全局个人中心</text>
+      <text x="2018" y="176" class="micro">P-IDN-03</text>
+    </a></g>
+  <g id="PB-JNT-01" aria-label="P-JNT-01 联合活动发起与管理低保真画板">
+    <rect x="20" y="225" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="256" class="boardTitle">P-JNT-01 · 联合活动发起与管理</text>
+    <text x="360" y="256" class="micro">画板 PB-JNT-01　变体：发起确认、成立后管理</text>
+    <g id="PB-JNT-01-D" aria-label="主低保真帧">
+      <rect x="40" y="277" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="291" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="314" class="micro">全局导航　/　联合活动发起与管理　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="346" width="828" height="38" rx="5" class="ghost"/>
+<rect x="76" y="399" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="444" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="489" width="828" height="34" rx="4" class="ghost"/>
+<text x="78" y="555" class="micro">筛选栏 · 状态摘要 · 数据列表/卡片 · 分页 · 详情抽屉</text>
+      <text x="82" y="336" class="overlay"><tspan x="82" dy="0">正常态：展示发起、参与社团确认、公布与联</tspan><tspan x="82" dy="21">合通道管理</tspan></text>
+      <text x="82" y="408" class="overlay"><tspan x="82" dy="0">响应式：筛选收纳为抽屉；</tspan><tspan x="82" dy="21">数据行转卡片；</tspan><tspan x="82" dy="21">行级动作与状态原因必须保留。</tspan></text>
+      <text x="462" y="408" class="overlay"><tspan x="462" dy="0">授权收口：非参与社团负责人/人事或超管既</tspan><tspan x="462" dy="21">有异常边界外拒绝</tspan></text>
+    </g><g id="EV-JNT-01-N" aria-label="P-JNT-01 正常状态">
+      <rect x="960" y="277" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="307" class="stateTitle">N · 正常</text>
+      <text x="976" y="337" class="stateBody"><tspan x="976" dy="0">展示发起、参与社团确认、公布</tspan><tspan x="976" dy="22">与联合通道管理</tspan></text>
+    </g><g id="EV-JNT-01-L" aria-label="P-JNT-01 加载状态">
+      <rect x="1240" y="277" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="307" class="stateTitle">L · 加载</text>
+      <text x="1256" y="337" class="stateBody"><tspan x="1256" dy="0">活动、确认列表或通道命令加载</tspan></text>
+    </g><g id="EV-JNT-01-E" aria-label="P-JNT-01 空数据状态">
+      <rect x="1520" y="277" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="307" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="337" class="stateBody"><tspan x="1536" dy="0">无既有活动时展示发起入口；</tspan><tspan x="1536" dy="22">无合格参与社团时说明条件</tspan></text>
+    </g><g id="EV-JNT-01-F" aria-label="P-JNT-01 失败状态">
+      <rect x="1800" y="277" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="307" class="stateTitle">F · 失败</text>
+      <text x="1816" y="337" class="stateBody"><tspan x="1816" dy="0">名单变化、确认竞争或通道命令</tspan><tspan x="1816" dy="22">失败后刷新权威版本</tspan></text>
+    </g><g id="EV-JNT-01-A" aria-label="P-JNT-01 无权限状态">
+      <rect x="2080" y="277" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="307" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="337" class="stateBody"><tspan x="2096" dy="0">非参与社团负责人/人事或超管</tspan><tspan x="2096" dy="22">既有异常边界外拒绝</tspan></text>
+    </g></g>
+<g id="PB-JNT-02" aria-label="P-JNT-02 联合共享同意与报名低保真画板">
+    <rect x="20" y="615" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="646" class="boardTitle">P-JNT-02 · 联合共享同意与报名</text>
+    <text x="360" y="646" class="micro">画板 PB-JNT-02　变体：说明阅读、主动同意、草稿、正式提交</text>
+    <g id="PB-JNT-02-D" aria-label="主低保真帧">
+      <rect x="40" y="667" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="681" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="704" class="micro">全局导航　/　联合共享同意与报名　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="736" width="150" height="187" rx="5" class="ghost"/>
+<rect x="248" y="736" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="736" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="788" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="788" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="840" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="840" width="220" height="38" rx="4" class="ghost"/>
+<rect x="684" y="892" width="220" height="31" rx="5" class="solid"/>
+<text x="78" y="945" class="micro">步骤/版本 · 字段分组 · 校验摘要 · 主/次操作 · 草稿提示</text>
+      <text x="82" y="726" class="overlay"><tspan x="82" dy="0">正常态：展示锁定社团、共享说明、主动同意</tspan><tspan x="82" dy="21">与独立联合申请</tspan></text>
+      <text x="82" y="798" class="overlay"><tspan x="82" dy="0">响应式：分栏改为单列；</tspan><tspan x="82" dy="21">步骤、错误摘要与当前状态置顶；</tspan><tspan x="82" dy="21">主操作不遮挡字段。</tspan></text>
+      <text x="462" y="798" class="overlay"><tspan x="462" dy="0">授权收口：未登录转登录；</tspan><tspan x="462" dy="21">资料门阻断；</tspan><tspan x="462" dy="21">非本人申请拒绝</tspan></text>
+    </g><g id="EV-JNT-02-N" aria-label="P-JNT-02 正常状态">
+      <rect x="960" y="667" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="697" class="stateTitle">N · 正常</text>
+      <text x="976" y="727" class="stateBody"><tspan x="976" dy="0">展示锁定社团、共享说明、主动</tspan><tspan x="976" dy="22">同意与独立联合申请</tspan></text>
+    </g><g id="EV-JNT-02-L" aria-label="P-JNT-02 加载状态">
+      <rect x="1240" y="667" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="697" class="stateTitle">L · 加载</text>
+      <text x="1256" y="727" class="stateBody"><tspan x="1256" dy="0">说明版本、表单或提交结果加载</tspan></text>
+    </g><g id="EV-JNT-02-E" aria-label="P-JNT-02 空数据状态">
+      <rect x="1520" y="667" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="697" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="727" class="stateBody"><tspan x="1536" dy="0">不适用：创建型页面；</tspan><tspan x="1536" dy="22">活动不可申请时显示原因</tspan></text>
+    </g><g id="EV-JNT-02-F" aria-label="P-JNT-02 失败状态">
+      <rect x="1800" y="667" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="697" class="stateTitle">F · 失败</text>
+      <text x="1816" y="727" class="stateBody"><tspan x="1816" dy="0">说明版本不匹配、通道变化或提</tspan><tspan x="1816" dy="22">交失败时保持草稿且不共享</tspan></text>
+    </g><g id="EV-JNT-02-A" aria-label="P-JNT-02 无权限状态">
+      <rect x="2080" y="667" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="697" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="727" class="stateBody"><tspan x="2096" dy="0">未登录转登录；</tspan><tspan x="2096" dy="22">资料门阻断；</tspan><tspan x="2096" dy="22">非本人申请拒绝</tspan></text>
+    </g></g>
+<g id="PB-JNT-03" aria-label="P-JNT-03 联合面试排期与评价低保真画板">
+    <rect x="20" y="1005" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="1036" class="boardTitle">P-JNT-03 · 联合面试排期与评价</text>
+    <text x="360" y="1036" class="micro">画板 PB-JNT-03　变体：本人日程、管理排期、跨社团评价</text>
+    <g id="PB-JNT-03-D" aria-label="主低保真帧">
+      <rect x="40" y="1057" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="1071" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="1094" class="micro">全局导航　/　联合面试排期与评价　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="1126" width="828" height="38" rx="5" class="ghost"/>
+<rect x="76" y="1179" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="1224" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="1269" width="828" height="34" rx="4" class="ghost"/>
+<text x="78" y="1335" class="micro">筛选栏 · 状态摘要 · 数据列表/卡片 · 分页 · 详情抽屉</text>
+      <text x="82" y="1116" class="overlay"><tspan x="82" dy="0">正常态：展示共享排期、一次面试、跨社团评</tspan><tspan x="82" dy="21">价和作废补面</tspan></text>
+      <text x="82" y="1188" class="overlay"><tspan x="82" dy="0">响应式：筛选收纳为抽屉；</tspan><tspan x="82" dy="21">数据行转卡片；</tspan><tspan x="82" dy="21">行级动作与状态原因必须保留。</tspan></text>
+      <text x="462" y="1188" class="overlay"><tspan x="462" dy="0">授权收口：非参与范围、非明确任务或已失权</tspan><tspan x="462" dy="21">用户拒绝</tspan></text>
+    </g><g id="EV-JNT-03-N" aria-label="P-JNT-03 正常状态">
+      <rect x="960" y="1057" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="1087" class="stateTitle">N · 正常</text>
+      <text x="976" y="1117" class="stateBody"><tspan x="976" dy="0">展示共享排期、一次面试、跨社</tspan><tspan x="976" dy="22">团评价和作废补面</tspan></text>
+    </g><g id="EV-JNT-03-L" aria-label="P-JNT-03 加载状态">
+      <rect x="1240" y="1057" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="1087" class="stateTitle">L · 加载</text>
+      <text x="1256" y="1117" class="stateBody"><tspan x="1256" dy="0">排期、材料或评价提交加载</tspan></text>
+    </g><g id="EV-JNT-03-E" aria-label="P-JNT-03 空数据状态">
+      <rect x="1520" y="1057" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="1087" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="1117" class="stateBody"><tspan x="1536" dy="0">无联合申请/面试记录时展示空</tspan><tspan x="1536" dy="22">态</tspan></text>
+    </g><g id="EV-JNT-03-F" aria-label="P-JNT-03 失败状态">
+      <rect x="1800" y="1057" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="1087" class="stateTitle">F · 失败</text>
+      <text x="1816" y="1117" class="stateBody"><tspan x="1816" dy="0">容量竞争、作废或补面失败保留</tspan><tspan x="1816" dy="22">原记录并刷新</tspan></text>
+    </g><g id="EV-JNT-03-A" aria-label="P-JNT-03 无权限状态">
+      <rect x="2080" y="1057" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="1087" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="1117" class="stateBody"><tspan x="2096" dy="0">非参与范围、非明确任务或已失</tspan><tspan x="2096" dy="22">权用户拒绝</tspan></text>
+    </g></g>
+<g id="PB-JNT-04" aria-label="P-JNT-04 联合结论与邀请低保真画板">
+    <rect x="20" y="1395" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="1426" class="boardTitle">P-JNT-04 · 联合结论与邀请</text>
+    <text x="360" y="1426" class="micro">画板 PB-JNT-04　变体：本人邀请、各社团独立结论与邀请</text>
+    <g id="PB-JNT-04-D" aria-label="主低保真帧">
+      <rect x="40" y="1447" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="1461" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="1484" class="micro">全局导航　/　联合结论与邀请　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="1516" width="828" height="38" rx="5" class="ghost"/>
+<rect x="76" y="1569" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="1614" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="1659" width="828" height="34" rx="4" class="ghost"/>
+<text x="78" y="1725" class="micro">筛选栏 · 状态摘要 · 数据列表/卡片 · 分页 · 详情抽屉</text>
+      <text x="82" y="1506" class="overlay"><tspan x="82" dy="0">正常态：展示各社团独立结论、邀请与本人处</tspan><tspan x="82" dy="21">理结果</tspan></text>
+      <text x="82" y="1578" class="overlay"><tspan x="82" dy="0">响应式：筛选收纳为抽屉；</tspan><tspan x="82" dy="21">数据行转卡片；</tspan><tspan x="82" dy="21">行级动作与状态原因必须保留。</tspan></text>
+      <text x="462" y="1578" class="overlay"><tspan x="462" dy="0">授权收口：仅本人处理本人邀请；</tspan><tspan x="462" dy="21">社团只操作本方结论与邀请</tspan></text>
+    </g><g id="EV-JNT-04-N" aria-label="P-JNT-04 正常状态">
+      <rect x="960" y="1447" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="1477" class="stateTitle">N · 正常</text>
+      <text x="976" y="1507" class="stateBody"><tspan x="976" dy="0">展示各社团独立结论、邀请与本</tspan><tspan x="976" dy="22">人处理结果</tspan></text>
+    </g><g id="EV-JNT-04-L" aria-label="P-JNT-04 加载状态">
+      <rect x="1240" y="1447" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="1477" class="stateTitle">L · 加载</text>
+      <text x="1256" y="1507" class="stateBody"><tspan x="1256" dy="0">结论/邀请加载或成员生效回读</tspan><tspan x="1256" dy="22">中</tspan></text>
+    </g><g id="EV-JNT-04-E" aria-label="P-JNT-04 空数据状态">
+      <rect x="1520" y="1447" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="1477" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="1507" class="stateBody"><tspan x="1536" dy="0">暂无结论或邀请时按角色展示空</tspan><tspan x="1536" dy="22">态</tspan></text>
+    </g><g id="EV-JNT-04-F" aria-label="P-JNT-04 失败状态">
+      <rect x="1800" y="1447" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="1477" class="stateTitle">F · 失败</text>
+      <text x="1816" y="1507" class="stateBody"><tspan x="1816" dy="0">结论锁定、接受/撤回竞争或外</tspan><tspan x="1816" dy="22">部不确定时不误报成功</tspan></text>
+    </g><g id="EV-JNT-04-A" aria-label="P-JNT-04 无权限状态">
+      <rect x="2080" y="1447" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="1477" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="1507" class="stateBody"><tspan x="2096" dy="0">仅本人处理本人邀请；</tspan><tspan x="2096" dy="22">社团只操作本方结论与邀请</tspan></text>
+    </g></g>
+<g id="PB-JNT-05" aria-label="P-JNT-05 联合活动结束确认低保真画板">
+    <rect x="20" y="1785" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="1816" class="boardTitle">P-JNT-05 · 联合活动结束确认</text>
+    <text x="360" y="1816" class="micro">画板 PB-JNT-05　变体：参与社团正常结束、超管强制结束</text>
+    <g id="PB-JNT-05-D" aria-label="主低保真帧">
+      <rect x="40" y="1837" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="1851" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="1874" class="micro">全局导航　/　联合活动结束确认　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="1906" width="260" height="187" rx="5" class="ghost"/>
+<rect x="354" y="1906" width="340" height="112" rx="5" class="ghost"/>
+<rect x="354" y="2034" width="340" height="59" rx="5" class="ghost"/>
+<rect x="710" y="2062" width="194" height="31" rx="5" class="danger"/>
+<text x="78" y="2115" class="micro">目标冻结 · 影响预览 · 重新认证 · 二次确认 · 分项结果</text>
+      <text x="82" y="1896" class="overlay"><tspan x="82" dy="0">正常态：展示正常结束条件、参与社团确认或</tspan><tspan x="82" dy="21">超管强制结束影响</tspan></text>
+      <text x="82" y="1968" class="overlay"><tspan x="82" dy="0">响应式：影响预览先于确认；</tspan><tspan x="82" dy="21">分项结果纵向展开；</tspan><tspan x="82" dy="21">危险操作不弱化。</tspan></text>
+      <text x="462" y="1968" class="overlay"><tspan x="462" dy="0">授权收口：普通结束限参与社团有权角色；</tspan><tspan x="462" dy="21">强制结束限超管</tspan></text>
+    </g><g id="EV-JNT-05-N" aria-label="P-JNT-05 正常状态">
+      <rect x="960" y="1837" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="1867" class="stateTitle">N · 正常</text>
+      <text x="976" y="1897" class="stateBody"><tspan x="976" dy="0">展示正常结束条件、参与社团确</tspan><tspan x="976" dy="22">认或超管强制结束影响</tspan></text>
+    </g><g id="EV-JNT-05-L" aria-label="P-JNT-05 加载状态">
+      <rect x="1240" y="1837" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="1867" class="stateTitle">L · 加载</text>
+      <text x="1256" y="1897" class="stateBody"><tspan x="1256" dy="0">结束条件与影响预览加载；</tspan><tspan x="1256" dy="22">提交防重复</tspan></text>
+    </g><g id="EV-JNT-05-E" aria-label="P-JNT-05 空数据状态">
+      <rect x="1520" y="1837" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="1867" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="1897" class="stateBody"><tspan x="1536" dy="0">不适用：单一活动命令页</tspan></text>
+    </g><g id="EV-JNT-05-F" aria-label="P-JNT-05 失败状态">
+      <rect x="1800" y="1837" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="1867" class="stateTitle">F · 失败</text>
+      <text x="1816" y="1897" class="stateBody"><tspan x="1816" dy="0">条件不满足、版本竞争或执行失</tspan><tspan x="1816" dy="22">败保持原活动状态</tspan></text>
+    </g><g id="EV-JNT-05-A" aria-label="P-JNT-05 无权限状态">
+      <rect x="2080" y="1837" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="1867" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="1897" class="stateBody"><tspan x="2096" dy="0">普通结束限参与社团有权角色；</tspan><tspan x="2096" dy="22">强制结束限超管</tspan></text>
+    </g></g>
+  <text x="40" y="2226" class="micro">正式低保真设计基线：用于状态与交互评审；外部高保真/移动视觉不得改变业务、授权与安全边界；代码开工门关闭。</text>
+</svg>

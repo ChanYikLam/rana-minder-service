@@ -1,0 +1,348 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="3100" viewBox="0 0 2400 3100" role="img" aria-labelledby="title desc">
+  <title id="title">RanaMinder J-01 首次登录低保真状态画板</title>
+  <desc id="desc">覆盖登录、资料门、个人资料、故障降级和个人中心五个页面的桌面、手机与五状态证据槽。</desc>
+  <metadata>
+    version: v1.0
+    date: 2026-08-01
+    scope: formal low-fidelity design baseline
+    journey: J-01
+    pages: P-IDN-01,P-GEN-04,P-IDN-02,P-GEN-03,P-IDN-03
+    code-gate: closed
+  </metadata>
+  <defs>
+    <style>
+      text { font-family: "Microsoft YaHei", "Noto Sans SC", Arial, sans-serif; fill: #202427; }
+      .h1 { font-size: 46px; font-weight: 700; letter-spacing: 1px; }
+      .h2 { font-size: 26px; font-weight: 700; }
+      .h3 { font-size: 21px; font-weight: 700; }
+      .body { font-size: 18px; }
+      .small { font-size: 15px; fill: #535b60; }
+      .tiny { font-size: 13px; fill: #60686d; }
+      .mono { font-family: Consolas, "SFMono-Regular", monospace; }
+      .panel { fill: #ffffff; stroke: #343a3e; stroke-width: 2; rx: 12; }
+      .soft { fill: #f4f5f6; stroke: #c4c9cc; stroke-width: 1.5; rx: 8; }
+      .wire { fill: #eceff1; stroke: #aeb5b9; stroke-width: 1.5; rx: 6; }
+      .line { stroke: #929a9f; stroke-width: 2; fill: none; }
+      .dash { stroke: #929a9f; stroke-width: 2; fill: none; stroke-dasharray: 8 8; }
+      .dark { fill: #272d31; }
+      .darkText { fill: #ffffff; }
+      .accent { fill: #dce3e6; stroke: #6e7a80; stroke-width: 1.5; rx: 6; }
+      .stateN { fill: #e8f1ec; stroke: #6f8d7a; }
+      .stateL { fill: #edf1f5; stroke: #718397; }
+      .stateE { fill: #f4f1e8; stroke: #93876a; }
+      .stateF { fill: #f5e9e8; stroke: #9b706b; }
+      .stateA { fill: #eeeaf4; stroke: #7d718f; }
+      .note { fill: #fff9df; stroke: #a89956; stroke-width: 1.5; rx: 8; }
+      .tag { fill: #ffffff; stroke: #7a8388; stroke-width: 1.3; rx: 14; }
+      .arrow { stroke: #4f585d; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#4f585d"/>
+    </marker>
+  </defs>
+
+  <rect width="2400" height="3100" fill="#e9ecee"/>
+
+  <!-- Title and scope -->
+  <rect x="0" y="0" width="2400" height="176" class="dark"/>
+  <text x="80" y="74" class="h1 darkText">J-01 · 首次登录</text>
+  <text x="80" y="120" class="h2 darkText">低保真状态画板 · v1.0</text>
+  <text x="1680" y="70" class="body darkText">正式低保真基线 · 不构成代码开工批准</text>
+  <text x="1680" y="112" class="small darkText">灰度布局与语义状态，不代表最终配色、字体或组件库</text>
+  <text x="80" y="158" class="small darkText">目标：从 Casdoor 登录，经资料门与邮箱验证，安全进入个人中心；失败不伪装成功，权限不由前端决定。</text>
+
+  <!-- Journey flow -->
+  <g id="J-01-flow">
+    <rect x="80" y="210" width="2240" height="280" class="panel"/>
+    <text x="110" y="252" class="h2">旅程主线与安全分支</text>
+
+    <rect x="110" y="292" width="280" height="104" class="soft"/>
+    <text x="132" y="326" class="h3">01 登录入口</text>
+    <text x="132" y="360" class="small mono">P-IDN-01 · /login</text>
+
+    <rect x="472" y="292" width="280" height="104" class="soft"/>
+    <text x="494" y="326" class="h3">02 Casdoor 回调</text>
+    <text x="494" y="360" class="small">服务端建立会话并核验账号</text>
+
+    <rect x="834" y="292" width="280" height="104" class="soft"/>
+    <text x="856" y="326" class="h3">03 资料门</text>
+    <text x="856" y="360" class="small mono">P-GEN-04 · required</text>
+
+    <rect x="1196" y="292" width="280" height="104" class="soft"/>
+    <text x="1218" y="326" class="h3">04 补资料/验邮箱</text>
+    <text x="1218" y="360" class="small mono">P-IDN-02 · profile</text>
+
+    <rect x="1558" y="292" width="280" height="104" class="soft"/>
+    <text x="1580" y="326" class="h3">05 个人中心</text>
+    <text x="1580" y="360" class="small mono">P-IDN-03 · /me</text>
+
+    <path d="M390 344 H466" class="arrow"/>
+    <path d="M752 344 H828" class="arrow"/>
+    <path d="M1114 344 H1190" class="arrow"/>
+    <path d="M1476 344 H1552" class="arrow"/>
+
+    <rect x="1930" y="292" width="350" height="104" class="note"/>
+    <text x="1952" y="326" class="h3">故障分支</text>
+    <text x="1952" y="356" class="small mono">P-GEN-03 · service-unavailable</text>
+    <text x="1952" y="380" class="tiny">达到降级边界后仅保留允许的公开入口</text>
+    <path d="M612 396 V438 H2105 V402" class="dash"/>
+
+    <text x="110" y="452" class="small">安全规则：已登录且资料完整可直接进入 /me；资料不足进入本人资料门；账号禁用/删除拒绝业务会话；外部回跳地址不被接受。</text>
+  </g>
+
+  <!-- Board 1 -->
+  <g id="PB-IDN-01">
+    <rect x="80" y="530" width="2240" height="44" class="dark"/>
+    <text x="100" y="560" class="h3 darkText">PB-IDN-01 · P-IDN-01 登录页 · EV-IDN-01-{N,L,E,F,A}</text>
+
+    <rect id="PB-IDN-01-D" x="80" y="590" width="1180" height="350" class="panel"/>
+    <text x="104" y="622" class="small mono">DESKTOP · 1440 参考布局</text>
+    <rect x="104" y="646" width="1132" height="44" class="dark"/>
+    <text x="126" y="675" class="body darkText">RanaMinder</text>
+    <text x="1060" y="675" class="small darkText">浏览公开内容</text>
+    <rect x="394" y="718" width="550" height="180" class="soft"/>
+    <rect x="424" y="744" width="70" height="54" class="wire"/>
+    <text x="516" y="768" class="h3">学校社团人员管理</text>
+    <text x="516" y="794" class="small">使用学校统一身份认证登录</text>
+    <rect x="424" y="824" width="490" height="44" class="dark"/>
+    <text x="566" y="853" class="body darkText">使用 Casdoor 登录</text>
+    <text x="570" y="889" class="small">暂不登录，浏览社团与活动</text>
+
+    <rect id="PB-IDN-01-M" x="1290" y="590" width="350" height="350" class="panel"/>
+    <text x="1312" y="622" class="small mono">MOBILE · 390 参考布局</text>
+    <rect x="1312" y="646" width="306" height="42" class="dark"/>
+    <text x="1330" y="674" class="small darkText">RanaMinder</text>
+    <rect x="1336" y="718" width="258" height="184" class="soft"/>
+    <rect x="1360" y="742" width="54" height="44" class="wire"/>
+    <text x="1430" y="760" class="small">学校社团人员管理</text>
+    <text x="1360" y="806" class="tiny">统一身份认证</text>
+    <rect x="1360" y="824" width="210" height="44" class="dark"/>
+    <text x="1414" y="852" class="small darkText">Casdoor 登录</text>
+    <text x="1392" y="888" class="tiny">浏览公开内容</text>
+
+    <rect x="1670" y="590" width="650" height="350" class="panel"/>
+    <text x="1694" y="622" class="h3">五状态证据槽</text>
+    <rect id="EV-IDN-01-N" x="1694" y="642" width="602" height="50" class="stateN"/>
+    <text x="1710" y="674" class="small"><tspan font-weight="700">N</tspan> 登录可用；已登录安全回跳 /me</text>
+    <rect id="EV-IDN-01-L" x="1694" y="700" width="602" height="50" class="stateL"/>
+    <text x="1710" y="732" class="small"><tspan font-weight="700">L</tspan> 回调处理中；按钮禁用防重复</text>
+    <rect id="EV-IDN-01-E" x="1694" y="758" width="602" height="50" class="stateE"/>
+    <text x="1710" y="790" class="small"><tspan font-weight="700">E</tspan> 不适用：无业务数据集合</text>
+    <rect id="EV-IDN-01-F" x="1694" y="816" width="602" height="50" class="stateF"/>
+    <text x="1710" y="848" class="small"><tspan font-weight="700">F</tspan> Casdoor 不可用；达到边界转 P-GEN-03</text>
+    <rect id="EV-IDN-01-A" x="1694" y="874" width="602" height="50" class="stateA"/>
+    <text x="1710" y="906" class="small"><tspan font-weight="700">A</tspan> 页面公开；禁用账号在回调后拒绝会话</text>
+  </g>
+
+  <!-- Board 2 -->
+  <g id="PB-GEN-04">
+    <rect x="80" y="970" width="2240" height="44" class="dark"/>
+    <text x="100" y="1000" class="h3 darkText">PB-GEN-04 · P-GEN-04 资料门拦截 · EV-GEN-04-{N,L,E,F,A}</text>
+
+    <rect id="PB-GEN-04-D" x="80" y="1030" width="1180" height="350" class="panel"/>
+    <text x="104" y="1062" class="small mono">DESKTOP · 写操作被拦截，但只读能力按服务端结果保留</text>
+    <rect x="104" y="1086" width="1132" height="44" class="dark"/>
+    <text x="126" y="1115" class="body darkText">RanaMinder · 完成资料</text>
+    <rect x="164" y="1140" width="1012" height="194" class="soft"/>
+    <text x="198" y="1178" class="h2">完成以下步骤后即可继续</text>
+    <rect x="198" y="1200" width="430" height="46" class="wire"/>
+    <text x="216" y="1230" class="body">1　补充学院、年级等必填资料</text>
+    <rect x="648" y="1200" width="430" height="46" class="wire"/>
+    <text x="666" y="1230" class="body">2　验证邮箱 ch***@gdmu.edu</text>
+    <rect x="198" y="1270" width="250" height="44" class="dark"/>
+    <text x="250" y="1299" class="body darkText">进入个人资料</text>
+    <text x="474" y="1298" class="small">可继续浏览只读页面 · 返回默认 /me</text>
+
+    <rect id="PB-GEN-04-M" x="1290" y="1030" width="350" height="350" class="panel"/>
+    <text x="1312" y="1062" class="small mono">MOBILE</text>
+    <rect x="1312" y="1086" width="306" height="42" class="dark"/>
+    <text x="1330" y="1114" class="small darkText">完成资料</text>
+    <text x="1336" y="1160" class="h3">还差 2 步</text>
+    <rect x="1336" y="1180" width="258" height="52" class="wire"/>
+    <text x="1350" y="1212" class="small">补充必填资料</text>
+    <rect x="1336" y="1244" width="258" height="52" class="wire"/>
+    <text x="1350" y="1276" class="small">验证邮箱</text>
+    <rect x="1336" y="1310" width="258" height="44" class="dark"/>
+    <text x="1410" y="1338" class="small darkText">进入资料页</text>
+
+    <rect x="1670" y="1030" width="650" height="350" class="panel"/>
+    <text x="1694" y="1062" class="h3">五状态证据槽</text>
+    <rect id="EV-GEN-04-N" x="1694" y="1082" width="602" height="50" class="stateN"/>
+    <text x="1710" y="1114" class="small"><tspan font-weight="700">N</tspan> 明确缺失项、受限范围与补救入口</text>
+    <rect id="EV-GEN-04-L" x="1694" y="1140" width="602" height="50" class="stateL"/>
+    <text x="1710" y="1172" class="small"><tspan font-weight="700">L</tspan> 重新核验资料门；防止重复跳转</text>
+    <rect id="EV-GEN-04-E" x="1694" y="1198" width="602" height="50" class="stateE"/>
+    <text x="1710" y="1230" class="small"><tspan font-weight="700">E</tspan> 不适用：拦截原因必须明确</text>
+    <rect id="EV-GEN-04-F" x="1694" y="1256" width="602" height="50" class="stateF"/>
+    <text x="1710" y="1288" class="small"><tspan font-weight="700">F</tspan> 核验失败时保持写能力关闭并允许重试</text>
+    <rect id="EV-GEN-04-A" x="1694" y="1314" width="602" height="50" class="stateA"/>
+    <text x="1710" y="1346" class="small"><tspan font-weight="700">A</tspan> 会话失效先回登录；只处理本人资料门</text>
+  </g>
+
+  <!-- Board 3 -->
+  <g id="PB-IDN-02">
+    <rect x="80" y="1410" width="2240" height="44" class="dark"/>
+    <text x="100" y="1440" class="h3 darkText">PB-IDN-02 · P-IDN-02 个人资料与邮箱验证 · EV-IDN-02-{N,L,E,F,A}</text>
+
+    <rect id="PB-IDN-02-D" x="80" y="1470" width="1180" height="350" class="panel"/>
+    <text x="104" y="1502" class="small mono">DESKTOP · 单页分步 · 固定字段只读</text>
+    <rect x="104" y="1526" width="1132" height="44" class="dark"/>
+    <text x="126" y="1555" class="body darkText">个人资料</text>
+    <rect x="148" y="1592" width="290" height="42" class="accent"/>
+    <text x="170" y="1620" class="small">1 补充资料　—　2 验证邮箱　—　3 完成</text>
+    <text x="148" y="1666" class="small">学号（只读）</text>
+    <rect x="148" y="1678" width="420" height="42" class="wire"/>
+    <text x="168" y="1706" class="small">2026••••••</text>
+    <text x="148" y="1742" class="small">学院 / 年级 / 手机号</text>
+    <rect x="148" y="1752" width="420" height="42" class="wire"/>
+    <rect x="610" y="1592" width="566" height="202" class="soft"/>
+    <text x="640" y="1626" class="h3">邮箱验证</text>
+    <text x="640" y="1660" class="body">ch***@gdmu.edu　［待验证］</text>
+    <rect x="640" y="1684" width="230" height="42" class="dark"/>
+    <text x="682" y="1712" class="small darkText">发送验证邮件</text>
+    <text x="640" y="1754" class="small">验证链接 24 小时有效 · 重发受频率限制</text>
+    <rect x="148" y="1804" width="240" height="0" class="line"/>
+
+    <rect id="PB-IDN-02-M" x="1290" y="1470" width="350" height="350" class="panel"/>
+    <text x="1312" y="1502" class="small mono">MOBILE</text>
+    <rect x="1312" y="1526" width="306" height="42" class="dark"/>
+    <text x="1330" y="1554" class="small darkText">个人资料</text>
+    <rect x="1336" y="1584" width="258" height="34" class="accent"/>
+    <text x="1352" y="1606" class="tiny">资料 → 邮箱 → 完成</text>
+    <rect x="1336" y="1636" width="258" height="42" class="wire"/>
+    <rect x="1336" y="1690" width="258" height="42" class="wire"/>
+    <rect x="1336" y="1744" width="258" height="42" class="wire"/>
+    <rect x="1336" y="1798" width="258" height="0" class="line"/>
+
+    <rect x="1670" y="1470" width="650" height="350" class="panel"/>
+    <text x="1694" y="1502" class="h3">五状态证据槽</text>
+    <rect id="EV-IDN-02-N" x="1694" y="1522" width="602" height="50" class="stateN"/>
+    <text x="1710" y="1554" class="small"><tspan font-weight="700">N</tspan> 补充/编辑、邮箱验证、同步状态与本人冲突选择</text>
+    <rect id="EV-IDN-02-L" x="1694" y="1580" width="602" height="50" class="stateL"/>
+    <text x="1710" y="1612" class="small"><tspan font-weight="700">L</tspan> 加载资料或保存同步中；旧值不被成功态覆盖</text>
+    <rect id="EV-IDN-02-E" x="1694" y="1638" width="602" height="50" class="stateE"/>
+    <text x="1710" y="1670" class="small"><tspan font-weight="700">E</tspan> 未建立资料进入初始表单，不展示空白页</text>
+    <rect id="EV-IDN-02-F" x="1694" y="1696" width="602" height="50" class="stateF"/>
+    <text x="1710" y="1728" class="small"><tspan font-weight="700">F</tspan> 校验/版本/同步失败保留原值与恢复动作</text>
+    <rect id="EV-IDN-02-A" x="1694" y="1754" width="602" height="50" class="stateA"/>
+    <text x="1710" y="1786" class="small"><tspan font-weight="700">A</tspan> 未登录回登录；他人资料与非本人选择拒绝</text>
+  </g>
+
+  <!-- Board 4 -->
+  <g id="PB-GEN-03">
+    <rect x="80" y="1850" width="2240" height="44" class="dark"/>
+    <text x="100" y="1880" class="h3 darkText">PB-GEN-03 · P-GEN-03 维护/故障降级 · EV-GEN-03-{N,L,E,F,A}</text>
+
+    <rect id="PB-GEN-03-D" x="80" y="1910" width="1180" height="350" class="panel"/>
+    <text x="104" y="1942" class="small mono">DESKTOP · 最小不可用说明</text>
+    <rect x="104" y="1966" width="1132" height="44" class="dark"/>
+    <text x="126" y="1995" class="body darkText">RanaMinder · 服务状态</text>
+    <rect x="300" y="2036" width="740" height="172" class="soft"/>
+    <rect x="336" y="2064" width="72" height="72" class="wire"/>
+    <text x="440" y="2084" class="h2">统一身份认证暂不可用</text>
+    <text x="440" y="2118" class="body">新的登录与受保护操作已暂停，请稍后重试。</text>
+    <text x="440" y="2148" class="small">支持编号：SUP-••••••　不展示内部错误路径</text>
+    <rect x="440" y="2166" width="180" height="38" class="dark"/>
+    <text x="500" y="2192" class="small darkText">安全重试</text>
+    <text x="658" y="2192" class="small">浏览公开内容</text>
+
+    <rect id="PB-GEN-03-M" x="1290" y="1910" width="350" height="350" class="panel"/>
+    <text x="1312" y="1942" class="small mono">MOBILE</text>
+    <rect x="1312" y="1966" width="306" height="42" class="dark"/>
+    <text x="1330" y="1994" class="small darkText">服务状态</text>
+    <rect x="1336" y="2032" width="258" height="190" class="soft"/>
+    <rect x="1427" y="2054" width="72" height="58" class="wire"/>
+    <text x="1374" y="2142" class="h3">暂时不可用</text>
+    <text x="1364" y="2170" class="tiny">稍后重试或浏览公开内容</text>
+    <rect x="1360" y="2190" width="210" height="0" class="line"/>
+
+    <rect x="1670" y="1910" width="650" height="350" class="panel"/>
+    <text x="1694" y="1942" class="h3">五状态证据槽</text>
+    <rect id="EV-GEN-03-N" x="1694" y="1962" width="602" height="50" class="stateN"/>
+    <text x="1710" y="1994" class="small"><tspan font-weight="700">N</tspan> 清楚说明不可用范围、重试与公开入口</text>
+    <rect id="EV-GEN-03-L" x="1694" y="2020" width="602" height="50" class="stateL"/>
+    <text x="1710" y="2052" class="small"><tspan font-weight="700">L</tspan> 不适用：不以无限等待替代不可用结论</text>
+    <rect id="EV-GEN-03-E" x="1694" y="2078" width="602" height="50" class="stateE"/>
+    <text x="1710" y="2110" class="small"><tspan font-weight="700">E</tspan> 不适用：依赖不可用不是空数据</text>
+    <rect id="EV-GEN-03-F" x="1694" y="2136" width="602" height="50" class="stateF"/>
+    <text x="1710" y="2168" class="small"><tspan font-weight="700">F</tspan> 详情读取失败仍显示最小提示，不伪装恢复</text>
+    <rect id="EV-GEN-03-A" x="1694" y="2194" width="602" height="50" class="stateA"/>
+    <text x="1710" y="2226" class="small"><tspan font-weight="700">A</tspan> 页面公开；受保护能力保持关闭</text>
+  </g>
+
+  <!-- Board 5 -->
+  <g id="PB-IDN-03">
+    <rect x="80" y="2290" width="2240" height="44" class="dark"/>
+    <text x="100" y="2320" class="h3 darkText">PB-IDN-03 · P-IDN-03 全局个人中心 · EV-IDN-03-{N,L,E,F,A}</text>
+
+    <rect id="PB-IDN-03-D" x="80" y="2350" width="1180" height="350" class="panel"/>
+    <text x="104" y="2382" class="small mono">DESKTOP · 不要求选择社团工作空间</text>
+    <rect x="104" y="2406" width="1132" height="44" class="dark"/>
+    <text x="126" y="2435" class="body darkText">RanaMinder　个人空间</text>
+    <text x="1064" y="2435" class="small darkText">通知 3　用户菜单</text>
+    <rect x="138" y="2470" width="1064" height="42" class="accent"/>
+    <text x="160" y="2498" class="small">待我处理 3　　进行中 2　　历史记录　　我的面试日程</text>
+    <rect x="138" y="2532" width="320" height="118" class="soft"/>
+    <text x="160" y="2564" class="h3">待补资料</text>
+    <text x="160" y="2594" class="small">平台 · 邮箱未验证</text>
+    <text x="160" y="2624" class="small">去处理 →</text>
+    <rect x="478" y="2532" width="320" height="118" class="soft"/>
+    <text x="500" y="2564" class="h3">即将开始面试</text>
+    <text x="500" y="2594" class="small">某社团 · 今天 19:00</text>
+    <text x="500" y="2624" class="small">查看详情 →</text>
+    <rect x="818" y="2532" width="320" height="118" class="soft"/>
+    <text x="840" y="2564" class="h3">待处理邀请</text>
+    <text x="840" y="2594" class="small">某社团 · 还有 2 天</text>
+    <text x="840" y="2624" class="small">查看邀请 →</text>
+
+    <rect id="PB-IDN-03-M" x="1290" y="2350" width="350" height="350" class="panel"/>
+    <text x="1312" y="2382" class="small mono">MOBILE</text>
+    <rect x="1312" y="2406" width="306" height="42" class="dark"/>
+    <text x="1330" y="2434" class="small darkText">个人空间</text>
+    <rect x="1336" y="2466" width="258" height="34" class="accent"/>
+    <text x="1350" y="2488" class="tiny">待办　进行中　历史　日程</text>
+    <rect x="1336" y="2516" width="258" height="68" class="soft"/>
+    <text x="1352" y="2542" class="small">待补资料</text>
+    <text x="1352" y="2568" class="tiny">邮箱未验证 · 去处理</text>
+    <rect x="1336" y="2596" width="258" height="68" class="soft"/>
+    <text x="1352" y="2622" class="small">即将开始面试</text>
+    <text x="1352" y="2648" class="tiny">今天 19:00 · 查看</text>
+
+    <rect x="1670" y="2350" width="650" height="350" class="panel"/>
+    <text x="1694" y="2382" class="h3">五状态证据槽</text>
+    <rect id="EV-IDN-03-N" x="1694" y="2402" width="602" height="50" class="stateN"/>
+    <text x="1710" y="2434" class="small"><tspan font-weight="700">N</tspan> 待办/进行中/历史/日程按对象当前状态聚合</text>
+    <rect id="EV-IDN-03-L" x="1694" y="2460" width="602" height="50" class="stateL"/>
+    <text x="1710" y="2492" class="small"><tspan font-weight="700">L</tspan> 分区骨架；未完成分区不显示假零</text>
+    <rect id="EV-IDN-03-E" x="1694" y="2518" width="602" height="50" class="stateE"/>
+    <text x="1710" y="2550" class="small"><tspan font-weight="700">E</tspan> 有权且无事项时按分区展示空态</text>
+    <rect id="EV-IDN-03-F" x="1694" y="2576" width="602" height="50" class="stateF"/>
+    <text x="1710" y="2608" class="small"><tspan font-weight="700">F</tspan> 查询失败显示错误与重试，不降级为“暂无”</text>
+    <rect id="EV-IDN-03-A" x="1694" y="2634" width="602" height="50" class="stateA"/>
+    <text x="1710" y="2666" class="small"><tspan font-weight="700">A</tspan> 会话失效回登录；旧目标失权安全拒绝</text>
+  </g>
+
+  <!-- Annotation and handoff -->
+  <rect x="80" y="2740" width="2240" height="260" class="panel"/>
+  <text x="110" y="2784" class="h2">交互与验收注记</text>
+  <rect x="110" y="2810" width="690" height="154" class="soft"/>
+  <text x="136" y="2842" class="h3">键盘与焦点</text>
+  <text x="136" y="2874" class="small">1. 主内容跳转 → 标题 → 表单 → 主操作 → 次操作</text>
+  <text x="136" y="2902" class="small">2. 错误使用紧急播报；加载与成功使用礼貌播报</text>
+  <text x="136" y="2930" class="small">3. 焦点不因局部刷新丢失；失败后回到错误摘要</text>
+
+  <rect x="830" y="2810" width="690" height="154" class="soft"/>
+  <text x="856" y="2842" class="h3">响应式边界</text>
+  <text x="856" y="2874" class="small">桌面与手机业务能力一致；手机改为单列和底部主操作</text>
+  <text x="856" y="2902" class="small">不隐藏资料门原因、故障范围、重试动作或支持编号</text>
+  <text x="856" y="2930" class="small">输入与按钮最小触控尺寸待组件规范或外部视觉稿复核</text>
+
+  <rect x="1550" y="2810" width="740" height="154" class="note"/>
+  <text x="1576" y="2842" class="h3">交付与证据边界</text>
+  <text x="1576" y="2874" class="small">已创建：5 个页面的低保真桌面/手机与五状态槽</text>
+  <text x="1576" y="2902" class="small">全局：43 页、215 状态位、五条可点击旅程已完成内部评审</text>
+  <text x="1576" y="2930" class="small">高保真/独立移动视觉由外部绘制；代码开工门保持关闭</text>
+
+  <text x="80" y="3060" class="small mono">RanaMinder · J-01 · source asset · 2026-08-01 · code gate closed</text>
+  <a href="核心交互旅程索引-v1.0.svg" tabindex="0" aria-label="打开核心交互旅程索引"><text x="1900" y="3060" class="small">打开核心旅程索引 →</text></a>
+</svg>

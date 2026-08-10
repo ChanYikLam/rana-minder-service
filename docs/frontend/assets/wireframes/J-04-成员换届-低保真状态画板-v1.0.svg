@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1480" viewBox="0 0 2400 1480" role="img" aria-labelledby="asset-title asset-desc">
+  <title id="asset-title">RanaMinder J-04 成员换届低保真状态画板</title>
+  <desc id="asset-desc">3 个页面主低保真帧及正常、加载、空数据、失败、无权限五状态；高保真与独立移动视觉稿由外部绘制。</desc>
+  <style>
+    .bg{fill:#f2f0ea}.ink{fill:#22272b}.muted{fill:#667078}.board{fill:#faf9f5;stroke:#68727a;stroke-width:2}.frame{fill:#ffffff;stroke:#2d3439;stroke-width:2}.chrome{fill:#d9dde0}.ghost{fill:#eef0f1;stroke:#9aa2a8;stroke-width:1.5}.solid{fill:#39434a}.danger{fill:#676164}.flowbar{fill:#e5e2da;stroke:#747d83;stroke-width:1.5}.flowNode{fill:#fff;stroke:#333b40;stroke-width:2}.flowNode:hover{fill:#e8ebec}.arrow{stroke:#4a545a;stroke-width:2;marker-end:url(#arrow);fill:none}.state{fill:#fff;stroke-width:2}.stateN{stroke:#4d565c}.stateL{stroke:#7c858b;stroke-dasharray:6 4}.stateE{stroke:#90979c}.stateF{stroke:#5b5050}.stateA{stroke:#363b3f;stroke-dasharray:3 3}.title{font:700 29px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b}.subtitle{font:15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#59636a}.boardTitle{font:700 18px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b}.label{font:600 17px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#2c3338}.nodeTitle{font:600 14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b}.body{font:15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#404a50}.stateTitle{font:700 15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#252b2f}.stateBody{font:13px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#3f484e}.overlay{font:12px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#273036}.micro{font:11px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#59636a}.linkText{font:600 14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b;text-decoration:underline}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4a545a"/></marker></defs>
+  <rect width="2400" height="1480" class="bg"/>
+  <text x="40" y="48" class="title">J-04 成员换届 · 低保真状态画板</text>
+  <text x="40" y="78" class="subtitle">3 个唯一页面 · 每页 1 个主低保真帧 + N/L/E/F/A 五状态 · 响应式以行为注释验收</text>
+  <a href="核心交互旅程索引-v1.0.svg" tabindex="0" aria-label="返回核心交互旅程索引"><text x="2070" y="48" class="linkText">← 核心旅程索引</text></a>
+  <g aria-label="J-04 成员换届可点击旅程"><path d="M 445 157 H 463" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-ORG-02" tabindex="0" aria-label="打开 P-ORG-02 管理工作台">
+      <rect id="STEP-J-04-1" x="90" y="122" width="355" height="70" rx="8" class="flowNode"/>
+      <text x="104" y="149" class="nodeTitle">1 · 管理工作台</text>
+      <text x="104" y="176" class="micro">P-ORG-02</text>
+    </a><path d="M 818 157 H 836" class="arrow"/><a href="#PB-MEM-06" tabindex="0" aria-label="打开 P-MEM-06 换届管理">
+      <rect id="STEP-J-04-2" x="463" y="122" width="355" height="70" rx="8" class="flowNode"/>
+      <text x="477" y="149" class="nodeTitle">2 · 换届管理</text>
+      <text x="477" y="176" class="micro">P-MEM-06</text>
+    </a><path d="M 1191 157 H 1209" class="arrow"/><a href="#PB-MEM-04" tabindex="0" aria-label="打开 P-MEM-04 任命调岗免职">
+      <rect id="STEP-J-04-3" x="836" y="122" width="355" height="70" rx="8" class="flowNode"/>
+      <text x="850" y="149" class="nodeTitle">3 · 任命调岗免职</text>
+      <text x="850" y="176" class="micro">P-MEM-04</text>
+    </a><path d="M 1564 157 H 1582" class="arrow"/><a href="#PB-MEM-01" tabindex="0" aria-label="打开 P-MEM-01 成员经历与任期">
+      <rect id="STEP-J-04-4" x="1209" y="122" width="355" height="70" rx="8" class="flowNode"/>
+      <text x="1223" y="149" class="nodeTitle">4 · 成员经历与任期</text>
+      <text x="1223" y="176" class="micro">P-MEM-01</text>
+    </a><path d="M 1937 157 H 1955" class="arrow"/><a href="J-02-普通招新-低保真状态画板-v1.0.svg#PB-NTF-01" tabindex="0" aria-label="打开 P-NTF-01 站内信中心">
+      <rect id="STEP-J-04-5" x="1582" y="122" width="355" height="70" rx="8" class="flowNode"/>
+      <text x="1596" y="149" class="nodeTitle">5 · 站内信中心</text>
+      <text x="1596" y="176" class="micro">P-NTF-01</text>
+    </a><a href="J-01-首次登录-低保真状态画板-v1.0.svg#PB-IDN-03" tabindex="0" aria-label="打开 P-IDN-03 全局个人中心">
+      <rect id="STEP-J-04-6" x="1955" y="122" width="355" height="70" rx="8" class="flowNode"/>
+      <text x="1969" y="149" class="nodeTitle">6 · 全局个人中心</text>
+      <text x="1969" y="176" class="micro">P-IDN-03</text>
+    </a></g>
+  <g id="PB-MEM-01" aria-label="P-MEM-01 成员经历与任期低保真画板">
+    <rect x="20" y="225" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="256" class="boardTitle">P-MEM-01 · 成员经历与任期</text>
+    <text x="360" y="256" class="micro">画板 PB-MEM-01　变体：本人经历、管理者查看、异常标记</text>
+    <g id="PB-MEM-01-D" aria-label="主低保真帧">
+      <rect x="40" y="277" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="291" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="314" class="micro">全局导航　/　成员经历与任期　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="346" width="828" height="58" rx="5" class="ghost"/>
+<rect x="76" y="420" width="530" height="113" rx="5" class="ghost"/>
+<rect x="622" y="420" width="282" height="113" rx="5" class="ghost"/>
+<text x="78" y="555" class="micro">对象摘要 · 权威状态 · 时间线/分区 · 主操作 · 审计入口</text>
+      <text x="82" y="336" class="overlay"><tspan x="82" dy="0">正常态：展示当前关系、多部门职位、任期历</tspan><tspan x="82" dy="21">史和异常标记</tspan></text>
+      <text x="82" y="408" class="overlay"><tspan x="82" dy="0">响应式：摘要与权威状态置顶；</tspan><tspan x="82" dy="21">分区可折叠；</tspan><tspan x="82" dy="21">关键操作保持可达。</tspan></text>
+      <text x="462" y="408" class="overlay"><tspan x="462" dy="0">授权收口：本人只看本人；</tspan><tspan x="462" dy="21">管理者按当前社团/部门范围查看</tspan></text>
+    </g><g id="EV-MEM-01-N" aria-label="P-MEM-01 正常状态">
+      <rect x="960" y="277" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="307" class="stateTitle">N · 正常</text>
+      <text x="976" y="337" class="stateBody"><tspan x="976" dy="0">展示当前关系、多部门职位、任</tspan><tspan x="976" dy="22">期历史和异常标记</tspan></text>
+    </g><g id="EV-MEM-01-L" aria-label="P-MEM-01 加载状态">
+      <rect x="1240" y="277" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="307" class="stateTitle">L · 加载</text>
+      <text x="1256" y="337" class="stateBody"><tspan x="1256" dy="0">成员与任期查询加载</tspan></text>
+    </g><g id="EV-MEM-01-E" aria-label="P-MEM-01 空数据状态">
+      <rect x="1520" y="277" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="307" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="337" class="stateBody"><tspan x="1536" dy="0">无当前关系/历史时明确显示无</tspan><tspan x="1536" dy="22">成员经历</tspan></text>
+    </g><g id="EV-MEM-01-F" aria-label="P-MEM-01 失败状态">
+      <rect x="1800" y="277" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="307" class="stateTitle">F · 失败</text>
+      <text x="1816" y="337" class="stateBody"><tspan x="1816" dy="0">查询或 Casdoor 对账</tspan><tspan x="1816" dy="22">失败显示异常，不改写历史</tspan></text>
+    </g><g id="EV-MEM-01-A" aria-label="P-MEM-01 无权限状态">
+      <rect x="2080" y="277" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="307" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="337" class="stateBody"><tspan x="2096" dy="0">本人只看本人；</tspan><tspan x="2096" dy="22">管理者按当前社团/部门范围查</tspan><tspan x="2096" dy="22">看</tspan></text>
+    </g></g>
+<g id="PB-MEM-04" aria-label="P-MEM-04 任命调岗免职低保真画板">
+    <rect x="20" y="615" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="646" class="boardTitle">P-MEM-04 · 任命调岗免职</text>
+    <text x="360" y="646" class="micro">画板 PB-MEM-04　变体：立即、预约、辞职申请、重新确认</text>
+    <g id="PB-MEM-04-D" aria-label="主低保真帧">
+      <rect x="40" y="667" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="681" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="704" class="micro">全局导航　/　任命调岗免职　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="736" width="260" height="187" rx="5" class="ghost"/>
+<rect x="354" y="736" width="340" height="112" rx="5" class="ghost"/>
+<rect x="354" y="864" width="340" height="59" rx="5" class="ghost"/>
+<rect x="710" y="892" width="194" height="31" rx="5" class="danger"/>
+<text x="78" y="945" class="micro">目标冻结 · 影响预览 · 重新认证 · 二次确认 · 分项结果</text>
+      <text x="82" y="726" class="overlay"><tspan x="82" dy="0">正常态：展示立即/预约任命调岗免职、辞职</tspan><tspan x="82" dy="21">和待重新确认命令</tspan></text>
+      <text x="82" y="798" class="overlay"><tspan x="82" dy="0">响应式：影响预览先于确认；</tspan><tspan x="82" dy="21">分项结果纵向展开；</tspan><tspan x="82" dy="21">危险操作不弱化。</tspan></text>
+      <text x="462" y="798" class="overlay"><tspan x="462" dy="0">授权收口：部门负责人仅本部门普通职位；</tspan><tspan x="462" dy="21">越权任免拒绝</tspan></text>
+    </g><g id="EV-MEM-04-N" aria-label="P-MEM-04 正常状态">
+      <rect x="960" y="667" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="697" class="stateTitle">N · 正常</text>
+      <text x="976" y="727" class="stateBody"><tspan x="976" dy="0">展示立即/预约任命调岗免职、</tspan><tspan x="976" dy="22">辞职和待重新确认命令</tspan></text>
+    </g><g id="EV-MEM-04-L" aria-label="P-MEM-04 加载状态">
+      <rect x="1240" y="667" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="697" class="stateTitle">L · 加载</text>
+      <text x="1256" y="727" class="stateBody"><tspan x="1256" dy="0">候选、影响预览或调度执行加载</tspan></text>
+    </g><g id="EV-MEM-04-E" aria-label="P-MEM-04 空数据状态">
+      <rect x="1520" y="667" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="697" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="727" class="stateBody"><tspan x="1536" dy="0">无合格候选/预约命令时说明当</tspan><tspan x="1536" dy="22">前条件</tspan></text>
+    </g><g id="EV-MEM-04-F" aria-label="P-MEM-04 失败状态">
+      <rect x="1800" y="667" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="697" class="stateTitle">F · 失败</text>
+      <text x="1816" y="727" class="stateBody"><tspan x="1816" dy="0">原发起人失权、前置失效或外部</tspan><tspan x="1816" dy="22">不确定时暂停待处置</tspan></text>
+    </g><g id="EV-MEM-04-A" aria-label="P-MEM-04 无权限状态">
+      <rect x="2080" y="667" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="697" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="727" class="stateBody"><tspan x="2096" dy="0">部门负责人仅本部门普通职位；</tspan><tspan x="2096" dy="22">越权任免拒绝</tspan></text>
+    </g></g>
+<g id="PB-MEM-06" aria-label="P-MEM-06 换届管理低保真画板">
+    <rect x="20" y="1005" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="1036" class="boardTitle">P-MEM-06 · 换届管理</text>
+    <text x="360" y="1036" class="micro">画板 PB-MEM-06　变体：方案预览、确认、部分异常</text>
+    <g id="PB-MEM-06-D" aria-label="主低保真帧">
+      <rect x="40" y="1057" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="1071" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="1094" class="micro">全局导航　/　换届管理　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="1126" width="260" height="187" rx="5" class="ghost"/>
+<rect x="354" y="1126" width="340" height="112" rx="5" class="ghost"/>
+<rect x="354" y="1254" width="340" height="59" rx="5" class="ghost"/>
+<rect x="710" y="1282" width="194" height="31" rx="5" class="danger"/>
+<text x="78" y="1335" class="micro">目标冻结 · 影响预览 · 重新认证 · 二次确认 · 分项结果</text>
+      <text x="82" y="1116" class="overlay"><tspan x="82" dy="0">正常态：展示换届方案、影响预览、交接续接</tspan><tspan x="82" dy="21">和部分异常</tspan></text>
+      <text x="82" y="1188" class="overlay"><tspan x="82" dy="0">响应式：影响预览先于确认；</tspan><tspan x="82" dy="21">分项结果纵向展开；</tspan><tspan x="82" dy="21">危险操作不弱化。</tspan></text>
+      <text x="462" y="1188" class="overlay"><tspan x="462" dy="0">授权收口：仅负责人/人事确认；</tspan><tspan x="462" dy="21">至少一名负责人约束不可绕过</tspan></text>
+    </g><g id="EV-MEM-06-N" aria-label="P-MEM-06 正常状态">
+      <rect x="960" y="1057" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="1087" class="stateTitle">N · 正常</text>
+      <text x="976" y="1117" class="stateBody"><tspan x="976" dy="0">展示换届方案、影响预览、交接</tspan><tspan x="976" dy="22">续接和部分异常</tspan></text>
+    </g><g id="EV-MEM-06-L" aria-label="P-MEM-06 加载状态">
+      <rect x="1240" y="1057" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="1087" class="stateTitle">L · 加载</text>
+      <text x="1256" y="1117" class="stateBody"><tspan x="1256" dy="0">方案、影响或分步执行加载</tspan></text>
+    </g><g id="EV-MEM-06-E" aria-label="P-MEM-06 空数据状态">
+      <rect x="1520" y="1057" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="1087" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="1117" class="stateBody"><tspan x="1536" dy="0">无职位变化时展示“无变更”而</tspan><tspan x="1536" dy="22">非允许空提交</tspan></text>
+    </g><g id="EV-MEM-06-F" aria-label="P-MEM-06 失败状态">
+      <rect x="1800" y="1057" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="1087" class="stateTitle">F · 失败</text>
+      <text x="1816" y="1117" class="stateBody"><tspan x="1816" dy="0">新任失败回退；</tspan><tspan x="1816" dy="22">旧任移除部分失败保留新任并告</tspan><tspan x="1816" dy="22">警</tspan></text>
+    </g><g id="EV-MEM-06-A" aria-label="P-MEM-06 无权限状态">
+      <rect x="2080" y="1057" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="1087" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="1117" class="stateBody"><tspan x="2096" dy="0">仅负责人/人事确认；</tspan><tspan x="2096" dy="22">至少一名负责人约束不可绕过</tspan></text>
+    </g></g>
+  <text x="40" y="1446" class="micro">正式低保真设计基线：用于状态与交互评审；外部高保真/移动视觉不得改变业务、授权与安全边界；代码开工门关闭。</text>
+</svg>

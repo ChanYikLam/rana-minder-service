@@ -1,0 +1,674 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="6940" viewBox="0 0 2400 6940" role="img" aria-labelledby="asset-title asset-desc">
+  <title id="asset-title">RanaMinder S-01 支撑与平台页面低保真状态画板</title>
+  <desc id="asset-desc">17 个页面主低保真帧及正常、加载、空数据、失败、无权限五状态；高保真与独立移动视觉稿由外部绘制。</desc>
+  <style>
+    .bg{fill:#f2f0ea}.ink{fill:#22272b}.muted{fill:#667078}.board{fill:#faf9f5;stroke:#68727a;stroke-width:2}.frame{fill:#ffffff;stroke:#2d3439;stroke-width:2}.chrome{fill:#d9dde0}.ghost{fill:#eef0f1;stroke:#9aa2a8;stroke-width:1.5}.solid{fill:#39434a}.danger{fill:#676164}.flowbar{fill:#e5e2da;stroke:#747d83;stroke-width:1.5}.flowNode{fill:#fff;stroke:#333b40;stroke-width:2}.flowNode:hover{fill:#e8ebec}.arrow{stroke:#4a545a;stroke-width:2;marker-end:url(#arrow);fill:none}.state{fill:#fff;stroke-width:2}.stateN{stroke:#4d565c}.stateL{stroke:#7c858b;stroke-dasharray:6 4}.stateE{stroke:#90979c}.stateF{stroke:#5b5050}.stateA{stroke:#363b3f;stroke-dasharray:3 3}.title{font:700 29px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b}.subtitle{font:15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#59636a}.boardTitle{font:700 18px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b}.label{font:600 17px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#2c3338}.nodeTitle{font:600 14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b}.body{font:15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#404a50}.stateTitle{font:700 15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#252b2f}.stateBody{font:13px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#3f484e}.overlay{font:12px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#273036}.micro{font:11px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#59636a}.linkText{font:600 14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#22272b;text-decoration:underline}
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4a545a"/></marker></defs>
+  <rect width="2400" height="6940" class="bg"/>
+  <text x="40" y="48" class="title">S-01 支撑与平台页面 · 低保真状态画板</text>
+  <text x="40" y="78" class="subtitle">17 个唯一页面 · 每页 1 个主低保真帧 + N/L/E/F/A 五状态 · 响应式以行为注释验收</text>
+  <a href="核心交互旅程索引-v1.0.svg" tabindex="0" aria-label="返回核心交互旅程索引"><text x="2070" y="48" class="linkText">← 核心旅程索引</text></a>
+  <g aria-label="支撑页面说明">
+      <rect x="40" y="112" width="2320" height="86" rx="8" class="flowbar"/>
+      <text x="70" y="146" class="label">17 个支撑与平台页面按领域分组，不新增核心旅程。</text>
+      <text x="70" y="177" class="body">组织与成员 · 表单与通知 · 审计与统计 · 配置与运维 · 通用安全收口</text>
+    </g>
+  <g id="PB-ORG-01" aria-label="P-ORG-01 社团接入管理低保真画板">
+    <rect x="20" y="225" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="256" class="boardTitle">P-ORG-01 · 社团接入管理</text>
+    <text x="360" y="256" class="micro">画板 PB-ORG-01　变体：接入、停用、解除、重新绑定</text>
+    <g id="PB-ORG-01-D" aria-label="主低保真帧">
+      <rect x="40" y="277" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="291" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="314" class="micro">全局导航　/　社团接入管理　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="346" width="828" height="38" rx="5" class="ghost"/>
+<rect x="76" y="399" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="444" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="489" width="828" height="34" rx="4" class="ghost"/>
+<text x="78" y="555" class="micro">筛选栏 · 状态摘要 · 数据列表/卡片 · 分页 · 详情抽屉</text>
+      <text x="82" y="336" class="overlay"><tspan x="82" dy="0">正常态：展示可接入 Group、映射状态</tspan><tspan x="82" dy="21">与接入/停用/重绑动作</tspan></text>
+      <text x="82" y="408" class="overlay"><tspan x="82" dy="0">响应式：筛选收纳为抽屉；</tspan><tspan x="82" dy="21">数据行转卡片；</tspan><tspan x="82" dy="21">行级动作与状态原因必须保留。</tspan></text>
+      <text x="462" y="408" class="overlay"><tspan x="462" dy="0">授权收口：非超级管理员拒绝；</tspan><tspan x="462" dy="21">无权 Group 不泄露存在</tspan></text>
+    </g><g id="EV-ORG-01-N" aria-label="P-ORG-01 正常状态">
+      <rect x="960" y="277" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="307" class="stateTitle">N · 正常</text>
+      <text x="976" y="337" class="stateBody"><tspan x="976" dy="0">展示可接入 Group、映射</tspan><tspan x="976" dy="22">状态与接入/停用/重绑动作</tspan></text>
+    </g><g id="EV-ORG-01-L" aria-label="P-ORG-01 加载状态">
+      <rect x="1240" y="277" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="307" class="stateTitle">L · 加载</text>
+      <text x="1256" y="337" class="stateBody"><tspan x="1256" dy="0">Group 校验、影响预览或</tspan><tspan x="1256" dy="22">同步处理中</tspan></text>
+    </g><g id="EV-ORG-01-E" aria-label="P-ORG-01 空数据状态">
+      <rect x="1520" y="277" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="307" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="337" class="stateBody"><tspan x="1536" dy="0">无合格 Group 时说明层</tspan><tspan x="1536" dy="22">级/用途条件，不提供伪造入口</tspan></text>
+    </g><g id="EV-ORG-01-F" aria-label="P-ORG-01 失败状态">
+      <rect x="1800" y="277" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="307" class="stateTitle">F · 失败</text>
+      <text x="1816" y="337" class="stateBody"><tspan x="1816" dy="0">映射冲突、外部失权或同步异常</tspan><tspan x="1816" dy="22">保持历史并给出处置入口</tspan></text>
+    </g><g id="EV-ORG-01-A" aria-label="P-ORG-01 无权限状态">
+      <rect x="2080" y="277" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="307" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="337" class="stateBody"><tspan x="2096" dy="0">非超级管理员拒绝；</tspan><tspan x="2096" dy="22">无权 Group 不泄露存在</tspan></text>
+    </g></g>
+<g id="PB-MEM-02" aria-label="P-MEM-02 部门关系申请低保真画板">
+    <rect x="20" y="615" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="646" class="boardTitle">P-MEM-02 · 部门关系申请</text>
+    <text x="360" y="646" class="micro">画板 PB-MEM-02　变体：本人申请/撤回、管理者审批</text>
+    <g id="PB-MEM-02-D" aria-label="主低保真帧">
+      <rect x="40" y="667" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="681" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="704" class="micro">全局导航　/　部门关系申请　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="736" width="828" height="38" rx="5" class="ghost"/>
+<rect x="76" y="789" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="834" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="879" width="828" height="34" rx="4" class="ghost"/>
+<text x="78" y="945" class="micro">筛选栏 · 状态摘要 · 数据列表/卡片 · 分页 · 详情抽屉</text>
+      <text x="82" y="726" class="overlay"><tspan x="82" dy="0">正常态：本人提交/撤回部门申请，管理者查</tspan><tspan x="82" dy="21">看审批结果</tspan></text>
+      <text x="82" y="798" class="overlay"><tspan x="82" dy="0">响应式：筛选收纳为抽屉；</tspan><tspan x="82" dy="21">数据行转卡片；</tspan><tspan x="82" dy="21">行级动作与状态原因必须保留。</tspan></text>
+      <text x="462" y="798" class="overlay"><tspan x="462" dy="0">授权收口：本人不能审批本人；</tspan><tspan x="462" dy="21">无当前管理范围者拒绝</tspan></text>
+    </g><g id="EV-MEM-02-N" aria-label="P-MEM-02 正常状态">
+      <rect x="960" y="667" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="697" class="stateTitle">N · 正常</text>
+      <text x="976" y="727" class="stateBody"><tspan x="976" dy="0">本人提交/撤回部门申请，管理</tspan><tspan x="976" dy="22">者查看审批结果</tspan></text>
+    </g><g id="EV-MEM-02-L" aria-label="P-MEM-02 加载状态">
+      <rect x="1240" y="667" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="697" class="stateTitle">L · 加载</text>
+      <text x="1256" y="727" class="stateBody"><tspan x="1256" dy="0">申请列表、审批详情或执行回读</tspan><tspan x="1256" dy="22">加载</tspan></text>
+    </g><g id="EV-MEM-02-E" aria-label="P-MEM-02 空数据状态">
+      <rect x="1520" y="667" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="697" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="727" class="stateBody"><tspan x="1536" dy="0">无申请时展示可发起入口；</tspan><tspan x="1536" dy="22">无审批项时展示空态</tspan></text>
+    </g><g id="EV-MEM-02-F" aria-label="P-MEM-02 失败状态">
+      <rect x="1800" y="667" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="697" class="stateTitle">F · 失败</text>
+      <text x="1816" y="727" class="stateBody"><tspan x="1816" dy="0">撤回/审批竞争或执行失败显示</tspan><tspan x="1816" dy="22">权威结果与恢复动作</tspan></text>
+    </g><g id="EV-MEM-02-A" aria-label="P-MEM-02 无权限状态">
+      <rect x="2080" y="667" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="697" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="727" class="stateBody"><tspan x="2096" dy="0">本人不能审批本人；</tspan><tspan x="2096" dy="22">无当前管理范围者拒绝</tspan></text>
+    </g></g>
+<g id="PB-MEM-03" aria-label="P-MEM-03 常规入社邀请低保真画板">
+    <rect x="20" y="1005" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="1036" class="boardTitle">P-MEM-03 · 常规入社邀请</text>
+    <text x="360" y="1036" class="micro">画板 PB-MEM-03　变体：本人接受/拒绝、工作空间发送/撤回</text>
+    <g id="PB-MEM-03-D" aria-label="主低保真帧">
+      <rect x="40" y="1057" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="1071" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="1094" class="micro">全局导航　/　常规入社邀请　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="1126" width="828" height="38" rx="5" class="ghost"/>
+<rect x="76" y="1179" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="1224" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="1269" width="828" height="34" rx="4" class="ghost"/>
+<text x="78" y="1335" class="micro">筛选栏 · 状态摘要 · 数据列表/卡片 · 分页 · 详情抽屉</text>
+      <text x="82" y="1116" class="overlay"><tspan x="82" dy="0">正常态：管理者发送/撤回常规邀请，本人接</tspan><tspan x="82" dy="21">受/拒绝</tspan></text>
+      <text x="82" y="1188" class="overlay"><tspan x="82" dy="0">响应式：筛选收纳为抽屉；</tspan><tspan x="82" dy="21">数据行转卡片；</tspan><tspan x="82" dy="21">行级动作与状态原因必须保留。</tspan></text>
+      <text x="462" y="1188" class="overlay"><tspan x="462" dy="0">授权收口：发送限负责人/人事；</tspan><tspan x="462" dy="21">处理限被邀请本人</tspan></text>
+    </g><g id="EV-MEM-03-N" aria-label="P-MEM-03 正常状态">
+      <rect x="960" y="1057" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="1087" class="stateTitle">N · 正常</text>
+      <text x="976" y="1117" class="stateBody"><tspan x="976" dy="0">管理者发送/撤回常规邀请，本</tspan><tspan x="976" dy="22">人接受/拒绝</tspan></text>
+    </g><g id="EV-MEM-03-L" aria-label="P-MEM-03 加载状态">
+      <rect x="1240" y="1057" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="1087" class="stateTitle">L · 加载</text>
+      <text x="1256" y="1117" class="stateBody"><tspan x="1256" dy="0">候选、邀请或成员生效回读加载</tspan></text>
+    </g><g id="EV-MEM-03-E" aria-label="P-MEM-03 空数据状态">
+      <rect x="1520" y="1057" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="1087" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="1117" class="stateBody"><tspan x="1536" dy="0">无候选/无邀请时按角色展示空</tspan><tspan x="1536" dy="22">态</tspan></text>
+    </g><g id="EV-MEM-03-F" aria-label="P-MEM-03 失败状态">
+      <rect x="1800" y="1057" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="1087" class="stateTitle">F · 失败</text>
+      <text x="1816" y="1117" class="stateBody"><tspan x="1816" dy="0">接受/撤回竞争或同步异常显示</tspan><tspan x="1816" dy="22">处理中/重试状态</tspan></text>
+    </g><g id="EV-MEM-03-A" aria-label="P-MEM-03 无权限状态">
+      <rect x="2080" y="1057" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="1087" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="1117" class="stateBody"><tspan x="2096" dy="0">发送限负责人/人事；</tspan><tspan x="2096" dy="22">处理限被邀请本人</tspan></text>
+    </g></g>
+<g id="PB-MEM-05" aria-label="P-MEM-05 成员退出与移除低保真画板">
+    <rect x="20" y="1395" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="1426" class="boardTitle">P-MEM-05 · 成员退出与移除</text>
+    <text x="360" y="1426" class="micro">画板 PB-MEM-05　变体：本人退出、管理者移除、重新加入</text>
+    <g id="PB-MEM-05-D" aria-label="主低保真帧">
+      <rect x="40" y="1447" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="1461" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="1484" class="micro">全局导航　/　成员退出与移除　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="1516" width="828" height="38" rx="5" class="ghost"/>
+<rect x="76" y="1569" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="1614" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="1659" width="828" height="34" rx="4" class="ghost"/>
+<text x="78" y="1725" class="micro">筛选栏 · 状态摘要 · 数据列表/卡片 · 分页 · 详情抽屉</text>
+      <text x="82" y="1506" class="overlay"><tspan x="82" dy="0">正常态：展示本人退出、管理者移除、关系生</tspan><tspan x="82" dy="21">效与重新加入边界</tspan></text>
+      <text x="82" y="1578" class="overlay"><tspan x="82" dy="0">响应式：筛选收纳为抽屉；</tspan><tspan x="82" dy="21">数据行转卡片；</tspan><tspan x="82" dy="21">行级动作与状态原因必须保留。</tspan></text>
+      <text x="462" y="1578" class="overlay"><tspan x="462" dy="0">授权收口：本人仅操作本人退出；</tspan><tspan x="462" dy="21">管理者按当前范围移除</tspan></text>
+    </g><g id="EV-MEM-05-N" aria-label="P-MEM-05 正常状态">
+      <rect x="960" y="1447" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="1477" class="stateTitle">N · 正常</text>
+      <text x="976" y="1507" class="stateBody"><tspan x="976" dy="0">展示本人退出、管理者移除、关</tspan><tspan x="976" dy="22">系生效与重新加入边界</tspan></text>
+    </g><g id="EV-MEM-05-L" aria-label="P-MEM-05 加载状态">
+      <rect x="1240" y="1447" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="1477" class="stateTitle">L · 加载</text>
+      <text x="1256" y="1507" class="stateBody"><tspan x="1256" dy="0">影响预览或 Casdoor </tspan><tspan x="1256" dy="22">回读处理中</tspan></text>
+    </g><g id="EV-MEM-05-E" aria-label="P-MEM-05 空数据状态">
+      <rect x="1520" y="1447" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="1477" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="1507" class="stateBody"><tspan x="1536" dy="0">无可退出/移除的有效关系时说</tspan><tspan x="1536" dy="22">明原因</tspan></text>
+    </g><g id="EV-MEM-05-F" aria-label="P-MEM-05 失败状态">
+      <rect x="1800" y="1447" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="1477" class="stateTitle">F · 失败</text>
+      <text x="1816" y="1507" class="stateBody"><tspan x="1816" dy="0">活跃业务阻断、版本竞争或同步</tspan><tspan x="1816" dy="22">失败保持原关系</tspan></text>
+    </g><g id="EV-MEM-05-A" aria-label="P-MEM-05 无权限状态">
+      <rect x="2080" y="1447" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="1477" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="1507" class="stateBody"><tspan x="2096" dy="0">本人仅操作本人退出；</tspan><tspan x="2096" dy="22">管理者按当前范围移除</tspan></text>
+    </g></g>
+<g id="PB-FORM-01" aria-label="P-FORM-01 动态表单设计器低保真画板">
+    <rect x="20" y="1785" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="1816" class="boardTitle">P-FORM-01 · 动态表单设计器</text>
+    <text x="360" y="1816" class="micro">画板 PB-FORM-01　变体：社团工作空间、平台模板</text>
+    <g id="PB-FORM-01-D" aria-label="主低保真帧">
+      <rect x="40" y="1837" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="1851" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="1874" class="micro">全局导航　/　动态表单设计器　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="1906" width="150" height="187" rx="5" class="ghost"/>
+<rect x="248" y="1906" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="1906" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="1958" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="1958" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="2010" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2010" width="220" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2062" width="220" height="31" rx="5" class="solid"/>
+<text x="78" y="2115" class="micro">步骤/版本 · 字段分组 · 校验摘要 · 主/次操作 · 草稿提示</text>
+      <text x="82" y="1896" class="overlay"><tspan x="82" dy="0">正常态：展示字段库、固定骨架、条件与字段</tspan><tspan x="82" dy="21">权限配置</tspan></text>
+      <text x="82" y="1968" class="overlay"><tspan x="82" dy="0">响应式：分栏改为单列；</tspan><tspan x="82" dy="21">步骤、错误摘要与当前状态置顶；</tspan><tspan x="82" dy="21">主操作不遮挡字段。</tspan></text>
+      <text x="462" y="1968" class="overlay"><tspan x="462" dy="0">授权收口：非本社团配置者或无平台模板权限</tspan><tspan x="462" dy="21">者拒绝</tspan></text>
+    </g><g id="EV-FORM-01-N" aria-label="P-FORM-01 正常状态">
+      <rect x="960" y="1837" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="1867" class="stateTitle">N · 正常</text>
+      <text x="976" y="1897" class="stateBody"><tspan x="976" dy="0">展示字段库、固定骨架、条件与</tspan><tspan x="976" dy="22">字段权限配置</tspan></text>
+    </g><g id="EV-FORM-01-L" aria-label="P-FORM-01 加载状态">
+      <rect x="1240" y="1837" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="1867" class="stateTitle">L · 加载</text>
+      <text x="1256" y="1897" class="stateBody"><tspan x="1256" dy="0">模板、草稿或预览加载；</tspan><tspan x="1256" dy="22">保存防重复</tspan></text>
+    </g><g id="EV-FORM-01-E" aria-label="P-FORM-01 空数据状态">
+      <rect x="1520" y="1837" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="1867" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="1897" class="stateBody"><tspan x="1536" dy="0">无自定义字段时展示空画布与添</tspan><tspan x="1536" dy="22">加入口</tspan></text>
+    </g><g id="EV-FORM-01-F" aria-label="P-FORM-01 失败状态">
+      <rect x="1800" y="1837" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="1867" class="stateTitle">F · 失败</text>
+      <text x="1816" y="1897" class="stateBody"><tspan x="1816" dy="0">校验/版本冲突或发布失败保留</tspan><tspan x="1816" dy="22">草稿并定位字段</tspan></text>
+    </g><g id="EV-FORM-01-A" aria-label="P-FORM-01 无权限状态">
+      <rect x="2080" y="1837" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="1867" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="1897" class="stateBody"><tspan x="2096" dy="0">非本社团配置者或无平台模板权</tspan><tspan x="2096" dy="22">限者拒绝</tspan></text>
+    </g></g>
+<g id="PB-NTF-02" aria-label="P-NTF-02 邮件设置低保真画板">
+    <rect x="20" y="2175" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="2206" class="boardTitle">P-NTF-02 · 邮件设置</text>
+    <text x="360" y="2206" class="micro">画板 PB-NTF-02　变体：本人偏好、社团发信配置、平台发信配置</text>
+    <g id="PB-NTF-02-D" aria-label="主低保真帧">
+      <rect x="40" y="2227" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="2241" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="2264" class="micro">全局导航　/　邮件设置　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="2296" width="150" height="187" rx="5" class="ghost"/>
+<rect x="248" y="2296" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2296" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="2348" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2348" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="2400" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2400" width="220" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2452" width="220" height="31" rx="5" class="solid"/>
+<text x="78" y="2505" class="micro">步骤/版本 · 字段分组 · 校验摘要 · 主/次操作 · 草稿提示</text>
+      <text x="82" y="2286" class="overlay"><tspan x="82" dy="0">正常态：展示本人偏好、社团与平台发信配置</tspan><tspan x="82" dy="21">及测试状态</tspan></text>
+      <text x="82" y="2358" class="overlay"><tspan x="82" dy="0">响应式：分栏改为单列；</tspan><tspan x="82" dy="21">步骤、错误摘要与当前状态置顶；</tspan><tspan x="82" dy="21">主操作不遮挡字段。</tspan></text>
+      <text x="462" y="2358" class="overlay"><tspan x="462" dy="0">授权收口：本人、社团管理员、超管仅见各自</tspan><tspan x="462" dy="21">配置作用域</tspan></text>
+    </g><g id="EV-NTF-02-N" aria-label="P-NTF-02 正常状态">
+      <rect x="960" y="2227" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="2257" class="stateTitle">N · 正常</text>
+      <text x="976" y="2287" class="stateBody"><tspan x="976" dy="0">展示本人偏好、社团与平台发信</tspan><tspan x="976" dy="22">配置及测试状态</tspan></text>
+    </g><g id="EV-NTF-02-L" aria-label="P-NTF-02 加载状态">
+      <rect x="1240" y="2227" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="2257" class="stateTitle">L · 加载</text>
+      <text x="1256" y="2287" class="stateBody"><tspan x="1256" dy="0">配置或测试结果加载；</tspan><tspan x="1256" dy="22">不确定时显示处理中</tspan></text>
+    </g><g id="EV-NTF-02-E" aria-label="P-NTF-02 空数据状态">
+      <rect x="1520" y="2227" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="2257" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="2287" class="stateBody"><tspan x="1536" dy="0">未配置发信账号时显示待配置，</tspan><tspan x="1536" dy="22">不伪装系统故障</tspan></text>
+    </g><g id="EV-NTF-02-F" aria-label="P-NTF-02 失败状态">
+      <rect x="1800" y="2227" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="2257" class="stateTitle">F · 失败</text>
+      <text x="1816" y="2287" class="stateBody"><tspan x="1816" dy="0">测试/投递不确定不显示成功，</tspan><tspan x="1816" dy="22">保留配置与重试入口</tspan></text>
+    </g><g id="EV-NTF-02-A" aria-label="P-NTF-02 无权限状态">
+      <rect x="2080" y="2227" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="2257" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="2287" class="stateBody"><tspan x="2096" dy="0">本人、社团管理员、超管仅见各</tspan><tspan x="2096" dy="22">自配置作用域</tspan></text>
+    </g></g>
+<g id="PB-AUD-01" aria-label="P-AUD-01 事实纠错低保真画板">
+    <rect x="20" y="2565" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="2596" class="boardTitle">P-AUD-01 · 事实纠错</text>
+    <text x="360" y="2596" class="micro">画板 PB-AUD-01　变体：本人申请/撤回、工作空间/超管处置</text>
+    <g id="PB-AUD-01-D" aria-label="主低保真帧">
+      <rect x="40" y="2617" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="2631" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="2654" class="micro">全局导航　/　事实纠错　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="2686" width="150" height="187" rx="5" class="ghost"/>
+<rect x="248" y="2686" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2686" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="2738" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2738" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="2790" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2790" width="220" height="38" rx="4" class="ghost"/>
+<rect x="684" y="2842" width="220" height="31" rx="5" class="solid"/>
+<text x="78" y="2895" class="micro">步骤/版本 · 字段分组 · 校验摘要 · 主/次操作 · 草稿提示</text>
+      <text x="82" y="2676" class="overlay"><tspan x="82" dy="0">正常态：展示纠错申请、证据、撤回、处理与</tspan><tspan x="82" dy="21">历史</tspan></text>
+      <text x="82" y="2748" class="overlay"><tspan x="82" dy="0">响应式：分栏改为单列；</tspan><tspan x="82" dy="21">步骤、错误摘要与当前状态置顶；</tspan><tspan x="82" dy="21">主操作不遮挡字段。</tspan></text>
+      <text x="462" y="2748" class="overlay"><tspan x="462" dy="0">授权收口：原提交人仅撤回本人；</tspan><tspan x="462" dy="21">处理人按当前权限处置</tspan></text>
+    </g><g id="EV-AUD-01-N" aria-label="P-AUD-01 正常状态">
+      <rect x="960" y="2617" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="2647" class="stateTitle">N · 正常</text>
+      <text x="976" y="2677" class="stateBody"><tspan x="976" dy="0">展示纠错申请、证据、撤回、处</tspan><tspan x="976" dy="22">理与历史</tspan></text>
+    </g><g id="EV-AUD-01-L" aria-label="P-AUD-01 加载状态">
+      <rect x="1240" y="2617" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="2647" class="stateTitle">L · 加载</text>
+      <text x="1256" y="2677" class="stateBody"><tspan x="1256" dy="0">申请/历史或决定提交加载</tspan></text>
+    </g><g id="EV-AUD-01-E" aria-label="P-AUD-01 空数据状态">
+      <rect x="1520" y="2617" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="2647" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="2677" class="stateBody"><tspan x="1536" dy="0">无申请/待处理项时按角色显示</tspan><tspan x="1536" dy="22">空态</tspan></text>
+    </g><g id="EV-AUD-01-F" aria-label="P-AUD-01 失败状态">
+      <rect x="1800" y="2617" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="2647" class="stateTitle">F · 失败</text>
+      <text x="1816" y="2677" class="stateBody"><tspan x="1816" dy="0">撤回与决定竞争、版本冲突或提</tspan><tspan x="1816" dy="22">交失败后显示权威结果</tspan></text>
+    </g><g id="EV-AUD-01-A" aria-label="P-AUD-01 无权限状态">
+      <rect x="2080" y="2617" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="2647" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="2677" class="stateBody"><tspan x="2096" dy="0">原提交人仅撤回本人；</tspan><tspan x="2096" dy="22">处理人按当前权限处置</tspan></text>
+    </g></g>
+<g id="PB-AUD-02" aria-label="P-AUD-02 审计查询低保真画板">
+    <rect x="20" y="2955" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="2986" class="boardTitle">P-AUD-02 · 审计查询</text>
+    <text x="360" y="2986" class="micro">画板 PB-AUD-02　变体：社团范围、平台范围、归档只读/失权过滤</text>
+    <g id="PB-AUD-02-D" aria-label="主低保真帧">
+      <rect x="40" y="3007" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="3021" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="3044" class="micro">全局导航　/　审计查询　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="3076" width="828" height="38" rx="5" class="ghost"/>
+<rect x="76" y="3129" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="3174" width="828" height="34" rx="4" class="ghost"/>
+<rect x="76" y="3219" width="828" height="34" rx="4" class="ghost"/>
+<text x="78" y="3285" class="micro">筛选栏 · 状态摘要 · 数据列表/卡片 · 分页 · 详情抽屉</text>
+      <text x="82" y="3066" class="overlay"><tspan x="82" dy="0">正常态：展示当前授权范围内的审计检索、归</tspan><tspan x="82" dy="21">档只读与失权过滤</tspan></text>
+      <text x="82" y="3138" class="overlay"><tspan x="82" dy="0">响应式：筛选收纳为抽屉；</tspan><tspan x="82" dy="21">数据行转卡片；</tspan><tspan x="82" dy="21">行级动作与状态原因必须保留。</tspan></text>
+      <text x="462" y="3138" class="overlay"><tspan x="462" dy="0">授权收口：越社团、越部门或已失权范围拒绝</tspan><tspan x="462" dy="21">且不泄露存在</tspan></text>
+    </g><g id="EV-AUD-02-N" aria-label="P-AUD-02 正常状态">
+      <rect x="960" y="3007" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="3037" class="stateTitle">N · 正常</text>
+      <text x="976" y="3067" class="stateBody"><tspan x="976" dy="0">展示当前授权范围内的审计检索</tspan><tspan x="976" dy="22">、归档只读与失权过滤</tspan></text>
+    </g><g id="EV-AUD-02-L" aria-label="P-AUD-02 加载状态">
+      <rect x="1240" y="3007" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="3037" class="stateTitle">L · 加载</text>
+      <text x="1256" y="3067" class="stateBody"><tspan x="1256" dy="0">查询、分页或归档读取加载</tspan></text>
+    </g><g id="EV-AUD-02-E" aria-label="P-AUD-02 空数据状态">
+      <rect x="1520" y="3007" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="3037" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="3067" class="stateBody"><tspan x="1536" dy="0">无命中时保留条件并显示空结果</tspan></text>
+    </g><g id="EV-AUD-02-F" aria-label="P-AUD-02 失败状态">
+      <rect x="1800" y="3007" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="3037" class="stateTitle">F · 失败</text>
+      <text x="1816" y="3067" class="stateBody"><tspan x="1816" dy="0">查询/归档失败提供重试，不返</tspan><tspan x="1816" dy="22">回越权部分结果</tspan></text>
+    </g><g id="EV-AUD-02-A" aria-label="P-AUD-02 无权限状态">
+      <rect x="2080" y="3007" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="3037" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="3067" class="stateBody"><tspan x="2096" dy="0">越社团、越部门或已失权范围拒</tspan><tspan x="2096" dy="22">绝且不泄露存在</tspan></text>
+    </g></g>
+<g id="PB-AUD-03" aria-label="P-AUD-03 正式删除低保真画板">
+    <rect x="20" y="3345" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="3376" class="boardTitle">P-AUD-03 · 正式删除</text>
+    <text x="360" y="3376" class="micro">画板 PB-AUD-03　变体：预览、重新认证、执行进度、部分失败</text>
+    <g id="PB-AUD-03-D" aria-label="主低保真帧">
+      <rect x="40" y="3397" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="3411" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="3434" class="micro">全局导航　/　正式删除　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="3466" width="260" height="187" rx="5" class="ghost"/>
+<rect x="354" y="3466" width="340" height="112" rx="5" class="ghost"/>
+<rect x="354" y="3594" width="340" height="59" rx="5" class="ghost"/>
+<rect x="710" y="3622" width="194" height="31" rx="5" class="danger"/>
+<text x="78" y="3675" class="micro">目标冻结 · 影响预览 · 重新认证 · 二次确认 · 分项结果</text>
+      <text x="82" y="3456" class="overlay"><tspan x="82" dy="0">正常态：展示删除范围、影响预览、重新认证</tspan><tspan x="82" dy="21">和执行状态</tspan></text>
+      <text x="82" y="3528" class="overlay"><tspan x="82" dy="0">响应式：影响预览先于确认；</tspan><tspan x="82" dy="21">分项结果纵向展开；</tspan><tspan x="82" dy="21">危险操作不弱化。</tspan></text>
+      <text x="462" y="3528" class="overlay"><tspan x="462" dy="0">授权收口：仅超级管理员；</tspan><tspan x="462" dy="21">重新认证失败或 Group 不符拒绝</tspan></text>
+    </g><g id="EV-AUD-03-N" aria-label="P-AUD-03 正常状态">
+      <rect x="960" y="3397" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="3427" class="stateTitle">N · 正常</text>
+      <text x="976" y="3457" class="stateBody"><tspan x="976" dy="0">展示删除范围、影响预览、重新</tspan><tspan x="976" dy="22">认证和执行状态</tspan></text>
+    </g><g id="EV-AUD-03-L" aria-label="P-AUD-03 加载状态">
+      <rect x="1240" y="3397" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="3427" class="stateTitle">L · 加载</text>
+      <text x="1256" y="3457" class="stateBody"><tspan x="1256" dy="0">预览或跨存储删除执行中显示分</tspan><tspan x="1256" dy="22">项进度</tspan></text>
+    </g><g id="EV-AUD-03-E" aria-label="P-AUD-03 空数据状态">
+      <rect x="1520" y="3397" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="3427" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="3457" class="stateBody"><tspan x="1536" dy="0">无可删除对象或被前置条件阻断</tspan><tspan x="1536" dy="22">时解释原因</tspan></text>
+    </g><g id="EV-AUD-03-F" aria-label="P-AUD-03 失败状态">
+      <rect x="1800" y="3397" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="3427" class="stateTitle">F · 失败</text>
+      <text x="1816" y="3457" class="stateBody"><tspan x="1816" dy="0">部分失败不得宣称完成，也不得</tspan><tspan x="1816" dy="22">补偿恢复已删数据</tspan></text>
+    </g><g id="EV-AUD-03-A" aria-label="P-AUD-03 无权限状态">
+      <rect x="2080" y="3397" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="3427" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="3457" class="stateBody"><tspan x="2096" dy="0">仅超级管理员；</tspan><tspan x="2096" dy="22">重新认证失败或 Group </tspan><tspan x="2096" dy="22">不符拒绝</tspan></text>
+    </g></g>
+<g id="PB-AUD-04" aria-label="P-AUD-04 数据保留策略低保真画板">
+    <rect x="20" y="3735" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="3766" class="boardTitle">P-AUD-04 · 数据保留策略</text>
+    <text x="360" y="3766" class="micro">画板 PB-AUD-04　变体：草稿、影响预览、版本发布</text>
+    <g id="PB-AUD-04-D" aria-label="主低保真帧">
+      <rect x="40" y="3787" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="3801" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="3824" class="micro">全局导航　/　数据保留策略　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="3856" width="150" height="187" rx="5" class="ghost"/>
+<rect x="248" y="3856" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="3856" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="3908" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="3908" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="3960" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="3960" width="220" height="38" rx="4" class="ghost"/>
+<rect x="684" y="4012" width="220" height="31" rx="5" class="solid"/>
+<text x="78" y="4065" class="micro">步骤/版本 · 字段分组 · 校验摘要 · 主/次操作 · 草稿提示</text>
+      <text x="82" y="3846" class="overlay"><tspan x="82" dy="0">正常态：展示保留策略草稿、影响预览、版本</tspan><tspan x="82" dy="21">与发布</tspan></text>
+      <text x="82" y="3918" class="overlay"><tspan x="82" dy="0">响应式：分栏改为单列；</tspan><tspan x="82" dy="21">步骤、错误摘要与当前状态置顶；</tspan><tspan x="82" dy="21">主操作不遮挡字段。</tspan></text>
+      <text x="462" y="3918" class="overlay"><tspan x="462" dy="0">授权收口：仅超级管理员；</tspan><tspan x="462" dy="21">失权或重新认证失败拒绝</tspan></text>
+    </g><g id="EV-AUD-04-N" aria-label="P-AUD-04 正常状态">
+      <rect x="960" y="3787" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="3817" class="stateTitle">N · 正常</text>
+      <text x="976" y="3847" class="stateBody"><tspan x="976" dy="0">展示保留策略草稿、影响预览、</tspan><tspan x="976" dy="22">版本与发布</tspan></text>
+    </g><g id="EV-AUD-04-L" aria-label="P-AUD-04 加载状态">
+      <rect x="1240" y="3787" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="3817" class="stateTitle">L · 加载</text>
+      <text x="1256" y="3847" class="stateBody"><tspan x="1256" dy="0">当前策略、影响或发布结果加载</tspan></text>
+    </g><g id="EV-AUD-04-E" aria-label="P-AUD-04 空数据状态">
+      <rect x="1520" y="3787" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="3817" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="3847" class="stateBody"><tspan x="1536" dy="0">无自定义草稿时显示当前生效策</tspan><tspan x="1536" dy="22">略与新建入口</tspan></text>
+    </g><g id="EV-AUD-04-F" aria-label="P-AUD-04 失败状态">
+      <rect x="1800" y="3787" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="3817" class="stateTitle">F · 失败</text>
+      <text x="1816" y="3847" class="stateBody"><tspan x="1816" dy="0">校验/发布失败保留旧生效版本</tspan></text>
+    </g><g id="EV-AUD-04-A" aria-label="P-AUD-04 无权限状态">
+      <rect x="2080" y="3787" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="3817" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="3847" class="stateBody"><tspan x="2096" dy="0">仅超级管理员；</tspan><tspan x="2096" dy="22">失权或重新认证失败拒绝</tspan></text>
+    </g></g>
+<g id="PB-STAT-01" aria-label="P-STAT-01 管理统计低保真画板">
+    <rect x="20" y="4125" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="4156" class="boardTitle">P-STAT-01 · 管理统计</text>
+    <text x="360" y="4156" class="micro">画板 PB-STAT-01　变体：社团/部门权限、普通/联合、平台范围</text>
+    <g id="PB-STAT-01-D" aria-label="主低保真帧">
+      <rect x="40" y="4177" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="4191" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="4214" class="micro">全局导航　/　管理统计　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="4246" width="160" height="64" rx="5" class="ghost"/>
+<rect x="254" y="4246" width="160" height="64" rx="5" class="ghost"/>
+<rect x="432" y="4246" width="160" height="64" rx="5" class="ghost"/>
+<rect x="76" y="4328" width="525" height="105" rx="5" class="ghost"/>
+<rect x="620" y="4246" width="284" height="187" rx="5" class="ghost"/>
+<text x="78" y="4455" class="micro">作用域栏 · 指标摘要 · 待办/异常 · 快捷入口 · 更新时间</text>
+      <text x="82" y="4236" class="overlay"><tspan x="82" dy="0">正常态：展示权限内统计、去重口径、小样本</tspan><tspan x="82" dy="21">保护与下钻</tspan></text>
+      <text x="82" y="4308" class="overlay"><tspan x="82" dy="0">响应式：指标纵向堆叠；</tspan><tspan x="82" dy="21">异常和待办优先；</tspan><tspan x="82" dy="21">工作空间标识持续可见。</tspan></text>
+      <text x="462" y="4308" class="overlay"><tspan x="462" dy="0">授权收口：部门/社团/平台范围按当前权限</tspan><tspan x="462" dy="21">裁剪</tspan></text>
+    </g><g id="EV-STAT-01-N" aria-label="P-STAT-01 正常状态">
+      <rect x="960" y="4177" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="4207" class="stateTitle">N · 正常</text>
+      <text x="976" y="4237" class="stateBody"><tspan x="976" dy="0">展示权限内统计、去重口径、小</tspan><tspan x="976" dy="22">样本保护与下钻</tspan></text>
+    </g><g id="EV-STAT-01-L" aria-label="P-STAT-01 加载状态">
+      <rect x="1240" y="4177" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="4207" class="stateTitle">L · 加载</text>
+      <text x="1256" y="4237" class="stateBody"><tspan x="1256" dy="0">指标、图表或下钻加载</tspan></text>
+    </g><g id="EV-STAT-01-E" aria-label="P-STAT-01 空数据状态">
+      <rect x="1520" y="4177" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="4207" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="4237" class="stateBody"><tspan x="1536" dy="0">无权限内数据时展示空态且不推</tspan><tspan x="1536" dy="22">断其他范围</tspan></text>
+    </g><g id="EV-STAT-01-F" aria-label="P-STAT-01 失败状态">
+      <rect x="1800" y="4177" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="4207" class="stateTitle">F · 失败</text>
+      <text x="1816" y="4237" class="stateBody"><tspan x="1816" dy="0">聚合失败/口径不可用时显示未</tspan><tspan x="1816" dy="22">知或错误，不展示旧值为当前</tspan></text>
+    </g><g id="EV-STAT-01-A" aria-label="P-STAT-01 无权限状态">
+      <rect x="2080" y="4177" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="4207" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="4237" class="stateBody"><tspan x="2096" dy="0">部门/社团/平台范围按当前权</tspan><tspan x="2096" dy="22">限裁剪</tspan></text>
+    </g></g>
+<g id="PB-EXP-01" aria-label="P-EXP-01 导出管理低保真画板">
+    <rect x="20" y="4515" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="4546" class="boardTitle">P-EXP-01 · 导出管理</text>
+    <text x="360" y="4546" class="micro">画板 PB-EXP-01　变体：社团/平台范围、生成中、可下载、失权/过期</text>
+    <g id="PB-EXP-01-D" aria-label="主低保真帧">
+      <rect x="40" y="4567" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="4581" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="4604" class="micro">全局导航　/　导出管理　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="4636" width="260" height="187" rx="5" class="ghost"/>
+<rect x="354" y="4636" width="340" height="112" rx="5" class="ghost"/>
+<rect x="354" y="4764" width="340" height="59" rx="5" class="ghost"/>
+<rect x="710" y="4792" width="194" height="31" rx="5" class="danger"/>
+<text x="78" y="4845" class="micro">目标冻结 · 影响预览 · 重新认证 · 二次确认 · 分项结果</text>
+      <text x="82" y="4626" class="overlay"><tspan x="82" dy="0">正常态：展示导出创建、任务状态、有效期与</tspan><tspan x="82" dy="21">下载</tspan></text>
+      <text x="82" y="4698" class="overlay"><tspan x="82" dy="0">响应式：影响预览先于确认；</tspan><tspan x="82" dy="21">分项结果纵向展开；</tspan><tspan x="82" dy="21">危险操作不弱化。</tspan></text>
+      <text x="462" y="4698" class="overlay"><tspan x="462" dy="0">授权收口：字段、附件、记录和下载均按当前</tspan><tspan x="462" dy="21">权限重新校验</tspan></text>
+    </g><g id="EV-EXP-01-N" aria-label="P-EXP-01 正常状态">
+      <rect x="960" y="4567" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="4597" class="stateTitle">N · 正常</text>
+      <text x="976" y="4627" class="stateBody"><tspan x="976" dy="0">展示导出创建、任务状态、有效</tspan><tspan x="976" dy="22">期与下载</tspan></text>
+    </g><g id="EV-EXP-01-L" aria-label="P-EXP-01 加载状态">
+      <rect x="1240" y="4567" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="4597" class="stateTitle">L · 加载</text>
+      <text x="1256" y="4627" class="stateBody"><tspan x="1256" dy="0">任务生成/刷新/下载准备中显</tspan><tspan x="1256" dy="22">示进度</tspan></text>
+    </g><g id="EV-EXP-01-E" aria-label="P-EXP-01 空数据状态">
+      <rect x="1520" y="4567" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="4597" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="4627" class="stateBody"><tspan x="1536" dy="0">无导出任务时提供有权范围内的</tspan><tspan x="1536" dy="22">新建入口</tspan></text>
+    </g><g id="EV-EXP-01-F" aria-label="P-EXP-01 失败状态">
+      <rect x="1800" y="4567" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="4597" class="stateTitle">F · 失败</text>
+      <text x="1816" y="4627" class="stateBody"><tspan x="1816" dy="0">生成失败可重试；</tspan><tspan x="1816" dy="22">过期/失权不可下载；</tspan><tspan x="1816" dy="22">不确定不显示完成</tspan></text>
+    </g><g id="EV-EXP-01-A" aria-label="P-EXP-01 无权限状态">
+      <rect x="2080" y="4567" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="4597" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="4627" class="stateBody"><tspan x="2096" dy="0">字段、附件、记录和下载均按当</tspan><tspan x="2096" dy="22">前权限重新校验</tspan></text>
+    </g></g>
+<g id="PB-CFG-01" aria-label="P-CFG-01 平台与社团配置低保真画板">
+    <rect x="20" y="4905" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="4936" class="boardTitle">P-CFG-01 · 平台与社团配置</text>
+    <text x="360" y="4936" class="micro">画板 PB-CFG-01　变体：社团配置、平台映射/安全/真实数据门</text>
+    <g id="PB-CFG-01-D" aria-label="主低保真帧">
+      <rect x="40" y="4957" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="4971" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="4994" class="micro">全局导航　/　平台与社团配置　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="5026" width="150" height="187" rx="5" class="ghost"/>
+<rect x="248" y="5026" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="5026" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="5078" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="5078" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="5130" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="5130" width="220" height="38" rx="4" class="ghost"/>
+<rect x="684" y="5182" width="220" height="31" rx="5" class="solid"/>
+<text x="78" y="5235" class="micro">步骤/版本 · 字段分组 · 校验摘要 · 主/次操作 · 草稿提示</text>
+      <text x="82" y="5016" class="overlay"><tspan x="82" dy="0">正常态：展示平台/社团配置、映射、安全开</tspan><tspan x="82" dy="21">关和真实数据门的适用变体</tspan></text>
+      <text x="82" y="5088" class="overlay"><tspan x="82" dy="0">响应式：分栏改为单列；</tspan><tspan x="82" dy="21">步骤、错误摘要与当前状态置顶；</tspan><tspan x="82" dy="21">主操作不遮挡字段。</tspan></text>
+      <text x="462" y="5088" class="overlay"><tspan x="462" dy="0">授权收口：社团管理员与超管仅操作各自作用</tspan><tspan x="462" dy="21">域；</tspan><tspan x="462" dy="21">高风险需重新认证</tspan></text>
+    </g><g id="EV-CFG-01-N" aria-label="P-CFG-01 正常状态">
+      <rect x="960" y="4957" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="4987" class="stateTitle">N · 正常</text>
+      <text x="976" y="5017" class="stateBody"><tspan x="976" dy="0">展示平台/社团配置、映射、安</tspan><tspan x="976" dy="22">全开关和真实数据门的适用变体</tspan></text>
+    </g><g id="EV-CFG-01-L" aria-label="P-CFG-01 加载状态">
+      <rect x="1240" y="4957" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="4987" class="stateTitle">L · 加载</text>
+      <text x="1256" y="5017" class="stateBody"><tspan x="1256" dy="0">配置、影响预览或发布结果加载</tspan></text>
+    </g><g id="EV-CFG-01-E" aria-label="P-CFG-01 空数据状态">
+      <rect x="1520" y="4957" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="4987" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="5017" class="stateBody"><tspan x="1536" dy="0">不适用：基础配置始终有当前值</tspan><tspan x="1536" dy="22">；</tspan><tspan x="1536" dy="22">可选项缺失单独说明</tspan></text>
+    </g><g id="EV-CFG-01-F" aria-label="P-CFG-01 失败状态">
+      <rect x="1800" y="4957" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="4987" class="stateTitle">F · 失败</text>
+      <text x="1816" y="5017" class="stateBody"><tspan x="1816" dy="0">校验、测试或发布失败保持旧生</tspan><tspan x="1816" dy="22">效配置</tspan></text>
+    </g><g id="EV-CFG-01-A" aria-label="P-CFG-01 无权限状态">
+      <rect x="2080" y="4957" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="4987" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="5017" class="stateBody"><tspan x="2096" dy="0">社团管理员与超管仅操作各自作</tspan><tspan x="2096" dy="22">用域；</tspan><tspan x="2096" dy="22">高风险需重新认证</tspan></text>
+    </g></g>
+<g id="PB-CFG-02" aria-label="P-CFG-02 权限模板管理低保真画板">
+    <rect x="20" y="5295" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="5326" class="boardTitle">P-CFG-02 · 权限模板管理</text>
+    <text x="360" y="5326" class="micro">画板 PB-CFG-02　变体：模板编辑、差异预览、发布/失败</text>
+    <g id="PB-CFG-02-D" aria-label="主低保真帧">
+      <rect x="40" y="5347" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="5361" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="5384" class="micro">全局导航　/　权限模板管理　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="5416" width="150" height="187" rx="5" class="ghost"/>
+<rect x="248" y="5416" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="5416" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="5468" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="5468" width="220" height="38" rx="4" class="ghost"/>
+<rect x="248" y="5520" width="418" height="38" rx="4" class="ghost"/>
+<rect x="684" y="5520" width="220" height="38" rx="4" class="ghost"/>
+<rect x="684" y="5572" width="220" height="31" rx="5" class="solid"/>
+<text x="78" y="5625" class="micro">步骤/版本 · 字段分组 · 校验摘要 · 主/次操作 · 草稿提示</text>
+      <text x="82" y="5406" class="overlay"><tspan x="82" dy="0">正常态：展示模板版本、权限差异、关联对象</tspan><tspan x="82" dy="21">和原子发布</tspan></text>
+      <text x="82" y="5478" class="overlay"><tspan x="82" dy="0">响应式：分栏改为单列；</tspan><tspan x="82" dy="21">步骤、错误摘要与当前状态置顶；</tspan><tspan x="82" dy="21">主操作不遮挡字段。</tspan></text>
+      <text x="462" y="5478" class="overlay"><tspan x="462" dy="0">授权收口：仅超级管理员；</tspan><tspan x="462" dy="21">部门模板不得突破作用域</tspan></text>
+    </g><g id="EV-CFG-02-N" aria-label="P-CFG-02 正常状态">
+      <rect x="960" y="5347" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="5377" class="stateTitle">N · 正常</text>
+      <text x="976" y="5407" class="stateBody"><tspan x="976" dy="0">展示模板版本、权限差异、关联</tspan><tspan x="976" dy="22">对象和原子发布</tspan></text>
+    </g><g id="EV-CFG-02-L" aria-label="P-CFG-02 加载状态">
+      <rect x="1240" y="5347" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="5377" class="stateTitle">L · 加载</text>
+      <text x="1256" y="5407" class="stateBody"><tspan x="1256" dy="0">模板、差异或发布结果加载</tspan></text>
+    </g><g id="EV-CFG-02-E" aria-label="P-CFG-02 空数据状态">
+      <rect x="1520" y="5347" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="5377" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="5407" class="stateBody"><tspan x="1536" dy="0">无自定义模板时展示内置默认及</tspan><tspan x="1536" dy="22">创建入口</tspan></text>
+    </g><g id="EV-CFG-02-F" aria-label="P-CFG-02 失败状态">
+      <rect x="1800" y="5347" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="5377" class="stateTitle">F · 失败</text>
+      <text x="1816" y="5407" class="stateBody"><tspan x="1816" dy="0">发布失败保留旧版本；</tspan><tspan x="1816" dy="22">权限缓存不提前切换</tspan></text>
+    </g><g id="EV-CFG-02-A" aria-label="P-CFG-02 无权限状态">
+      <rect x="2080" y="5347" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="5377" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="5407" class="stateBody"><tspan x="2096" dy="0">仅超级管理员；</tspan><tspan x="2096" dy="22">部门模板不得突破作用域</tspan></text>
+    </g></g>
+<g id="PB-OPS-01" aria-label="P-OPS-01 内置运维状态低保真画板">
+    <rect x="20" y="5685" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="5716" class="boardTitle">P-OPS-01 · 内置运维状态</text>
+    <text x="360" y="5716" class="micro">画板 PB-OPS-01　变体：正常、异常、过期未知</text>
+    <g id="PB-OPS-01-D" aria-label="主低保真帧">
+      <rect x="40" y="5737" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="5751" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="5774" class="micro">全局导航　/　内置运维状态　　作用域：按当前用户与对象回源</text>
+<rect x="76" y="5806" width="160" height="64" rx="5" class="ghost"/>
+<rect x="254" y="5806" width="160" height="64" rx="5" class="ghost"/>
+<rect x="432" y="5806" width="160" height="64" rx="5" class="ghost"/>
+<rect x="76" y="5888" width="525" height="105" rx="5" class="ghost"/>
+<rect x="620" y="5806" width="284" height="187" rx="5" class="ghost"/>
+<text x="78" y="6015" class="micro">作用域栏 · 指标摘要 · 待办/异常 · 快捷入口 · 更新时间</text>
+      <text x="82" y="5796" class="overlay"><tspan x="82" dy="0">正常态：只读展示版本、依赖、任务积压与最</tspan><tspan x="82" dy="21">近异常更新时间</tspan></text>
+      <text x="82" y="5868" class="overlay"><tspan x="82" dy="0">响应式：指标纵向堆叠；</tspan><tspan x="82" dy="21">异常和待办优先；</tspan><tspan x="82" dy="21">工作空间标识持续可见。</tspan></text>
+      <text x="462" y="5868" class="overlay"><tspan x="462" dy="0">授权收口：仅超级管理员，拒绝时不暴露运维</tspan><tspan x="462" dy="21">细节</tspan></text>
+    </g><g id="EV-OPS-01-N" aria-label="P-OPS-01 正常状态">
+      <rect x="960" y="5737" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="5767" class="stateTitle">N · 正常</text>
+      <text x="976" y="5797" class="stateBody"><tspan x="976" dy="0">只读展示版本、依赖、任务积压</tspan><tspan x="976" dy="22">与最近异常更新时间</tspan></text>
+    </g><g id="EV-OPS-01-L" aria-label="P-OPS-01 加载状态">
+      <rect x="1240" y="5737" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="5767" class="stateTitle">L · 加载</text>
+      <text x="1256" y="5797" class="stateBody"><tspan x="1256" dy="0">状态查询加载，分区可独立完成</tspan></text>
+    </g><g id="EV-OPS-01-E" aria-label="P-OPS-01 空数据状态">
+      <rect x="1520" y="5737" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="5767" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="5797" class="stateBody"><tspan x="1536" dy="0">无最近异常/任务时显示明确空</tspan><tspan x="1536" dy="22">态</tspan></text>
+    </g><g id="EV-OPS-01-F" aria-label="P-OPS-01 失败状态">
+      <rect x="1800" y="5737" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="5767" class="stateTitle">F · 失败</text>
+      <text x="1816" y="5797" class="stateBody"><tspan x="1816" dy="0">查询失败或状态过期显示“未知</tspan><tspan x="1816" dy="22">”，不伪装健康</tspan></text>
+    </g><g id="EV-OPS-01-A" aria-label="P-OPS-01 无权限状态">
+      <rect x="2080" y="5737" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="5767" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="5797" class="stateBody"><tspan x="2096" dy="0">仅超级管理员，拒绝时不暴露运</tspan><tspan x="2096" dy="22">维细节</tspan></text>
+    </g></g>
+<g id="PB-GEN-01" aria-label="P-GEN-01 404低保真画板">
+    <rect x="20" y="6075" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="6106" class="boardTitle">P-GEN-01 · 404</text>
+    <text x="360" y="6106" class="micro">画板 PB-GEN-01　变体：站内未匹配、返回安全入口</text>
+    <g id="PB-GEN-01-D" aria-label="主低保真帧">
+      <rect x="40" y="6127" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="6141" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="6164" class="micro">全局导航　/　404　　作用域：按当前用户与对象回源</text>
+<rect x="288" y="6201" width="404" height="160" rx="8" class="ghost"/>
+<circle cx="490" cy="6237" r="20" class="solid"/>
+<rect x="378" y="6276" width="224" height="12" rx="4" class="chrome"/>
+<rect x="405" y="6319" width="170" height="30" rx="5" class="solid"/>
+<text x="78" y="6405" class="micro">结果标题 · 最小原因 · 支持编号 · 安全返回 · 恢复动作</text>
+      <text x="82" y="6186" class="overlay"><tspan x="82" dy="0">正常态：展示 404、受控返回入口和安全</tspan><tspan x="82" dy="21">站内导航</tspan></text>
+      <text x="82" y="6258" class="overlay"><tspan x="82" dy="0">响应式：单列安全收口；</tspan><tspan x="82" dy="21">保留返回入口；</tspan><tspan x="82" dy="21">不扩大错误或对象存在性信息。</tspan></text>
+      <text x="462" y="6258" class="overlay"><tspan x="462" dy="0">授权收口：不适用：不根据权限泄露目标存在</tspan><tspan x="462" dy="21">性</tspan></text>
+    </g><g id="EV-GEN-01-N" aria-label="P-GEN-01 正常状态">
+      <rect x="960" y="6127" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="6157" class="stateTitle">N · 正常</text>
+      <text x="976" y="6187" class="stateBody"><tspan x="976" dy="0">展示 404、受控返回入口和</tspan><tspan x="976" dy="22">安全站内导航</tspan></text>
+    </g><g id="EV-GEN-01-L" aria-label="P-GEN-01 加载状态">
+      <rect x="1240" y="6127" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="6157" class="stateTitle">L · 加载</text>
+      <text x="1256" y="6187" class="stateBody"><tspan x="1256" dy="0">不适用：静态结果页不等待业务</tspan><tspan x="1256" dy="22">数据</tspan></text>
+    </g><g id="EV-GEN-01-E" aria-label="P-GEN-01 空数据状态">
+      <rect x="1520" y="6127" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="6157" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="6187" class="stateBody"><tspan x="1536" dy="0">不适用：页面自身即未匹配结果</tspan></text>
+    </g><g id="EV-GEN-01-F" aria-label="P-GEN-01 失败状态">
+      <rect x="1800" y="6127" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="6157" class="stateTitle">F · 失败</text>
+      <text x="1816" y="6187" class="stateBody"><tspan x="1816" dy="0">不适用：不得在 404 上发</tspan><tspan x="1816" dy="22">起业务命令</tspan></text>
+    </g><g id="EV-GEN-01-A" aria-label="P-GEN-01 无权限状态">
+      <rect x="2080" y="6127" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="6157" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="6187" class="stateBody"><tspan x="2096" dy="0">不适用：不根据权限泄露目标存</tspan><tspan x="2096" dy="22">在性</tspan></text>
+    </g></g>
+<g id="PB-GEN-02" aria-label="P-GEN-02 无权限低保真画板">
+    <rect x="20" y="6465" width="2360" height="362" rx="10" class="board"/>
+    <text x="42" y="6496" class="boardTitle">P-GEN-02 · 无权限</text>
+    <text x="360" y="6496" class="micro">画板 PB-GEN-02　变体：对象不可见、操作被拒绝、重新鉴权失败</text>
+    <g id="PB-GEN-02-D" aria-label="主低保真帧">
+      <rect x="40" y="6517" width="900" height="288" rx="8" class="frame"/>
+      <rect x="60" y="6531" width="860" height="34" rx="5" class="chrome"/>
+<text x="76" y="6554" class="micro">全局导航　/　无权限　　作用域：按当前用户与对象回源</text>
+<rect x="288" y="6591" width="404" height="160" rx="8" class="ghost"/>
+<circle cx="490" cy="6627" r="20" class="solid"/>
+<rect x="378" y="6666" width="224" height="12" rx="4" class="chrome"/>
+<rect x="405" y="6709" width="170" height="30" rx="5" class="solid"/>
+<text x="78" y="6795" class="micro">结果标题 · 最小原因 · 支持编号 · 安全返回 · 恢复动作</text>
+      <text x="82" y="6576" class="overlay"><tspan x="82" dy="0">正常态：展示等价拒绝、最小原因和安全返回</tspan><tspan x="82" dy="21">入口</tspan></text>
+      <text x="82" y="6648" class="overlay"><tspan x="82" dy="0">响应式：单列安全收口；</tspan><tspan x="82" dy="21">保留返回入口；</tspan><tspan x="82" dy="21">不扩大错误或对象存在性信息。</tspan></text>
+      <text x="462" y="6648" class="overlay"><tspan x="462" dy="0">授权收口：页面自身即无权限结果；</tspan><tspan x="462" dy="21">不得显示受保护对象内容</tspan></text>
+    </g><g id="EV-GEN-02-N" aria-label="P-GEN-02 正常状态">
+      <rect x="960" y="6517" width="270" height="288" rx="8" class="state stateN"/>
+      <text x="976" y="6547" class="stateTitle">N · 正常</text>
+      <text x="976" y="6577" class="stateBody"><tspan x="976" dy="0">展示等价拒绝、最小原因和安全</tspan><tspan x="976" dy="22">返回入口</tspan></text>
+    </g><g id="EV-GEN-02-L" aria-label="P-GEN-02 加载状态">
+      <rect x="1240" y="6517" width="270" height="288" rx="8" class="state stateL"/>
+      <text x="1256" y="6547" class="stateTitle">L · 加载</text>
+      <text x="1256" y="6577" class="stateBody"><tspan x="1256" dy="0">不适用：授权校验未完成时原页</tspan><tspan x="1256" dy="22">面保持加载</tspan></text>
+    </g><g id="EV-GEN-02-E" aria-label="P-GEN-02 空数据状态">
+      <rect x="1520" y="6517" width="270" height="288" rx="8" class="state stateE"/>
+      <text x="1536" y="6547" class="stateTitle">E · 空数据</text>
+      <text x="1536" y="6577" class="stateBody"><tspan x="1536" dy="0">不适用：拒绝不能表达为空数据</tspan></text>
+    </g><g id="EV-GEN-02-F" aria-label="P-GEN-02 失败状态">
+      <rect x="1800" y="6517" width="270" height="288" rx="8" class="state stateF"/>
+      <text x="1816" y="6547" class="stateTitle">F · 失败</text>
+      <text x="1816" y="6577" class="stateBody"><tspan x="1816" dy="0">不适用：系统失败应进入失败/</tspan><tspan x="1816" dy="22">降级，不冒充拒绝</tspan></text>
+    </g><g id="EV-GEN-02-A" aria-label="P-GEN-02 无权限状态">
+      <rect x="2080" y="6517" width="270" height="288" rx="8" class="state stateA"/>
+      <text x="2096" y="6547" class="stateTitle">A · 无权限</text>
+      <text x="2096" y="6577" class="stateBody"><tspan x="2096" dy="0">页面自身即无权限结果；</tspan><tspan x="2096" dy="22">不得显示受保护对象内容</tspan></text>
+    </g></g>
+  <text x="40" y="6906" class="micro">正式低保真设计基线：用于状态与交互评审；外部高保真/移动视觉不得改变业务、授权与安全边界；代码开工门关闭。</text>
+</svg>
