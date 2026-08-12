@@ -12,7 +12,22 @@
 
 承接的工作类型（由各领域模块发起）：Casdoor 写入与回读、通知投递、文件检查/预览、导出生成、到期任务、正式删除执行、派生重算、对账。
 
-## 2. 权威与边界
+## 2. 关键组件
+
+| 组件 | 类型 | 职责 |
+|---|---|---|
+| `TaskProcessorRegistry` | Controller（interfaces） | 任务类型->处理器映射注册；处理器薄壳，不含业务决策 |
+| `JobController` | Controller（interfaces） | 任务管理端点（积压查询、手动重试入口，仅超管） |
+| `ClaimAndExecuteTaskUseCase` | 应用命令·查询用例（application/commands、application/queries） | 取租约->复核前置条件->调用领域命令->回读收口->更新任务状态 |
+| `BatchOrchestrationUseCase` | 应用命令·查询用例（application/commands、application/queries） | 受控批量编排：冻结批次输入->逐项调度->汇总结果 |
+| `RetryPolicyUseCase` | 应用命令·查询用例（application/commands、application/queries） | 重试策略判定：退避计算、上限判定、人工处置触发 |
+| `TaskStateMachine` | 领域模型·状态机（domain/models、domain/state-machines） | 任务状态转换规则（SRS-SM-ORG-004）：待执行/执行中/可重试失败/结果不确定/需人工处置/已完成 |
+| `LeaseAndIdempotencyRules` | 领域服务·规则（domain/services） | 租约竞争规则、幂等键派生、重试判定（纯规则，不依赖存储或 SDK） |
+| `BatchAggregationRules` | 领域服务·规则（domain/services） | 批次汇总规则：成功项保留、失败项隔离、批次级审计 |
+| `TaskRepository` | 基础设施适配（infrastructure） | 任务表访问（含租约竞争原子条件更新）、任务状态持久化 |
+| `ExternalCallDispatcher` | 基础设施适配（infrastructure） | 外部适配调用编排（Casdoor/S3/邮件/文件检查），按任务类型路由 |
+
+## 3. 权威与边界
 
 | 本模块可以 | 本模块禁止 |
 |---|---|
@@ -30,7 +45,7 @@
 5. 外部结果不确定时必须先可信回读或查询，再决定成功、重试、补偿或异常收口。
 6. 任务状态必须能区分：待执行、执行中、可重试失败、结果不确定、不可自动重试/需人工处置、已完成（命名与实现由下游规格决定）。
 
-## 3. 运行形态（ADR-001、ADR-013）
+## 4. 运行形态（ADR-001、ADR-013）
 
 - 后台任务通过 `src/worker.ts` 独立启动入口运行（NestJS 应用上下文，不监听 HTTP），与 HTTP 应用复用同一套应用层、领域层和基础设施适配。
 - 后台入口不得假定 HTTP Guard/Pipe/Interceptor 生效；每个任务在应用能力边界重新校验授权、状态、版本、租约、幂等和外部结果收口条件。
@@ -38,7 +53,7 @@
 - 文件检查、预览生成等 CPU/内存密集或处理不可信内容的工作不得塞入 API 请求事件循环（ADR-013 §2.9）。
 - 首版不强制独立消息队列；未来引入时只能作为唤醒/分发/削峰，消费者仍回到持久任务领取并核验，队列确认不能替代业务完成状态。
 
-## 4. 分层落位指南
+## 5. 分层落位指南
 
 ```
 interfaces/     启动器与任务注册：声明任务处理器（无 HTTP 入口）
@@ -52,22 +67,22 @@ infrastructure/ 任务持久化访问、租约锁、外部适配调用（Casdoor
 - **domain**：任务状态转换、幂等键派生、重试上限/退避判定、批次汇总规则，不依赖具体存储或外部 SDK。
 - **infrastructure**：任务表访问（含租约竞争语句）、事务辅助、外部调用客户端。
 
-## 5. 开发必须遵守的规则
+## 6. 开发必须遵守的规则
 
-### 5.1 任务写入与提交
+### 6.1 任务写入与提交
 
 - 业务事实与任务意图同成同败时，**同一本地数据库事务**内写入；不得先提交业务再靠内存回调/进程内队列补建任务。
 - 任务记录须携带：与来源业务意图的稳定关联、适用作用域、源对象及版本、幂等依据、租约信息、尝试次数、可执行时间、脱敏失败信息和最终结果引用。
 - 失败信息必须脱敏，不得写入业务正文、内部评语、附件内容、完整联系方式、令牌或密钥。
 
-### 5.2 领取与执行
+### 6.2 领取与执行
 
 - 所有领取/竞争使用数据库级原子条件更新（租约版本比较），双执行单元并发只允许一个成功。
 - 执行成功必须回读或查询外部结果后再收口；不得盲目重复调用换取表面成功。
 - 迟到响应、重复回调、人工重试与恢复重放共享同一业务意图和收口规则，不得各自产生一份结果。
 - 对任务执行使用唯一追踪编号，并与业务幂等键区分开（两者不得混同）。
 
-### 5.3 受控批量（SRS-SM-ORG-004）
+### 6.3 受控批量（SRS-SM-ORG-004）
 
 - 批量前提：固定一个社团、一个操作类型和一个业务/邀请类型；跨社团、跨操作类型或任意字段通用修改一律拒绝。
 - 预览阶段原子保存筛选条件、固定对象 ID、对象版本、操作参数和影响范围；预览版本唯一，修改选择后旧预览失效并重新预览。
@@ -76,13 +91,40 @@ infrastructure/ 任务持久化访问、租约锁、外部适配调用（Casdoor
 - 失败项重试必须关联原批次、仅含失败项、沿用原业务幂等键；成功项不得复制或再次执行。
 - 批次级审计与单项审计并存，单项通知不能被批次摘要替代。
 
-### 5.4 与领域模块的协作
+### 6.4 与领域模块的协作
 
 - 后台执行器只推进**已获授权且已持久化**的业务意图；取得租约和提交结果时仍执行对应状态、版本、权限或领域前置检查。
 - 领域模块通过其应用命令暴露可执行操作，job 不直接写领域表。
 - 任务类型的业务归属：例如关系写入/回读归 identity/organization/invitation/membership 模块，导出归 stat-export 模块，删除归 audit 模块，通知投递归 notification 模块——job 只负责把它们编排到后台执行。
 
-## 6. 测试要求
+### 6.5 任务状态枚举（TaskStatus）
+
+```
+任务状态枚举（TaskStatus）：
+- PENDING（待执行）
+- LEASED（执行中）
+- RETRYABLE_FAILED（可重试失败）
+- UNCERTAIN（结果不确定，需读回）
+- MANUAL_INTERVENTION（不可自动重试/需人工处置）
+- COMPLETED（已完成）
+```
+
+### 6.6 任务类型与处理器映射
+
+| 任务类型 | 处理器 | 业务归属模块 |
+|---|---|---|
+| Casdoor 资料同步/读回 | `CasdoorSyncHandler` | identity |
+| Casdoor Group 写入/读回 | `CasdoorGroupHandler` | organization/invitation/membership |
+| 通知投递 | `NotificationDeliveryHandler` | notification |
+| 文件检查/预览 | `FileCheckHandler` | file |
+| 导出生成 | `ExportGenerationHandler` | stat-export |
+| 到期任务 | `DeadlineTaskHandler` | 各领域模块 |
+| 正式删除执行 | `FormalDeleteHandler` | audit |
+| 派生重算 | `DerivedRebuildHandler` | read-model/stat-export |
+| 对账 | `ReconciliationHandler` | identity/organization |
+| 受控批量执行 | `BatchExecutionHandler` | 各领域模块 |
+
+## 7. 测试要求
 
 - 业务提交前崩溃、提交后崩溃（外部未执行）、外部成功但本地记录前崩溃、迟到响应；
 - 双执行单元竞争、租约过期、恢复重放——全部场景不得产生第二份业务结果；
@@ -92,7 +134,7 @@ infrastructure/ 任务持久化访问、租约锁、外部适配调用（Casdoor
 - 幂等键重复提交返回原结果；追踪编号与幂等键分离；
 - 任务失败信息脱敏断言。
 
-## 7. 相关文档
+## 8. 相关文档
 
 - [ADR-001 首版应用形态与后台任务运行单元](../../../docs/architecture/ADR-001-首版应用形态与后台任务运行单元.md)
 - [ADR-004 后台任务与可靠投递机制](../../../docs/architecture/ADR-004-后台任务与可靠投递机制.md)
