@@ -33,7 +33,7 @@
 | `ClubOnboardingStateMachine` / `RelationCommandStateMachine` / `AppointmentCommandStateMachine` | 状态机（domain/state-machines） | ORG-001/002/003 转换门 |
 | `PermissionCalculator` | 领域服务（domain/services） | 从当前 Group 观测＋模板版本＋业务任务计算当前权限（同社团并集、范围受限） |
 | `LastOwnerContinuityPolicy` | 领域服务（domain/services） | 最后负责人连续性与交接锚点规则（ORG-024） |
-| `GroupAdapter` | 基础设施适配（infrastructure） | Casdoor Group 读写、写后定向读回与对账 |
+| `CasdoorGroupAdapter` | 基础设施适配（infrastructure） | Casdoor Group 读取与写入、写后定向读回（对账由 `CasdoorReconcileRunner` 承担，见 Casdoor 适配文档） |
 | `RlsContextSetter` | 基础设施适配（infrastructure） | 命令事务前设置单目标 RLS 会话上下文（ADR-005） |
 | `TaskWriter` | 基础设施适配（infrastructure） | 向 job 模块登记关系执行/调度/对账任务 |
 

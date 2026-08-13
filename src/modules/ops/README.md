@@ -23,7 +23,7 @@
 | `StatusSummaryQueryService` | 查询用例（application/queries） | 聚合各适配器最近结果、判定过期与未知；不查询业务数据 |
 | `LogQueryUseCase` | 查询用例（application/queries） | 脱敏运行日志查询入口（按追踪编号关联） |
 | `RedactionRules` | 领域服务·规则（domain/services） | 脱敏分类规则、字段允许清单、敏感内容拦截（纯规则） |
-| `RetentionRules` | 领域服务·规则（domain/services） | 日志保留期规则：普通日志 90 天（30 在线+60 归档）、网络安全日志 6 个月 |
+| `RetentionRules` | 领域服务·规则（domain/services） | 日志保留期规则：普通日志 30 天在线 + 60 天压缩归档（ADR-011 §2.1 基线 30 天，SRS §11.2 细化归档）、网络安全日志 6 个月 |
 | `TraceIdGenerator` | 领域服务·规则（domain/services） | 唯一追踪编号生成规则；追踪编号与业务幂等键区分规则 |
 | `LogWriterAdapter` | 基础设施适配（infrastructure） | 脱敏日志写入（结构化字段、字段允许清单过滤） |
 | `TraceContextAdapter` | 基础设施适配（infrastructure） | 追踪上下文传递：HTTP 请求->应用命令->外部调用/后台任务 |

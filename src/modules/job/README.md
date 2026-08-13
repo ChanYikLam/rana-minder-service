@@ -25,7 +25,7 @@
 | `LeaseAndIdempotencyRules` | 领域服务·规则（domain/services） | 租约竞争规则、幂等键派生、重试判定（纯规则，不依赖存储或 SDK） |
 | `BatchAggregationRules` | 领域服务·规则（domain/services） | 批次汇总规则：成功项保留、失败项隔离、批次级审计 |
 | `TaskRepository` | 基础设施适配（infrastructure） | 任务表访问（含租约竞争原子条件更新）、任务状态持久化 |
-| `ExternalCallAdapter` | 基础设施适配（infrastructure） | 外部适配调用编排（Casdoor/S3/邮件/文件检查），按任务类型路由 |
+| `ExternalCallAdapter` | 基础设施适配（infrastructure） | 外部适配调用编排：路由至 `src/adapters/` 的 Casdoor/S3/邮件/文件检查适配器，按任务类型分发；不直接持有外部 SDK |
 
 ## 3. 权威与边界
 

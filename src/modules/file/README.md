@@ -16,7 +16,7 @@
 | `FileAccessQuery`、`FileStatusQuery` | 查询用例（application/queries） | 每次预览/下载的实时鉴权与检查/绑定状态查询（IFC-QRY-006） |
 | `FileModel`、`FileVersion`、`FileReference` | 领域模型（domain/models） | 文件逻辑记录、不可变版本、业务引用 |
 | `FileStateMachine` | 状态机（domain/state-machines） | 11 条转换规则 |
-| `FileRepository`、`S3ObjectStoreAdapter`、`FileScannerAdapter`、`SignedUrlProvider`、`DeleteManifestHandler` | 基础设施适配（infrastructure） | 元数据持久化、对象字节与派生物、检查服务适配、短时地址与水印、删除清单逐项执行与核验 |
+| `FileRepository`、`ObjectStoreAdapter`、`FileCheckAdapter`、`SignedUrlProvider`、`DeleteManifestHandler` | 基础设施适配（infrastructure） | 元数据持久化、对象字节与派生物、检查服务适配、短时地址与水印、删除清单逐项执行与核验 |
 
 ## 对外接口
 
