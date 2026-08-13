@@ -61,7 +61,7 @@ rana-minder-service/
 - **接口与数据**：`docs/specification/`（接口契约、数据模型与约束、Casdoor 集成契约、安全设计）
 - **测试规格**：`docs/specification/测试规格与验收追踪-v1.0.md`
 - **部署运维**：`docs/operations/部署运维与恢复手册-v1.0.md`
-- **后端开发指导**：`src/modules/*/README.md`（各模块）、`src/` 各目录中文文档
+- **后端开发指导**：`src/modules/*/README.md`（各模块）、`src/modules/分层实现规范.md`（分层约定）、`src/` 各目录中文文档
 
 ## 当前状态
 
