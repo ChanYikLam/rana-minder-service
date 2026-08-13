@@ -14,10 +14,10 @@
 | `JointActivityController` | Controller（interfaces） | 活动发起/确认/公布/取消/结束、参与社团与报名通道 HTTP 入口，建立协作域授权上下文 |
 | `JointInterviewController` | Controller（interfaces） | 共享排期、出勤、评价、作废与补面 HTTP 入口 |
 | `JointApplicationController` | Controller（interfaces） | 联合申请草稿/提交（共享同意证据、服从调剂）HTTP 入口 |
-| `PublishJointActivity`、`VoidJointInterview`、`ConfirmConclusionReview`、`ForceEndJointActivity` | 应用命令·查询用例（application/commands、application/queries） | 状态机转换用例；跨对象/跨模块原子副作用在用例层编排 |
-| `JointActivityDetailQuery`、`JointInterviewScheduleQuery` | 应用命令·查询用例（application/commands、application/queries） | 详情与当前可操作项、共享排期聚合 |
-| `JointActivity`、`JointApplication`、`JointInterviewRecord`、`ClubConclusion`、`JointChannel` | 领域模型·状态机（domain/models、domain/state-machines） | 强类型对象、版本、正交标志（面试作废待复核）、期限/窗口 |
-| `JointActivityStateMachine` 等 6 个 | 领域模型·状态机（domain/models、domain/state-machines） | 六个状态机的转换、前置条件与拒绝规则 |
+| `PublishJointActivity`、`VoidJointInterview`、`ConfirmConclusionReview`、`ForceEndJointActivity` | 应用命令（application/commands） | 状态机转换用例；跨对象/跨模块原子副作用在用例层编排 |
+| `JointActivityDetailQuery`、`JointInterviewScheduleQuery` | 查询用例（application/queries） | 详情与当前可操作项、共享排期聚合 |
+| `JointActivity`、`JointApplication`、`JointInterviewRecord`、`ClubConclusion`、`JointChannel` | 领域模型（domain/models） | 强类型对象、版本、正交标志（面试作废待复核）、期限/窗口 |
+| `JointActivityStateMachine` 等 6 个 | 状态机（domain/state-machines） | 六个状态机的转换、前置条件与拒绝规则 |
 | `JointRepository`、`CollaborationScopeAdapter` | 基础设施适配（infrastructure） | 权威对象持久化访问；联合协作域授权判定适配 |
 
 ## 对外接口

@@ -23,14 +23,14 @@
 | `ClubsController` | Controller（interfaces） | 接入向导、启停、修复/重绑、重新启用、解除接入入口 |
 | `RelationCommandsController` | Controller（interfaces） | 关系命令发起、进度查询、人工重试入口 |
 | `AppointmentCommandsController` | Controller（interfaces） | 预约命令、暂停处置、重新确认、取消入口 |
-| `CompleteOnboardingUseCase` | 应用命令·查询用例（application/commands、application/queries） | 向导校验与启用（映射合法、负责人连续性、二次确认） |
-| `SuspendClubUseCase` / `ForceSuspendClubUseCase` | 应用命令·查询用例（application/commands、application/queries） | 普通/强制停用（后者记录暂停起点、暂停自动截止） |
-| `RebindGroupUseCase` | 应用命令·查询用例（application/commands、application/queries） | 同步异常修复、重新绑定、待重新接入（目标均只到已停用） |
-| `SubmitRelationCommandUseCase` | 应用命令·查询用例（application/commands、application/queries） | ORG-002 受理：保存意图、原关系快照与执行任务 |
-| `HandleRelationReadbackUseCase` | 应用命令·查询用例（application/commands、application/queries） | 回读收口成功/失败/补偿，按命令版本裁决 |
-| `ScheduleAppointmentUseCase` | 应用命令·查询用例（application/commands、application/queries） | 到达执行点复核前置条件并竞争执行租约 |
-| `ConfirmAppointmentUseCase` | 应用命令·查询用例（application/commands、application/queries） | 发起人失权后由当前有权者重新确认或改期 |
-| `ClubOnboardingStateMachine` / `RelationCommandStateMachine` / `AppointmentCommandStateMachine` | 领域模型·状态机（domain/models、domain/state-machines） | ORG-001/002/003 转换门 |
+| `CompleteOnboardingUseCase` | 应用命令（application/commands） | 向导校验与启用（映射合法、负责人连续性、二次确认） |
+| `SuspendClubUseCase` / `ForceSuspendClubUseCase` | 应用命令（application/commands） | 普通/强制停用（后者记录暂停起点、暂停自动截止） |
+| `RebindGroupUseCase` | 应用命令（application/commands） | 同步异常修复、重新绑定、待重新接入（目标均只到已停用） |
+| `SubmitRelationCommandUseCase` | 应用命令（application/commands） | ORG-002 受理：保存意图、原关系快照与执行任务 |
+| `HandleRelationReadbackUseCase` | 应用命令（application/commands） | 回读收口成功/失败/补偿，按命令版本裁决 |
+| `ScheduleAppointmentUseCase` | 应用命令（application/commands） | 到达执行点复核前置条件并竞争执行租约 |
+| `ConfirmAppointmentUseCase` | 应用命令（application/commands） | 发起人失权后由当前有权者重新确认或改期 |
+| `ClubOnboardingStateMachine` / `RelationCommandStateMachine` / `AppointmentCommandStateMachine` | 状态机（domain/state-machines） | ORG-001/002/003 转换门 |
 | `PermissionCalculator` | 领域服务（domain/services） | 从当前 Group 观测＋模板版本＋业务任务计算当前权限（同社团并集、范围受限） |
 | `LastOwnerContinuityPolicy` | 领域服务（domain/services） | 最后负责人连续性与交接锚点规则（ORG-024） |
 | `GroupAdapter` | 基础设施适配（infrastructure） | Casdoor Group 读写、写后定向读回与对账 |

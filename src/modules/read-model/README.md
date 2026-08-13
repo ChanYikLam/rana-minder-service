@@ -21,14 +21,14 @@
 | `PublicDirectoryController` | Controller（interfaces） | 未认证可读的"找社团""找活动"搜索入口 |
 | `PersonalCenterController` | Controller（interfaces） | 全局个人中心查询入口（本人事项+当前有权角色型事项） |
 | `WorkbenchController` | Controller（interfaces） | 当前社团管理工作台查询入口（固定当前社团） |
-| `PublicDirectoryQueryService` | 应用命令·查询用例（application/commands、application/queries） | 公开目录派生查询：搜索规范化、可见性派生、字段投影 |
-| `PersonalCenterQueryService` | 应用命令·查询用例（application/commands、application/queries） | 个人中心聚合：本人事项+角色型事项，失权后失效 |
-| `WorkbenchQueryService` | 应用命令·查询用例（application/commands、application/queries） | 工作台聚合：固定当前社团管理数据，逐对象重验授权 |
-| `SearchNormalizer` | 领域服务·规则（domain/services） | 搜索文本规范化（NFC->大小写折叠->再 NFC->去空白->压缩）、分层排序规则 |
-| `VisibilityDerivationRules` | 领域服务·规则（domain/services） | 可见性派生规则：发布状态、访问者类型、字段投影（纯函数） |
-| `CacheKeyBuilder` | 领域服务·规则（domain/services） | 缓存键构造：必须包含社团/协作域/访问者范围维度 |
+| `PublicDirectoryQueryService` | 查询用例（application/queries） | 公开目录派生查询：搜索规范化、可见性派生、字段投影 |
+| `PersonalCenterQueryService` | 查询用例（application/queries） | 个人中心聚合：本人事项+角色型事项，失权后失效 |
+| `WorkbenchQueryService` | 查询用例（application/queries） | 工作台聚合：固定当前社团管理数据，逐对象重验授权 |
+| `SearchNormalizer` | 领域服务（domain/services） | 搜索文本规范化（NFC->大小写折叠->再 NFC->去空白->压缩）、分层排序规则 |
+| `VisibilityDerivationRules` | 领域服务（domain/services） | 可见性派生规则：发布状态、访问者类型、字段投影（纯函数） |
+| `CacheKeyBuilder` | 领域服务（domain/services） | 缓存键构造：必须包含社团/协作域/访问者范围维度 |
 | `PostgresReadRepository` | 基础设施适配（infrastructure） | PostgreSQL 查询与索引、pg_trgm 检索实现 |
-| `RebuildableCache` | 基础设施适配（infrastructure） | 可重建缓存载体：丢失/过期/清空时可回源，可替换 |
+| `RebuildableCacheAdapter` | 基础设施适配（infrastructure） | 可重建缓存载体：丢失/过期/清空时可回源，可替换 |
 
 ## 3. 权威与边界
 

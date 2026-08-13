@@ -20,13 +20,13 @@
 | 组件 | 类型 | 职责 |
 |---|---|---|
 | `StatusPageController` | Controller（interfaces） | 超级管理员内置只读状态页端点（仅当前有效超管可访问） |
-| `StatusSummaryAggregator` | 应用命令·查询用例（application/commands、application/queries） | 聚合各适配器最近结果、判定过期与未知；不查询业务数据 |
-| `LogQueryUseCase` | 应用命令·查询用例（application/commands、application/queries） | 脱敏运行日志查询入口（按追踪编号关联） |
+| `StatusSummaryQueryService` | 查询用例（application/queries） | 聚合各适配器最近结果、判定过期与未知；不查询业务数据 |
+| `LogQueryUseCase` | 查询用例（application/queries） | 脱敏运行日志查询入口（按追踪编号关联） |
 | `RedactionRules` | 领域服务·规则（domain/services） | 脱敏分类规则、字段允许清单、敏感内容拦截（纯规则） |
 | `RetentionRules` | 领域服务·规则（domain/services） | 日志保留期规则：普通日志 90 天（30 在线+60 归档）、网络安全日志 6 个月 |
 | `TraceIdGenerator` | 领域服务·规则（domain/services） | 唯一追踪编号生成规则；追踪编号与业务幂等键区分规则 |
 | `LogWriterAdapter` | 基础设施适配（infrastructure） | 脱敏日志写入（结构化字段、字段允许清单过滤） |
-| `TraceContextMiddleware` | 基础设施适配（infrastructure） | 追踪上下文传递：HTTP 请求->应用命令->外部调用/后台任务 |
+| `TraceContextAdapter` | 基础设施适配（infrastructure） | 追踪上下文传递：HTTP 请求->应用命令->外部调用/后台任务 |
 | `StatusSummaryRepository` | 基础设施适配（infrastructure） | 状态摘要存储、备份恢复结果证据读取 |
 
 ## 3. 权威与边界
@@ -49,14 +49,14 @@
 ## 4. 运行形态
 
 - 状态页端点和日志查询走 HTTP 入口（`StatusPageController`、`LogQueryUseCase`）。
-- 追踪上下文中间件（`TraceContextMiddleware`）在 HTTP 和 worker 两个入口都生效，确保请求、后台任务和外部调用共享同一追踪编号。
+- 追踪上下文适配（`TraceContextAdapter`）在 HTTP 和 worker 两个入口都生效，确保请求、后台任务和外部调用共享同一追踪编号。
 - 日志写入（`LogWriterAdapter`）在 HTTP 与 worker 两个入口都运行，统一执行脱敏与字段允许清单过滤。
 
 ## 5. 分层落位指南
 
 ```
 interfaces/     内置状态页只读端点（Controller，仅超级管理员）
-application/    状态汇总用例：聚合各适配器最近结果、判定过期与未知
+application/    状态汇总查询用例（`StatusSummaryQueryService`）：聚合各适配器最近结果、判定过期与未知
 domain/         脱敏规则、保留期规则、追踪编号生成规则（纯规则）
 infrastructure/ 日志写入（脱敏）、追踪上下文传递、状态摘要存储、备份恢复结果读取
 ```

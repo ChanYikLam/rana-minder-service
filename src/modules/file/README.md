@@ -12,9 +12,10 @@
 | 组件 | 类型 | 职责 |
 |---|---|---|
 | `FileController`、`FileCheckCallbackController` | Controller（interfaces） | 上传初始化、字节完成、检查回调、预览/下载请求的路由与请求适配 |
-| `InitiateUploadCommand`、`CompleteUploadCommand`、`AskFileCheckCommand`、`PromoteFileCommand`（检查收口）、`BindFileCommand`、`ReplaceDraftFileCommand`、`RemoveDraftFileCommand`、`QueueFormalDeleteCommand` | 应用命令·查询用例（application/commands、application/queries） | SRS-SM-FILE-001 各转换与文件生命周期用例 |
-| `FileAccessQuery`、`FileStatusQuery` | 应用命令·查询用例（application/commands、application/queries） | 每次预览/下载的实时鉴权与检查/绑定状态查询（IFC-QRY-006） |
-| `FileModel`、`FileVersion`、`FileReference`、`FileStateMachine` | 领域模型·状态机（domain/models、domain/state-machines） | 文件逻辑记录、不可变版本、业务引用与 11 条转换规则 |
+| `InitiateUploadCommand`、`CompleteUploadCommand`、`AskFileCheckCommand`、`PromoteFileCommand`（检查收口）、`BindFileCommand`、`ReplaceDraftFileCommand`、`RemoveDraftFileCommand`、`QueueFormalDeleteCommand` | 应用命令（application/commands） | SRS-SM-FILE-001 各转换与文件生命周期用例 |
+| `FileAccessQuery`、`FileStatusQuery` | 查询用例（application/queries） | 每次预览/下载的实时鉴权与检查/绑定状态查询（IFC-QRY-006） |
+| `FileModel`、`FileVersion`、`FileReference` | 领域模型（domain/models） | 文件逻辑记录、不可变版本、业务引用 |
+| `FileStateMachine` | 状态机（domain/state-machines） | 11 条转换规则 |
 | `FileRepository`、`S3ObjectStoreAdapter`、`FileScannerAdapter`、`SignedUrlProvider`、`DeleteManifestHandler` | 基础设施适配（infrastructure） | 元数据持久化、对象字节与派生物、检查服务适配、短时地址与水印、删除清单逐项执行与核验 |
 
 ## 对外接口

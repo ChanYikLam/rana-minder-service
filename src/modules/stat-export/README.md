@@ -12,9 +12,9 @@
 | 组件 | 类型 | 职责 |
 |---|---|---|
 | `StatisticsController`、`ExportController` | Controller（interfaces） | 统计查询、导出申请/重试/提前删除/下载/状态入口与授权上下文 |
-| `ClubStatisticsQuery`、`RecruitmentFunnelQuery`、`JointActivityStatisticsQuery` | 应用命令·查询用例（application/commands、application/queries） | 同步只读统计：口径计算、普通社团隔离、联合参与方边界、下钻权限 |
-| `ExportApplyCommand`、`ExportRetryCommand`、`ExportDeleteCommand` | 应用命令·查询用例（application/commands、application/queries） | 推进 `SRS-SM-EXP-001`；申请幂等、快照冻结、租约/版本竞争 |
-| `StatisticsSpecification`、`ExportTaskAggregate`、`ExportSnapshot` | 领域模型·状态机（domain/models、domain/state-machines） | 指标口径与失效传播规则；任务状态、范围/字段/附件快照、失权/过期判定 |
+| `ClubStatisticsQuery`、`RecruitmentFunnelQuery`、`JointActivityStatisticsQuery` | 查询用例（application/queries） | 同步只读统计：口径计算、普通社团隔离、联合参与方边界、下钻权限 |
+| `ExportApplyCommand`、`ExportRetryCommand`、`ExportDeleteCommand` | 应用命令（application/commands） | 推进 `SRS-SM-EXP-001`；申请幂等、快照冻结、租约/版本竞争 |
+| `StatisticsSpecification`、`ExportTaskAggregate`、`ExportSnapshot` | 领域模型（domain/models） | 指标口径与失效传播规则；任务状态、范围/字段/附件快照、失权/过期判定 |
 | `ExportFileWriter`、`ShortLivedUrlProvider`、`ExportDisposal` | 基础设施适配（infrastructure） | 对象存储写入（水印/公式转义）、短期下载地址、失效清理与删除传播 |
 
 ## 对外接口

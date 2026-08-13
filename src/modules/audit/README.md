@@ -12,11 +12,12 @@
 | 组件 | 类型 | 职责 |
 |---|---|---|
 | `CorrectionController`、`CorrectionAdminController` | Controller（interfaces） | 纠错提交/决定/撤回、正式删除、保留策略、审计查询入口与授权上下文 |
-| `SubmitCorrection`、`DecideCorrection`、`WithdrawCorrection` | 应用命令·查询用例（application/commands、application/queries） | 推进 `SRS-SM-AUD-001` 各转换；携带申请版本与幂等键 |
-| `AuditWriter` | 应用命令·查询用例（application/commands、application/queries） | 关键审计写入器：与业务同事务提交；敏感字段脱敏 |
-| `FormalDeleteCommand`、`RetentionPolicyCommand` | 应用命令·查询用例（application/commands、application/queries） | 删除执行清单编排、保留策略发布/执行（高风险门） |
-| `CorrectionAggregate`、`CorrectionStateMachine` | 领域模型·状态机（domain/models、domain/state-machines） | 纠错状态、客观错误判定、作者回避与联合边界 |
-| `AuditEvent`、`DeletionChecklist` | 领域模型·状态机（domain/models、domain/state-machines） | 审计事件目录；删除清单步骤、恢复重放与最小删除审计 |
+| `SubmitCorrection`、`DecideCorrection`、`WithdrawCorrection` | 应用命令（application/commands） | 推进 `SRS-SM-AUD-001` 各转换；携带申请版本与幂等键 |
+| `AuditWriter` | 应用命令（application/commands） | 关键审计写入器：与业务同事务提交；敏感字段脱敏 |
+| `FormalDeleteCommand`、`RetentionPolicyCommand` | 应用命令（application/commands） | 删除执行清单编排、保留策略发布/执行（高风险门） |
+| `CorrectionAggregate` | 领域模型（domain/models） | 纠错状态、客观错误判定、作者回避与联合边界 |
+| `CorrectionStateMachine` | 状态机（domain/state-machines） | `SRS-SM-AUD-001` 转换与拒绝规则 |
+| `AuditEvent`、`DeletionChecklist` | 领域模型（domain/models） | 审计事件目录；删除清单步骤、恢复重放与最小删除审计 |
 | `AuditRepository`、`DeletionStepExecutor` | 基础设施适配（infrastructure） | 审计/清单持久化（PostgreSQL）；跨数据库/对象存储/缓存/索引/导出副本逐项执行 |
 
 ## 对外接口

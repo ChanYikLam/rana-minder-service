@@ -2,11 +2,11 @@
 
 > 模块定位：平台支撑模块之一（ADR-002 §2.2）
 > 职责：到期、重试、对账、通知投递、导出、删除、重算和受控批量执行的领取、租约、调度与编排
-> 上游权威：[系统架构总览 v1.0](../../../docs/architecture/系统架构总览-v1.0.md)、[ADR-001](../../../docs/architecture/ADR-001-首版应用形态与后台任务运行单元.md)、[ADR-004](../../../docs/architecture/ADR-004-后台任务与可靠投递机制.md)、[ADR-013](../../../docs/architecture/ADR-013-Vue与NestJS首版应用技术栈.md)、[SRS-SM-ORG-004](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+> 上游权威：[系统架构总览 v1.0](../../../docs/architecture/系统架构总览-v1.0.md)、[ADR-001](../../../docs/architecture/ADR-001-首版应用形态与后台任务运行单元.md)、[ADR-004](../../../docs/architecture/ADR-004-后台任务与可靠投递机制.md)、[ADR-013](../../../docs/architecture/ADR-013-Vue与NestJS首版应用技术栈.md)、[SRS-SM-ORG-004（受控批量操作，8 条转换；IFC-SM-007）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
 
 ## 1. 定位与责任
 
-本模块为系统提供后台执行能力：任务领取、租约竞争、调度、重试策略和受控批量编排（`SRS-SM-ORG-004`）。
+本模块为系统提供后台执行能力：任务领取、租约竞争、调度、重试策略和受控批量编排（`SRS-SM-ORG-004（IFC-SM-007）`）。
 
 本模块**只提供执行机制**，不拥有任何领域状态，不代替领域模块作出业务决定。每类业务意图的最终业务解释、状态机和事务归属继续遵守 ADR-002；每个批量单项仍调用责任领域模块的应用命令。
 
@@ -16,16 +16,16 @@
 
 | 组件 | 类型 | 职责 |
 |---|---|---|
-| `TaskProcessorRegistry` | Controller（interfaces） | 任务类型->处理器映射注册；处理器薄壳，不含业务决策 |
+| `TaskProcessorRegistry` | 接口适配（interfaces） | 任务类型->处理器映射注册；处理器薄壳，不含业务决策；平台支撑模块 interfaces 层例外：无 HTTP 入口，承载任务类型注册与处理器装配 |
 | `JobController` | Controller（interfaces） | 任务管理端点（积压查询、手动重试入口，仅超管） |
-| `ClaimAndExecuteTaskUseCase` | 应用命令·查询用例（application/commands、application/queries） | 取租约->复核前置条件->调用领域命令->回读收口->更新任务状态 |
-| `BatchOrchestrationUseCase` | 应用命令·查询用例（application/commands、application/queries） | 受控批量编排：冻结批次输入->逐项调度->汇总结果 |
-| `RetryPolicyUseCase` | 应用命令·查询用例（application/commands、application/queries） | 重试策略判定：退避计算、上限判定、人工处置触发 |
-| `TaskStateMachine` | 领域模型·状态机（domain/models、domain/state-machines） | 任务状态转换规则（SRS-SM-ORG-004）：待执行/执行中/可重试失败/结果不确定/需人工处置/已完成 |
+| `ClaimAndExecuteTaskUseCase` | 应用命令（application/commands） | 取租约->复核前置条件->调用领域命令->回读收口->更新任务状态 |
+| `BatchOrchestrationUseCase` | 应用命令（application/commands） | 受控批量编排：冻结批次输入->逐项调度->汇总结果 |
+| `RetryPolicyUseCase` | 应用命令（application/commands） | 重试策略判定：退避计算、上限判定、人工处置触发 |
+| `TaskStateMachine` | 状态机（domain/state-machines） | 任务状态转换规则（SRS-SM-ORG-004（IFC-SM-007））：待执行/执行中/可重试失败/结果不确定/需人工处置/已完成 |
 | `LeaseAndIdempotencyRules` | 领域服务·规则（domain/services） | 租约竞争规则、幂等键派生、重试判定（纯规则，不依赖存储或 SDK） |
 | `BatchAggregationRules` | 领域服务·规则（domain/services） | 批次汇总规则：成功项保留、失败项隔离、批次级审计 |
 | `TaskRepository` | 基础设施适配（infrastructure） | 任务表访问（含租约竞争原子条件更新）、任务状态持久化 |
-| `ExternalCallDispatcher` | 基础设施适配（infrastructure） | 外部适配调用编排（Casdoor/S3/邮件/文件检查），按任务类型路由 |
+| `ExternalCallAdapter` | 基础设施适配（infrastructure） | 外部适配调用编排（Casdoor/S3/邮件/文件检查），按任务类型路由 |
 
 ## 3. 权威与边界
 
@@ -58,7 +58,7 @@
 ```
 interfaces/     启动器与任务注册：声明任务处理器（无 HTTP 入口）
 application/    执行编排：领取、重试策略、对账流程、批量逐项调用领域命令
-domain/         任务状态机规则（SRS-SM-ORG-004）、租约/幂等规则、重试判定（纯规则）
+domain/         任务状态机规则（SRS-SM-ORG-004（IFC-SM-007））、租约/幂等规则、重试判定（纯规则）
 infrastructure/ 任务持久化访问、租约锁、外部适配调用（Casdoor/S3/邮件/文件检查）
 ```
 
@@ -82,7 +82,7 @@ infrastructure/ 任务持久化访问、租约锁、外部适配调用（Casdoor
 - 迟到响应、重复回调、人工重试与恢复重放共享同一业务意图和收口规则，不得各自产生一份结果。
 - 对任务执行使用唯一追踪编号，并与业务幂等键区分开（两者不得混同）。
 
-### 6.3 受控批量（SRS-SM-ORG-004）
+### 6.3 受控批量（SRS-SM-ORG-004（IFC-SM-007））
 
 - 批量前提：固定一个社团、一个操作类型和一个业务/邀请类型；跨社团、跨操作类型或任意字段通用修改一律拒绝。
 - 预览阶段原子保存筛选条件、固定对象 ID、对象版本、操作参数和影响范围；预览版本唯一，修改选择后旧预览失效并重新预览。
@@ -108,6 +108,8 @@ infrastructure/ 任务持久化访问、租约锁、外部适配调用（Casdoor
 - MANUAL_INTERVENTION（不可自动重试/需人工处置）
 - COMPLETED（已完成）
 ```
+
+TaskStatus 为任务持久状态枚举，与适配层 ExternalStatus（外部调用结果枚举，见 src/adapters/基础设施适配文档.md）语义不同：UNCERTAIN 在 TaskStatus 指任务结果不确定需读回，在 ExternalStatus 指外部调用结果不确定；二者位于不同枚举体系，不得混用。
 
 ### 6.6 任务类型与处理器映射
 
@@ -139,6 +141,6 @@ infrastructure/ 任务持久化访问、租约锁、外部适配调用（Casdoor
 - [ADR-001 首版应用形态与后台任务运行单元](../../../docs/architecture/ADR-001-首版应用形态与后台任务运行单元.md)
 - [ADR-004 后台任务与可靠投递机制](../../../docs/architecture/ADR-004-后台任务与可靠投递机制.md)
 - [ADR-013 Vue 与 NestJS 首版应用技术栈](../../../docs/architecture/ADR-013-Vue与NestJS首版应用技术栈.md)
-- [SRS 状态机转换明细（4.4 SRS-SM-ORG-004 受控批量操作）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [SRS 状态机转换明细（4.4 SRS-SM-ORG-004（IFC-SM-007） 受控批量操作）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
 - [接口契约 v1.0（事务边界与任务语义）](../../../docs/specification/接口契约-v1.0.md)
 - [部署运维与恢复手册](../../../docs/operations/部署运维与恢复手册-v1.0.md)

@@ -12,9 +12,11 @@
 | 组件 | 类型 | 职责 |
 |---|---|---|
 | `NotificationController` | Controller（interfaces） | 本人通知列表/类型筛选、已读、全部已读、已处理、隐藏的 HTTP 路由与请求适配 |
-| `CreateNotificationFactCommand`（供各领域命令同事务调用）、`DeliverInboxCommand`、`CreateEmailAttemptCommand`、`RetryChannelDeliveryCommand`、`PauseInboxCommand`、`ResumeInboxCommand`、`MarkPermanentFailureCommand`、`ManualResendCommand` | 应用命令·查询用例（application/commands、application/queries） | SRS-SM-NTF-001 各转换与渠道投递用例 |
-| `NotificationQueryService` | 应用命令·查询用例（application/commands、application/queries） | 呈现列表、未读数、有期限通知状态与安全摘要查询（IFC-QRY-005 类） |
-| `NotificationFactModel`、`InboxPresentationModel`、`ChannelDeliveryAttemptModel`、`RecipientSnapshot`、`RecipientSnapshotResolver`、`NotificationStateMachine` | 领域模型·状态机（domain/models、domain/state-machines） | 通知事实、呈现子状态、渠道尝试、收件人快照计算与转换规则 |
+| `CreateNotificationFactCommand`（供各领域命令同事务调用）、`DeliverInboxCommand`、`CreateEmailAttemptCommand`、`RetryChannelDeliveryCommand`、`PauseInboxCommand`、`ResumeInboxCommand`、`MarkPermanentFailureCommand`、`ManualResendCommand` | 应用命令（application/commands） | SRS-SM-NTF-001 各转换与渠道投递用例 |
+| `NotificationQueryService` | 查询用例（application/queries） | 呈现列表、未读数、有期限通知状态与安全摘要查询（IFC-QRY-005 类） |
+| `NotificationFactModel`、`InboxPresentationModel`、`ChannelDeliveryAttemptModel`、`RecipientSnapshot` | 领域模型（domain/models） | 通知事实、呈现子状态、渠道尝试、收件人快照 |
+| `RecipientSnapshotResolver` | 领域服务（domain/services） | 收件人快照计算 |
+| `NotificationStateMachine` | 状态机（domain/state-machines） | 转换规则 |
 | `NotificationRepository`、`InboxAdapter`、`EmailAdapter`、`TemplateSnapshotService` | 基础设施适配（infrastructure） | 事实与渠道意图持久化、站内信呈现、邮件发送与结果查询、模板版本快照 |
 
 ## 对外接口

@@ -12,11 +12,12 @@
 | 组件 | 类型 | 职责 |
 |---|---|---|
 | `FormDefinitionController` / `FormSubmissionController` | Controller（interfaces） | 表单设计/发布/停用、草稿保存、提交与修订的 HTTP 路由与请求适配 |
-| `CreateFormDraftCommand`、`UpdateFormDraftCommand`、`RunPreviewTestCommand`、`PublishFormVersionCommand`、`DeprecateFormVersionCommand`、`ReuseFormVersionCommand` | 应用命令·查询用例（application/commands、application/queries） | SRS-SM-FORM-001 各转换的用例编排 |
-| `SaveSubmissionDraftCommand`、`MigrateDraftCommand`、`RequestSubmitCommand`、`CompleteSubmitCommand`（检查通过收口）、`OpenRevisionCommand`、`LockSubmissionCommand`、`RequestCorrectionCommand`、`CleanupDraftCommand` | 应用命令·查询用例（application/commands、application/queries） | SRS-SM-FORM-002 各转换的用例编排 |
-| `FormDefinitionModel`、`FormVersionModel`、`FormSubmissionModel`、`FormRevisionModel` | 领域模型·状态机（domain/models、domain/state-machines） | 表单根与不可变版本、提交骨架与可还原修订快照 |
-| `FormDefinitionStateMachine`、`FormSubmissionStateMachine`、`FormDraftMigrator`、`FieldPermissionRule` | 领域模型·状态机（domain/models、domain/state-machines） | 转换前置校验、草稿跨版本迁移、字段级权限收紧与条件校验规则（纯规则，不依赖存储） |
-| `FormDefinitionQueryService`、`SubmissionQueryService` | 应用命令·查询用例（application/commands、application/queries） | 当前指针/版本树、提交与修订详情查询（IFC-QRY-001/002），回源权威、不从缓存或通知推断授权 |
+| `CreateFormDraftCommand`、`UpdateFormDraftCommand`、`RunPreviewTestCommand`、`PublishFormVersionCommand`、`DeprecateFormVersionCommand`、`ReuseFormVersionCommand` | 应用命令（application/commands） | SRS-SM-FORM-001 各转换的用例编排 |
+| `SaveSubmissionDraftCommand`、`MigrateDraftCommand`、`RequestSubmitCommand`、`CompleteSubmitCommand`（检查通过收口）、`OpenRevisionCommand`、`LockSubmissionCommand`、`RequestCorrectionCommand`、`CleanupDraftCommand` | 应用命令（application/commands） | SRS-SM-FORM-002 各转换的用例编排 |
+| `FormDefinitionModel`、`FormVersionModel`、`FormSubmissionModel`、`FormRevisionModel` | 领域模型（domain/models） | 表单根与不可变版本、提交骨架与可还原修订快照 |
+| `FormDefinitionStateMachine`、`FormSubmissionStateMachine` | 状态机（domain/state-machines） | 转换前置校验 |
+| `FormDraftMigrator`、`FieldPermissionRule` | 领域服务（domain/services） | 草稿跨版本迁移、字段级权限收紧与条件校验规则（纯规则，不依赖存储） |
+| `FormDefinitionQueryService`、`SubmissionQueryService` | 查询用例（application/queries） | 当前指针/版本树、提交与修订详情查询（IFC-QRY-001/002），回源权威、不从缓存或通知推断授权 |
 | `FormDefinitionRepository`、`FormSubmissionRepository`、`AnswerSnapshotStore` | 基础设施适配（infrastructure） | PostgreSQL 关系骨架与 JSONB 答案快照读写、版本与唯一性约束落地 |
 
 ## 对外接口

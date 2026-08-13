@@ -14,10 +14,10 @@
 | `MembershipController` | Controller（interfaces） | 成员经历、退出/移除 HTTP 入口 |
 | `DepartmentRelationController` | Controller（interfaces） | 部门/职位关系变更、结束、同步异常修复入口 |
 | `DepartmentApplicationController` | Controller（interfaces） | 部门关系申请提交/撤回/审批入口 |
-| `ApproveDeparture`、`RemoveMember`、`ChangeDepartmentRelation`、`ApproveDepartmentApplication` | 应用命令·查询用例（application/commands、application/queries） | 状态转换用例；加入部门＋任职/跨部门调动为单一业务命令（MEM-009） |
-| `MemberPeriodQuery`、`DepartmentRelationQuery` | 应用命令·查询用例（application/commands、application/queries） | 经历时间线、当前关系与可操作项 |
-| `MembershipPeriod`、`DepartmentRelation`、`DepartmentApplication` | 领域模型·状态机（domain/models、domain/state-machines） | 经历段、关系段、申请与不可变历史 |
-| `MembershipPeriodStateMachine`、`DepartmentRelationStateMachine`、`DepartmentApplicationStateMachine` | 领域模型·状态机（domain/models、domain/state-machines） | 三个状态机转换、连续性/自审等前置规则 |
+| `ApproveDeparture`、`RemoveMember`、`ChangeDepartmentRelation`、`ApproveDepartmentApplication` | 应用命令（application/commands） | 状态转换用例；加入部门＋任职/跨部门调动为单一业务命令（MEM-009） |
+| `MemberPeriodQuery`、`DepartmentRelationQuery` | 查询用例（application/queries） | 经历时间线、当前关系与可操作项 |
+| `MembershipPeriod`、`DepartmentRelation`、`DepartmentApplication` | 领域模型（domain/models） | 经历段、关系段、申请与不可变历史 |
+| `MembershipPeriodStateMachine`、`DepartmentRelationStateMachine`、`DepartmentApplicationStateMachine` | 状态机（domain/state-machines） | 三个状态机转换、连续性/自审等前置规则 |
 | `MembershipRepository`、`CasdoorGroupAdapter`、`JobTaskWriter` | 基础设施适配（infrastructure） | 权威对象持久化；Group 写入/回读/外部变更对账；关系任务与换届批次 |
 
 ## 对外接口
