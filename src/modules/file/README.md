@@ -1,7 +1,23 @@
 # 领域模块 · 文件
 
 > 更新日期：2026-08-12
-> 状态机：`SRS-SM-FILE-001`（文件，11 条转换）
+> 状态机：`SRS-SM-FILE-001`（文件，11 条转换；IFC-SM-026）
+
+## 事务边界对照（IFC-TX-001~008）
+
+对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
+
+| 边界 | 名称 | 本模块参与 |
+|---|---|---|
+| `IFC-TX-001` | 本地业务状态转换 | -- |
+| `IFC-TX-002` | 直接权益与通知 | -- |
+| `IFC-TX-003` | Casdoor 外部写入 | -- |
+| `IFC-TX-004` | 文件上传/检查/绑定 | ✓ 上传/检查/绑定 |
+| `IFC-TX-005` | 通知渠道投递 | -- |
+| `IFC-TX-006` | 受控批量 | -- |
+| `IFC-TX-007` | 正式删除 | ✓ 正式删除（跨存储清单逐项执行与核验） |
+| `IFC-TX-008` | 派生刷新与重建 | -- |
+
 
 ## 核心职责
 
@@ -11,11 +27,12 @@
 
 | 组件 | 类型 | 职责 |
 |---|---|---|
-| `FileController`、`FileCheckCallbackController` | Controller | 上传初始化、字节完成、检查回调、预览/下载请求的路由与请求适配 |
-| `InitiateUploadCommand`、`CompleteUploadCommand`、`AskFileCheckCommand`、`PromoteFileCommand`（检查收口）、`BindFileCommand`、`ReplaceDraftFileCommand`、`RemoveDraftFileCommand`、`QueueFormalDeleteCommand` | 应用命令·查询用例 | SM-FILE-001 各转换与文件生命周期用例（application/commands、application/queries） |
-| `FileAccessQuery`、`FileStatusQuery` | 应用命令·查询用例 | 每次预览/下载的实时鉴权与检查/绑定状态查询（IFC-QRY-006） |
-| `FileModel`、`FileVersion`、`FileReference`、`FileStateMachine` | 领域模型·状态机 | 文件逻辑记录、不可变版本、业务引用与 11 条转换规则（domain/models、domain/state-machines） |
-| `FileRepository`、`S3ObjectStoreAdapter`、`FileScannerAdapter`、`SignedUrlProvider`、`DeleteManifestHandler` | 基础设施适配 | 元数据持久化、对象字节与派生物、检查服务适配、短时地址与水印、删除清单逐项执行与核验（infrastructure） |
+| `FileController`、`FileCheckCallbackController` | Controller（interfaces） | 上传初始化、字节完成、检查回调、预览/下载请求的路由与请求适配 |
+| `InitiateUploadCommand`、`CompleteUploadCommand`、`AskFileCheckCommand`、`PromoteFileCommand`（检查收口）、`BindFileCommand`、`ReplaceDraftFileCommand`、`RemoveDraftFileCommand`、`QueueFormalDeleteCommand` | 应用命令（application/commands） | SRS-SM-FILE-001 各转换与文件生命周期用例 |
+| `FileAccessQuery`、`FileStatusQuery` | 查询用例（application/queries） | 每次预览/下载的实时鉴权与检查/绑定状态查询（IFC-QRY-006） |
+| `FileModel`、`FileVersion`、`FileReference` | 领域模型（domain/models） | 文件逻辑记录、不可变版本、业务引用 |
+| `FileStateMachine` | 状态机（domain/state-machines） | 11 条转换规则 |
+| `FileRepository`、`ObjectStoreAdapter`、`FileCheckAdapter`、`SignedUrlProvider`、`DeleteManifestHandler` | 基础设施适配（infrastructure） | 元数据持久化、对象字节与派生物、检查服务适配、短时地址与水印、删除清单逐项执行与核验 |
 
 ## 对外接口
 
@@ -25,17 +42,17 @@
 
 ## 核心逻辑摘要
 
-- SM-FILE-001：`新建 → 临时上传 → 检查中 → 可用 → 已绑定提交 → 待清理 → 已清理`；检查中 → 隔离/失败（可重试标志）；可用/临时上传/隔离失败 → 待清理（失去最后有效引用）；已绑定提交 → 待清理（正式删除执行中）→ 正式删除；预览/下载为状态不变操作（IFC-SM-026）。
-- 隔离/失败不向社团管理员开放人工标可用，重新上传必须新建文件；隔离原因不把危险内容写入日志；已清理为临时文件终态，不得删除审计（FORM-007、GOV-008、AUD-008）。
+- SRS-SM-FILE-001：`新建（NEW） -> 临时上传（TEMPORARY_UPLOAD） -> 检查中（CHECKING） -> 可用（AVAILABLE） -> 已绑定提交（BOUND_TO_SUBMISSION） -> 待清理（PENDING_CLEANUP） -> 已清理（CLEANED）`；检查中 -> 隔离/失败（QUARANTINED_FAILED，可重试标志）；可用/临时上传/隔离失败 -> 待清理（失去最后有效引用）；已绑定提交 -> 待清理（正式删除执行中）-> 正式删除（FORMALLY_DELETED）；预览/下载为状态不变操作（IFC-SM-026）。
+- 隔离/失败不向社团管理员开放人工标可用，重新上传必须新建文件（IFC-ERR-003 当前无权 / IFC-ERR-006 业务前置条件失败）；隔离原因不把危险内容写入日志；已清理为临时文件终态，不得删除审计（FORM-007、GOV-008、AUD-008）。
 - 事务边界归属：上传/检查/绑定为第 4 类（IFC-TX-004）；正式删除为第 7 类（IFC-TX-007）。
 - 平台统一的类别/真实类型白名单/单文件大小/数量上限为上传硬约束，社团及表单管理员不得放宽（FORM-003）；草稿内替换产生新文件版本且旧临时引用进入受控清理，不覆盖已检查原件（IFC-FIL-006）。
-- 幂等与回读：上传会话与文件 ID 幂等，同一内容不等于同一业务引用；检查结果绑定文件哈希/版本，重复回调幂等，任一检查未完成保持检查中；检查服务不可用不得超时放行，状态保持不可访问（FORM-007、GOV-008、NFR-003）。
+- 幂等与回读：上传会话与文件 ID 幂等，同一内容不等于同一业务引用；检查结果绑定文件哈希/版本，重复回调幂等，任一检查未完成保持检查中；检查服务不可用不得超时放行，状态保持不可访问（IFC-ERR-012 依赖不可用）（FORM-007、GOV-008、NFR-003）。
 - 绑定与清理竞争：文件引用与不可变提交修订同一事务建立，与孤儿清理竞争只允许一个成功；草稿文件删除后立即不可见，物理清理在无有效引用且期限满足后执行（FORM-009、AUD-008）。
-- 访问控制：每次预览/下载按当前用户、对象、字段、任务、社团/联合关系和业务状态实时鉴权，只生成短时最小范围地址并加必要水印；失权、停用、隔离或删除后旧链接不得继续访问（FORM-008、AUD-004、IFC-FIL-005）。
-- 正式删除：由审计模块正式删除命令触发（IFC-TX-007），先撤销访问再按清单逐项删除数据库、对象存储、缓存、索引与未过期导出并核验；任一步失败保持未完成并重试；恢复备份后必须重放删除清单并核对数据库—对象一致性，未收口不得宣称文件恢复完成（AUD-007 至 AUD-009、IFC-DATA-011）。
+- 访问控制：每次预览/下载按当前用户、对象、字段、任务、社团/联合关系和业务状态实时鉴权，只生成短时最小范围地址并加必要水印；失权、停用、隔离或删除后旧链接不得继续访问（IFC-ERR-003 当前无权 / IFC-ERR-011 安全限制）（FORM-008、AUD-004、IFC-FIL-005）。
+- 正式删除：由审计模块正式删除命令触发（IFC-TX-007），先撤销访问再按清单逐项删除数据库、对象存储、缓存、索引与未过期导出并核验；任一步失败保持未完成并重试；恢复备份后必须重放删除清单并核对数据库-对象一致性，未收口不得宣称文件恢复完成（AUD-007 至 AUD-009、IFC-DATA-011）。
 - 恢复后访问：删除清单重放与一致性核验完成前，隔离区不作为正式恢复源，预览需按需重新生成；差异未收口不得宣称文件恢复完成（IFC-FIL-009）。
-- 检查状态查询：`IFC-FIL-003` 必须返回检查、晋升、隔离、失败或可用的真实状态；依赖不可用时保持不可访问，不得超时自动通过。
+- 检查状态查询：`IFC-FIL-003` 必须返回检查、晋升、隔离、失败或可用的真实状态；依赖不可用时保持不可访问，不得超时自动通过（IFC-ERR-012 依赖不可用）。
 
 ## 典型调用链
 
-上传绑定：`FileController 初始化上传` → `InitiateUploadCommand` 同事务保存元数据、不可变版本与隔离区定位并创建检查任务（第 4 类边界）→ 字节完成 → `AskFileCheckCommand` → 检查服务回调 `PromoteFileCommand` 晋升可用 → `BindFileCommand` 与表单提交修订同事务原子绑定。访问：`FileAccessQuery` 实时鉴权 → 生成短时地址与水印 → 敏感访问写审计。删除：审计模块正式删除命令 → 撤销访问 → 删除清单逐项执行核验 → 全部完成进入正式删除终态。
+上传绑定：`FileController 初始化上传` -> `InitiateUploadCommand` 同事务保存元数据、不可变版本与隔离区定位并创建检查任务（第 4 类边界）-> 字节完成 -> `AskFileCheckCommand` -> 检查服务回调 `PromoteFileCommand` 晋升可用 -> `BindFileCommand` 与表单提交修订同事务原子绑定。访问：`FileAccessQuery` 实时鉴权 -> 生成短时地址与水印 -> 敏感访问写审计。删除：审计模块正式删除命令 -> 撤销访问 -> 删除清单逐项执行核验 -> 全部完成进入正式删除终态。

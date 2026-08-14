@@ -1,7 +1,23 @@
 # 领域模块 · 通知
 
-> 更新日期：2026-08-12
-> 状态机：`SRS-SM-NTF-001`（通知事实/渠道，10 条转换）
+> 更新日期：2026-08-14
+> 状态机：`SRS-SM-NTF-001`（通知事实/渠道，10 条转换；IFC-SM-027）
+
+## 事务边界对照（IFC-TX-001~008）
+
+对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
+
+| 边界 | 名称 | 本模块参与 |
+|---|---|---|
+| `IFC-TX-001` | 本地业务状态转换 | -- |
+| `IFC-TX-002` | 直接权益与通知 | ✓ 通知事实＋收件人快照在领域命令事务内保存 |
+| `IFC-TX-003` | Casdoor 外部写入 | -- |
+| `IFC-TX-004` | 文件上传/检查/绑定 | -- |
+| `IFC-TX-005` | 通知渠道投递 | ✓ 站内信/邮件渠道投递、失败重试与恢复补投 |
+| `IFC-TX-006` | 受控批量 | -- |
+| `IFC-TX-007` | 正式删除 | -- |
+| `IFC-TX-008` | 派生刷新与重建 | -- |
+
 
 ## 核心职责
 
@@ -11,11 +27,13 @@
 
 | 组件 | 类型 | 职责 |
 |---|---|---|
-| `NotificationController` | Controller | 本人通知列表/类型筛选、已读、全部已读、已处理、隐藏的 HTTP 路由与请求适配 |
-| `CreateNotificationFactCommand`（供各领域命令同事务调用）、`DeliverInboxCommand`、`CreateEmailAttemptCommand`、`RetryChannelDeliveryCommand`、`PauseInboxCommand`、`ResumeInboxCommand`、`MarkPermanentFailureCommand`、`ManualResendCommand` | 应用命令·查询用例 | SM-NTF-001 各转换与渠道投递用例（application/commands、application/queries） |
-| `NotificationQueryService` | 应用命令·查询用例 | 呈现列表、未读数、有期限通知状态与安全摘要查询（IFC-QRY-005 类） |
-| `NotificationFactModel`、`InboxPresentationModel`、`ChannelDeliveryAttemptModel`、`RecipientSnapshot`、`RecipientSnapshotResolver`、`NotificationStateMachine` | 领域模型·状态机 | 通知事实、呈现子状态、渠道尝试、收件人快照计算与转换规则（domain/models、domain/state-machines） |
-| `NotificationRepository`、`InboxAdapter`、`EmailAdapter`、`TemplateSnapshotService` | 基础设施适配 | 事实与渠道意图持久化、站内信呈现、邮件发送与结果查询、模板版本快照（infrastructure） |
+| `NotificationController` | Controller（interfaces） | 本人通知列表/类型筛选、已读、全部已读、已处理、隐藏的 HTTP 路由与请求适配 |
+| `CreateNotificationFactCommand`（供各领域命令同事务调用）、`DeliverInboxCommand`、`CreateEmailAttemptCommand`、`RetryChannelDeliveryCommand`、`PauseInboxCommand`、`ResumeInboxCommand`、`MarkPermanentFailureCommand`、`ManualResendCommand` | 应用命令（application/commands） | SRS-SM-NTF-001 各转换与渠道投递用例 |
+| `NotificationQueryService` | 查询用例（application/queries） | 呈现列表、未读数、有期限通知状态与安全摘要查询（IFC-QRY-005 类） |
+| `NotificationFactModel`、`InboxPresentationModel`、`ChannelDeliveryAttemptModel`、`RecipientSnapshot` | 领域模型（domain/models） | 通知事实、呈现子状态、渠道尝试、收件人快照 |
+| `RecipientSnapshotResolver` | 领域服务（domain/services） | 收件人快照计算 |
+| `NotificationStateMachine` | 状态机（domain/state-machines） | 转换规则 |
+| `NotificationRepository`、`InboxAdapter`、`EmailAdapter`、`TemplateSnapshotService` | 基础设施适配（infrastructure） | 事实与渠道意图持久化、站内信呈现、邮件发送与结果查询、模板版本快照 |
 
 ## 对外接口
 
@@ -25,17 +43,17 @@
 
 ## 核心逻辑摘要
 
-- SM-NTF-001：`新建 → 已创建＋待投递 / 已创建＋暂停投递 → 已投递`；已投递下分呈现子状态：已读/已处理/隐藏；邮件为可选渠道子状态：待投递/已投递/失败重试/永久失败。权益通知不可物理删除，有期限通知显示可处理/已处理/已撤回/已过期，过期保留历史（NTF-003）。
+- SRS-SM-NTF-001：`新建（NEW） -> 已创建＋待投递（CREATED_PENDING_DELIVERY）/ 已创建＋暂停投递（CREATED_PAUSED_DELIVERY） -> 已投递（DELIVERED）`；已投递下分呈现子状态：已读（READ）/已处理（PROCESSED）/隐藏（HIDDEN）；邮件为可选渠道子状态：待投递/已投递/失败重试/永久失败。权益通知不可物理删除，有期限通知显示可处理/已处理/已撤回/已过期，过期保留历史（NTF-003）。
 - 收件人在业务事件发生时形成快照，后续换届不改变历史收件人；通知只关联逻辑事件与最少摘要，业务对象状态只在打开时实时读取（NTF-001 至 003）。
-- 事务边界归属：通知事实保存为第 2 类（IFC-TX-002）——通知事实、逻辑事件 ID、收件人快照与最少摘要同事务原子保存，保存失败则权益命令整体回滚；渠道投递失败不回滚已提交业务（NTF-001 至 003）。邮件渠道为第 5 类（IFC-TX-005）。
+- 事务边界归属：通知事实保存为第 2 类（IFC-TX-002 边界 2）--通知事实、逻辑事件 ID、收件人快照与最少摘要同事务原子保存，保存失败则权益命令整体回滚（IFC-ERR-016 内部提交失败）；通知投递（含投递失败）为第 5 类（IFC-TX-005 边界 5：通知渠道投递）--渠道意图、任务与模板/发件身份快照可靠保存，投递失败不回滚已提交业务、恢复只补投渠道、不得重执行业务或冒充已读，永久失败保留投递证据，结果不确定先回读再收口（NTF-001 至 003、NTF-007、IFC-ERR-013 外部结果不确定）。
 - 紧急关闭站内信：超管填写原因、预计恢复时间、影响预览并二次确认后按范围暂停投递并写特权审计；通知事实仍保存、权益业务可继续、默认邮件仍按配置尝试；恢复后按原事件时间升序补投，不同范围/收件人按分区、租约与逻辑事件幂等并行，不得重复执行业务（NTF-001、IFC-NTF-001、NFR-006）。
-- 邮件资格与失败：事件允许邮件、本次/活动配置未关闭、用户未退订、邮箱已验证、发信账号有效才创建邮件任务（NTF-004 至 007）；明确退信或连续失败 24 小时进入永久失败并保留投递证据；人工重发创建新尝试且只重发通知、不重执行原业务（NTF-007）。
+- 邮件资格与失败：事件允许邮件、本次/活动配置未关闭、用户未退订、邮箱已验证、发信账号有效才创建邮件任务（NTF-004 至 007）；明确退信或连续失败 24 小时进入永久失败并保留投递证据；人工重发创建新尝试且只重发通知、不重执行原业务（NTF-007）。投递结果不确定时必须先回读再收口（IFC-ERR-013 外部结果不确定）；依赖不可用时按故障规则降级而非伪成功（IFC-ERR-012 依赖不可用）。
 - 幂等：逻辑事件＋收件人唯一去重，同一逻辑事件重复投递只对应一条站内信；渠道消息 ID 幂等，结果不确定先查询再收口；呈现子状态只改变本人偏好，不改变通知事实与业务历史。
-- 内容约束：正文只携带理解事件所需的最少信息，不得复制完整报名表、内部评价、联系方式或附件；邮件不含免登录令牌，链接打开重新鉴权（NTF-003、需求发现 08）。
-- 模板与身份：发送时冻结模板版本与发件身份；自定义 HTML 只允许受限标签与行内样式，未通过安全校验自动回退平台默认模板；回复地址固定为实际发信账号，历史投递保留原身份（需求发现 08）。
+- 内容约束：正文只携带理解事件所需的最少信息，不得复制完整报名表、内部评价、联系方式或附件；邮件不含免登录令牌，链接打开重新鉴权（IFC-ERR-003 当前无权 时拒绝直接访问）（NTF-003、需求发现 08）。
+- 模板与身份：发送时冻结模板版本与发件身份；自定义 HTML 只允许受限标签与行内样式，未通过安全校验自动回退平台默认模板（IFC-ERR-005 输入无效 / IFC-ERR-011 安全限制）；回复地址固定为实际发信账号，历史投递保留原身份（需求发现 08）。
 - 定位说明：`CreateNotificationFactCommand` 是被各领域命令在本事务内调用的事务能力，不是独立公开命令；站内信/邮件/恢复补投由 job 模块编排调用本模块渠道命令，任务执行前仍复核事实状态与渠道资格（IFC-CMD-005）。
 - 审计与脱敏：业务审计引用通知事实，渠道尝试独立审计；失败信息、正文与发信密钥不得写入运行日志或普通审计（AUD-003、需求发现 08）。
 
 ## 典型调用链
 
-权益领域命令（如录取结论发布）→ 同一本地事务原子保存业务结果＋通知事实＋收件人快照＋去重键（第 2 类边界，任一失败整体回滚）→ 站内信任务投递并创建唯一呈现记录 → 邮件资格判定通过时创建渠道任务与模板快照 → 发送后回读查询结果：临时失败转失败重试，明确退信或连续失败 24 小时转永久失败并站内信提示用户、通知管理员；恢复补投按原事件时间排队投递（IFC-NTF-001）。
+权益领域命令（如录取结论发布）-> 同一本地事务原子保存业务结果＋通知事实＋收件人快照＋去重键（第 2 类边界，任一失败整体回滚）-> 站内信任务投递并创建唯一呈现记录 -> 邮件资格判定通过时创建渠道任务与模板快照 -> 发送后回读查询结果：临时失败转失败重试，明确退信或连续失败 24 小时转永久失败并站内信提示用户、通知管理员；恢复补投按原事件时间排队投递（IFC-NTF-001）。
