@@ -1,0 +1,242 @@
+# ============================================================
+# RanaMinder Service · CI 流水线配置（cnb.cool 云原生构建）
+#
+# 权威依据：docs/engineering/CI与质量门定义-v1.0.md（CI-001~CI-006）
+# 阶段 -> 实现 -> 门禁的完整映射与维护说明见：
+#   docs/engineering/CI流水线落地指南-v1.0.md
+# 语法参考：https://docs.cnb.cool/zh/build/grammar.md
+#
+# 结构概览：
+#   (main|dev).pull_request / push：
+#     - docs-check：任何变更都执行（秘密扫描 + 文档链接一致性）
+#     - code-check：仅代码相关变更执行（CI-001 阶段 1~8、10；代码未开工时自动跳过）
+#   v*.tag_push：
+#     - release-check：全量阶段 + 发布门证据摘要（CI-002 规则 3、CI-004）
+#
+# 代码未开工保护：所有代码阶段以 package.json / 锁文件存在为前提
+# （if 条件），仓库当前为纯文档状态时全部自动跳过，流水线保持绿色；
+# 代码开工后（package.json 出现）各阶段按 CI-001 门禁严格生效。
+# ============================================================
+
+# ------------------------------------------------------------
+# main / dev 分支：MR 与推送
+# ------------------------------------------------------------
+"(main|dev)":
+  # ---- MR（含推送更新）：全量门禁（CI-001、CI-002 规则 1）----
+  pull_request:
+    # 文档检查：任何变更都执行；纯文档变更（docs/**、*.md）时，
+    # 本流水线是唯一执行者（CI-002 规则 2：保留阶段 9 与 11）
+    - name: docs-check
+      docker:
+        image: node:24
+      stages:
+        # 阶段 9：秘密扫描（gitleaks，0 命中）
+        - name: 9-秘密扫描
+          script: |
+            set -e
+            if ! command -v gitleaks >/dev/null 2>&1; then
+              curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+              tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+            fi
+            gitleaks detect --source . --no-banner --redact
+        # 阶段 11：文档一致性（相对链接检查）
+        - name: 11-文档链接一致性
+          script: |
+            bash scripts/ci/check-docs-links.sh
+
+    # 代码质量门：仅代码相关变更执行（src/、test/、构建配置、.cnb.yml 等）
+    - name: code-check
+      docker:
+        image: node:24
+      services:
+        - docker
+      ifModify:
+        - "**"
+        - "!(docs/**)"
+        - "!(**/*.md)"
+        - "!*.md"
+        - "!(scripts/ci/**)"
+      stages:
+        # 阶段 1：安装（锁文件驱动；锁文件缺失/漂移失败——代码开工后生效）
+        - name: 1-安装
+          if: "[ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]"
+          script: npm ci
+        # 阶段 2：类型检查
+        - name: 2-类型检查
+          if: "[ -f package.json ]"
+          script: npx tsc --noEmit -p tsconfig.json
+        # 阶段 3：Lint 与格式检查
+        - name: 3-Lint与格式
+          if: "[ -f package.json ]"
+          script: |
+            npm run lint
+            npm run format:check
+        # 阶段 4：单元测试 L1（领域规则，覆盖率新增代码须有对应用例）
+        - name: 4-单元测试L1
+          if: "[ -f package.json ]"
+          script: npm run test:unit
+        # 阶段 5：集成测试 L2（真实 PG18：扩展/RLS/约束；dind 已声明，
+        # 代码开工后按测试执行计划 v1.0 补充 PG18 容器启动步骤）
+        - name: 5-集成测试L2
+          if: "[ -f package.json ]"
+          script: |
+            # 启动真实 PG18 示例（代码开工后启用）：
+            #   docker run -d --name pg18 -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ranaminder_test postgres:18
+            npm run test:integration
+        # 阶段 6：契约测试 L3（HTTP 级：信封/错误码/分页/幂等/脱敏）
+        - name: 6-契约测试L3
+          if: "[ -f package.json ]"
+          script: npm run test:contract
+        # 阶段 7：构建（HTTP 应用 + Worker 双入口，ADR-001/ADR-013）
+        - name: 7-构建
+          if: "[ -f package.json ]"
+          script: |
+            npm run build
+            npm run build:worker
+        # 阶段 8：镜像构建（tag 非 latest）
+        - name: 8-镜像构建
+          if: "[ -f Dockerfile ]"
+          script: |
+            docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
+        # 阶段 10：依赖审计与许可证登记（DEP-003）
+        - name: 10-依赖审计与许可证登记
+          if: "[ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]"
+          script: |
+            npm audit --audit-level=high
+            bash scripts/ci/check-license-registry.sh
+
+  # ---- push（合并后回归验证；策略与 MR 相同）----
+  push:
+    - name: docs-check
+      docker:
+        image: node:24
+      stages:
+        - name: 9-秘密扫描
+          script: |
+            set -e
+            if ! command -v gitleaks >/dev/null 2>&1; then
+              curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+              tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+            fi
+            gitleaks detect --source . --no-banner --redact
+        - name: 11-文档链接一致性
+          script: |
+            bash scripts/ci/check-docs-links.sh
+    - name: code-check
+      docker:
+        image: node:24
+      services:
+        - docker
+      ifModify:
+        - "**"
+        - "!(docs/**)"
+        - "!(**/*.md)"
+        - "!*.md"
+        - "!(scripts/ci/**)"
+      stages:
+        - name: 1-安装
+          if: "[ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]"
+          script: npm ci
+        - name: 2-类型检查
+          if: "[ -f package.json ]"
+          script: npx tsc --noEmit -p tsconfig.json
+        - name: 3-Lint与格式
+          if: "[ -f package.json ]"
+          script: |
+            npm run lint
+            npm run format:check
+        - name: 4-单元测试L1
+          if: "[ -f package.json ]"
+          script: npm run test:unit
+        - name: 5-集成测试L2
+          if: "[ -f package.json ]"
+          script: |
+            npm run test:integration
+        - name: 6-契约测试L3
+          if: "[ -f package.json ]"
+          script: npm run test:contract
+        - name: 7-构建
+          if: "[ -f package.json ]"
+          script: |
+            npm run build
+            npm run build:worker
+        - name: 8-镜像构建
+          if: "[ -f Dockerfile ]"
+          script: |
+            docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
+        - name: 10-依赖审计与许可证登记
+          if: "[ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]"
+          script: |
+            npm audit --audit-level=high
+            bash scripts/ci/check-license-registry.sh
+
+# ------------------------------------------------------------
+# 发布 Tag（v*）：全量阶段 + 发布门证据（CI-002 规则 3、CI-004）
+# ------------------------------------------------------------
+"v*":
+  tag_push:
+    - name: release-check
+      docker:
+        image: node:24
+      services:
+        - docker
+      stages:
+        - name: 9-秘密扫描
+          script: |
+            set -e
+            if ! command -v gitleaks >/dev/null 2>&1; then
+              curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+              tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+            fi
+            gitleaks detect --source . --no-banner --redact
+        - name: 11-文档链接一致性
+          script: |
+            bash scripts/ci/check-docs-links.sh
+        - name: 1-安装
+          if: "[ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]"
+          script: npm ci
+        - name: 2-类型检查
+          if: "[ -f package.json ]"
+          script: npx tsc --noEmit -p tsconfig.json
+        - name: 3-Lint与格式
+          if: "[ -f package.json ]"
+          script: |
+            npm run lint
+            npm run format:check
+        - name: 4-单元测试L1
+          if: "[ -f package.json ]"
+          script: npm run test:unit
+        - name: 5-集成测试L2
+          if: "[ -f package.json ]"
+          script: |
+            npm run test:integration
+        - name: 6-契约测试L3
+          if: "[ -f package.json ]"
+          script: npm run test:contract
+        - name: 7-构建
+          if: "[ -f package.json ]"
+          script: |
+            npm run build
+            npm run build:worker
+        # 阶段 8：镜像构建并推送（Tag 即版本号，非 latest）
+        - name: 8-镜像构建推送
+          if: "[ -f Dockerfile ]"
+          script: |
+            docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} .
+            docker push ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
+        - name: 10-依赖审计与许可证登记
+          if: "[ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]"
+          script: |
+            npm audit --audit-level=high
+            bash scripts/ci/check-license-registry.sh
+      endStages:
+        # 发布门证据摘要（CI-004）：人工门由治理流程控制，CI 只输出证据供归档
+        - name: 发布门证据摘要
+          script: |
+            echo "=== 发布门证据（CI-004）==="
+            echo "1) 首批技术验证清单 38 项（TVER-*）：人工门，见 docs/engineering/首批技术验证清单-v1.0.md"
+            echo "2) 测试规格执行（306 转换底线、TST-FAIL/NFR/SEC）：人工门，见 docs/specification/测试规格与验收追踪-v1.0.md"
+            echo "3) OPS-VER-001~024 部署/升级/恢复演练：人工门，见 docs/operations/部署运维与恢复手册-v1.0.md"
+            echo "4) 生产 DDL 与迁移评审：人工门"
+            echo "5) 秘密扫描/依赖审计/许可证：本流水线已执行（上方阶段日志即证据）"
+            echo "6) 镜像与版本锁定（非 latest）：本流水线已执行（阶段 8 日志即证据）"

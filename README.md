@@ -27,6 +27,8 @@ rana-minder-service/
 │   ├── 启动入口文档.md
 │   └── ...
 ├── test/                  集成测试与验收证据
+├── scripts/ci/            CI 检查脚本（文档链接、许可证登记）
+├── .cnb.yml               CI 流水线配置（cnb.cool 云原生构建）
 └── README.md              本文件
 ```
 
@@ -62,6 +64,7 @@ rana-minder-service/
 - **测试规格**：`docs/specification/测试规格与验收追踪-v1.0.md`
 - **部署运维**：`docs/operations/部署运维与恢复手册-v1.0.md`
 - **后端开发指导**：`src/modules/*/README.md`（各模块）、`src/modules/分层实现规范.md`（分层约定）、`src/` 各目录中文文档
+- **CI 流水线**：`docs/engineering/CI与质量门定义-v1.0.md`（门禁权威）、`docs/engineering/CI流水线落地指南-v1.0.md`（`.cnb.yml` 实现明细与维护）
 
 ## 当前状态
 
