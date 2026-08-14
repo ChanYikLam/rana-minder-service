@@ -34,20 +34,20 @@ rana-minder-service/
 
 | 类型 | 模块 | 状态机 |
 |---|---|---|
-| 领域 | identity（身份与资料） | SM-IDN-001~003 |
-| 领域 | organization（组织与授权） | SM-ORG-001~003 |
-| 领域 | recruitment（普通招新） | SM-REC-001~005 |
-| 领域 | joint（联合活动） | SM-JNT-001~006 |
-| 领域 | invitation（邀请与成员激活） | SM-INV-001、SM-MEM-004 |
-| 领域 | membership（成员生命周期） | SM-MEM-001~003 |
-| 领域 | form（动态表单） | SM-FORM-001~002 |
-| 领域 | file（文件） | SM-FILE-001 |
-| 领域 | notification（通知） | SM-NTF-001 |
-| 领域 | audit（纠错、审计与数据生命周期） | SM-AUD-001 |
-| 领域 | stat-export（统计与导出） | SM-EXP-001 |
+| 领域 | identity（身份与资料） | SRS-SM-IDN-001~003 |
+| 领域 | organization（组织与授权） | SRS-SM-ORG-001~003 |
+| 领域 | recruitment（普通招新） | SRS-SM-REC-001~005 |
+| 领域 | joint（联合活动） | SRS-SM-JNT-001~006 |
+| 领域 | invitation（邀请与成员激活） | SRS-SM-INV-001、SRS-SM-MEM-004 |
+| 领域 | membership（成员生命周期） | SRS-SM-MEM-001~003 |
+| 领域 | form（动态表单） | SRS-SM-FORM-001~002 |
+| 领域 | file（文件） | SRS-SM-FILE-001 |
+| 领域 | notification（通知） | SRS-SM-NTF-001 |
+| 领域 | audit（纠错、审计与数据生命周期） | SRS-SM-AUD-001 |
+| 领域 | stat-export（统计与导出） | SRS-SM-EXP-001 |
 | 领域 | config（配置与发布） | - |
 | 平台支撑 | read-model（派生入口与读模型） | - |
-| 平台支撑 | job（后台任务与批量编排） | SM-ORG-004 |
+| 平台支撑 | job（后台任务与批量编排） | SRS-SM-ORG-004 |
 | 平台支撑 | ops（运维与可观测性） | - |
 
 共 29 个状态机、306 条转换、8 类事务边界。
@@ -61,7 +61,7 @@ rana-minder-service/
 - **接口与数据**：`docs/specification/`（接口契约、数据模型与约束、Casdoor 集成契约、安全设计）
 - **测试规格**：`docs/specification/测试规格与验收追踪-v1.0.md`
 - **部署运维**：`docs/operations/部署运维与恢复手册-v1.0.md`
-- **后端开发指导**：`src/modules/*/README.md`（各模块）、`src/` 各目录中文文档
+- **后端开发指导**：`src/modules/*/README.md`（各模块）、`src/modules/分层实现规范.md`（分层约定）、`src/` 各目录中文文档
 
 ## 当前状态
 
