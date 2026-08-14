@@ -52,7 +52,7 @@
 - 追踪上下文适配（`TraceContextAdapter`）在 HTTP 和 worker 两个入口都生效，确保请求、后台任务和外部调用共享同一追踪编号。
 - 日志写入（`LogWriterAdapter`）在 HTTP 与 worker 两个入口都运行，统一执行脱敏与字段允许清单过滤。
 
-## 5. 分层落位指南
+## 5. 分层落位
 
 ```
 interfaces/     内置状态页只读端点（Controller，仅超级管理员）
