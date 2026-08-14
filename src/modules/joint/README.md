@@ -40,3 +40,12 @@
 ## 典型调用链
 
 `JointActivityController 首次公布` -> `PublishJointActivity` 用例（全体确认、名单、报名时间、共享说明完整校验）-> `JointActivityStateMachine` 已成立->已公布 ＋ `JNT-002` 全体关系锁定（同一数据库事务原子提交）-> 通知事实写入 notification、目录投影刷新经 read-model -> 提交后 job 执行确认轮次截止与提醒任务，任务按活动版本幂等。
+
+## 相关文档
+
+- [ADR-002 逻辑模块与状态机唯一责任基线](../../../docs/architecture/ADR-002-逻辑模块与状态机唯一责任基线.md)
+- [SRS 状态机转换明细（SRS-SM-JNT-001~006）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)
+- [数据模型与约束 v1.0](../../../docs/specification/数据模型与约束-v1.0.md)
+- [安全设计与实现级威胁模型（GOV-004 联合安全开关、GOV-007 重认证）](../../../docs/specification/安全设计与实现级威胁模型-v1.0.md)
+- [SRS v1.0（JNT 需求事实）](../../../docs/specification/SRS-v1.0.md)

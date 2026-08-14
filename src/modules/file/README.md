@@ -40,3 +40,11 @@
 ## 典型调用链
 
 上传绑定：`FileController 初始化上传` -> `InitiateUploadCommand` 同事务保存元数据、不可变版本与隔离区定位并创建检查任务（第 4 类边界）-> 字节完成 -> `AskFileCheckCommand` -> 检查服务回调 `PromoteFileCommand` 晋升可用 -> `BindFileCommand` 与表单提交修订同事务原子绑定。访问：`FileAccessQuery` 实时鉴权 -> 生成短时地址与水印 -> 敏感访问写审计。删除：审计模块正式删除命令 -> 撤销访问 -> 删除清单逐项执行核验 -> 全部完成进入正式删除终态。
+
+## 相关文档
+
+- [ADR-008 S3 兼容对象存储与文件可恢复提交](../../../docs/architecture/ADR-008-S3兼容对象存储与文件可恢复提交.md)
+- [SRS 状态机转换明细（SRS-SM-FILE-001）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)
+- [数据模型与约束 v1.0](../../../docs/specification/数据模型与约束-v1.0.md)
+- [安全设计与实现级威胁模型（FORM-007、GOV-008 文件检查）](../../../docs/specification/安全设计与实现级威胁模型-v1.0.md)

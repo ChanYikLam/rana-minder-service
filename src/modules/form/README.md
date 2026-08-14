@@ -40,3 +40,11 @@
 ## 典型调用链
 
 `FormSubmissionController 请求正式提交` -> `RequestSubmitCommand` 冻结待提交快照并创建文件检查任务 -> 文件检查服务回调 `CompleteSubmitCommand` -> 领域校验（状态/期限/文件全部可用/版本匹配）-> 同一本地事务原子创建不可变提交修订、资料快照、答案与附件绑定并推进所属业务命令（第 4 类边界）-> 权益通知事实同事务保存 -> 渠道投递在提交后执行。
+
+## 相关文档
+
+- [ADR-002 逻辑模块与状态机唯一责任基线](../../../docs/architecture/ADR-002-逻辑模块与状态机唯一责任基线.md)
+- [ADR-006 PostgreSQL 主数据库与动态表单混合存储方向](../../../docs/architecture/ADR-006-PostgreSQL主数据库与动态表单混合存储方向.md)
+- [SRS 状态机转换明细（SRS-SM-FORM-001~002）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)
+- [数据模型与约束 v1.0](../../../docs/specification/数据模型与约束-v1.0.md)

@@ -58,3 +58,11 @@
 ## 典型调用链
 
 `InterviewsController 选时` -> `ChooseInterviewSlotUseCase`（`ConflictFreeSlotPolicy` 校验容量与跨活动重叠）-> 本地原子提交（容量占用＋时间占用＋通知事实＋审计）-> 提交后渠道投递与面试安排派生刷新；`PublishPathResultUseCase` 将候补转录取时经 `InvitationPort` 与邀请模块创建邀请同事务提交，邀请接受后的 Casdoor 关系收口走邀请/成员流程与 ORG-002。
+
+## 相关文档
+
+- [ADR-002 逻辑模块与状态机唯一责任基线](../../../docs/architecture/ADR-002-逻辑模块与状态机唯一责任基线.md)
+- [SRS 状态机转换明细（SRS-SM-REC-001~005）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)
+- [数据模型与约束 v1.0](../../../docs/specification/数据模型与约束-v1.0.md)
+- [SRS v1.0（REC 需求事实）](../../../docs/specification/SRS-v1.0.md)
