@@ -71,3 +71,13 @@
 ## 典型调用链
 
 `RelationCommandsController 任命` -> `SubmitRelationCommandUseCase`（权限模板->成员前提->最后负责人连续性->高风险确认）-> 原子提交（意图＋原关系快照＋审计＋执行任务）-> job 关系任务 -> Casdoor 分步写入 -> 定向读回 -> `HandleRelationReadbackUseCase` 收口成功并按新关系重算权限；失败按 15 分钟窗口重试，超时转人工重试。
+
+## 相关文档
+
+- [ADR-002 逻辑模块与状态机唯一责任基线](../../../docs/architecture/ADR-002-逻辑模块与状态机唯一责任基线.md)
+- [ADR-005 数据隔离与选择性 RLS](../../../docs/architecture/ADR-005-数据隔离与选择性RLS.md)
+- [ADR-009 Casdoor 统一适配与事件对账机制](../../../docs/architecture/ADR-009-Casdoor统一适配与事件对账机制.md)
+- [ADR-014 单数据库与统一应用业务 Schema](../../../docs/architecture/ADR-014-单数据库与统一应用业务Schema.md)
+- [SRS 状态机转换明细（SRS-SM-ORG-001~004）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)
+- [数据模型与约束 v1.0](../../../docs/specification/数据模型与约束-v1.0.md)

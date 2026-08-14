@@ -55,3 +55,11 @@
 ## 典型调用链
 
 `DepartmentRelationController 发起复合调岗` -> `ChangeDepartmentRelation` 用例（当前成员资格、层级权限、加入＋退出组合明确确认）-> `DepartmentRelationStateMachine` 校验 -> 同一数据库事务原子：变更处理中＋原关系快照＋Casdoor Group 写入任务 -> job 执行写入->可信回读->当前有效；部分写入->补偿回原关系->仍失败转同步异常并保持最小权限。
+
+## 相关文档
+
+- [ADR-002 逻辑模块与状态机唯一责任基线](../../../docs/architecture/ADR-002-逻辑模块与状态机唯一责任基线.md)
+- [ADR-009 Casdoor 统一适配与事件对账机制](../../../docs/architecture/ADR-009-Casdoor统一适配与事件对账机制.md)
+- [SRS 状态机转换明细（SRS-SM-MEM-001~003）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)
+- [数据模型与约束 v1.0](../../../docs/specification/数据模型与约束-v1.0.md)

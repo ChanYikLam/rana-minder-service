@@ -65,3 +65,12 @@
 ## 典型调用链
 
 `ProfilesController 保存资料` → `SaveProfileUseCase` 校验字段/版本并重算资料门 → 本地原子提交（资料新版本＋同步意图＋必要审计与通知事实）→ 登记同步任务到 job → 后台 `ApplyProfileSyncStepUseCase` → Casdoor 写入 → 定向读回 → 按读回值收口为已同步 / 已回退 / 同步冲突待本人选择（本人提交新选择后重新进入待同步）。
+
+## 相关文档
+
+- [ADR-002 逻辑模块与状态机唯一责任基线](../../../docs/architecture/ADR-002-逻辑模块与状态机唯一责任基线.md)
+- [ADR-009 Casdoor 统一适配与事件对账机制](../../../docs/architecture/ADR-009-Casdoor统一适配与事件对账机制.md)
+- [SRS 状态机转换明细（SRS-SM-IDN-001~003）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [接口契约 v1.0（IFC-SM-001~003、IFC-TX-001/003/005）](../../../docs/specification/接口契约-v1.0.md)
+- [Casdoor 集成契约 v1.0](../../../docs/specification/Casdoor集成契约-v1.0.md)
+- [安全设计与实现级威胁模型（IDN-009 降级）](../../../docs/specification/安全设计与实现级威胁模型-v1.0.md)

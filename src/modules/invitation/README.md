@@ -55,3 +55,11 @@
 ## 典型调用链
 
 `InvitationController 接受联合邀请` -> `AcceptInvitation` 用例（本人、待处理且无待复核标志、资料/邮箱门、部门 Group 可用）-> `InvitationStateMachine` 校验 -> 同一数据库事务原子提交：邀请已接受（不可逆）＋结论锁定（跨模块编排）＋通知事实＋成员生效任务 -> job 领取任务执行 Casdoor 写入->可信回读->membership 收口成员经历生效；回读未确认前不开放权限，失败按重试/补偿/高优先级异常规则收口。
+
+## 相关文档
+
+- [ADR-002 逻辑模块与状态机唯一责任基线](../../../docs/architecture/ADR-002-逻辑模块与状态机唯一责任基线.md)
+- [ADR-009 Casdoor 统一适配与事件对账机制](../../../docs/architecture/ADR-009-Casdoor统一适配与事件对账机制.md)
+- [SRS 状态机转换明细（SRS-SM-INV-001、SRS-SM-MEM-004）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)
+- [Casdoor 集成契约 v1.0](../../../docs/specification/Casdoor集成契约-v1.0.md)
