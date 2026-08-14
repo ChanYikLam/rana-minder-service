@@ -57,3 +57,11 @@ CasdoorAdapter 核心接口：
 ## 典型调用链
 
 Group 关系写入（后台）：领域事务原子保存业务意图＋原关系快照＋处理中状态＋幂等依据＋任务（第 3 类边界）→ job 领取并复核主体/作用域/版本/安全开关 → `CasdoorGroupAdapter` 写入 → `CasdoorWriteService` 定向读回目标关系 → 按读回值收口为成功/重试/补偿/高优先级异常 → 更新任务并通知相关角色。周期对账：`CasdoorReconcileRunner` 按水位分页扫描 → 与本地意图/观测比较形成候选差异 → 高影响差异定向读回 → 交领域模块处置。
+
+## 相关文档
+
+- [ADR-009 Casdoor 统一适配与事件对账机制](../../../docs/architecture/ADR-009-Casdoor统一适配与事件对账机制.md)
+- [Casdoor 集成契约 v1.0](../../../docs/specification/Casdoor集成契约-v1.0.md)
+- [接口契约 v1.0（IFC-TX-003 Casdoor 外部写入）](../../../docs/specification/接口契约-v1.0.md)
+- [部署运维与恢复手册（OPS-DEP-003 能力验证门、§12.1）](../../../docs/operations/部署运维与恢复手册-v1.0.md)
+- [安全设计与实现级威胁模型（CAS-FAIL 降级）](../../../docs/specification/安全设计与实现级威胁模型-v1.0.md)
