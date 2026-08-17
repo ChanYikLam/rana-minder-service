@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { ProjectionType } from '../contracts';
 import type { AuthoritativeSnapshot, ProjectionRecord, ProjectionScope } from '../contracts';
 import type { DerivationRule } from '../derivation/derivation-rule';
+import { ClubDirectoryRule } from './public-directory/find-club';
+import { ActivityDirectoryRule } from './public-directory/find-activity';
 import { BaseProjectionBuilder } from './projection-builder';
 import type { RebuildBasis } from './projection-builder';
 import type { SourcePortRegistry } from './source-port-registry';
@@ -17,6 +19,8 @@ export interface PublicDirectoryItem {
   readonly summary?: string;
   /** 活动报名截止（"正在报名"按查询时共同派生，不是持久状态） */
   readonly deadlineAt?: string;
+  /** 活动类型（找活动筛选；CLUB 条目无此字段） */
+  readonly activityType?: string;
   readonly sourceVersion: number;
 }
 
@@ -70,7 +74,12 @@ export class PublicDirectoryRule
 @Injectable()
 export class PublicDirectoryProjection extends BaseProjectionBuilder<readonly PublicDirectoryItem[]> {
   readonly projectionType = ProjectionType.PUBLIC_DIRECTORY;
+  /** 默认/回退规则（未知对象类型时使用） */
   readonly rule = new PublicDirectoryRule();
+  /** 找社团规则（C6.1） */
+  private readonly clubRule = new ClubDirectoryRule();
+  /** 找活动规则（C6.2） */
+  private readonly activityRule = new ActivityDirectoryRule();
 
   constructor(readonly sourcePorts: SourcePortRegistry) {
     super();
@@ -89,7 +98,14 @@ export class PublicDirectoryProjection extends BaseProjectionBuilder<readonly Pu
       }
       const snapshots = await port.list(scope);
       for (const snapshot of snapshots) {
-        items.push(...this.rule.derive(snapshot));
+        // C6.1/C6.2：按对象类型路由到找社团/找活动子规则
+        const rule =
+          snapshot.objectType === 'CLUB'
+            ? this.clubRule
+            : snapshot.objectType === 'ACTIVITY'
+              ? this.activityRule
+              : this.rule;
+        items.push(...rule.derive(snapshot));
         maxVersion = Math.max(maxVersion, snapshot.version);
       }
     }
