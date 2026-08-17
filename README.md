@@ -27,7 +27,12 @@ rana-minder-service/
 │   ├── 启动入口文档.md
 │   └── ...
 ├── test/                  集成测试与验收证据
-├── scripts/ci/            CI 检查脚本（文档链接、许可证登记）
+├── scripts/
+│   ├── ci/                CI 检查脚本（文档链接、许可证登记）
+│   └── dev/               开发环境脚本（postgres 扩展初始化）
+├── Dockerfile             后端镜像构建（双入口，见 Docker 镜像构建规范）
+├── .dockerignore          镜像构建上下文排除规则（秘密防护）
+├── docker-compose.dev.yml 开发环境依赖服务编排（PG18/MinIO/Casdoor/Mailpit）
 ├── .cnb.yml               CI 流水线配置（cnb.cool 云原生构建）
 └── README.md              本文件
 ```
@@ -65,6 +70,7 @@ rana-minder-service/
 - **部署运维**：`docs/operations/部署运维与恢复手册-v1.0.md`
 - **后端开发指导**：`src/modules/*/README.md`（各模块）、`src/modules/分层实现规范.md`（分层约定）、`src/` 各目录中文文档
 - **CI 流水线**：`docs/engineering/CI与质量门定义-v1.0.md`（门禁权威）、`docs/engineering/CI流水线落地指南-v1.0.md`（`.cnb.yml` 实现明细与维护）
+- **容器与镜像**：`docs/engineering/Docker镜像构建规范-v1.0.md`（镜像构建规则，Dockerfile/.dockerignore 已落地）；开发环境依赖编排见 `docker-compose.dev.yml`
 
 ## 启动与开发
 
