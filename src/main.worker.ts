@@ -21,6 +21,9 @@
  *   `docs/engineering/依赖与版本基线-v1.0.md`（DEP-001）首批技术验证后选定；
  * - 1.3 通用任务信封（XCC-JOB-001 与 `DATA-JOB-001..004`）落地后，本入口会接入
  *   `PlatformTasksModule` 与 `PlatformJobModule`；当前不导入任何业务模块。
+ * - 已接入 read-model 平台支撑模块：job 任务领取循环落地后，本入口将消费
+ *   派生刷新/重建（RecomputeIntent）等批量任务（消费接力，ADR-002 §2.2）；
+ *   当前不做任务调度与领取。
  */
 
 import { NestFactory } from '@nestjs/core';

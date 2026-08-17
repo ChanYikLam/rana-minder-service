@@ -11,7 +11,7 @@
 
 `DOCK-002`：前置：代码尚未开工（无 `package.json`），本规范与落地文件以 [启动入口文档](../../src/启动入口文档.md)、[后端工程约定](后端工程约定-v1.0.md)、[依赖与版本基线](依赖与版本基线-v1.0.md) 为输入编写；代码就绪后镜像可直接构建。DEP-Q-003（基础镜像）正式确认前，本节选型为**强候选约定，不冻结**。
 
-`DOCK-003`：镜像形态：**单镜像双入口**——HTTP 应用（`dist/main.js`）与后台任务（`dist/worker.js`）共用同一镜像与编译产物（[启动入口文档](../../src/启动入口文档.md)、ADR-013 §2.3、OPS-TOPO-003），以启动命令区分；不设独立 worker 镜像，未来拆分部署仍同镜像不同命令（ADR-012）。
+`DOCK-003`：镜像形态：**单镜像双入口**——HTTP 应用（`dist/main.js`）与后台任务（`dist/main.worker.js`）共用同一镜像与编译产物（[启动入口文档](../../src/启动入口文档.md)、ADR-013 §2.3、OPS-TOPO-003），以启动命令区分；不设独立 worker 镜像，未来拆分部署仍同镜像不同命令（ADR-012）。
 
 ## 2. 基础镜像选型（DEP-Q-003 候选评估）
 
@@ -36,7 +36,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
-RUN pnpm run build        # 产出 dist/main.js 与 dist/worker.js
+RUN pnpm run build        # 产出 dist/main.js 与 dist/main.worker.js
 
 # 运行阶段：生产依赖 + 编译产物，不含源码与工具链
 FROM node:24-slim AS runtime
@@ -60,12 +60,12 @@ CMD ["node", "dist/main.js"]
 
 ## 4. 双入口镜像
 
-`DOCK-030`：镜像默认启动 HTTP 应用（`CMD ["node", "dist/main.js"]`）；后台任务入口以**编排层命令覆盖**启动（`command: ["node", "dist/worker.js"]`）。两个容器共用镜像与 tag，以容器名/服务名区分职责：
+`DOCK-030`：镜像默认启动 HTTP 应用（`CMD ["node", "dist/main.js"]`）；后台任务入口以**编排层命令覆盖**启动（`command: ["node", "dist/main.worker.js"]`）。两个容器共用镜像与 tag，以容器名/服务名区分职责：
 
 | 入口 | 命令 | 监听 | 健康探针 |
 |---|---|---|---|
 | HTTP 应用（app） | `node dist/main.js` | `:3000`（EXPOSE） | 编排层定义（§5 DOCK-043） |
-| 后台任务（worker） | `node dist/worker.js` | 无 | 进程存活探针 |
+| 后台任务（worker） | `node dist/main.worker.js` | 无 | 进程存活探针 |
 
 `DOCK-031`：双入口各自的启动前置（配置校验、依赖就绪、启动状态上报）由 [启动入口文档](../../src/启动入口文档.md) 与部署运维手册 §8 约束，镜像层不重复实现。
 
@@ -123,7 +123,7 @@ docker build -t ranaminder-service:dev .
 docker run --rm -d --name ranaminder-app   -v "$PWD/config.dev.yaml:/etc/ranaminder/config.yaml:ro"   --read-only --tmpfs /tmp -p 3000:3000 ranaminder-service:dev
 
 # worker 入口冒烟（命令覆盖）
-docker run --rm -d --name ranaminder-worker   -v "$PWD/config.dev.yaml:/etc/ranaminder/config.yaml:ro"   --read-only --tmpfs /tmp ranaminder-service:dev   node dist/worker.js
+docker run --rm -d --name ranaminder-worker   -v "$PWD/config.dev.yaml:/etc/ranaminder/config.yaml:ro"   --read-only --tmpfs /tmp ranaminder-service:dev   node dist/main.worker.js
 
 # 开发环境依赖服务（PG18/MinIO/Casdoor/Mailpit）
 docker compose -f docker-compose.dev.yml up -d

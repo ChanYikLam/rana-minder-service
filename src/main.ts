@@ -4,6 +4,8 @@
  * 职责：
  * - 启动一个完整的 NestApplication，面向 12 个领域模块的 HTTP 接口；
  * - 通过 RANA_MINDER_CONFIG token 取 server.port / server.host；
+ * - 全局启用 ValidationPipe（白名单 + transform），承载页面交互接入、
+ *   命令/查询、逐请求授权、同步本地事务与提交后任务意图登记；
  * - 启用优雅关闭，遵循 server.gracefulShutdownTimeoutMs；
  * - 不引入全局前缀（待接口契约评审 API-Q-001 关闭后由适配层统一注入）。
  *
@@ -15,14 +17,14 @@
  *
  * 受控状态：
  * - 启动骨架已就绪，ConfigurationModule 已挂入；HTTP 端口与监听地址来自配置。
- * - `AppModule` 当前未导入任何业务模块——HTTP 端点表为空；实际 API 绑定待接口契约
- *   评审与 API-Q 关闭后接入，详见 `docs/specification/接口实现规格-v1.0.md` §15。
+ * - `AppModule` 已接入 read-model 等平台支撑模块；实际 API 绑定待接口契约评审
+ *   与 API-Q 关闭后接入，详见 `docs/specification/接口实现规格-v1.0.md` §15。
  * - 应用可运行门槛：首批技术验证通过、真实数据技术启用门保持关闭；当前仅作
  *   "代码可编译、可启动"的工程脚手架验证。
  */
 
 import { NestFactory } from '@nestjs/core';
-import { Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 
 import { AppModule } from './app.module';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from './config';
@@ -33,6 +35,7 @@ async function bootstrap(): Promise<void> {
     bufferLogs: false,
   });
 
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableShutdownHooks();
 
   const config = app.get<RanaMinderConfig>(RANA_MINDER_CONFIG);

@@ -14,10 +14,10 @@ WORKDIR /app
 # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile
-# 编译产物：dist/main.js（HTTP 应用）、dist/worker.js（后台任务），
+# 编译产物：dist/main.js（HTTP 应用）、dist/main.worker.js（后台任务），
 # 共用同一编译产物，见 src/启动入口文档.md
 COPY . .
-RUN pnpm run build
+RUN pnpm run build && pnpm run build:worker
 
 # ---- 运行阶段（node:24-slim，DEP-Q-003 强候选）----
 FROM node:24-slim AS runtime
@@ -45,5 +45,5 @@ USER ranaminder
 EXPOSE 3000
 
 # 双入口：默认 HTTP 应用；后台任务以编排层命令覆盖：
-#   command: ["node", "dist/worker.js"]
+#   command: ["node", "dist/main.worker.js"]
 CMD ["node", "dist/main.js"]
