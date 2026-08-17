@@ -95,7 +95,8 @@ describe('QueryEntryRegistry（IFC-QRY-008 入口登记与负向校验）', () =
   it('分页超上限 → 拒绝', () => {
     const registry = makeRegistry();
     assert.throws(
-      () => registry.assertValidQuery('public-directory', clubScope, { limit: 101, anonymous: true }),
+      () =>
+        registry.assertValidQuery('public-directory', clubScope, { limit: 101, anonymous: true }),
       /limit 必须为 1\.\.100/,
     );
   });
@@ -103,7 +104,8 @@ describe('QueryEntryRegistry（IFC-QRY-008 入口登记与负向校验）', () =
   it('作用域种类不匹配 → 拒绝（me 要求 SUBJECT，传 CLUB）', () => {
     const registry = makeRegistry();
     assert.throws(
-      () => registry.assertValidQuery('personal-center', clubScope, { limit: 10, anonymous: false }),
+      () =>
+        registry.assertValidQuery('personal-center', clubScope, { limit: 10, anonymous: false }),
       /要求作用域 SUBJECT/,
     );
   });

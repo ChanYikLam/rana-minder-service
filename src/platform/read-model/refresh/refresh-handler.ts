@@ -29,7 +29,8 @@ export class RefreshHandler {
   ) {}
 
   async consume(intent: RecomputeIntent): Promise<void> {
-    const targets: readonly ProjectionType[] = intent.targetProjections ?? this.allRegisteredTypes();
+    const targets: readonly ProjectionType[] =
+      intent.targetProjections ?? this.allRegisteredTypes();
     for (const projectionType of targets) {
       await this.refreshOne(projectionType, intent);
     }
@@ -50,7 +51,10 @@ export class RefreshHandler {
     }
   }
 
-  private async refreshInner(projectionType: ProjectionType, intent: RecomputeIntent): Promise<void> {
+  private async refreshInner(
+    projectionType: ProjectionType,
+    intent: RecomputeIntent,
+  ): Promise<void> {
     const builder = this.registry.get(projectionType);
     const scope = intent.source.scope;
 

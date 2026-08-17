@@ -33,7 +33,10 @@ export class InMemoryProjectionStore implements ProjectionStore {
     });
   }
 
-  async load<TData>(projectionType: ProjectionType, scope: ProjectionScope): Promise<ProjectionRecord<TData> | null> {
+  async load<TData>(
+    projectionType: ProjectionType,
+    scope: ProjectionScope,
+  ): Promise<ProjectionRecord<TData> | null> {
     const key = this.key(projectionType, scope);
     const entry = this.entries.get(key);
     if (entry === undefined) {

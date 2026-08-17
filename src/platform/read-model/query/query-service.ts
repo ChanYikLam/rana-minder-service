@@ -59,7 +59,11 @@ export class ReadModelQueryService {
     };
   }
 
-  private assertGranted(projectionType: ProjectionType, scope: ProjectionScope, auth: QueryAuthContext): void {
+  private assertGranted(
+    projectionType: ProjectionType,
+    scope: ProjectionScope,
+    auth: QueryAuthContext,
+  ): void {
     if (projectionType === 'PUBLIC_DIRECTORY' && auth.visitor === 'ANONYMOUS') {
       return; // 公开目录：未认证可读，但字段投影按访问者类型执行
     }
@@ -69,7 +73,11 @@ export class ReadModelQueryService {
     }
   }
 
-  private assertOptions(opts: QueryOptions, scope: ProjectionScope, projectionType: ProjectionType): void {
+  private assertOptions(
+    opts: QueryOptions,
+    scope: ProjectionScope,
+    projectionType: ProjectionType,
+  ): void {
     if (opts.limit <= 0 || opts.limit > 100) {
       throw new Error('IFC-ERR-VALIDATION: limit 必须为 1..100');
     }
@@ -96,7 +104,8 @@ export class ReadModelQueryService {
     const items = Array.isArray(data) ? (data as TItem[]) : [];
     const total = items.length;
     const page = items.slice(0, opts.limit);
-    const nextCursor = items.length > opts.limit ? this.encodeCursor(opts, opts.limit, scope, projectionType) : null;
+    const nextCursor =
+      items.length > opts.limit ? this.encodeCursor(opts, opts.limit, scope, projectionType) : null;
     return {
       items: page,
       nextCursor,
@@ -117,7 +126,12 @@ export class ReadModelQueryService {
   }
 
   private sameScope(a: ProjectionScope, b: ProjectionScope): boolean {
-    return a.kind === b.kind && a.clubId === b.clubId && a.unionId === b.unionId && a.subjectId === b.subjectId;
+    return (
+      a.kind === b.kind &&
+      a.clubId === b.clubId &&
+      a.unionId === b.unionId &&
+      a.subjectId === b.subjectId
+    );
   }
 
   private encodeCursor(

@@ -12,7 +12,8 @@ export const ProjectionRecordStatus = {
   INVALIDATED: 'INVALIDATED',
 } as const;
 
-export type ProjectionRecordStatus = (typeof ProjectionRecordStatus)[keyof typeof ProjectionRecordStatus];
+export type ProjectionRecordStatus =
+  (typeof ProjectionRecordStatus)[keyof typeof ProjectionRecordStatus];
 
 /**
  * 投影记录信封（DATA-DER-001）。

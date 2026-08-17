@@ -8,7 +8,11 @@ const TYPE = 'PUBLIC_DIRECTORY' as const;
 
 const clubScope = (clubId: string): ProjectionScope => ({ kind: 'CLUB', clubId });
 
-const record = (scope: ProjectionScope, sourceVersion = 1, derivedVersion = 1): ProjectionRecord => ({
+const record = (
+  scope: ProjectionScope,
+  sourceVersion = 1,
+  derivedVersion = 1,
+): ProjectionRecord => ({
   projectionType: TYPE,
   source: { objectType: 'CLUB', objectId: scope.clubId ?? 'x', version: sourceVersion, scope },
   watermark: {

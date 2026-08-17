@@ -21,7 +21,10 @@ export interface ClubDirectorySourceView {
  * 只有发布后的普通招新语义（published 且通道开放、无暂停/终态）才能进入
  * 公开结果（C6.8）；截止过滤由投影重建时按服务端时刻执行。
  */
-export class ClubDirectoryRule implements DerivationRule<AuthoritativeSnapshot, readonly PublicDirectoryItem[]> {
+export class ClubDirectoryRule implements DerivationRule<
+  AuthoritativeSnapshot,
+  readonly PublicDirectoryItem[]
+> {
   readonly ruleName = 'find-club';
 
   derive(source: AuthoritativeSnapshot): readonly PublicDirectoryItem[] {

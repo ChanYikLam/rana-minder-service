@@ -11,7 +11,8 @@ export const OpsTelemetryEventType = {
   REBUILD_BACKLOG: 'REBUILD_BACKLOG',
 } as const;
 
-export type OpsTelemetryEventType = (typeof OpsTelemetryEventType)[keyof typeof OpsTelemetryEventType];
+export type OpsTelemetryEventType =
+  (typeof OpsTelemetryEventType)[keyof typeof OpsTelemetryEventType];
 
 /** 技术证据（脱敏：只含类型/标识/原因，不含业务负载） */
 export interface OpsTelemetryEvidence {

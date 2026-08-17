@@ -18,7 +18,11 @@ describe('DeadlineFilterRule（C6.7 平台时区自然日窗口）', () => {
     const now = tzDayStart('2026-08-17') + 10 * 3_600_000; // 8/17 10:00 (+8)
     const deadline = tzDayStart('2026-08-17') + 20 * 3_600_000; // 8/17 20:00
     assert.equal(
-      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.TODAY, new Date(now).toISOString()),
+      rule.isWithin(
+        new Date(deadline).toISOString(),
+        DeadlinePreset.TODAY,
+        new Date(now).toISOString(),
+      ),
       true,
     );
   });
@@ -27,7 +31,11 @@ describe('DeadlineFilterRule（C6.7 平台时区自然日窗口）', () => {
     const now = tzDayStart('2026-08-17') + 20 * 3_600_000; // 20:00
     const deadline = tzDayStart('2026-08-17') + 12 * 3_600_000; // 12:00（已过）
     assert.equal(
-      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.TODAY, new Date(now).toISOString()),
+      rule.isWithin(
+        new Date(deadline).toISOString(),
+        DeadlinePreset.TODAY,
+        new Date(now).toISOString(),
+      ),
       false,
     );
   });
@@ -36,7 +44,11 @@ describe('DeadlineFilterRule（C6.7 平台时区自然日窗口）', () => {
     const now = tzDayStart('2026-08-17') + 10 * 3_600_000;
     const deadline = tzDayStart('2026-08-19') + 23 * 3_600_000; // 8/19 23:59
     assert.equal(
-      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.DAYS_3, new Date(now).toISOString()),
+      rule.isWithin(
+        new Date(deadline).toISOString(),
+        DeadlinePreset.DAYS_3,
+        new Date(now).toISOString(),
+      ),
       true,
     );
   });
@@ -45,7 +57,11 @@ describe('DeadlineFilterRule（C6.7 平台时区自然日窗口）', () => {
     const now = tzDayStart('2026-08-17') + 10 * 3_600_000;
     const deadline = tzDayStart('2026-08-21') + 1 * 3_600_000; // 8/21（第 4 个自然日）
     assert.equal(
-      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.DAYS_3, new Date(now).toISOString()),
+      rule.isWithin(
+        new Date(deadline).toISOString(),
+        DeadlinePreset.DAYS_3,
+        new Date(now).toISOString(),
+      ),
       false,
     );
   });
@@ -54,13 +70,20 @@ describe('DeadlineFilterRule（C6.7 平台时区自然日窗口）', () => {
     const now = tzDayStart('2026-08-17') + 10 * 3_600_000;
     const deadline = tzDayStart('2026-08-23') + 20 * 3_600_000; // 8/23
     assert.equal(
-      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.DAYS_7, new Date(now).toISOString()),
+      rule.isWithin(
+        new Date(deadline).toISOString(),
+        DeadlinePreset.DAYS_7,
+        new Date(now).toISOString(),
+      ),
       true,
     );
   });
 
   it('非法时间输入 → 不命中（不抛错）', () => {
-    assert.equal(rule.isWithin('not-a-date', DeadlinePreset.TODAY, new Date().toISOString()), false);
+    assert.equal(
+      rule.isWithin('not-a-date', DeadlinePreset.TODAY, new Date().toISOString()),
+      false,
+    );
   });
 
   it('平台时区自然日边界：跨 UTC 日期但同 +8 自然日仍算当天（TODAY）', () => {
@@ -96,7 +119,11 @@ describe('DeadlineFilterRule（C6.7 平台时区自然日窗口）', () => {
     // 仅 to（无 from）：截止早于 to 且未过 → true
     const early = tzDayStart('2026-08-17') + 20 * 3_600_000;
     assert.equal(
-      rule.isWithinRange(new Date(early).toISOString(), { to: '2026-08-18' }, new Date(now).toISOString()),
+      rule.isWithinRange(
+        new Date(early).toISOString(),
+        { to: '2026-08-18' },
+        new Date(now).toISOString(),
+      ),
       true,
     );
   });

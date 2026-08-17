@@ -27,7 +27,10 @@ export interface ProjectionStore {
   save<TData>(record: ProjectionRecord<TData>, options?: SaveOptions): Promise<void>;
 
   /** 读取一个作用域下的投影记录；不存在、已失效或已过期返回 null */
-  load<TData>(projectionType: ProjectionType, scope: ProjectionScope): Promise<ProjectionRecord<TData> | null>;
+  load<TData>(
+    projectionType: ProjectionType,
+    scope: ProjectionScope,
+  ): Promise<ProjectionRecord<TData> | null>;
 
   /** 标记失效（权限收紧/状态变化/停用/联合失效/字段权限变化/正式删除后） */
   invalidate(

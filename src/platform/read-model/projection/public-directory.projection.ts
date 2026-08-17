@@ -43,7 +43,10 @@ export interface PublicDirectorySourceView {
  * （read-model README §6.3）。截止时间过滤按服务端时刻由投影重建时执行。
  */
 @Injectable()
-export class PublicDirectoryRule implements DerivationRule<AuthoritativeSnapshot, readonly PublicDirectoryItem[]> {
+export class PublicDirectoryRule implements DerivationRule<
+  AuthoritativeSnapshot,
+  readonly PublicDirectoryItem[]
+> {
   readonly ruleName = 'public-directory';
 
   derive(source: AuthoritativeSnapshot): readonly PublicDirectoryItem[] {
@@ -70,7 +73,9 @@ export class PublicDirectoryRule implements DerivationRule<AuthoritativeSnapshot
  * 该类型不参与（源不可用 → 明确不可用，不伪造新鲜结果）。
  */
 @Injectable()
-export class PublicDirectoryProjection extends BaseProjectionBuilder<readonly PublicDirectoryItem[]> {
+export class PublicDirectoryProjection extends BaseProjectionBuilder<
+  readonly PublicDirectoryItem[]
+> {
   readonly projectionType = ProjectionType.PUBLIC_DIRECTORY;
   /** 默认/回退规则（未知对象类型时使用） */
   readonly rule = new PublicDirectoryRule();
