@@ -48,6 +48,28 @@
 | `PostgresReadRepository` | 基础设施适配（infrastructure） | PostgreSQL 查询与索引、pg_trgm 检索实现 |
 | `RebuildableCacheAdapter` | 基础设施适配（infrastructure） | 可重建缓存载体：丢失/过期/清空时可回源，可替换 |
 
+### 当前实现组件（与代码一致）
+
+| 组件 | 位置 | 职责 |
+|---|---|---|
+| `ReadModelQueryService` | query/query-service.ts | 查询编排：授权 → 读投影 → 回源重建/明确不可用；游标绑投影类型/作用域/筛选（v2） |
+| `QueryEntryRegistry` | query/entry-registry.ts | 入口登记目录（IFC-QRY-008）：筛选键/值类型/操作符/空值/枚举/排序/分页/作用域/匿名；未知项一律拒绝 |
+| `DirectoryQueryService` | query/directory-query.ts | 公开目录入口（C3.1）：匿名可读、单一筛选键（name/activityType/signupStatus/deadline/deadlineRange） |
+| `PersonalCenterQueryService` | query/me-query.ts | 个人中心入口（C3.2）：作用域强制本人（subjectId=principalId），kind 筛选 |
+| `WorkbenchQueryService` | query/workbench-query.ts | 工作台入口（C3.3）：作用域强制 clubId；verifyObject 逐对象重验（C6.11） |
+| `SearchNormalizer` | derivation/search-normalizer.ts | 搜索文本规范化固定顺序（C6.6） |
+| `SearchLayering` | derivation/search-layering.ts | 搜索分层（C6.3/C6.5）：精确→连续子串→近似；近似不超直接命中；排序固定 |
+| `SimilarityScorer` | derivation/similarity.ts | 近似相似度（C6.4 应用侧降级；权威 pg_trgm 0.6 由基础设施执行） |
+| `VisibilityDerivationRules` | derivation/visibility-derivation.ts | 可见性派生：发布状态/访问者类型/字段投影（纯函数） |
+| `DeadlineFilterRule` | derivation/deadline-filter.ts | 截止筛选（C6.7）：平台时区自然日窗口 TODAY/3DAYS/7DAYS + CUSTOM 起止 |
+| `ClubDirectoryRule` / `ActivityDirectoryRule` | projection/public-directory/ | 找社团（C6.1）/找活动（C6.2，首次公布语义 C6.8）子规则 |
+| `ProjectionStore`(+内存实现) | projection/ | 可重建投影载体：save/load/invalidate/clear/TTL 过期（C2.1） |
+| `CacheInvalidationService` | invalidation/ | 失效服务：标记投影失效 + 索引失效（C4.2）+ 登记重算意图 |
+| `RefreshHandler` | refresh/refresh-handler.ts | 消费 A 的 recompute：旧水位不覆盖新结果、失败上报 ops（C5.3） |
+| `ObjectAuthorizationPort`(+占位) | contracts/authorization-port.ts | 对象级授权端口（C6.9-C6.11 逐对象重验；占位 fail-closed） |
+| `OpsTelemetryPort`(+占位) | contracts/ops-telemetry-port.ts | ops 遥测端口（C5.3 技术证据；占位日志） |
+| `SearchIndexPort` / `PostgresTrgmSearchRepository` | infrastructure/postgres-trgm-search.ts | pg_trgm 检索端口与 PostgreSQL 实现模板（SQL/DDL；未接入明确不可用） |
+
 ## 3. 权威与边界
 
 | 本模块可以 | 本模块禁止 |
