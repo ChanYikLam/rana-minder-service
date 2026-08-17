@@ -43,8 +43,7 @@ const makeService = (rebuildImpl?: (scope: ProjectionScope) => Promise<Projectio
       assert.equal(t, TYPE);
       return {
         projectionType: TYPE,
-        rebuild: async (scope: ProjectionScope) =>
-          rebuildImpl ? rebuildImpl(scope) : makeRecord(scope),
+        rebuild: async (scope: ProjectionScope) => (rebuildImpl ? rebuildImpl(scope) : makeRecord(scope)),
       };
     },
     list: () => [],
@@ -55,10 +54,7 @@ const makeService = (rebuildImpl?: (scope: ProjectionScope) => Promise<Projectio
 describe('ReadModelQueryService（C3.5 授权/游标/负向）', () => {
   it('未授权作用域 → IFC-ERR-FORBIDDEN（R2 不从投影授权）', async () => {
     const { service } = makeService();
-    await assert.rejects(
-      service.query(TYPE, clubScope('c-other'), auth(), opts()),
-      /IFC-ERR-FORBIDDEN/,
-    );
+    await assert.rejects(service.query(TYPE, clubScope('c-other'), auth(), opts()), /IFC-ERR-FORBIDDEN/);
   });
 
   it('公开目录允许匿名读取', async () => {

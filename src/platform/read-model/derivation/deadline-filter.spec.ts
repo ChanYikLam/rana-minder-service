@@ -17,31 +17,46 @@ describe('DeadlineFilterRule（C6.7 平台时区自然日窗口）', () => {
   it('TODAY：今天自然日内截止（晚于 now）→ 命中', () => {
     const now = tzDayStart('2026-08-17') + 10 * 3_600_000; // 8/17 10:00 (+8)
     const deadline = tzDayStart('2026-08-17') + 20 * 3_600_000; // 8/17 20:00
-    assert.equal(rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.TODAY, new Date(now).toISOString()), true);
+    assert.equal(
+      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.TODAY, new Date(now).toISOString()),
+      true,
+    );
   });
 
   it('TODAY：已过截止 → 不命中（半开区间）', () => {
     const now = tzDayStart('2026-08-17') + 20 * 3_600_000; // 20:00
     const deadline = tzDayStart('2026-08-17') + 12 * 3_600_000; // 12:00（已过）
-    assert.equal(rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.TODAY, new Date(now).toISOString()), false);
+    assert.equal(
+      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.TODAY, new Date(now).toISOString()),
+      false,
+    );
   });
 
   it('3DAYS：明后天截止在 3 日窗口内 → 命中', () => {
     const now = tzDayStart('2026-08-17') + 10 * 3_600_000;
     const deadline = tzDayStart('2026-08-19') + 23 * 3_600_000; // 8/19 23:59
-    assert.equal(rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.DAYS_3, new Date(now).toISOString()), true);
+    assert.equal(
+      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.DAYS_3, new Date(now).toISOString()),
+      true,
+    );
   });
 
   it('3DAYS：超出 3 个自然日 → 不命中', () => {
     const now = tzDayStart('2026-08-17') + 10 * 3_600_000;
     const deadline = tzDayStart('2026-08-21') + 1 * 3_600_000; // 8/21（第 4 个自然日）
-    assert.equal(rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.DAYS_3, new Date(now).toISOString()), false);
+    assert.equal(
+      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.DAYS_3, new Date(now).toISOString()),
+      false,
+    );
   });
 
   it('7DAYS：一周内命中', () => {
     const now = tzDayStart('2026-08-17') + 10 * 3_600_000;
     const deadline = tzDayStart('2026-08-23') + 20 * 3_600_000; // 8/23
-    assert.equal(rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.DAYS_7, new Date(now).toISOString()), true);
+    assert.equal(
+      rule.isWithin(new Date(deadline).toISOString(), DeadlinePreset.DAYS_7, new Date(now).toISOString()),
+      true,
+    );
   });
 
   it('非法时间输入 → 不命中（不抛错）', () => {

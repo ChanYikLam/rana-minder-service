@@ -70,12 +70,11 @@ export class PersonalCenterQueryService {
       limit: params.limit,
       anonymous: false,
     });
-    return this.query.query<PersonalCenterItem>(
-      ProjectionType.PERSONAL_CENTER,
-      scope,
-      auth,
-      { limit: params.limit, cursor: params.cursor, filter },
-    );
+    return this.query.query<PersonalCenterItem>(ProjectionType.PERSONAL_CENTER, scope, auth, {
+      limit: params.limit,
+      cursor: params.cursor,
+      filter,
+    });
   }
 }
 

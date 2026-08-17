@@ -37,22 +37,58 @@ describe('ClubDirectoryRule（C6.1 找社团）', () => {
 
   it('未发布/暂停/终态/通道关闭 → 不进入公开结果（C6.8）', () => {
     assert.equal(
-      rule.derive(snapshot('CLUB', { objectType: 'CLUB', displayName: 'x', published: false, channelOpen: true, paused: false, terminated: false })).length,
+      rule.derive(
+        snapshot('CLUB', {
+          objectType: 'CLUB',
+          displayName: 'x',
+          published: false,
+          channelOpen: true,
+          paused: false,
+          terminated: false,
+        }),
+      ).length,
       0,
     );
     assert.equal(
-      rule.derive(snapshot('CLUB', { objectType: 'CLUB', displayName: 'x', published: true, channelOpen: true, paused: true, terminated: false })).length,
+      rule.derive(
+        snapshot('CLUB', {
+          objectType: 'CLUB',
+          displayName: 'x',
+          published: true,
+          channelOpen: true,
+          paused: true,
+          terminated: false,
+        }),
+      ).length,
       0,
     );
     assert.equal(
-      rule.derive(snapshot('CLUB', { objectType: 'CLUB', displayName: 'x', published: true, channelOpen: false, paused: false, terminated: false })).length,
+      rule.derive(
+        snapshot('CLUB', {
+          objectType: 'CLUB',
+          displayName: 'x',
+          published: true,
+          channelOpen: false,
+          paused: false,
+          terminated: false,
+        }),
+      ).length,
       0,
     );
   });
 
   it('非 CLUB 快照 → 空', () => {
     assert.equal(
-      rule.derive(snapshot('ACTIVITY', { objectType: 'ACTIVITY', displayName: 'x', published: true, channelOpen: true, paused: false, terminated: false })).length,
+      rule.derive(
+        snapshot('ACTIVITY', {
+          objectType: 'ACTIVITY',
+          displayName: 'x',
+          published: true,
+          channelOpen: true,
+          paused: false,
+          terminated: false,
+        }),
+      ).length,
       0,
     );
   });

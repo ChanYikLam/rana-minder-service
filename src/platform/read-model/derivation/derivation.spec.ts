@@ -41,10 +41,7 @@ describe('VisibilityDerivationRules（C1.1 字段边界 + C6.8 发布过滤）',
     assert.equal(v.derive({ ...base, channelOpen: false }).visible, false);
     assert.equal(v.derive({ ...base, paused: true }).visible, false);
     assert.equal(v.derive({ ...base, terminated: true }).visible, false);
-    assert.equal(
-      v.derive({ ...base, deadlineAt: '2026-08-17T11:00:00.000Z' }).visible,
-      false,
-    );
+    assert.equal(v.derive({ ...base, deadlineAt: '2026-08-17T11:00:00.000Z' }).visible, false);
   });
 
   it('截止晚于服务端时刻 → 可见（半开区间语义）', () => {

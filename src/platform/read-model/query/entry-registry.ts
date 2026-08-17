@@ -57,7 +57,7 @@ export interface QueryEntryDefinition {
   /** 筛选键登记 */
   readonly filterKeys: readonly FilterKeyDefinition[];
   /** 排序白名单（首版仅稳定默认） */
-  readonly allowedSorts: readonly ('STABLE_DEFAULT')[];
+  readonly allowedSorts: readonly 'STABLE_DEFAULT'[];
   /** 分页上限（≤100） */
   readonly maxLimit: number;
   /** 是否允许未认证读取（公开入口） */
@@ -129,9 +129,7 @@ export class QueryEntryRegistry {
 
     // 作用域要求
     if (entry.requiredScopeKind !== 'ANY' && scope.kind !== entry.requiredScopeKind) {
-      throw new Error(
-        `IFC-ERR-VALIDATION: 入口 ${entryId} 要求作用域 ${entry.requiredScopeKind}`,
-      );
+      throw new Error(`IFC-ERR-VALIDATION: 入口 ${entryId} 要求作用域 ${entry.requiredScopeKind}`);
     }
     // 未认证许可
     if (params.anonymous && !entry.allowAnonymous) {
@@ -176,9 +174,7 @@ export class QueryEntryRegistry {
     // 值类型校验（enum 走白名单；其余按非空字符串放行，精确类型由投影层实现）
     if (def.valueType === FilterValueType.ENUM && def.allowedValues !== undefined) {
       if (!def.allowedValues.includes(filter.value)) {
-        throw new Error(
-          `IFC-ERR-VALIDATION: 筛选键 ${filter.key} 的值不在允许集合内`,
-        );
+        throw new Error(`IFC-ERR-VALIDATION: 筛选键 ${filter.key} 的值不在允许集合内`);
       }
     }
   }

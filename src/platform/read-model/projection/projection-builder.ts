@@ -46,10 +46,7 @@ export abstract class BaseProjectionBuilder<TData> implements ProjectionBuilder<
   /** 权威源端口注册表（只读领域权威对象；领域模块实现后注册） */
   abstract readonly sourcePorts: SourcePortRegistry;
 
-  abstract rebuild(
-    scope: ProjectionScope,
-    basis: RebuildBasis,
-  ): Promise<ProjectionRecord<TData> | null>;
+  abstract rebuild(scope: ProjectionScope, basis: RebuildBasis): Promise<ProjectionRecord<TData> | null>;
 
   protected makeWatermark(scope: ProjectionScope, basis: RebuildBasis, sourceVersion: number): Watermark {
     return {

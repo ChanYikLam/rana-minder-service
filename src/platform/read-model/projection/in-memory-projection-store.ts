@@ -26,18 +26,14 @@ export class InMemoryProjectionStore implements ProjectionStore {
   private readonly entries = new Map<string, StoredEntry>();
 
   async save<TData>(record: ProjectionRecord<TData>, options?: SaveOptions): Promise<void> {
-    const expiresAt =
-      options?.ttlMs !== undefined ? Date.now() + options.ttlMs : undefined;
+    const expiresAt = options?.ttlMs !== undefined ? Date.now() + options.ttlMs : undefined;
     this.entries.set(this.key(record.projectionType, record.watermark.scope), {
       record,
       expiresAt,
     });
   }
 
-  async load<TData>(
-    projectionType: ProjectionType,
-    scope: ProjectionScope,
-  ): Promise<ProjectionRecord<TData> | null> {
+  async load<TData>(projectionType: ProjectionType, scope: ProjectionScope): Promise<ProjectionRecord<TData> | null> {
     const key = this.key(projectionType, scope);
     const entry = this.entries.get(key);
     if (entry === undefined) {
@@ -91,10 +87,7 @@ export class InMemoryProjectionStore implements ProjectionStore {
     return result;
   }
 
-  async clear(
-    projectionType?: ProjectionType,
-    scope?: ProjectionScope,
-  ): Promise<void> {
+  async clear(projectionType?: ProjectionType, scope?: ProjectionScope): Promise<void> {
     if (projectionType === undefined && scope === undefined) {
       this.entries.clear();
       return;

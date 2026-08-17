@@ -24,10 +24,7 @@ describe('QueryEntryRegistry（IFC-QRY-008 入口登记与负向校验）', () =
 
   it('重复登记同一入口 → 拒绝（配置错误）', () => {
     const registry = makeRegistry();
-    assert.throws(
-      () => registry.register(PUBLIC_DIRECTORY_ENTRY),
-      /IFC-ERR-CONFIG/,
-    );
+    assert.throws(() => registry.register(PUBLIC_DIRECTORY_ENTRY), /IFC-ERR-CONFIG/);
   });
 
   it('未知筛选键 → 拒绝（不静默忽略后返回更宽结果）', () => {

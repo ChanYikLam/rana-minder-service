@@ -24,16 +24,10 @@ export interface SaveOptions {
  */
 export interface ProjectionStore {
   /** 保存/更新一个投影记录（幂等覆盖同水位旧值；可选 TTL） */
-  save<TData>(
-    record: ProjectionRecord<TData>,
-    options?: SaveOptions,
-  ): Promise<void>;
+  save<TData>(record: ProjectionRecord<TData>, options?: SaveOptions): Promise<void>;
 
   /** 读取一个作用域下的投影记录；不存在、已失效或已过期返回 null */
-  load<TData>(
-    projectionType: ProjectionType,
-    scope: ProjectionScope,
-  ): Promise<ProjectionRecord<TData> | null>;
+  load<TData>(projectionType: ProjectionType, scope: ProjectionScope): Promise<ProjectionRecord<TData> | null>;
 
   /** 标记失效（权限收紧/状态变化/停用/联合失效/字段权限变化/正式删除后） */
   invalidate(
@@ -50,8 +44,5 @@ export interface ProjectionStore {
   ): Promise<readonly ProjectionRecord<TData>[]>;
 
   /** 清空投影：省略参数=全部；仅传类型=该类型全部；传类型+作用域=精确作用域 */
-  clear(
-    projectionType?: ProjectionType,
-    scope?: ProjectionScope,
-  ): Promise<void>;
+  clear(projectionType?: ProjectionType, scope?: ProjectionScope): Promise<void>;
 }

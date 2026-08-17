@@ -57,10 +57,7 @@ export class SearchLayering {
    *          FUZZY 数量不超过直接命中（EXACT+SUBSTRING）数量；
    *          同层按 similarity 降序 → normalizedName → objectId。
    */
-  layer(
-    normalizedQuery: string,
-    candidates: readonly SearchCandidate[],
-  ): readonly LayeredMatch[] {
+  layer(normalizedQuery: string, candidates: readonly SearchCandidate[]): readonly LayeredMatch[] {
     const all = candidates.map((c) => this.classify(normalizedQuery, c));
     const exact = all.filter((r) => r.layer === SearchMatchLayer.EXACT);
     const substring = all.filter((r) => r.layer === SearchMatchLayer.SUBSTRING);
@@ -82,7 +79,11 @@ export class SearchLayering {
             a.candidate.objectId.localeCompare(b.candidate.objectId),
         );
 
-    return [...rank(SearchMatchLayer.EXACT, exact), ...rank(SearchMatchLayer.SUBSTRING, substring), ...rank(SearchMatchLayer.FUZZY, cappedFuzzy)];
+    return [
+      ...rank(SearchMatchLayer.EXACT, exact),
+      ...rank(SearchMatchLayer.SUBSTRING, substring),
+      ...rank(SearchMatchLayer.FUZZY, cappedFuzzy),
+    ];
   }
 
   private classify(normalizedQuery: string, candidate: SearchCandidate): LayeredMatch {

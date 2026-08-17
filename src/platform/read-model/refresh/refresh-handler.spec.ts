@@ -33,10 +33,7 @@ const record = (sourceVersion: number): ProjectionRecord => ({
 
 /** rebuild 行为可定制（第二参为 store，用于模拟重建期间的并发写入）；rebuildCalls 记录调用次数 */
 const makeService = (
-  rebuildImpl: (
-    v: number,
-    store: InMemoryProjectionStore,
-  ) => Promise<ProjectionRecord | null> = async (v) => record(v),
+  rebuildImpl: (v: number, store: InMemoryProjectionStore) => Promise<ProjectionRecord | null> = async (v) => record(v),
 ) => {
   const store = new InMemoryProjectionStore();
   const rebuildCalls: number[] = [];

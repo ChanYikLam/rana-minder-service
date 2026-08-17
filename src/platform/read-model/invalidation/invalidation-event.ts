@@ -22,8 +22,7 @@ export const InvalidationEventType = {
   SOURCE_DELETED: 'SOURCE_DELETED',
 } as const;
 
-export type InvalidationEventType =
-  (typeof InvalidationEventType)[keyof typeof InvalidationEventType];
+export type InvalidationEventType = (typeof InvalidationEventType)[keyof typeof InvalidationEventType];
 
 /**
  * 失效事件。

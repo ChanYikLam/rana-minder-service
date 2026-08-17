@@ -93,12 +93,11 @@ export class DirectoryQueryService {
       limit: params.limit,
       anonymous: auth.visitor === 'ANONYMOUS',
     });
-    return this.query.query<PublicDirectoryItem>(
-      ProjectionType.PUBLIC_DIRECTORY,
-      scope,
-      auth,
-      { limit: params.limit, cursor: params.cursor, filter },
-    );
+    return this.query.query<PublicDirectoryItem>(ProjectionType.PUBLIC_DIRECTORY, scope, auth, {
+      limit: params.limit,
+      cursor: params.cursor,
+      filter,
+    });
   }
 
   private toFilter(

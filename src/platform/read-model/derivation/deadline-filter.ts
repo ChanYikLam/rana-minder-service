@@ -63,11 +63,7 @@ export class DeadlineFilterRule {
    * 纯日期输入（YYYY-MM-DD）按平台时区自然日转换：from=当日 00:00、to=次日 00:00；
    * 带时间输入按原值参与区间。截止必须严格晚于服务端时刻。
    */
-  isWithinRange(
-    deadlineAt: string,
-    range: { from?: string; to?: string },
-    now: string,
-  ): boolean {
+  isWithinRange(deadlineAt: string, range: { from?: string; to?: string }, now: string): boolean {
     const deadline = Date.parse(deadlineAt);
     const n = Date.parse(now);
     if (!Number.isFinite(deadline) || !Number.isFinite(n)) {

@@ -4,7 +4,7 @@ import type { AuthoritativeSnapshot, ProjectionRecord, ProjectionScope } from '.
 import type { DerivationRule } from '../derivation/derivation-rule';
 import { BaseProjectionBuilder } from './projection-builder';
 import type { RebuildBasis } from './projection-builder';
-import type { SourcePortRegistry } from './source-port-registry';
+import { SourcePortRegistry } from './source-port-registry';
 
 /**
  * 当前社团管理工作台条目（IFC-QRY-003、IFC-QRY-009.6）。
@@ -41,9 +41,7 @@ export interface WorkbenchSourceView {
  * 工作台派生规则：从社团作用域内角色型对象派生条目（确定性）。
  */
 @Injectable()
-export class ClubWorkbenchRule
-  implements DerivationRule<AuthoritativeSnapshot, readonly WorkbenchItem[]>
-{
+export class ClubWorkbenchRule implements DerivationRule<AuthoritativeSnapshot, readonly WorkbenchItem[]> {
   readonly ruleName = 'club-workbench';
 
   derive(source: AuthoritativeSnapshot): readonly WorkbenchItem[] {

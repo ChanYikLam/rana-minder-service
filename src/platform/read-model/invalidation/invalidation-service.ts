@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ProjectionScope, RecomputeIntent } from '../contracts';
 import { ProjectionType } from '../contracts';
-import type { ProjectionRegistry } from '../projection/projection-registry';
+import { ProjectionRegistry } from '../projection/projection-registry';
 import { PROJECTION_STORE } from '../projection/projection-store';
 import type { ProjectionStore } from '../projection/projection-store';
 import { RECOMPUTE_INTENT_SINK } from '../refresh/recompute-intent-sink';
@@ -40,19 +40,12 @@ export class CacheInvalidationService {
    * 处理失效事件：标记受影响投影失效、失效搜索索引并登记重建意图。
    */
   async onInvalidation(event: InvalidationEvent): Promise<void> {
-    const affectedTypes = this.rules
-      .filter((rule) => rule.isAffected(event))
-      .map((rule) => rule.projectionType);
+    const affectedTypes = this.rules.filter((rule) => rule.isAffected(event)).map((rule) => rule.projectionType);
 
     // 注册表内全部投影类型都按规则判定（防止漏失效）
     for (const projectionType of this.allProjectionTypes()) {
       if (affectedTypes.includes(projectionType)) {
-        await this.store.invalidate(
-          projectionType,
-          event.scope,
-          event.occurredAt,
-          event.eventId,
-        );
+        await this.store.invalidate(projectionType, event.scope, event.occurredAt, event.eventId);
       }
     }
 

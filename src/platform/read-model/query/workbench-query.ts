@@ -74,12 +74,11 @@ export class WorkbenchQueryService {
       limit: params.limit,
       anonymous: false,
     });
-    return this.query.query<WorkbenchItem>(
-      ProjectionType.CLUB_WORKBENCH,
-      scope,
-      auth,
-      { limit: params.limit, cursor: params.cursor, filter },
-    );
+    return this.query.query<WorkbenchItem>(ProjectionType.CLUB_WORKBENCH, scope, auth, {
+      limit: params.limit,
+      cursor: params.cursor,
+      filter,
+    });
   }
 
   /**

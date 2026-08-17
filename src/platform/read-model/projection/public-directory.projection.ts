@@ -6,7 +6,7 @@ import { ClubDirectoryRule } from './public-directory/find-club';
 import { ActivityDirectoryRule } from './public-directory/find-activity';
 import { BaseProjectionBuilder } from './projection-builder';
 import type { RebuildBasis } from './projection-builder';
-import type { SourcePortRegistry } from './source-port-registry';
+import { SourcePortRegistry } from './source-port-registry';
 
 /**
  * 公开目录条目（"找社团"/"找活动"；IFC-QRY-009.2 两模式独立，不混用名称条件）。
@@ -43,9 +43,7 @@ export interface PublicDirectorySourceView {
  * （read-model README §6.3）。截止时间过滤按服务端时刻由投影重建时执行。
  */
 @Injectable()
-export class PublicDirectoryRule
-  implements DerivationRule<AuthoritativeSnapshot, readonly PublicDirectoryItem[]>
-{
+export class PublicDirectoryRule implements DerivationRule<AuthoritativeSnapshot, readonly PublicDirectoryItem[]> {
   readonly ruleName = 'public-directory';
 
   derive(source: AuthoritativeSnapshot): readonly PublicDirectoryItem[] {

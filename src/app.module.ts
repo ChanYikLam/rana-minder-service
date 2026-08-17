@@ -15,11 +15,6 @@ import { ReadModelModule } from './platform/read-model/module';
  * form → file → notification → audit → stat-export → config → read-model → job → ops
  */
 @Module({
-  imports: [
-    ConfigModule,
-    CommonModule,
-    DatabaseModule,
-    ReadModelModule,
-  ],
+  imports: [ConfigModule, CommonModule, DatabaseModule, ReadModelModule],
 })
 export class AppModule {}

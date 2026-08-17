@@ -98,10 +98,7 @@ describe('PersonalCenterQueryService（C3.2 个人中心入口）', () => {
   it('未认证 → 拒绝', async () => {
     const { query } = makeQueryMock();
     const service = new PersonalCenterQueryService(query, makeRegistry());
-    await assert.rejects(
-      service.queryMy(auth({ principalId: null }), { limit: 10 }),
-      /IFC-ERR-FORBIDDEN/,
-    );
+    await assert.rejects(service.queryMy(auth({ principalId: null }), { limit: 10 }), /IFC-ERR-FORBIDDEN/);
   });
 
   it('kind 筛选透传', async () => {

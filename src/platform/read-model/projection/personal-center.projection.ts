@@ -4,7 +4,7 @@ import type { AuthoritativeSnapshot, ProjectionRecord, ProjectionScope } from '.
 import type { DerivationRule } from '../derivation/derivation-rule';
 import { BaseProjectionBuilder } from './projection-builder';
 import type { RebuildBasis } from './projection-builder';
-import type { SourcePortRegistry } from './source-port-registry';
+import { SourcePortRegistry } from './source-port-registry';
 
 /**
  * 个人中心条目。
@@ -39,9 +39,7 @@ export interface PersonalCenterSourceView {
  * 个人中心派生规则：从主体相关权威对象派生事项条目（确定性）。
  */
 @Injectable()
-export class PersonalCenterRule
-  implements DerivationRule<AuthoritativeSnapshot, readonly PersonalCenterItem[]>
-{
+export class PersonalCenterRule implements DerivationRule<AuthoritativeSnapshot, readonly PersonalCenterItem[]> {
   readonly ruleName = 'personal-center';
 
   derive(source: AuthoritativeSnapshot): readonly PersonalCenterItem[] {

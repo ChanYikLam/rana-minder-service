@@ -3,7 +3,7 @@ import type { RecomputeIntent } from '../contracts';
 import { ProjectionType } from '../contracts';
 import { OPS_TELEMETRY_PORT } from '../contracts/ops-telemetry-port';
 import type { OpsTelemetryPort } from '../contracts/ops-telemetry-port';
-import type { ProjectionRegistry } from '../projection/projection-registry';
+import { ProjectionRegistry } from '../projection/projection-registry';
 import { PROJECTION_STORE } from '../projection/projection-store';
 import type { ProjectionStore } from '../projection/projection-store';
 
@@ -29,17 +29,13 @@ export class RefreshHandler {
   ) {}
 
   async consume(intent: RecomputeIntent): Promise<void> {
-    const targets: readonly ProjectionType[] =
-      intent.targetProjections ?? this.allRegisteredTypes();
+    const targets: readonly ProjectionType[] = intent.targetProjections ?? this.allRegisteredTypes();
     for (const projectionType of targets) {
       await this.refreshOne(projectionType, intent);
     }
   }
 
-  private async refreshOne(
-    projectionType: ProjectionType,
-    intent: RecomputeIntent,
-  ): Promise<void> {
+  private async refreshOne(projectionType: ProjectionType, intent: RecomputeIntent): Promise<void> {
     try {
       await this.refreshInner(projectionType, intent);
     } catch (error) {
@@ -54,10 +50,7 @@ export class RefreshHandler {
     }
   }
 
-  private async refreshInner(
-    projectionType: ProjectionType,
-    intent: RecomputeIntent,
-  ): Promise<void> {
+  private async refreshInner(projectionType: ProjectionType, intent: RecomputeIntent): Promise<void> {
     const builder = this.registry.get(projectionType);
     const scope = intent.source.scope;
 
@@ -75,12 +68,7 @@ export class RefreshHandler {
 
     if (rebuilt === null) {
       // 源不存在/已删除：标记失效，不伪造新鲜结果
-      await this.store.invalidate(
-        projectionType,
-        scope,
-        intent.createdAt,
-        intent.intentId,
-      );
+      await this.store.invalidate(projectionType, scope, intent.createdAt, intent.intentId);
       return;
     }
 
