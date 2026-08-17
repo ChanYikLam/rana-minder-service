@@ -13,6 +13,7 @@
   "scripts": {
     "build": "nest build",
     "build:all": "nest build",
+    "build:worker": "nest build ranaminder-worker",
     "start": "node dist/main.js",
     "start:worker": "node dist/main.worker.js",
     "start:dev": "nest start --watch",
@@ -32,12 +33,17 @@
     "yaml": "^2.6.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
     "@types/node": "^22.10.0",
+    "eslint": "^9",
+    "eslint-config-prettier": "^10",
+    "prettier": "^3",
     "ts-node": "^10.9.2",
-    "typescript": "~5.7.0"
+    "typescript": "~5.7.0",
+    "typescript-eslint": "^8"
   },
   "pnpm": {
     "peerDependencyRules": {

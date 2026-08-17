@@ -7,17 +7,16 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | ✓ 申请/路径/面试/通道领域命令 |
-| `IFC-TX-002` | 直接权益与通知 | ✓ 权益类结果同事务保存通知事实与收件人快照 |
-| `IFC-TX-003` | Casdoor 外部写入 | -- |
-| `IFC-TX-004` | 文件上传/检查/绑定 | -- |
-| `IFC-TX-005` | 通知渠道投递 | -- |
-| `IFC-TX-006` | 受控批量 | -- |
-| `IFC-TX-007` | 正式删除 | -- |
-| `IFC-TX-008` | 派生刷新与重建 | -- |
-
+| 边界         | 名称               | 本模块参与                                 |
+| ------------ | ------------------ | ------------------------------------------ |
+| `IFC-TX-001` | 本地业务状态转换   | ✓ 申请/路径/面试/通道领域命令              |
+| `IFC-TX-002` | 直接权益与通知     | ✓ 权益类结果同事务保存通知事实与收件人快照 |
+| `IFC-TX-003` | Casdoor 外部写入   | --                                         |
+| `IFC-TX-004` | 文件上传/检查/绑定 | --                                         |
+| `IFC-TX-005` | 通知渠道投递       | --                                         |
+| `IFC-TX-006` | 受控批量           | --                                         |
+| `IFC-TX-007` | 正式删除           | --                                         |
+| `IFC-TX-008` | 派生刷新与重建     | --                                         |
 
 ## 核心职责
 
@@ -34,25 +33,25 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `RecruitmentsController` | Controller（interfaces） | 活动创建/发布/暂停/恢复/完成/取消入口 |
-| `ApplicationChannelController` | Controller（interfaces） | 通道开放/暂停/恢复/关闭/重开新窗口 |
-| `ApplicationsController` | Controller（interfaces） | 草稿、提交、补充、退出、恢复窗口、身份异常处置 |
-| `InterviewsController` | Controller（interfaces） | 选时、改期、出勤、开始、完成、作废、补面 |
-| `PublishRecruitmentUseCase` | 应用命令（application/commands） | 发布配置快照冻结与合理性校验 |
-| `CompleteRecruitmentUseCase` | 应用命令（application/commands） | 完成前置复核与归档只读锁定 |
-| `SubmitApplicationUseCase` | 应用命令（application/commands） | 不可变提交修订＋资格/资料/表单快照原子保存 |
-| `CreateRemedyWindowUseCase` | 应用命令（application/commands） | 规则收紧补救窗口、个人恢复窗口、身份异常顺延 |
-| `ChooseInterviewSlotUseCase` | 应用命令（application/commands） | 容量＋时间占用＋唯一有效记录原子占用 |
-| `RescheduleInterviewUseCase` | 应用命令（application/commands） | 原子释放旧占用并取得新占用，失败保持旧安排 |
-| `VoidInterviewUseCase` | 应用命令（application/commands） | 无效面试作废与补面重排 |
-| `PublishPathResultUseCase` | 应用命令（application/commands） | 候补转录取（与邀请模块联动）与结果发布 |
-| `RecruitmentStateMachine` / `ChannelStateMachine` / `ApplicationStateMachine` / `PathStateMachine` / `InterviewStateMachine` | 状态机（domain/state-machines） | REC-001 至 005 转换门 |
-| `ConflictFreeSlotPolicy` | 领域服务（domain/services） | 容量、时间冲突与跨活动重叠的半开区间判定 |
-| `EligibilitySnapshotRule` | 领域服务（domain/services） | 提交时资格依据快照与约束（REC-043） |
-| `InvitationPort` | 基础设施适配（infrastructure） | 跨模块调用邀请模块创建邀请（同成同败） |
-| `TaskWriter` | 基础设施适配（infrastructure） | 向 job 模块登记截止/提醒/过期任务 |
+| 组件                                                                                                                         | 类型                             | 职责                                           |
+| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------- |
+| `RecruitmentsController`                                                                                                     | Controller（interfaces）         | 活动创建/发布/暂停/恢复/完成/取消入口          |
+| `ApplicationChannelController`                                                                                               | Controller（interfaces）         | 通道开放/暂停/恢复/关闭/重开新窗口             |
+| `ApplicationsController`                                                                                                     | Controller（interfaces）         | 草稿、提交、补充、退出、恢复窗口、身份异常处置 |
+| `InterviewsController`                                                                                                       | Controller（interfaces）         | 选时、改期、出勤、开始、完成、作废、补面       |
+| `PublishRecruitmentUseCase`                                                                                                  | 应用命令（application/commands） | 发布配置快照冻结与合理性校验                   |
+| `CompleteRecruitmentUseCase`                                                                                                 | 应用命令（application/commands） | 完成前置复核与归档只读锁定                     |
+| `SubmitApplicationUseCase`                                                                                                   | 应用命令（application/commands） | 不可变提交修订＋资格/资料/表单快照原子保存     |
+| `CreateRemedyWindowUseCase`                                                                                                  | 应用命令（application/commands） | 规则收紧补救窗口、个人恢复窗口、身份异常顺延   |
+| `ChooseInterviewSlotUseCase`                                                                                                 | 应用命令（application/commands） | 容量＋时间占用＋唯一有效记录原子占用           |
+| `RescheduleInterviewUseCase`                                                                                                 | 应用命令（application/commands） | 原子释放旧占用并取得新占用，失败保持旧安排     |
+| `VoidInterviewUseCase`                                                                                                       | 应用命令（application/commands） | 无效面试作废与补面重排                         |
+| `PublishPathResultUseCase`                                                                                                   | 应用命令（application/commands） | 候补转录取（与邀请模块联动）与结果发布         |
+| `RecruitmentStateMachine` / `ChannelStateMachine` / `ApplicationStateMachine` / `PathStateMachine` / `InterviewStateMachine` | 状态机（domain/state-machines）  | REC-001 至 005 转换门                          |
+| `ConflictFreeSlotPolicy`                                                                                                     | 领域服务（domain/services）      | 容量、时间冲突与跨活动重叠的半开区间判定       |
+| `EligibilitySnapshotRule`                                                                                                    | 领域服务（domain/services）      | 提交时资格依据快照与约束（REC-043）            |
+| `InvitationPort`                                                                                                             | 基础设施适配（infrastructure）   | 跨模块调用邀请模块创建邀请（同成同败）         |
+| `TaskWriter`                                                                                                                 | 基础设施适配（infrastructure）   | 向 job 模块登记截止/提醒/过期任务              |
 
 ## 对外接口
 

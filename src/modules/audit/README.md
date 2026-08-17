@@ -7,17 +7,16 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | ✓ 纠错申请/决定/撤回，关键审计同事务提交 |
-| `IFC-TX-002` | 直接权益与通知 | -- |
-| `IFC-TX-003` | Casdoor 外部写入 | -- |
-| `IFC-TX-004` | 文件上传/检查/绑定 | -- |
-| `IFC-TX-005` | 通知渠道投递 | -- |
-| `IFC-TX-006` | 受控批量 | -- |
-| `IFC-TX-007` | 正式删除 | ✓ 正式删除执行：先撤权、清单持久化、跨存储步骤核验、恢复后重放 |
-| `IFC-TX-008` | 派生刷新与重建 | -- |
-
+| 边界         | 名称               | 本模块参与                                                     |
+| ------------ | ------------------ | -------------------------------------------------------------- |
+| `IFC-TX-001` | 本地业务状态转换   | ✓ 纠错申请/决定/撤回，关键审计同事务提交                       |
+| `IFC-TX-002` | 直接权益与通知     | --                                                             |
+| `IFC-TX-003` | Casdoor 外部写入   | --                                                             |
+| `IFC-TX-004` | 文件上传/检查/绑定 | --                                                             |
+| `IFC-TX-005` | 通知渠道投递       | --                                                             |
+| `IFC-TX-006` | 受控批量           | --                                                             |
+| `IFC-TX-007` | 正式删除           | ✓ 正式删除执行：先撤权、清单持久化、跨存储步骤核验、恢复后重放 |
+| `IFC-TX-008` | 派生刷新与重建     | --                                                             |
 
 ## 核心职责
 
@@ -25,16 +24,16 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `CorrectionController`、`CorrectionAdminController` | Controller（interfaces） | 纠错提交/决定/撤回、正式删除、保留策略、审计查询入口与授权上下文 |
-| `SubmitCorrection`、`DecideCorrection`、`WithdrawCorrection` | 应用命令（application/commands） | 推进 `SRS-SM-AUD-001` 各转换；携带申请版本与幂等键 |
-| `AuditWriter` | 应用命令（application/commands） | 关键审计写入器：与业务同事务提交；敏感字段脱敏 |
-| `FormalDeleteCommand`、`RetentionPolicyCommand` | 应用命令（application/commands） | 删除执行清单编排、保留策略发布/执行（高风险门） |
-| `CorrectionAggregate` | 领域模型（domain/models） | 纠错状态、客观错误判定、作者回避与联合边界 |
-| `CorrectionStateMachine` | 状态机（domain/state-machines） | `SRS-SM-AUD-001` 转换与拒绝规则 |
-| `AuditEvent`、`DeletionChecklist` | 领域模型（domain/models） | 审计事件目录；删除清单步骤、恢复重放与最小删除审计 |
-| `AuditRepository`、`DeletionStepExecutor` | 基础设施适配（infrastructure） | 审计/清单持久化（PostgreSQL）；跨数据库/对象存储/缓存/索引/导出副本逐项执行 |
+| 组件                                                         | 类型                             | 职责                                                                        |
+| ------------------------------------------------------------ | -------------------------------- | --------------------------------------------------------------------------- |
+| `CorrectionController`、`CorrectionAdminController`          | Controller（interfaces）         | 纠错提交/决定/撤回、正式删除、保留策略、审计查询入口与授权上下文            |
+| `SubmitCorrection`、`DecideCorrection`、`WithdrawCorrection` | 应用命令（application/commands） | 推进 `SRS-SM-AUD-001` 各转换；携带申请版本与幂等键                          |
+| `AuditWriter`                                                | 应用命令（application/commands） | 关键审计写入器：与业务同事务提交；敏感字段脱敏                              |
+| `FormalDeleteCommand`、`RetentionPolicyCommand`              | 应用命令（application/commands） | 删除执行清单编排、保留策略发布/执行（高风险门）                             |
+| `CorrectionAggregate`                                        | 领域模型（domain/models）        | 纠错状态、客观错误判定、作者回避与联合边界                                  |
+| `CorrectionStateMachine`                                     | 状态机（domain/state-machines）  | `SRS-SM-AUD-001` 转换与拒绝规则                                             |
+| `AuditEvent`、`DeletionChecklist`                            | 领域模型（domain/models）        | 审计事件目录；删除清单步骤、恢复重放与最小删除审计                          |
+| `AuditRepository`、`DeletionStepExecutor`                    | 基础设施适配（infrastructure）   | 审计/清单持久化（PostgreSQL）；跨数据库/对象存储/缓存/索引/导出副本逐项执行 |
 
 ## 对外接口
 

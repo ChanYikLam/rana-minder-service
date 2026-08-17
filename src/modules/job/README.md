@@ -8,19 +8,18 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | -- |
-| `IFC-TX-002` | 直接权益与通知 | -- |
-| `IFC-TX-003` | Casdoor 外部写入 | ✓ Casdoor 写入与回读任务编排 |
-| `IFC-TX-004` | 文件上传/检查/绑定 | ✓ 文件检查/预览任务编排 |
-| `IFC-TX-005` | 通知渠道投递 | ✓ 通知投递任务编排 |
-| `IFC-TX-006` | 受控批量 | ✓ 受控批量编排（逐项调用领域命令） |
-| `IFC-TX-007` | 正式删除 | ✓ 正式删除步骤执行任务 |
-| `IFC-TX-008` | 派生刷新与重建 | ✓ 派生重算/对账任务 |
+| 边界         | 名称               | 本模块参与                         |
+| ------------ | ------------------ | ---------------------------------- |
+| `IFC-TX-001` | 本地业务状态转换   | --                                 |
+| `IFC-TX-002` | 直接权益与通知     | --                                 |
+| `IFC-TX-003` | Casdoor 外部写入   | ✓ Casdoor 写入与回读任务编排       |
+| `IFC-TX-004` | 文件上传/检查/绑定 | ✓ 文件检查/预览任务编排            |
+| `IFC-TX-005` | 通知渠道投递       | ✓ 通知投递任务编排                 |
+| `IFC-TX-006` | 受控批量           | ✓ 受控批量编排（逐项调用领域命令） |
+| `IFC-TX-007` | 正式删除           | ✓ 正式删除步骤执行任务             |
+| `IFC-TX-008` | 派生刷新与重建     | ✓ 派生重算/对账任务                |
 
 注：本模块只提供任务执行机制，各任务的事务归属与业务决定由责任领域模块拥有。
-
 
 ## 1. 定位与责任
 
@@ -32,27 +31,27 @@
 
 ## 2. 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `TaskProcessorRegistry` | 接口适配（interfaces） | 任务类型->处理器映射注册；处理器薄壳，不含业务决策；平台支撑模块 interfaces 层例外：无 HTTP 入口，承载任务类型注册与处理器装配 |
-| `JobController` | Controller（interfaces） | 任务管理端点（积压查询、手动重试入口，仅超管） |
-| `ClaimAndExecuteTaskUseCase` | 应用命令（application/commands） | 取租约->复核前置条件->调用领域命令->回读收口->更新任务状态 |
-| `BatchOrchestrationUseCase` | 应用命令（application/commands） | 受控批量编排：冻结批次输入->逐项调度->汇总结果 |
-| `RetryPolicyUseCase` | 应用命令（application/commands） | 重试策略判定：退避计算、上限判定、人工处置触发 |
-| `TaskStateMachine` | 状态机（domain/state-machines） | 任务状态转换规则（SRS-SM-ORG-004（IFC-SM-007））：待执行/执行中/可重试失败/结果不确定/需人工处置/已完成 |
-| `LeaseAndIdempotencyRules` | 领域服务·规则（domain/services） | 租约竞争规则、幂等键派生、重试判定（纯规则，不依赖存储或 SDK） |
-| `BatchAggregationRules` | 领域服务·规则（domain/services） | 批次汇总规则：成功项保留、失败项隔离、批次级审计 |
-| `TaskRepository` | 基础设施适配（infrastructure） | 任务表访问（含租约竞争原子条件更新）、任务状态持久化 |
-| `ExternalCallAdapter` | 基础设施适配（infrastructure） | 外部适配调用编排：路由至 `src/adapters/` 的 Casdoor/S3/邮件/文件检查适配器，按任务类型分发；不直接持有外部 SDK |
+| 组件                         | 类型                             | 职责                                                                                                                           |
+| ---------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `TaskProcessorRegistry`      | 接口适配（interfaces）           | 任务类型->处理器映射注册；处理器薄壳，不含业务决策；平台支撑模块 interfaces 层例外：无 HTTP 入口，承载任务类型注册与处理器装配 |
+| `JobController`              | Controller（interfaces）         | 任务管理端点（积压查询、手动重试入口，仅超管）                                                                                 |
+| `ClaimAndExecuteTaskUseCase` | 应用命令（application/commands） | 取租约->复核前置条件->调用领域命令->回读收口->更新任务状态                                                                     |
+| `BatchOrchestrationUseCase`  | 应用命令（application/commands） | 受控批量编排：冻结批次输入->逐项调度->汇总结果                                                                                 |
+| `RetryPolicyUseCase`         | 应用命令（application/commands） | 重试策略判定：退避计算、上限判定、人工处置触发                                                                                 |
+| `TaskStateMachine`           | 状态机（domain/state-machines）  | 任务状态转换规则（SRS-SM-ORG-004（IFC-SM-007））：待执行/执行中/可重试失败/结果不确定/需人工处置/已完成                        |
+| `LeaseAndIdempotencyRules`   | 领域服务·规则（domain/services） | 租约竞争规则、幂等键派生、重试判定（纯规则，不依赖存储或 SDK）                                                                 |
+| `BatchAggregationRules`      | 领域服务·规则（domain/services） | 批次汇总规则：成功项保留、失败项隔离、批次级审计                                                                               |
+| `TaskRepository`             | 基础设施适配（infrastructure）   | 任务表访问（含租约竞争原子条件更新）、任务状态持久化                                                                           |
+| `ExternalCallAdapter`        | 基础设施适配（infrastructure）   | 外部适配调用编排：路由至 `src/adapters/` 的 Casdoor/S3/邮件/文件检查适配器，按任务类型分发；不直接持有外部 SDK                 |
 
 ## 3. 权威与边界
 
-| 本模块可以 | 本模块禁止 |
-|---|---|
-| 领取、租约、调度、执行、重试、汇总持久任务 | 反向拥有其他模块的领域状态 |
-| 在批量中逐项调用领域应用命令 | 自行决定录取、任免、成员、权限或归档结果 |
+| 本模块可以                                     | 本模块禁止                                   |
+| ---------------------------------------------- | -------------------------------------------- |
+| 领取、租约、调度、执行、重试、汇总持久任务     | 反向拥有其他模块的领域状态                   |
+| 在批量中逐项调用领域应用命令                   | 自行决定录取、任免、成员、权限或归档结果     |
 | 保存任务意图、租约、尝试、失败与收口的技术权威 | 用任务存在绕过状态、版本、权限或业务前置条件 |
-| 按任务类型和积压独立扩展执行单元 | 把外部成功直接当成本地业务成功 |
+| 按任务类型和积压独立扩展执行单元               | 把外部成功直接当成本地业务成功               |
 
 核心不变量（ADR-004）：
 
@@ -125,26 +124,26 @@ TaskStatus 为任务持久状态枚举，与适配层 ExternalStatus（外部调
 
 ### 6.5 任务类型与处理器映射
 
-| 任务类型 | 处理器 | 业务归属模块 |
-|---|---|---|
-| Casdoor 资料同步/读回 | `CasdoorSyncHandler` | identity |
-| Casdoor Group 写入/读回 | `CasdoorGroupHandler` | organization/invitation/membership |
-| 通知投递 | `NotificationDeliveryHandler` | notification |
-| 文件检查/预览 | `FileCheckHandler` | file |
-| 导出生成 | `ExportGenerationHandler` | stat-export |
-| 到期任务 | `DeadlineTaskHandler` | 各领域模块 |
-| 正式删除执行 | `FormalDeleteHandler` | audit |
-| 派生重算 | `DerivedRebuildHandler` | read-model/stat-export |
-| 对账 | `ReconciliationHandler` | identity/organization |
-| 受控批量执行 | `BatchExecutionHandler` | 各领域模块 |
+| 任务类型                | 处理器                        | 业务归属模块                       |
+| ----------------------- | ----------------------------- | ---------------------------------- |
+| Casdoor 资料同步/读回   | `CasdoorSyncHandler`          | identity                           |
+| Casdoor Group 写入/读回 | `CasdoorGroupHandler`         | organization/invitation/membership |
+| 通知投递                | `NotificationDeliveryHandler` | notification                       |
+| 文件检查/预览           | `FileCheckHandler`            | file                               |
+| 导出生成                | `ExportGenerationHandler`     | stat-export                        |
+| 到期任务                | `DeadlineTaskHandler`         | 各领域模块                         |
+| 正式删除执行            | `FormalDeleteHandler`         | audit                              |
+| 派生重算                | `DerivedRebuildHandler`       | read-model/stat-export             |
+| 对账                    | `ReconciliationHandler`       | identity/organization              |
+| 受控批量执行            | `BatchExecutionHandler`       | 各领域模块                         |
 
 ## 7. 与相邻模块协作
 
-| 协作对象 | 关系 |
-|---|---|
+| 协作对象                                                                                         | 关系                                                                                                        |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | 各领域模块（identity/organization/invitation/membership/stat-export/audit/notification/file 等） | job 逐项调用其应用命令编排到后台执行，不直接写领域表；取得租约与提交结果时仍复核状态/版本/权限/业务前置条件 |
-| ops 模块 | 任务积压、最近异常与各任务类型最近结果流向 ops 内置状态页；job 不改变 ops 观测结论 |
-| adapters（Casdoor/S3/邮件/文件检查） | 经 `ExternalCallAdapter` 按任务类型路由分发，不直接持有外部 SDK |
+| ops 模块                                                                                         | 任务积压、最近异常与各任务类型最近结果流向 ops 内置状态页；job 不改变 ops 观测结论                          |
+| adapters（Casdoor/S3/邮件/文件检查）                                                             | 经 `ExternalCallAdapter` 按任务类型路由分发，不直接持有外部 SDK                                             |
 
 任务类型的业务归属详见 §6.5 任务类型与处理器映射表；每类业务意图的最终解释与状态机归属仍由领域模块负责（ADR-002）。
 

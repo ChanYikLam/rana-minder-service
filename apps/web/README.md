@@ -17,7 +17,7 @@
 > 2. 后端 API 绑定由 `API-Q-001..007` 收口（详见
 >    [`docs/specification/接口实现规格-v1.0.md` §15](../../docs/specification/接口实现规格-v1.0.md)）；
 > 3. 首批技术验证通过——尤其是 OAuth/Casdoor 适配、错误码映射、分页约定；
-> 5. 前后端契约对齐确认（参见
+> 4. 前后端契约对齐确认（参见
 >    [`docs/engineering/前后端契约对齐-v1.0.md`](../../docs/engineering/前后端契约对齐-v1.0.md)）。
 >
 > 计划目录形态（启用时落地，本提交不创建）：

@@ -47,7 +47,6 @@ async function bootstrap(): Promise<void> {
 
 bootstrap().catch((err) => {
   // 启动失败时直接以非零状态退出；具体错误原因由日志层（1.4）承接。
-  // eslint-disable-next-line no-console
   console.error('Fatal: worker application failed to bootstrap', err);
   process.exit(1);
 });

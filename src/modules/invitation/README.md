@@ -7,17 +7,16 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | ✓ 接受邀请及跨模块联动 |
-| `IFC-TX-002` | 直接权益与通知 | ✓ 邀请创建/通知事实同一边界 |
-| `IFC-TX-003` | Casdoor 外部写入 | ✓ 成员生效编排（Casdoor 关系写入） |
-| `IFC-TX-004` | 文件上传/检查/绑定 | -- |
-| `IFC-TX-005` | 通知渠道投递 | -- |
-| `IFC-TX-006` | 受控批量 | -- |
-| `IFC-TX-007` | 正式删除 | -- |
-| `IFC-TX-008` | 派生刷新与重建 | -- |
-
+| 边界         | 名称               | 本模块参与                         |
+| ------------ | ------------------ | ---------------------------------- |
+| `IFC-TX-001` | 本地业务状态转换   | ✓ 接受邀请及跨模块联动             |
+| `IFC-TX-002` | 直接权益与通知     | ✓ 邀请创建/通知事实同一边界        |
+| `IFC-TX-003` | Casdoor 外部写入   | ✓ 成员生效编排（Casdoor 关系写入） |
+| `IFC-TX-004` | 文件上传/检查/绑定 | --                                 |
+| `IFC-TX-005` | 通知渠道投递       | --                                 |
+| `IFC-TX-006` | 受控批量           | --                                 |
+| `IFC-TX-007` | 正式删除           | --                                 |
+| `IFC-TX-008` | 派生刷新与重建     | --                                 |
 
 ## 核心职责
 
@@ -25,16 +24,16 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `InvitationController` | Controller（interfaces） | 邀请创建/接受/拒绝/撤回/重发 HTTP 入口 |
-| `RoutineInvitationController` | Controller（interfaces） | 常规入社邀请创建/撤回/重发 HTTP 入口 |
-| `AcceptInvitation`、`WithdrawInvitation`、`ReissueInvitation`、`ActivateMemberIntention` | 应用命令（application/commands） | 状态转换用例；接受时与结论锁定、全活动首邀事件同事务编排 |
-| `ResolveSyncTask` | 应用命令（application/commands） | 同步重试/补偿/高优先级异常处置（先回读后收口） |
-| `InvitationStatusQuery`、`InvitationListQuery` | 查询用例（application/queries） | 当前状态、期限冻结与可操作项 |
-| `Invitation`、`RoutineInvitation` | 领域模型（domain/models） | 三类强类型邀请对象、接受事实、剩余时长与不可变历史 |
-| `InvitationStateMachine`、`RoutineInvitationStateMachine` | 状态机（domain/state-machines） | `INV-001`、`MEM-004` 转换、正交标志与拒绝规则 |
-| `InvitationRepository`、`CasdoorAdapter`、`JobTaskWriter` | 基础设施适配（infrastructure） | 权威对象持久化；Casdoor 写入/回读适配；成员生效任务写入（事务发件箱） |
+| 组件                                                                                     | 类型                             | 职责                                                                  |
+| ---------------------------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------- |
+| `InvitationController`                                                                   | Controller（interfaces）         | 邀请创建/接受/拒绝/撤回/重发 HTTP 入口                                |
+| `RoutineInvitationController`                                                            | Controller（interfaces）         | 常规入社邀请创建/撤回/重发 HTTP 入口                                  |
+| `AcceptInvitation`、`WithdrawInvitation`、`ReissueInvitation`、`ActivateMemberIntention` | 应用命令（application/commands） | 状态转换用例；接受时与结论锁定、全活动首邀事件同事务编排              |
+| `ResolveSyncTask`                                                                        | 应用命令（application/commands） | 同步重试/补偿/高优先级异常处置（先回读后收口）                        |
+| `InvitationStatusQuery`、`InvitationListQuery`                                           | 查询用例（application/queries）  | 当前状态、期限冻结与可操作项                                          |
+| `Invitation`、`RoutineInvitation`                                                        | 领域模型（domain/models）        | 三类强类型邀请对象、接受事实、剩余时长与不可变历史                    |
+| `InvitationStateMachine`、`RoutineInvitationStateMachine`                                | 状态机（domain/state-machines）  | `INV-001`、`MEM-004` 转换、正交标志与拒绝规则                         |
+| `InvitationRepository`、`CasdoorAdapter`、`JobTaskWriter`                                | 基础设施适配（infrastructure）   | 权威对象持久化；Casdoor 写入/回读适配；成员生效任务写入（事务发件箱） |
 
 ## 对外接口
 

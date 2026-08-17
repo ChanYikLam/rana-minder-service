@@ -15,7 +15,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-const TRACE_PREFIX = 'tr_';
+export const TRACE_PREFIX = 'tr_';
 const TRACE_ID_LENGTH = TRACE_PREFIX.length + 36; // 'tr_' + 标准 UUID（横线）长度
 
 export function generateTraceId(): string {
@@ -43,10 +43,7 @@ export interface TraceDerivation {
 // 派生关系（XCC-GEN-001）通过 trace.parent_id 字段承载，不通过 ID 字符串本身
 // 编码。本函数为 TraceContextAdapter 落地时的契约签名，避免后续接入时改动
 // 调用方。
-export function deriveTrace(
-  childTraceId: string,
-  parentTraceId?: string,
-): TraceDerivation {
+export function deriveTrace(childTraceId: string, parentTraceId?: string): TraceDerivation {
   if (!isTraceId(childTraceId)) {
     throw new TypeError(`Invalid trace id: ${String(childTraceId)}`);
   }

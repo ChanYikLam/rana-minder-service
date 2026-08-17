@@ -64,7 +64,7 @@ ifModify:
 
 | CI-001 阶段 | 流水线 | 配置位置 | 命令 | 门禁 | 当前状态 |
 |---|---|---|---|---|---|
-| 1 安装 | code-check / release-check | 阶段 `1-安装` | `npm ci`（锁文件驱动） | 通过；锁文件缺失/漂移失败 | 代码就绪后激活 |
+| 1 安装 | code-check / release-check | 阶段 `1-安装` | `pnpm install --frozen-lockfile`（pnpm 锁文件驱动） | 通过；pnpm-lock.yaml 缺失/漂移失败 | 代码就绪后激活 |
 | 2 类型检查 | code-check / release-check | 阶段 `2-类型检查` | `npx tsc --noEmit -p tsconfig.json` | 通过 | 代码就绪后激活 |
 | 3 Lint | code-check / release-check | 阶段 `3-Lint与格式` | `npm run lint` ＋ `npm run format:check` | 通过 | 代码就绪后激活 |
 | 4 单元测试 L1 | code-check / release-check | 阶段 `4-单元测试L1` | `npm run test:unit` | 通过；覆盖率不设硬下限，新增代码须有对应用例 | 代码就绪后激活 |
@@ -73,7 +73,7 @@ ifModify:
 | 7 构建 | code-check / release-check | 阶段 `7-构建` | `npm run build` ＋ `npm run build:worker`（HTTP 与 Worker 双入口，ADR-001/ADR-013） | 通过 | 代码就绪后激活 |
 | 8 镜像 | code-check / release-check | 阶段 `8-镜像构建`（release 为 `8-镜像构建推送`） | `docker build`，tag 为提交 SHA（release 为版本 Tag）；push 至 CNB 制品库 | 通过（tag 非 latest） | Dockerfile 出现后激活 |
 | 9 秘密扫描 | docs-check / code-check / release-check | 阶段 `9-秘密扫描` | gitleaks v8.30.0（固定版本，见 §4.3）`detect --source . --redact` | 0 命中 | **已激活** |
-| 10 依赖审计 | code-check / release-check | 阶段 `10-依赖审计与许可证登记` | `npm audit --audit-level=high` ＋ `scripts/ci/check-license-registry.sh` | 无关键/高危未处置项；DEP-003 登记一致 | 代码就绪后激活（登记检查脚本已就位） |
+| 10 依赖审计 | code-check / release-check | 阶段 `10-依赖审计与许可证登记` | `pnpm audit --audit-level=high` ＋ `scripts/ci/check-license-registry.sh` | 无关键/高危未处置项；DEP-003 登记一致 | 代码就绪后激活（登记检查脚本已就位） |
 | 11 文档一致性 | docs-check / code-check / release-check | 阶段 `11-文档链接一致性` | `bash scripts/ci/check-docs-links.sh` | 全部相对链接有效 | **已激活** |
 
 `CIL-021`：阶段 9、11 在所有流水线中重复出现（docs-check 双阶段、code-check/release-check 全量），修改时须同步三处；§6 给出本地复现命令。

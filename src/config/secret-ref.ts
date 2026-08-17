@@ -21,10 +21,7 @@ export type SecretRef = string;
 const ENV_PATTERN = /^\$\{env:([A-Z_][A-Z0-9_]*)\}$/;
 const FILE_PATTERN = /^\$\{file:([^}]+)\}$/;
 
-const ALLOWED_FILE_PREFIXES: readonly string[] = [
-  '/etc/ranaminder/secrets/',
-  '/run/secrets/',
-];
+const ALLOWED_FILE_PREFIXES: readonly string[] = ['/etc/ranaminder/secrets/', '/run/secrets/'];
 
 export class SecretRefError extends Error {
   constructor(message: string) {

@@ -31,7 +31,10 @@ import type {
 } from './configuration';
 
 export class ConfigLoadError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
+  constructor(
+    message: string,
+    public readonly cause?: unknown,
+  ) {
     super(message);
     this.name = 'ConfigLoadError';
   }
@@ -105,7 +108,10 @@ function buildServer(raw: Partial<ServerConfig> | undefined, env: NodeJS.Process
   };
 }
 
-function buildDatabase(raw: Partial<DatabaseConfig> | undefined, env: NodeJS.ProcessEnv): DatabaseConfig {
+function buildDatabase(
+  raw: Partial<DatabaseConfig> | undefined,
+  env: NodeJS.ProcessEnv,
+): DatabaseConfig {
   return {
     host: parseString(raw?.host, env.DATABASE_HOST, 'DATABASE_HOST', 'localhost'),
     port: parseIntValue(raw?.port, env.DATABASE_PORT, 'DATABASE_PORT', 5432),
@@ -122,7 +128,10 @@ function buildDatabase(raw: Partial<DatabaseConfig> | undefined, env: NodeJS.Pro
   };
 }
 
-function buildCasdoor(raw: Partial<CasdoorConfig> | undefined, env: NodeJS.ProcessEnv): CasdoorConfig {
+function buildCasdoor(
+  raw: Partial<CasdoorConfig> | undefined,
+  env: NodeJS.ProcessEnv,
+): CasdoorConfig {
   return {
     endpoint: parseString(raw?.endpoint, env.CASDOOR_ENDPOINT, 'CASDOOR_ENDPOINT', ''),
     clientId: parseString(raw?.clientId, env.CASDOOR_CLIENT_ID, 'CASDOOR_CLIENT_ID', ''),
@@ -147,7 +156,10 @@ function buildCasdoor(raw: Partial<CasdoorConfig> | undefined, env: NodeJS.Proce
   };
 }
 
-function buildStorage(raw: Partial<StorageConfig> | undefined, env: NodeJS.ProcessEnv): StorageConfig {
+function buildStorage(
+  raw: Partial<StorageConfig> | undefined,
+  env: NodeJS.ProcessEnv,
+): StorageConfig {
   return {
     endpoint: parseString(raw?.endpoint, env.STORAGE_ENDPOINT, 'STORAGE_ENDPOINT', ''),
     region: parseString(raw?.region, env.STORAGE_REGION, 'STORAGE_REGION', 'us-east-1'),

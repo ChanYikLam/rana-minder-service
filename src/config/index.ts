@@ -16,18 +16,9 @@ export type {
   JobConfig,
 } from './configuration';
 
-export {
-  ConfigLoadError,
-  loadConfig,
-  type LoadOptions,
-} from './config.loader';
+export { ConfigLoadError, loadConfig, type LoadOptions } from './config.loader';
 
-export {
-  SecretRefError,
-  isSecretRef,
-  resolveSecret,
-  type SecretRef,
-} from './secret-ref';
+export { SecretRefError, isSecretRef, resolveSecret, type SecretRef } from './secret-ref';
 
 export { RANA_MINDER_CONFIG } from './tokens';
 
