@@ -13,9 +13,10 @@
 #   v*.tag_push：
 #     - release-check：全量阶段 + 发布门证据摘要（CI-002 规则 3、CI-004）
 #
-# 代码未开工保护：所有代码阶段以 package.json / 锁文件存在为前提
-# （if 条件），仓库当前为纯文档状态时全部自动跳过，流水线保持绿色；
-# 代码开工后（package.json 出现）各阶段按 CI-001 门禁严格生效。
+# 代码未开工保护：仓库当前为纯文档状态（无 package.json）时，
+# 各代码阶段按 if 条件自动跳过，流水线保持绿色；代码开工后
+# （package.json 出现）阶段 1 执行 npm ci，锁文件缺失/漂移即失败，
+# 其余各阶段按 CI-001 门禁严格生效。
 # ============================================================
 
 # ------------------------------------------------------------
@@ -57,9 +58,9 @@
         - "!*.md"
         - "!(scripts/ci/**)"
       stages:
-        # 阶段 1：安装（锁文件驱动；锁文件缺失/漂移失败——代码开工后生效）
+        # 阶段 1：安装（npm ci 锁文件驱动；package.json 出现后锁文件缺失/漂移即失败）
         - name: 1-安装
-          if: "[ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]"
+          if: "[ -f package.json ]"
           script: npm ci
         # 阶段 2：类型检查
         - name: 2-类型检查
@@ -75,13 +76,33 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
-        # 阶段 5：集成测试 L2（真实 PG18：扩展/RLS/约束；dind 已声明，
-        # 代码开工后按测试执行计划 v1.0 补充 PG18 容器启动步骤）
+        # 阶段 5：集成测试 L2（真实 PG18：pg_trgm/btree_gist 扩展；dind 已声明）
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
           script: |
-            # 启动真实 PG18 示例（代码开工后启用）：
-            #   docker run -d --name pg18 -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ranaminder_test postgres:18
+            set -e
+            # 启动真实 PG18 测试容器（应用连接信息由 package.json 的 test:integration 脚本传入）
+            docker run -d --name pg18-ci \
+              -e POSTGRES_PASSWORD=ci \
+              -e POSTGRES_DB=ranaminder_test \
+              -p 5432:5432 \
+              postgres:18
+            trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
+            # 等待 PG18 就绪（最长约 60 秒）
+            for i in $(seq 1 30); do
+              if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+              if [ "$i" = 30 ]; then
+                echo "PG18 未在预期时间内就绪，容器日志："
+                docker logs pg18-ci
+                exit 1
+              fi
+            done
+            # 与开发环境 scripts/dev/postgres-init.sql 保持一致的扩展初始化
+            docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
+              -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
             npm run test:integration
         # 阶段 6：契约测试 L3（HTTP 级：信封/错误码/分页/幂等/脱敏）
         - name: 6-契约测试L3
@@ -135,7 +156,7 @@
         - "!(scripts/ci/**)"
       stages:
         - name: 1-安装
-          if: "[ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]"
+          if: "[ -f package.json ]"
           script: npm ci
         - name: 2-类型检查
           if: "[ -f package.json ]"
@@ -151,6 +172,26 @@
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
           script: |
+            set -e
+            docker run -d --name pg18-ci \
+              -e POSTGRES_PASSWORD=ci \
+              -e POSTGRES_DB=ranaminder_test \
+              -p 5432:5432 \
+              postgres:18
+            trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
+            for i in $(seq 1 30); do
+              if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+              if [ "$i" = 30 ]; then
+                echo "PG18 未在预期时间内就绪，容器日志："
+                docker logs pg18-ci
+                exit 1
+              fi
+            done
+            docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
+              -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
             npm run test:integration
         - name: 6-契约测试L3
           if: "[ -f package.json ]"
@@ -193,7 +234,7 @@
           script: |
             bash scripts/ci/check-docs-links.sh
         - name: 1-安装
-          if: "[ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]"
+          if: "[ -f package.json ]"
           script: npm ci
         - name: 2-类型检查
           if: "[ -f package.json ]"
@@ -209,6 +250,26 @@
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
           script: |
+            set -e
+            docker run -d --name pg18-ci \
+              -e POSTGRES_PASSWORD=ci \
+              -e POSTGRES_DB=ranaminder_test \
+              -p 5432:5432 \
+              postgres:18
+            trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
+            for i in $(seq 1 30); do
+              if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+              if [ "$i" = 30 ]; then
+                echo "PG18 未在预期时间内就绪，容器日志："
+                docker logs pg18-ci
+                exit 1
+              fi
+            done
+            docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
+              -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
             npm run test:integration
         - name: 6-契约测试L3
           if: "[ -f package.json ]"
