@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { SearchNormalizer } from './derivation/search-normalizer';
 import { VisibilityDerivationRules } from './derivation/visibility-derivation';
+import { INDEX_INVALIDATION_PORT } from './invalidation/index-invalidation';
 import { CacheInvalidationService } from './invalidation/invalidation-service';
+import { LogOnlyIndexInvalidation } from './invalidation/log-only-index-invalidation';
 import { InMemoryProjectionStore } from './projection/in-memory-projection-store';
 import { ClubWorkbenchProjection } from './projection/club-workbench.projection';
 import { PersonalCenterProjection } from './projection/personal-center.projection';
@@ -49,6 +51,7 @@ import { RefreshHandler } from './refresh/refresh-handler';
     ReadModelQueryService,
     // 失效与刷新（消费接力）
     CacheInvalidationService,
+    { provide: INDEX_INVALIDATION_PORT, useClass: LogOnlyIndexInvalidation },
     RefreshHandler,
     DerivedRebuildHandler,
     { provide: RECOMPUTE_INTENT_SINK, useClass: JobRecomputeIntentSink },

@@ -33,14 +33,14 @@ export class ReadModelQueryService {
     opts: QueryOptions,
   ): Promise<ReadModelQueryResult<TItem>> {
     this.assertGranted(projectionType, scope, auth);
-    this.assertOptions(opts);
+    this.assertOptions(opts, scope);
 
     const builder = this.registry.get(projectionType);
 
     // 1) 命中有效投影 → 直接返回（字段投影由调用方按 visitor 执行）
     const record = await this.store.load<TItem>(projectionType, scope);
     if (record !== null && record.status === 'ACTIVE') {
-      return this.paginate(record.data, opts);
+      return this.paginate(record.data, opts, scope);
     }
 
     // 2) 投影失效/缺失 → 回源同步重建（IFC-QRY-009.8 安全回源）
@@ -53,7 +53,7 @@ export class ReadModelQueryService {
     }
     await this.store.save(rebuilt);
     return {
-      ...this.paginate(rebuilt.data as TItem, opts),
+      ...this.paginate(rebuilt.data as TItem, opts, scope),
       watermark: rebuilt.watermark,
       source: QuerySource.REFRESHED,
     };
@@ -73,7 +73,7 @@ export class ReadModelQueryService {
     }
   }
 
-  private assertOptions(opts: QueryOptions): void {
+  private assertOptions(opts: QueryOptions, scope: ProjectionScope): void {
     if (opts.limit <= 0 || opts.limit > 100) {
       throw new Error('IFC-ERR-VALIDATION: limit 必须为 1..100');
     }
@@ -81,17 +81,21 @@ export class ReadModelQueryService {
       throw new Error('IFC-ERR-VALIDATION: 未知操作符');
     }
     if (opts.cursor !== undefined) {
-      // 游标必须可解析且绑定当前作用域/筛选；损坏或跨入口复用一律拒绝
-      this.decodeCursor(opts.cursor, opts);
+      // 游标必须可解析且绑定当前作用域/筛选；损坏、跨作用域或跨入口复用一律拒绝
+      this.decodeCursor(opts.cursor, opts, scope);
     }
   }
 
-  private paginate<TItem>(data: unknown, opts: QueryOptions): ReadModelQueryResult<TItem> {
+  private paginate<TItem>(
+    data: unknown,
+    opts: QueryOptions,
+    scope: ProjectionScope,
+  ): ReadModelQueryResult<TItem> {
     const items = Array.isArray(data) ? (data as TItem[]) : [];
     const total = items.length;
     const page = items.slice(0, opts.limit);
     const nextCursor =
-      items.length > opts.limit ? this.encodeCursor(opts, opts.limit) : null;
+      items.length > opts.limit ? this.encodeCursor(opts, opts.limit, scope) : null;
     return {
       items: page,
       nextCursor,
@@ -120,18 +124,18 @@ export class ReadModelQueryService {
     );
   }
 
-  private encodeCursor(opts: QueryOptions, offset: number): string {
+  private encodeCursor(opts: QueryOptions, offset: number, scope: ProjectionScope): string {
     const payload = JSON.stringify({
       v: 'rm-qry-1',
       offset,
       filter: opts.filter ?? null,
-      scope: null,
+      scope: this.canonicalScope(scope),
     });
     return Buffer.from(payload, 'utf8').toString('base64url');
   }
 
-  private decodeCursor(cursor: string, opts: QueryOptions): void {
-    let parsed: { v: string; offset: number; filter: unknown };
+  private decodeCursor(cursor: string, opts: QueryOptions, scope: ProjectionScope): void {
+    let parsed: { v: string; offset: number; filter: unknown; scope?: unknown };
     try {
       parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
     } catch {
@@ -140,10 +144,25 @@ export class ReadModelQueryService {
     if (parsed.v !== 'rm-qry-1' || !Number.isInteger(parsed.offset) || parsed.offset < 0) {
       throw new Error('IFC-ERR-VALIDATION: 损坏的游标');
     }
+    // 游标绑定作用域：跨作用域/跨入口复用的旧游标一律拒绝（不静默换结果集）
+    if (parsed.scope === undefined || !this.sameScope(parsed.scope as ProjectionScope, scope)) {
+      throw new Error('IFC-ERR-VALIDATION: 游标与作用域不匹配');
+    }
     // 游标绑定筛选：筛选变化后旧游标拒绝（不静默换结果集）
     const filterJson = JSON.stringify(opts.filter ?? null);
     if (filterJson !== JSON.stringify(parsed.filter)) {
       throw new Error('IFC-ERR-VALIDATION: 游标与筛选不匹配');
     }
+  }
+
+  /** 作用域规范化（稳定键序，供游标签名与跨入口比较） */
+  private canonicalScope(scope: ProjectionScope): ProjectionScope {
+    return {
+      kind: scope.kind,
+      clubId: scope.clubId,
+      unionId: scope.unionId,
+      subjectId: scope.subjectId,
+      visitor: scope.visitor,
+    };
   }
 }

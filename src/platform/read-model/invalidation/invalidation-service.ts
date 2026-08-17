@@ -6,6 +6,8 @@ import { PROJECTION_STORE } from '../projection/projection-store';
 import type { ProjectionStore } from '../projection/projection-store';
 import { RECOMPUTE_INTENT_SINK } from '../refresh/recompute-intent-sink';
 import type { RecomputeIntentSink } from '../refresh/recompute-intent-sink';
+import { INDEX_INVALIDATION_PORT } from './index-invalidation';
+import type { IndexInvalidationPort } from './index-invalidation';
 import type { InvalidationEvent } from './invalidation-event';
 import type { InvalidationRule } from './invalidation-rule';
 
@@ -26,6 +28,7 @@ export class CacheInvalidationService {
     private readonly registry: ProjectionRegistry,
     @Inject(PROJECTION_STORE) private readonly store: ProjectionStore,
     @Inject(RECOMPUTE_INTENT_SINK) private readonly recomputeSink: RecomputeIntentSink,
+    @Inject(INDEX_INVALIDATION_PORT) private readonly indexInvalidation: IndexInvalidationPort,
   ) {}
 
   /** 登记失效规则（由具体投影在装配时注册） */
@@ -34,7 +37,7 @@ export class CacheInvalidationService {
   }
 
   /**
-   * 处理失效事件：标记受影响投影失效并登记重建意图。
+   * 处理失效事件：标记受影响投影失效、失效搜索索引并登记重建意图。
    */
   async onInvalidation(event: InvalidationEvent): Promise<void> {
     const affectedTypes = this.rules
@@ -52,6 +55,9 @@ export class CacheInvalidationService {
         );
       }
     }
+
+    // 搜索索引失效（C4.2；索引不得成为授权来源，幂等以 eventId 为准）
+    await this.indexInvalidation.invalidate(event);
 
     // 登记重建意图（旧水位不覆盖新结果由 refresh 保障）
     if (affectedTypes.length > 0) {

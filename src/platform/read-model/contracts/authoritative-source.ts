@@ -8,6 +8,8 @@ import type { SourceRef } from './source-ref';
  * 防止 read-model 意外写入或依赖实现细节。
  */
 export interface AuthoritativeSnapshot {
+  /** 权威对象类型（与 SourceRef.objectType 一致，如 'CLUB'/'ACTIVITY'/'PERSON'） */
+  readonly objectType: string;
   /** 稳定标识 */
   readonly objectId: string;
   /** 当前版本（IFC-DATA-004） */
