@@ -10,7 +10,8 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "start:worker": "node dist/worker",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test -r ts-node/register \"src/platform/read-model/**/*.spec.ts\""
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
