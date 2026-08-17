@@ -95,7 +95,7 @@
             npm run build:worker
         # 阶段 8：镜像构建（tag 非 latest）
         - name: 8-镜像构建
-          if: "[ -f Dockerfile ]"
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
         # 阶段 10：依赖审计与许可证登记（DEP-003）
@@ -161,7 +161,7 @@
             npm run build
             npm run build:worker
         - name: 8-镜像构建
-          if: "[ -f Dockerfile ]"
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
         - name: 10-依赖审计与许可证登记
@@ -220,7 +220,7 @@
             npm run build:worker
         # 阶段 8：镜像构建并推送（Tag 即版本号，非 latest）
         - name: 8-镜像构建推送
-          if: "[ -f Dockerfile ]"
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} .
             docker push ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}

@@ -71,7 +71,7 @@ ifModify:
 | 5 集成测试 L2 | code-check / release-check | 阶段 `5-集成测试L2` | `npm run test:integration`（真实 PG18，见 §7.2） | 通过 | 代码就绪后激活 |
 | 6 契约测试 L3 | code-check / release-check | 阶段 `6-契约测试L3` | `npm run test:contract` | 通过 | 代码就绪后激活 |
 | 7 构建 | code-check / release-check | 阶段 `7-构建` | `npm run build` ＋ `npm run build:worker`（HTTP 与 Worker 双入口，ADR-001/ADR-013） | 通过 | 代码就绪后激活 |
-| 8 镜像 | code-check / release-check | 阶段 `8-镜像构建`（release 为 `8-镜像构建推送`） | `docker build`，tag 为提交 SHA（release 为版本 Tag）；push 至 CNB 制品库 | 通过（tag 非 latest） | Dockerfile 出现后激活 |
+| 8 镜像 | code-check / release-check | 阶段 `8-镜像构建`（release 为 `8-镜像构建推送`） | `docker build`，tag 为提交 SHA（release 为版本 Tag）；push 至 CNB 制品库 | 通过（tag 非 latest） | 代码就绪后激活（Dockerfile 已随 [Docker 镜像构建规范](Docker镜像构建规范-v1.0.md) 落地） |
 | 9 秘密扫描 | docs-check / code-check / release-check | 阶段 `9-秘密扫描` | gitleaks v8.30.0（固定版本，见 §4.3）`detect --source . --redact` | 0 命中 | **已激活** |
 | 10 依赖审计 | code-check / release-check | 阶段 `10-依赖审计与许可证登记` | `npm audit --audit-level=high` ＋ `scripts/ci/check-license-registry.sh` | 无关键/高危未处置项；DEP-003 登记一致 | 代码就绪后激活（登记检查脚本已就位） |
 | 11 文档一致性 | docs-check / code-check / release-check | 阶段 `11-文档链接一致性` | `bash scripts/ci/check-docs-links.sh` | 全部相对链接有效 | **已激活** |
@@ -153,6 +153,7 @@ bash scripts/ci/check-license-registry.sh
 | CI-001 十一阶段映射 | 已映射（§3 表）；阶段 9、11 当前真实执行，其余代码就绪后自动激活 |
 | CI-002 触发策略 | 已落地（ifModify 分流、纯文档只跑 9+11、tag 全量+证据） |
 | 检查脚本 | check-docs-links.sh（已激活，当前仓库 734 链接零断链）；check-license-registry.sh（待代码就绪激活） |
+| 镜像构建输入 | Dockerfile/.dockerignore/docker-compose.dev.yml 已随 [Docker 镜像构建规范](Docker镜像构建规范-v1.0.md) 落地；阶段 8 门禁同步为 package.json＋Dockerfile 双条件 |
 | 既有断链修复 | src/modules/分层实现规范.md 15 处链接已修复（`../architecture/` 等缺少 `../../docs/` 前缀） |
 | 密钥 | 无入仓秘密；私有凭据预留密钥仓库 imports 通道 |
 | 前端对应阶段 | 由 rana-minder-web 仓库单独承载（§7.1） |
