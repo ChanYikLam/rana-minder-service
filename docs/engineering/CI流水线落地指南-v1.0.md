@@ -73,7 +73,7 @@ ifModify:
 | 7 构建 | code-check / release-check | 阶段 `7-构建` | `npm run build` ＋ `npm run build:worker`（HTTP 与 Worker 双入口，ADR-001/ADR-013） | 通过 | 代码就绪后激活 |
 | 8 镜像 | code-check / release-check | 阶段 `8-镜像构建`（release 为 `8-镜像构建推送`） | `docker build`，tag 为提交 SHA（release 为版本 Tag）；push 至 CNB 制品库 | 通过（tag 非 latest） | Dockerfile 出现后激活 |
 | 9 秘密扫描 | docs-check / code-check / release-check | 阶段 `9-秘密扫描` | gitleaks v8.30.0（固定版本，见 §4.3）`detect --source . --redact` | 0 命中 | **已激活** |
-| 10 依赖审计 | code-check / release-check | 阶段 `10-依赖审计与许可证登记` | `pnpm audit --audit-level=high` ＋ `scripts/ci/check-license-registry.sh` | 无关键/高危未处置项；DEP-003 登记一致 | 代码就绪后激活（登记检查脚本已就位） |
+| 10 依赖审计 | code-check / release-check | 阶段 `10-依赖审计与许可证登记` | `corepack pnpm audit --audit-level=high`（corepack 匹配 packageManager）＋ `scripts/ci/check-license-registry.sh` | 无关键/高危未处置项；DEP-003 登记一致 | 代码就绪后激活（登记检查脚本已就位） |
 | 11 文档一致性 | docs-check / code-check / release-check | 阶段 `11-文档链接一致性` | `bash scripts/ci/check-docs-links.sh` | 全部相对链接有效 | **已激活** |
 
 `CIL-021`：阶段 9、11 在 `docs-check`（PR/push 两处）与 `release-check`（tag 一处）出现；`code-check` 不重复承载，因为 docs-check 在任何 MR/push 中无条件执行，阶段 9、11 已覆盖全部变更。修改 gitleaks 下载地址或链接检查命令时，须同步这三处；§6 给出本地复现命令。

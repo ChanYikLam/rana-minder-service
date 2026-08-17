@@ -126,7 +126,8 @@
         - name: 10-依赖审计与许可证登记
           if: "[ -f pnpm-lock.yaml ]"
           script: |
-            pnpm audit --audit-level=high
+            # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本（同阶段 1）
+            corepack pnpm audit --audit-level=high
             bash scripts/ci/check-license-registry.sh
 
   # ---- push（合并后回归验证；策略与 MR 相同）----
@@ -213,7 +214,8 @@
         - name: 10-依赖审计与许可证登记
           if: "[ -f pnpm-lock.yaml ]"
           script: |
-            pnpm audit --audit-level=high
+            # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本（同阶段 1）
+            corepack pnpm audit --audit-level=high
             bash scripts/ci/check-license-registry.sh
 
 # ------------------------------------------------------------
@@ -295,7 +297,8 @@
         - name: 10-依赖审计与许可证登记
           if: "[ -f pnpm-lock.yaml ]"
           script: |
-            pnpm audit --audit-level=high
+            # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本（同阶段 1）
+            corepack pnpm audit --audit-level=high
             bash scripts/ci/check-license-registry.sh
       endStages:
         # 发布门证据摘要（CI-004）：人工门由治理流程控制，CI 只输出证据供归档
