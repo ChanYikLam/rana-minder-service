@@ -1,0 +1,47 @@
+{
+  "name": "ranaminder-service",
+  "version": "0.0.0",
+  "description": "高校学生社团人员管理系统 · 后端服务（NestJS + TypeScript，按 ADR-001 / ADR-013 / ADR-014）",
+  "private": true,
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "build": "nest build",
+    "build:all": "nest build",
+    "start": "node dist/main.js",
+    "start:worker": "node dist/main.worker.js",
+    "start:dev": "nest start --watch",
+    "start:dev:worker": "nest start --watch --entryFile main.worker",
+    "lint": "eslint \"{src,test,apps,packages}/**/*.ts\"",
+    "lint:fix": "eslint \"{src,test,apps,packages}/**/*.ts\" --fix",
+    "format": "prettier --write \"{src,test,apps,packages}/**/*.{ts,json,md}\"",
+    "format:check": "prettier --check \"{src,test,apps,packages}/**/*.{ts,json,md}\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.0",
+    "@types/node": "^22.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.7.0"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "ignoreMissing": []
+    }
+  }
+}

@@ -1,0 +1,9 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - '.'
+
+# 根包也作为 workspace 成员，便于 apps/* 与 packages/* 引用根包脚本
+# 与 NestJS CLI 配置约定。
+# 当前第一批只启用根包；apps/* 与 packages/* 在 1.1 之后按需启用。
+# 启用时机参见 docs/engineering/依赖与版本基线-v1.0.md（DEP-001）。
