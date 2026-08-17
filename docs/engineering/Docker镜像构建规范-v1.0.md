@@ -30,21 +30,21 @@
 `DOCK-020`：两阶段结构（`Dockerfile` 已落地，与本节一致）：
 
 ```dockerfile
-# 构建阶段：锁文件驱动安装 + 编译
+# 构建阶段：锁文件驱动安装 + 编译（包管理器为 pnpm，与 package.json / CI 一致）
 FROM node:24 AS build
 WORKDIR /app
-COPY package.json package-lock.json* npm-shrinkwrap.json* ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build        # 产出 dist/main.js 与 dist/worker.js
+RUN pnpm run build        # 产出 dist/main.js 与 dist/worker.js
 
 # 运行阶段：生产依赖 + 编译产物，不含源码与工具链
 FROM node:24-slim AS runtime
 ENV NODE_ENV=production TZ=UTC RANAMINDER_CONFIG=/etc/ranaminder/config.yaml
 WORKDIR /app
 RUN groupadd --gid 10001 ranaminder && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin ranaminder && mkdir -p /etc/ranaminder
-COPY --from=build /app/package.json /app/package-lock.json* /app/npm-shrinkwrap.json* ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+RUN corepack enable && pnpm install --prod --frozen-lockfile && pnpm store prune
 COPY --from=build /app/dist ./dist
 USER ranaminder
 EXPOSE 3000
@@ -53,10 +53,10 @@ CMD ["node", "dist/main.js"]
 
 `DOCK-021`：规则：
 
-1. **依赖层缓存**：`package.json` 与锁文件先于源码 COPY，依赖未变时 `npm ci` 层命中缓存；
-2. **运行期依赖独立安装**：运行阶段 `npm ci --omit=dev`（锁文件驱动），不复制构建期 `node_modules`，避免 dev 依赖与构建平台差异进入镜像；
+1. **依赖层缓存**：`package.json` 与 pnpm 锁文件（`pnpm-lock.yaml`）先于源码 COPY，依赖未变时 `pnpm install --frozen-lockfile` 层命中缓存；
+2. **运行期依赖独立安装**：运行阶段 `pnpm install --prod --frozen-lockfile`（锁文件驱动），不复制构建期 `node_modules`，避免 dev 依赖与构建平台差异进入镜像；
 3. **源码不进入运行阶段**：仅复制 `dist/` 产物；`docs`、`test`、`scripts` 等由 `.dockerignore` 排除（§6）；
-4. 构建命令与 CI 阶段 7 一致（`npm run build`）；若后续引入独立 worker 构建脚本（`build:worker`），在构建阶段同步执行。
+4. 构建命令与 CI 阶段 7 一致（`pnpm run build`）；若后续引入独立 worker 构建脚本（`build:worker`），在构建阶段同步执行。
 
 ## 4. 双入口镜像
 
