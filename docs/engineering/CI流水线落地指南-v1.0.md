@@ -23,7 +23,7 @@
 
 | 门禁定义条目 | 落地情况 |
 |---|---|
-| CI-001 十一阶段流水线 | 全部落入配置（§3 逐项映射）；阶段 1~8、10 由 code-check / release-check 承载，阶段 9、11 由 docs-check / code-check / release-check 承载 |
+| CI-001 十一阶段流水线 | 全部落入配置（§3 逐项映射）；阶段 1~8、10 由 code-check / release-check 承载，阶段 9、11 由 docs-check / release-check 承载（docs-check 无条件执行覆盖所有 MR/push） |
 | CI-002 触发策略 | 落地（§2）：MR/push 全量（ifModify 分流）、纯文档变更只跑阶段 9+11、发布 tag 全量+发布证据 |
 | CI-003 合并门 | 由流水线结果＋保护分支状态检查承载；第 2~6 项为人工评审门，CI 提供对应证据 |
 | CI-004 发布门 | release-check 的 endStages 输出证据摘要；真实验证（TVER-*）与演练（OPS-VER-*）仍为人工门 |
@@ -68,15 +68,15 @@ ifModify:
 | 2 类型检查 | code-check / release-check | 阶段 `2-类型检查` | `npx tsc --noEmit -p tsconfig.json` | 通过 | 代码就绪后激活 |
 | 3 Lint | code-check / release-check | 阶段 `3-Lint与格式` | `npm run lint` ＋ `npm run format:check` | 通过 | 代码就绪后激活 |
 | 4 单元测试 L1 | code-check / release-check | 阶段 `4-单元测试L1` | `npm run test:unit` | 通过；覆盖率不设硬下限，新增代码须有对应用例 | 代码就绪后激活 |
-| 5 集成测试 L2 | code-check / release-check | 阶段 `5-集成测试L2` | `npm run test:integration`（真实 PG18，见 §7.2） | 通过 | 代码就绪后激活 |
+| 5 集成测试 L2 | code-check / release-check | 阶段 `5-集成测试L2` | 启动 PG18 容器（pg18-ci，扩展 pg_trgm/btree_gist）→ `npm run test:integration`（见 §7.2） | 通过 | 代码就绪后激活 |
 | 6 契约测试 L3 | code-check / release-check | 阶段 `6-契约测试L3` | `npm run test:contract` | 通过 | 代码就绪后激活 |
 | 7 构建 | code-check / release-check | 阶段 `7-构建` | `npm run build` ＋ `npm run build:worker`（HTTP 与 Worker 双入口，ADR-001/ADR-013） | 通过 | 代码就绪后激活 |
-| 8 镜像 | code-check / release-check | 阶段 `8-镜像构建`（release 为 `8-镜像构建推送`） | `docker build`，tag 为提交 SHA（release 为版本 Tag）；push 至 CNB 制品库 | 通过（tag 非 latest） | 代码就绪后激活（Dockerfile 已随 [Docker 镜像构建规范](Docker镜像构建规范-v1.0.md) 落地） |
-| 9 秘密扫描 | docs-check / code-check / release-check | 阶段 `9-秘密扫描` | gitleaks v8.30.0（固定版本，见 §4.3）`detect --source . --redact` | 0 命中 | **已激活** |
+| 8 镜像 | code-check / release-check | 阶段 `8-镜像构建`（release 为 `8-镜像构建推送`） | `docker build`，tag 为提交 SHA（code-check 仅构建，release 构建并 push 至 CNB 制品库） | 通过（tag 非 latest） | 代码就绪后激活（Dockerfile 已随 [Docker 镜像构建规范](Docker镜像构建规范-v1.0.md) 落地） |
+| 9 秘密扫描 | docs-check / release-check | 阶段 `9-秘密扫描` | gitleaks v8.30.0（固定版本，见 §4.3）`detect --source . --redact` | 0 命中 | **已激活** |
 | 10 依赖审计 | code-check / release-check | 阶段 `10-依赖审计与许可证登记` | `npm audit --audit-level=high` ＋ `scripts/ci/check-license-registry.sh` | 无关键/高危未处置项；DEP-003 登记一致 | 代码就绪后激活（登记检查脚本已就位） |
-| 11 文档一致性 | docs-check / code-check / release-check | 阶段 `11-文档链接一致性` | `bash scripts/ci/check-docs-links.sh` | 全部相对链接有效 | **已激活** |
+| 11 文档一致性 | docs-check / release-check | 阶段 `11-文档链接一致性` | `bash scripts/ci/check-docs-links.sh` | 全部相对链接有效 | **已激活** |
 
-`CIL-021`：阶段 9、11 在所有流水线中重复出现（docs-check 双阶段、code-check/release-check 全量），修改时须同步三处；§6 给出本地复现命令。
+`CIL-021`：阶段 9、11 在 `docs-check`（PR/push 两处）与 `release-check`（tag 一处）出现；`code-check` 不重复承载，因为 docs-check 在任何 MR/push 中无条件执行，阶段 9、11 已覆盖全部变更。修改 gitleaks 下载地址或链接检查命令时，须同步这三处；§6 给出本地复现命令。
 
 ## 4. 环境与密钥
 
@@ -131,7 +131,7 @@ bash scripts/ci/check-license-registry.sh
 
 ### 7.2 集成测试 L2 的真实 PG18
 
-`CIL-061`：cnb.cool 未提供托管 PostgreSQL 服务，采用"dind 服务 + 容器内运行 PG18"方案：流水线已声明 `services: [docker]`（code-check / release-check），代码开工后在阶段 5 脚本中启动 `postgres:18` 容器（含扩展/RLS/约束，测试库隔离），再运行 `npm run test:integration`；容器启动命令的占位注释已写入配置。
+`CIL-061`：cnb.cool 未提供托管 PostgreSQL 服务，采用"dind 服务 + 容器内运行 PG18"方案：流水线已声明 `services: [docker]`（code-check / release-check），阶段 5 脚本启动 `postgres:18` 容器 `pg18-ci`，等待 `pg_isready` 就绪后创建 `pg_trgm`/`btree_gist` 扩展（与开发环境 `scripts/dev/postgres-init.sql` 一致），再运行 `npm run test:integration`；测试库为 `ranaminder_test`（与开发库 `ranaminder_dev` 隔离），应用连接信息由 `package.json` 的 `test:integration` 脚本按 [配置规格](配置规格-v1.0.md) 草案传入，容器用完即清（trap）。
 
 ### 7.3 依赖许可证登记表
 
@@ -152,7 +152,7 @@ bash scripts/ci/check-license-registry.sh
 | 流水线配置（.cnb.yml） | 已落地（main/dev × PR/push、v* × tag） |
 | CI-001 十一阶段映射 | 已映射（§3 表）；阶段 9、11 当前真实执行，其余代码就绪后自动激活 |
 | CI-002 触发策略 | 已落地（ifModify 分流、纯文档只跑 9+11、tag 全量+证据） |
-| 检查脚本 | check-docs-links.sh（已激活，当前仓库 734 链接零断链）；check-license-registry.sh（待代码就绪激活） |
+| 检查脚本 | check-docs-links.sh（已激活，当前仓库 882 个相对链接零断链）；check-license-registry.sh（待代码就绪激活） |
 | 镜像构建输入 | Dockerfile/.dockerignore/docker-compose.dev.yml 已随 [Docker 镜像构建规范](Docker镜像构建规范-v1.0.md) 落地；阶段 8 门禁同步为 package.json＋Dockerfile 双条件 |
 | 既有断链修复 | src/modules/分层实现规范.md 15 处链接已修复（`../architecture/` 等缺少 `../../docs/` 前缀） |
 | 密钥 | 无入仓秘密；私有凭据预留密钥仓库 imports 通道 |
