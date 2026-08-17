@@ -119,6 +119,48 @@ describe('QueryEntryRegistry（IFC-QRY-008 入口登记与负向校验）', () =
     );
   });
 
+  it('RANGE：起止对象且至少一端，非法时间拒绝（C6.7 自定义起止）', () => {
+    const registry = makeRegistry();
+    // 合法 RANGE：deadline 键已登记 RANGE
+    assert.doesNotThrow(() =>
+      registry.assertValidQuery('public-directory', clubScope, {
+        filter: { key: 'deadline', value: { from: '2026-08-18' }, operator: 'RANGE' },
+        limit: 10,
+        anonymous: true,
+      }),
+    );
+    // 两端都缺 → 拒绝
+    assert.throws(
+      () =>
+        registry.assertValidQuery('public-directory', clubScope, {
+          filter: { key: 'deadline', value: {}, operator: 'RANGE' },
+          limit: 10,
+          anonymous: true,
+        }),
+      /至少一端起止/,
+    );
+    // 非法时间 → 拒绝
+    assert.throws(
+      () =>
+        registry.assertValidQuery('public-directory', clubScope, {
+          filter: { key: 'deadline', value: { to: 'not-a-date' }, operator: 'RANGE' },
+          limit: 10,
+          anonymous: true,
+        }),
+      /不是合法时间/,
+    );
+    // 未登记 RANGE 的键（name）用 RANGE → 拒绝（未知操作符）
+    assert.throws(
+      () =>
+        registry.assertValidQuery('public-directory', clubScope, {
+          filter: { key: 'name', value: { from: 'a' }, operator: 'RANGE' },
+          limit: 10,
+          anonymous: true,
+        }),
+      /未知操作符/,
+    );
+  });
+
   it('公开目录允许匿名 + 合法筛选通过', () => {
     const registry = makeRegistry();
     assert.doesNotThrow(() =>

@@ -1,4 +1,5 @@
 import type { ProjectionScope, ProjectionType } from '../contracts';
+import type { FilterClause, FilterOperator, RangeValue } from './query-options';
 
 /**
  * 筛选值类型（IFC-QRY-008：入口登记"筛选键/值类型/操作符"）。
@@ -13,8 +14,8 @@ export const FilterValueType = {
 
 export type FilterValueType = (typeof FilterValueType)[keyof typeof FilterValueType];
 
-/** 操作符白名单（首版仅 EQ；IN/RANGE 后续按目录扩展，未登记一律拒绝） */
-export type FilterOperator = 'EQ';
+/** 操作符白名单（EQ/RANGE；未登记一律拒绝） */
+export type { FilterOperator };
 
 /**
  * 筛选键登记（IFC-QRY-008：值类型、操作符、空值语义、权威字段）。
@@ -28,7 +29,7 @@ export interface FilterKeyDefinition {
   readonly valueType: FilterValueType;
   /** 允许的枚举值（valueType=ENUM 时必填；未知枚举值拒绝） */
   readonly allowedValues?: readonly string[];
-  /** 操作符白名单（首版仅 EQ） */
+  /** 操作符白名单（EQ 单值；RANGE 起止，按目录登记） */
   readonly operators: readonly FilterOperator[];
   /** 空值/空集合语义：是否允许显式空值（默认 false：空值拒绝） */
   readonly allowEmpty?: boolean;
@@ -118,7 +119,7 @@ export class QueryEntryRegistry {
     entryId: string,
     scope: ProjectionScope,
     params: {
-      filter?: { key: string; value: string; operator: FilterOperator };
+      filter?: FilterClause;
       sort?: 'STABLE_DEFAULT';
       limit: number;
       anonymous: boolean;
@@ -150,10 +151,7 @@ export class QueryEntryRegistry {
     }
   }
 
-  private assertFilter(
-    entry: QueryEntryDefinition,
-    filter: { key: string; value: string; operator: FilterOperator },
-  ): void {
+  private assertFilter(entry: QueryEntryDefinition, filter: FilterClause): void {
     const def = entry.filterKeys.find((f) => f.key === filter.key);
     if (def === undefined) {
       throw new Error(`IFC-ERR-VALIDATION: 未知筛选键 ${filter.key}`);
@@ -161,18 +159,44 @@ export class QueryEntryRegistry {
     if (!def.operators.includes(filter.operator)) {
       throw new Error(`IFC-ERR-VALIDATION: 未知操作符 ${filter.operator}`);
     }
+    if (filter.operator === 'RANGE') {
+      this.assertRangeValue(def, filter.value as RangeValue);
+      return;
+    }
+    // EQ：单值字符串
+    if (typeof filter.value !== 'string') {
+      throw new Error(`IFC-ERR-VALIDATION: 筛选键 ${filter.key} 需单值`);
+    }
     if (filter.value.length === 0) {
       if (!def.allowEmpty) {
         throw new Error(`IFC-ERR-VALIDATION: 筛选键 ${filter.key} 不允许空值`);
       }
       return;
     }
-    // 值类型校验（enum 走白名单；其余首版按非空字符串放行，精确类型由投影层实现）
+    // 值类型校验（enum 走白名单；其余按非空字符串放行，精确类型由投影层实现）
     if (def.valueType === FilterValueType.ENUM && def.allowedValues !== undefined) {
       if (!def.allowedValues.includes(filter.value)) {
         throw new Error(
           `IFC-ERR-VALIDATION: 筛选键 ${filter.key} 的值不在允许集合内`,
         );
+      }
+    }
+  }
+
+  /** RANGE：value 必须是起止对象且至少一端；DATE 值按 ISO 解析校验 */
+  private assertRangeValue(def: FilterKeyDefinition, value: RangeValue): void {
+    if (typeof value !== 'object' || value === null) {
+      throw new Error(`IFC-ERR-VALIDATION: 筛选键 ${def.key} 需起止对象`);
+    }
+    if (value.from === undefined && value.to === undefined) {
+      throw new Error(`IFC-ERR-VALIDATION: 筛选键 ${def.key} 需至少一端起止`);
+    }
+    for (const [k, v] of [
+      ['from', value.from],
+      ['to', value.to],
+    ] as const) {
+      if (v !== undefined && !Number.isFinite(Date.parse(v))) {
+        throw new Error(`IFC-ERR-VALIDATION: 筛选键 ${def.key} 的 ${k} 不是合法时间`);
       }
     }
   }

@@ -117,16 +117,28 @@ describe('PersonalCenterQueryService（C3.2 个人中心入口）', () => {
 });
 
 describe('WorkbenchQueryService（C3.3 工作台入口）', () => {
-  it('固定当前社团：scope 强制 clubId', async () => {
+  const makeWb = () => {
     const { query, calls } = makeQueryMock();
-    const service = new WorkbenchQueryService(query, makeRegistry());
+    const objectAuth = { verify: async () => false } as never;
+    return { service: new WorkbenchQueryService(query, makeRegistry(), objectAuth), calls };
+  };
+
+  it('固定当前社团：scope 强制 clubId', async () => {
+    const { service, calls } = makeWb();
     await service.queryClub('c1', auth(), { limit: 10 });
     assert.deepEqual(calls[0].scope, clubScope);
   });
 
   it('缺少社团标识 → 拒绝', async () => {
-    const { query } = makeQueryMock();
-    const service = new WorkbenchQueryService(query, makeRegistry());
+    const { service } = makeWb();
     await assert.rejects(service.queryClub('', auth(), { limit: 10 }), /缺少当前社团标识/);
+  });
+
+  it('逐对象重验委托授权端口（C6.11 占位 fail-closed）', async () => {
+    const { service } = makeWb();
+    assert.equal(
+      await service.verifyObject('u1', { objectType: 'ACTIVITY', objectId: 'a1' }, 'VIEW'),
+      false, // 领域授权模块接入前一律拒绝
+    );
   });
 });

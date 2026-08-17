@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ProjectionType } from '../contracts';
 import type { ProjectionScope } from '../contracts';
+import { OBJECT_AUTHORIZATION_PORT } from '../contracts/authorization-port';
+import type { AuthorizationAction, ObjectAuthorizationPort } from '../contracts/authorization-port';
 import { QueryEntryRegistry } from './entry-registry';
 import type { QueryAuthContext } from './query-context';
 import { QuerySource } from './query-result';
@@ -42,13 +44,15 @@ export interface WorkbenchQueryParams {
  *
  * 固定当前社团工作空间：作用域强制为 CLUB 且 clubId 必须显式给出；
  * 不跨社团合并管理数据；授权由服务端入口判定（越界作用域拒绝），
- * 打开/筛选/详情和命令在后续调用中重新授权。
+ * 打开/筛选/详情和命令经 verifyObject 逐对象重验（C6.11）。
  */
 @Injectable()
 export class WorkbenchQueryService {
   constructor(
     @Inject(ReadModelQueryService) private readonly query: ReadModelQueryService,
     private readonly entries: QueryEntryRegistry,
+    @Inject(OBJECT_AUTHORIZATION_PORT)
+    private readonly objectAuth: ObjectAuthorizationPort,
   ) {}
 
   async queryClub(
@@ -76,6 +80,20 @@ export class WorkbenchQueryService {
       auth,
       { limit: params.limit, cursor: params.cursor, filter },
     );
+  }
+
+  /**
+   * C6.11 逐对象重验：打开/详情/命令前重新授权。
+   *
+   * 授权判定由组织与授权模块实现（本模块只承接判定结果）；
+   * 占位实现 fail-closed（领域授权模块接入前一律拒绝，绝不越权）。
+   */
+  async verifyObject(
+    principalId: string,
+    object: { objectType: string; objectId: string },
+    action: AuthorizationAction,
+  ): Promise<boolean> {
+    return this.objectAuth.verify(principalId, object, action);
   }
 }
 

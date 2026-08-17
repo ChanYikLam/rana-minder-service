@@ -77,8 +77,13 @@ export class ReadModelQueryService {
     if (opts.limit <= 0 || opts.limit > 100) {
       throw new Error('IFC-ERR-VALIDATION: limit 必须为 1..100');
     }
-    if (opts.filter !== undefined && opts.filter.operator !== 'EQ') {
-      throw new Error('IFC-ERR-VALIDATION: 未知操作符');
+    if (opts.filter !== undefined) {
+      if (opts.filter.operator !== 'EQ' && opts.filter.operator !== 'RANGE') {
+        throw new Error('IFC-ERR-VALIDATION: 未知操作符');
+      }
+      if (opts.filter.operator === 'RANGE' && typeof opts.filter.value !== 'object') {
+        throw new Error('IFC-ERR-VALIDATION: RANGE 需起止对象');
+      }
     }
     if (opts.cursor !== undefined) {
       // 游标必须可解析且绑定当前投影类型/作用域/筛选；损坏、跨入口、跨作用域复用一律拒绝

@@ -38,9 +38,9 @@ export const PUBLIC_DIRECTORY_ENTRY = {
     {
       key: 'deadline',
       valueType: 'enum' as const,
-      // C6.7 截止筛选：今日截止/3日内/7日内（自定义起止待 RANGE 操作符扩展）
+      // C6.7 截止筛选：预设（今日/3日/7日）走 EQ；自定义起止走 RANGE（服务端自然日转换）
       allowedValues: ['TODAY', '3DAYS', '7DAYS'],
-      operators: ['EQ' as const],
+      operators: ['EQ' as const, 'RANGE' as const],
       authoritativeField: 'deadlineAt(server natural day)',
     },
   ],
@@ -59,8 +59,10 @@ export interface DirectoryQueryParams {
   readonly activityType?: string;
   /** 报名状态（找活动筛选；"正在报名"为派生值，OPEN 表示可报名） */
   readonly signupStatus?: 'OPEN' | 'CLOSED';
-  /** 截止筛选（服务端自然日转换） */
+  /** 截止预设（服务端自然日转换；与 deadlineRange 互斥） */
   readonly deadline?: 'TODAY' | '3DAYS' | '7DAYS';
+  /** 自定义截止起止（C6.7；与 deadline 预设互斥，至少一端） */
+  readonly deadlineRange?: { from?: string; to?: string };
   readonly limit: number;
   readonly cursor?: string;
 }
@@ -101,22 +103,27 @@ export class DirectoryQueryService {
 
   private toFilter(
     params: DirectoryQueryParams,
-  ): { key: string; value: string; operator: 'EQ' } | undefined {
-    const chosen = (
-      [
-        ['name', params.name],
-        ['activityType', params.activityType],
-        ['signupStatus', params.signupStatus],
-        ['deadline', params.deadline],
-      ] as const
-    ).filter(([, v]) => v !== undefined && v !== '');
+  ): { key: string; value: string | { from?: string; to?: string }; operator: 'EQ' | 'RANGE' } | undefined {
+    const chosen: { key: string; value: string | { from?: string; to?: string }; operator: 'EQ' | 'RANGE' }[] = [];
+    if (params.name !== undefined && params.name !== '') {
+      chosen.push({ key: 'name', value: params.name, operator: 'EQ' });
+    }
+    if (params.activityType !== undefined && params.activityType !== '') {
+      chosen.push({ key: 'activityType', value: params.activityType, operator: 'EQ' });
+    }
+    if (params.signupStatus !== undefined) {
+      chosen.push({ key: 'signupStatus', value: params.signupStatus, operator: 'EQ' });
+    }
+    if (params.deadline !== undefined) {
+      chosen.push({ key: 'deadline', value: params.deadline, operator: 'EQ' });
+    }
+    if (params.deadlineRange !== undefined) {
+      chosen.push({ key: 'deadline', value: params.deadlineRange, operator: 'RANGE' });
+    }
     if (chosen.length > 1) {
       throw new Error('IFC-ERR-VALIDATION: 同一时刻只能使用一个筛选键');
     }
-    if (chosen.length === 0) {
-      return undefined;
-    }
-    return { key: chosen[0][0], value: chosen[0][1] as string, operator: 'EQ' };
+    return chosen[0];
   }
 }
 

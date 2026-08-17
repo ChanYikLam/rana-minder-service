@@ -55,4 +55,34 @@ describe('DeadlineFilterRule（C6.7 平台时区自然日窗口）', () => {
     // +8 8/18 00:00 属于 8/18 自然日，TODAY（8/17）窗口不包含 → false
     assert.equal(rule.isWithin(deadlineSameDay, DeadlinePreset.TODAY, nowUtc), false);
   });
+
+  it('CUSTOM（RANGE）：纯日期 from 按平台时区自然日 00:00 转换，半开区间', () => {
+    const now = tzDayStart('2026-08-17') + 10 * 3_600_000; // 8/17 10:00 (+8)
+    // 截止 8/18 12:00：∈ [8/18, 8/20) 自然日窗口（from 8/18 00:00 / to 8/20 00:00）
+    const deadline = tzDayStart('2026-08-18') + 12 * 3_600_000;
+    assert.equal(
+      rule.isWithinRange(
+        new Date(deadline).toISOString(),
+        { from: '2026-08-18', to: '2026-08-20' },
+        new Date(now).toISOString(),
+      ),
+      true,
+    );
+    // 截止恰为止日次日的 00:00（>= to，半开）→ false
+    const deadlineAtTo = tzDayStart('2026-08-21'); // +8 8/21 00:00 = 止日 8/20 的次日
+    assert.equal(
+      rule.isWithinRange(
+        new Date(deadlineAtTo).toISOString(),
+        { from: '2026-08-18', to: '2026-08-20' },
+        new Date(now).toISOString(),
+      ),
+      false,
+    );
+    // 仅 to（无 from）：截止早于 to 且未过 → true
+    const early = tzDayStart('2026-08-17') + 20 * 3_600_000;
+    assert.equal(
+      rule.isWithinRange(new Date(early).toISOString(), { to: '2026-08-18' }, new Date(now).toISOString()),
+      true,
+    );
+  });
 });

@@ -1,4 +1,10 @@
 import { Module } from '@nestjs/common';
+import {
+  OBJECT_AUTHORIZATION_PORT,
+  OPS_TELEMETRY_PORT,
+  RejectAllObjectAuthorization,
+  LogOnlyOpsTelemetry,
+} from './contracts';
 import { SearchNormalizer } from './derivation/search-normalizer';
 import { VisibilityDerivationRules } from './derivation/visibility-derivation';
 import { INDEX_INVALIDATION_PORT } from './invalidation/index-invalidation';
@@ -72,6 +78,8 @@ import { RefreshHandler } from './refresh/refresh-handler';
     // 失效与刷新（消费接力）
     CacheInvalidationService,
     { provide: INDEX_INVALIDATION_PORT, useClass: LogOnlyIndexInvalidation },
+    { provide: OPS_TELEMETRY_PORT, useClass: LogOnlyOpsTelemetry },
+    { provide: OBJECT_AUTHORIZATION_PORT, useClass: RejectAllObjectAuthorization },
     RefreshHandler,
     DerivedRebuildHandler,
     { provide: RECOMPUTE_INTENT_SINK, useClass: JobRecomputeIntentSink },

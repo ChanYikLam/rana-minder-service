@@ -56,4 +56,51 @@ export class DeadlineFilterRule {
     const dayStartShifted = Math.floor(shifted / 86_400_000) * 86_400_000;
     return dayStartShifted - PLATFORM_TZ_OFFSET_MINUTES * 60_000;
   }
+
+  /**
+   * 自定义起止（C6.7/RANGE）：deadlineAt ∈ [from, to)（半开）。
+   *
+   * 纯日期输入（YYYY-MM-DD）按平台时区自然日转换：from=当日 00:00、to=次日 00:00；
+   * 带时间输入按原值参与区间。截止必须严格晚于服务端时刻。
+   */
+  isWithinRange(
+    deadlineAt: string,
+    range: { from?: string; to?: string },
+    now: string,
+  ): boolean {
+    const deadline = Date.parse(deadlineAt);
+    const n = Date.parse(now);
+    if (!Number.isFinite(deadline) || !Number.isFinite(n)) {
+      return false;
+    }
+    if (deadline <= n) {
+      return false; // 已过
+    }
+    if (range.from !== undefined) {
+      const from = this.normalizeBound(range.from, 'start');
+      if (deadline < from) {
+        return false;
+      }
+    }
+    if (range.to !== undefined) {
+      const to = this.normalizeBound(range.to, 'end');
+      if (deadline >= to) {
+        return false; // 半开
+      }
+    }
+    return true;
+  }
+
+  private normalizeBound(v: string, end: 'start' | 'end'): number {
+    const ms = Date.parse(v);
+    if (!Number.isFinite(ms)) {
+      return Number.NaN;
+    }
+    // 纯日期 → 平台时区自然日边界（from=00:00 / to=次日 00:00）
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      const dayStart = this.naturalDayStart(ms);
+      return end === 'start' ? dayStart : dayStart + 86_400_000;
+    }
+    return ms;
+  }
 }

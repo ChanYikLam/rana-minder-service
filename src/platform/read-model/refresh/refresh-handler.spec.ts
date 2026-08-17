@@ -40,6 +40,7 @@ const makeService = (
 ) => {
   const store = new InMemoryProjectionStore();
   const rebuildCalls: number[] = [];
+  const opsReports: string[] = [];
   const registry = {
     get: () => ({
       projectionType: TYPE,
@@ -51,7 +52,8 @@ const makeService = (
     }),
     list: () => [{ projectionType: TYPE }],
   } as never;
-  return { service: new RefreshHandler(registry, store), store, rebuildCalls };
+  const ops = { report: async (e: { event: string }) => void opsReports.push(e.event) } as never;
+  return { service: new RefreshHandler(registry, store, ops), store, rebuildCalls, opsReports };
 };
 
 describe('RefreshHandler（C5.4 水位/失败不改源）', () => {
@@ -97,5 +99,13 @@ describe('RefreshHandler（C5.4 水位/失败不改源）', () => {
     });
     await assert.rejects(service.consume(intent(3)), /authority unavailable/);
     assert.equal(await store.load(TYPE, scope), null);
+  });
+
+  it('重建失败经 ops 遥测上报技术证据（C5.3），再上抛', async () => {
+    const { service, opsReports } = makeService(async () => {
+      throw new Error('authority unavailable');
+    });
+    await assert.rejects(service.consume(intent(3)), /authority unavailable/);
+    assert.deepEqual(opsReports, ['REBUILD_FAILED']);
   });
 });

@@ -11,17 +11,28 @@ export interface QueryOptions {
   readonly limit: number;
   /** 稳定游标（绑定作用域/筛选/字段；null=第一页） */
   readonly cursor?: string;
-  /** 筛选（单键值；首版不允许任意 JSONPath/表达式） */
+  /** 筛选（单键；不允许任意 JSONPath/表达式） */
   readonly filter?: FilterClause;
   /** 排序（首版仅稳定权威默认；展示排序见具体投影） */
   readonly sort?: 'STABLE_DEFAULT';
 }
 
+/** 筛选操作符（未登记操作符拒绝；多值/任意表达式后续按目录扩展） */
+export type FilterOperator = 'EQ' | 'RANGE';
+
+/** RANGE 操作符的值：起止（至少一个；服务端按平台时区自然日转换） */
+export interface RangeValue {
+  /** 起始（含） */
+  readonly from?: string;
+  /** 结束（半开：不含） */
+  readonly to?: string;
+}
+
 export interface FilterClause {
   /** 已登记的筛选键（未登记键拒绝，不静默忽略） */
   readonly key: string;
-  /** 值（类型由入口目录登记） */
-  readonly value: string;
-  /** 操作符（首版仅 EQ；范围/多值后续按目录扩展） */
-  readonly operator: 'EQ';
+  /** 值（EQ：单值字符串；RANGE：起止对象） */
+  readonly value: string | RangeValue;
+  /** 操作符 */
+  readonly operator: FilterOperator;
 }
