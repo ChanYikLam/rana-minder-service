@@ -145,4 +145,21 @@ describe('ReadModelQueryService（C3.5 授权/游标/负向）', () => {
     assert.ok(result.nextCursor);
     assert.equal(result.total, 5);
   });
+
+  it('游标跨入口（跨投影类型）复用 → 拒绝（C3.4 游标绑投影类型）', async () => {
+    const { service } = makeService();
+    const scope = clubScope('c1');
+    const first = await service.query(TYPE, scope, auth(), opts({ limit: 1 }));
+    assert.ok(first.nextCursor);
+    // 以另一投影类型（入口）复用同一游标 → 拒绝（不静默换结果集）
+    await assert.rejects(
+      service.query(
+        'PERSONAL_CENTER' as never,
+        scope,
+        auth(),
+        opts({ limit: 1, cursor: first.nextCursor ?? undefined }),
+      ),
+      /游标与入口不匹配/,
+    );
+  });
 });

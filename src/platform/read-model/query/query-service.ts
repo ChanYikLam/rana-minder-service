@@ -33,14 +33,14 @@ export class ReadModelQueryService {
     opts: QueryOptions,
   ): Promise<ReadModelQueryResult<TItem>> {
     this.assertGranted(projectionType, scope, auth);
-    this.assertOptions(opts, scope);
+    this.assertOptions(opts, scope, projectionType);
 
     const builder = this.registry.get(projectionType);
 
     // 1) 命中有效投影 → 直接返回（字段投影由调用方按 visitor 执行）
     const record = await this.store.load<TItem>(projectionType, scope);
     if (record !== null && record.status === 'ACTIVE') {
-      return this.paginate(record.data, opts, scope);
+      return this.paginate(record.data, opts, scope, projectionType);
     }
 
     // 2) 投影失效/缺失 → 回源同步重建（IFC-QRY-009.8 安全回源）
@@ -53,7 +53,7 @@ export class ReadModelQueryService {
     }
     await this.store.save(rebuilt);
     return {
-      ...this.paginate(rebuilt.data as TItem, opts, scope),
+      ...this.paginate(rebuilt.data as TItem, opts, scope, projectionType),
       watermark: rebuilt.watermark,
       source: QuerySource.REFRESHED,
     };
@@ -73,7 +73,7 @@ export class ReadModelQueryService {
     }
   }
 
-  private assertOptions(opts: QueryOptions, scope: ProjectionScope): void {
+  private assertOptions(opts: QueryOptions, scope: ProjectionScope, projectionType: ProjectionType): void {
     if (opts.limit <= 0 || opts.limit > 100) {
       throw new Error('IFC-ERR-VALIDATION: limit 必须为 1..100');
     }
@@ -81,8 +81,8 @@ export class ReadModelQueryService {
       throw new Error('IFC-ERR-VALIDATION: 未知操作符');
     }
     if (opts.cursor !== undefined) {
-      // 游标必须可解析且绑定当前作用域/筛选；损坏、跨作用域或跨入口复用一律拒绝
-      this.decodeCursor(opts.cursor, opts, scope);
+      // 游标必须可解析且绑定当前投影类型/作用域/筛选；损坏、跨入口、跨作用域复用一律拒绝
+      this.decodeCursor(opts.cursor, opts, scope, projectionType);
     }
   }
 
@@ -90,12 +90,15 @@ export class ReadModelQueryService {
     data: unknown,
     opts: QueryOptions,
     scope: ProjectionScope,
+    projectionType: ProjectionType,
   ): ReadModelQueryResult<TItem> {
     const items = Array.isArray(data) ? (data as TItem[]) : [];
     const total = items.length;
     const page = items.slice(0, opts.limit);
     const nextCursor =
-      items.length > opts.limit ? this.encodeCursor(opts, opts.limit, scope) : null;
+      items.length > opts.limit
+        ? this.encodeCursor(opts, opts.limit, scope, projectionType)
+        : null;
     return {
       items: page,
       nextCursor,
@@ -124,27 +127,48 @@ export class ReadModelQueryService {
     );
   }
 
-  private encodeCursor(opts: QueryOptions, offset: number, scope: ProjectionScope): string {
+  private encodeCursor(
+    opts: QueryOptions,
+    offset: number,
+    scope: ProjectionScope,
+    projectionType: ProjectionType,
+  ): string {
     const payload = JSON.stringify({
-      v: 'rm-qry-1',
+      v: 'rm-qry-2',
       offset,
       filter: opts.filter ?? null,
       scope: this.canonicalScope(scope),
+      projectionType,
     });
     return Buffer.from(payload, 'utf8').toString('base64url');
   }
 
-  private decodeCursor(cursor: string, opts: QueryOptions, scope: ProjectionScope): void {
-    let parsed: { v: string; offset: number; filter: unknown; scope?: unknown };
+  private decodeCursor(
+    cursor: string,
+    opts: QueryOptions,
+    scope: ProjectionScope,
+    projectionType: ProjectionType,
+  ): void {
+    let parsed: {
+      v: string;
+      offset: number;
+      filter: unknown;
+      scope?: unknown;
+      projectionType?: unknown;
+    };
     try {
       parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
     } catch {
       throw new Error('IFC-ERR-VALIDATION: 损坏的游标');
     }
-    if (parsed.v !== 'rm-qry-1' || !Number.isInteger(parsed.offset) || parsed.offset < 0) {
+    if (parsed.v !== 'rm-qry-2' || !Number.isInteger(parsed.offset) || parsed.offset < 0) {
       throw new Error('IFC-ERR-VALIDATION: 损坏的游标');
     }
-    // 游标绑定作用域：跨作用域/跨入口复用的旧游标一律拒绝（不静默换结果集）
+    // 游标绑定投影类型：跨入口复用一律拒绝（不静默换结果集）
+    if (parsed.projectionType !== projectionType) {
+      throw new Error('IFC-ERR-VALIDATION: 游标与入口不匹配');
+    }
+    // 游标绑定作用域：跨作用域复用的旧游标一律拒绝（不静默换结果集）
     if (parsed.scope === undefined || !this.sameScope(parsed.scope as ProjectionScope, scope)) {
       throw new Error('IFC-ERR-VALIDATION: 游标与作用域不匹配');
     }

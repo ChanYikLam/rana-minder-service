@@ -11,7 +11,14 @@ import { ProjectionRegistry } from './projection/projection-registry';
 import { PROJECTION_STORE } from './projection/projection-store';
 import { PublicDirectoryProjection } from './projection/public-directory.projection';
 import { SourcePortRegistry } from './projection/source-port-registry';
+import { CLUB_WORKBENCH_ENTRY } from './query/workbench-query';
+import { DirectoryQueryService } from './query/directory-query';
+import { PERSONAL_CENTER_ENTRY } from './query/me-query';
+import { PersonalCenterQueryService } from './query/me-query';
+import { PUBLIC_DIRECTORY_ENTRY } from './query/directory-query';
+import { QueryEntryRegistry } from './query/entry-registry';
 import { ReadModelQueryService } from './query/query-service';
+import { WorkbenchQueryService } from './query/workbench-query';
 import { DerivedRebuildHandler } from './refresh/derived-rebuild-handler';
 import { JobRecomputeIntentSink } from './refresh/job-recompute-intent-sink';
 import { RECOMPUTE_INTENT_SINK } from './refresh/recompute-intent-sink';
@@ -47,8 +54,21 @@ import { RefreshHandler } from './refresh/refresh-handler';
     PublicDirectoryProjection,
     PersonalCenterProjection,
     ClubWorkbenchProjection,
-    // 查询入口
+    // 查询入口（IFC-QRY-008 登记目录 + 三个独立入口）
     ReadModelQueryService,
+    {
+      provide: QueryEntryRegistry,
+      useFactory: () => {
+        const registry = new QueryEntryRegistry();
+        registry.register(PUBLIC_DIRECTORY_ENTRY);
+        registry.register(PERSONAL_CENTER_ENTRY);
+        registry.register(CLUB_WORKBENCH_ENTRY);
+        return registry;
+      },
+    },
+    DirectoryQueryService,
+    PersonalCenterQueryService,
+    WorkbenchQueryService,
     // 失效与刷新（消费接力）
     CacheInvalidationService,
     { provide: INDEX_INVALIDATION_PORT, useClass: LogOnlyIndexInvalidation },
@@ -60,6 +80,10 @@ import { RefreshHandler } from './refresh/refresh-handler';
     ProjectionRegistry,
     SourcePortRegistry,
     ReadModelQueryService,
+    QueryEntryRegistry,
+    DirectoryQueryService,
+    PersonalCenterQueryService,
+    WorkbenchQueryService,
     CacheInvalidationService,
     RefreshHandler,
     DerivedRebuildHandler,
