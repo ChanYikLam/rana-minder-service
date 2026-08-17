@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { CommonModule } from './common/common.module';
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
-import { ReadModelModule } from './modules/read-model/module';
+import { ReadModelModule } from './platform/read-model/module';
 
 /**
  * 根装配（对应启动入口文档 §1 注册顺序）。
