@@ -6,9 +6,12 @@
  * - logging：sanitizer / app-logger / security-log / retention-executor
  * - tracing：trace-id-factory / span-link / correlation / trace-context adapter
  * - audit-link：audit-boundary assert
+ * - status-page：stale-unknown rule + 5 个端口（app/db/task/dep/authorizer）+ 状态汇总
+ *   查询用例 + Controller（仅超管、只读、过期即未知；DB/任务/适配器端口当前为
+ *   "未连接"桩实现，返回 'unknown' 以满足 ADR-011 §2.1 第 2 条）
  *
  * 后续接入顺序（不在本 MR 范围，按 PR #32 §2.2 B 子任务次序）：
- *   status-page/ → health-summary/ → backup-report/
+ *   health-summary/ → backup-report/
  *   → 基础设施 & 应用层组装（LogWriterAdapter / StatusSummaryRepository /
  *     StatusSummaryQueryService / LogQueryUseCase）→ 测试。
  *
@@ -80,6 +83,26 @@ import {
 
 import { AUDIT_BOUNDARY_ASSERT } from './audit-link/tokens';
 import { DefaultAuditBoundaryAssert } from './audit-link/audit-boundary';
+
+import {
+  STALE_UNKNOWN_RULE,
+  APP_STATUS_PORT,
+  DB_STATUS_PORT,
+  TASK_SUMMARY_PORT,
+  DEP_LATEST_PORT,
+  STATUS_PAGE_AUTHORIZER,
+  STATUS_SUMMARY_QUERY,
+} from './status-page/tokens';
+import { DefaultStaleUnknownRule } from './status-page/stale-unknown';
+import { ProcessAppStatusPort } from './status-page/app-status';
+import { NotWiredDbStatusPort } from './status-page/db-status';
+import { NotWiredTaskSummaryPort } from './status-page/task-summary';
+import { NotWiredDepLatestPort } from './status-page/dep-latest';
+import {
+  RejectAllStatusPageAuthorizer,
+} from './status-page/status-page-authorizer';
+import { DefaultStatusSummaryQueryService } from './status-page/status-summary-query.service';
+import { StatusPageController } from './status-page/page-controller';
 
 // ----- domain/services providers -----
 
@@ -167,8 +190,55 @@ const AUDIT_BOUNDARY_ASSERT_PROVIDER: Provider = {
   useFactory: () => new DefaultAuditBoundaryAssert(),
 };
 
+// ----- status-page providers -----
+
+const STALE_UNKNOWN_RULE_PROVIDER: Provider = {
+  provide: STALE_UNKNOWN_RULE,
+  useFactory: () => new DefaultStaleUnknownRule(),
+};
+
+const APP_STATUS_PORT_PROVIDER: Provider = {
+  provide: APP_STATUS_PORT,
+  // 首版 version 来源兜底；1.5 配置骨架完善后由 RanaMinderConfig 注入真实 version
+  // + 启动时间戳。
+  useFactory: () =>
+    new ProcessAppStatusPort(
+      process.env['npm_package_version'] ?? '0.0.0',
+      new Date(),
+    ),
+};
+
+const DB_STATUS_PORT_PROVIDER: Provider = {
+  provide: DB_STATUS_PORT,
+  useFactory: () => new NotWiredDbStatusPort(),
+};
+
+const TASK_SUMMARY_PORT_PROVIDER: Provider = {
+  provide: TASK_SUMMARY_PORT,
+  useFactory: () => new NotWiredTaskSummaryPort(),
+};
+
+const DEP_LATEST_PORT_PROVIDER: Provider = {
+  provide: DEP_LATEST_PORT,
+  useFactory: () => new NotWiredDepLatestPort(),
+};
+
+const STATUS_PAGE_AUTHORIZER_PROVIDER: Provider = {
+  provide: STATUS_PAGE_AUTHORIZER,
+  // fail-closed：身份模块接入前一律拒绝；接入后由 useClass 替换为身份判定实现。
+  useFactory: () => new RejectAllStatusPageAuthorizer(),
+};
+
+const STATUS_SUMMARY_QUERY_PROVIDER: Provider = {
+  provide: STATUS_SUMMARY_QUERY,
+  useFactory: (app, db, task, dep) =>
+    new DefaultStatusSummaryQueryService(app, db, task, dep),
+  inject: [APP_STATUS_PORT, DB_STATUS_PORT, TASK_SUMMARY_PORT, DEP_LATEST_PORT],
+};
+
 @Module({
   imports: [],
+  controllers: [StatusPageController],
   providers: [
     REDACTION_RULES_PROVIDER,
     RETENTION_RULES_PROVIDER,
@@ -181,6 +251,13 @@ const AUDIT_BOUNDARY_ASSERT_PROVIDER: Provider = {
     CORRELATION_PROVIDER,
     TRACE_CONTEXT_PROVIDER,
     AUDIT_BOUNDARY_ASSERT_PROVIDER,
+    STALE_UNKNOWN_RULE_PROVIDER,
+    APP_STATUS_PORT_PROVIDER,
+    DB_STATUS_PORT_PROVIDER,
+    TASK_SUMMARY_PORT_PROVIDER,
+    DEP_LATEST_PORT_PROVIDER,
+    STATUS_PAGE_AUTHORIZER_PROVIDER,
+    STATUS_SUMMARY_QUERY_PROVIDER,
   ],
   exports: [
     REDACTION_RULES,
@@ -194,6 +271,13 @@ const AUDIT_BOUNDARY_ASSERT_PROVIDER: Provider = {
     CORRELATION,
     TRACE_CONTEXT,
     AUDIT_BOUNDARY_ASSERT,
+    STALE_UNKNOWN_RULE,
+    APP_STATUS_PORT,
+    DB_STATUS_PORT,
+    TASK_SUMMARY_PORT,
+    DEP_LATEST_PORT,
+    STATUS_PAGE_AUTHORIZER,
+    STATUS_SUMMARY_QUERY,
   ],
 })
 export class ObservabilityModule {}
