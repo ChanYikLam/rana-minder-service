@@ -18,14 +18,8 @@
 
 import { Controller, Get, HttpCode, Inject } from '@nestjs/common';
 
-import {
-  STATUS_PAGE_AUTHORIZER,
-  STATUS_SUMMARY_QUERY,
-} from './tokens';
-import {
-  type StatusPageActor,
-  type StatusPageAuthorizer,
-} from './status-page-authorizer';
+import { STATUS_PAGE_AUTHORIZER, STATUS_SUMMARY_QUERY } from './tokens';
+import { type StatusPageActor, type StatusPageAuthorizer } from './status-page-authorizer';
 import {
   type StatusSummaryQueryService,
   type StatusSummaryView,

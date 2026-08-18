@@ -24,7 +24,8 @@
 
 import { type StatusSummaryQueryService } from '../status-page/status-summary-query.service';
 
-export type SubsystemName = 'app' | 'db' | 'task' | 'casdoor' | 'mail' | 'file-check' | 'notify' | 'backup';
+export type SubsystemName =
+  'app' | 'db' | 'task' | 'casdoor' | 'mail' | 'file-check' | 'notify' | 'backup';
 
 export type HealthVerdict = 'ok' | 'degraded' | 'unknown';
 
@@ -52,8 +53,16 @@ export class DefaultHealthSummaryService implements HealthSummaryService {
 
     const subsystems: SubsystemHealth[] = [
       { name: 'app', state: 'fresh' }, // 应用进程本身：snapshot 必有 → fresh
-      { name: 'db', state: view.db.state, ...(view.db.ageMs !== undefined ? { ageMs: view.db.ageMs } : {}) },
-      { name: 'task', state: view.task.state, ...(view.task.ageMs !== undefined ? { ageMs: view.task.ageMs } : {}) },
+      {
+        name: 'db',
+        state: view.db.state,
+        ...(view.db.ageMs !== undefined ? { ageMs: view.db.ageMs } : {}),
+      },
+      {
+        name: 'task',
+        state: view.task.state,
+        ...(view.task.ageMs !== undefined ? { ageMs: view.task.ageMs } : {}),
+      },
       ...(['casdoor', 'mail', 'file-check', 'notify', 'backup'] as const).map((dep) => {
         const d = view.deps[dep];
         return { name: dep, state: d.state, ...(d.ageMs !== undefined ? { ageMs: d.ageMs } : {}) };

@@ -24,7 +24,11 @@ export interface SpanLink {
   readonly startedAt?: Date;
 }
 
-function assertValid(parentTraceId: string | undefined, childTraceId: string, kind: SpanKind): SpanLink {
+function assertValid(
+  parentTraceId: string | undefined,
+  childTraceId: string,
+  kind: SpanKind,
+): SpanLink {
   if (!isTraceId(childTraceId)) {
     throw new TypeError(`Invalid child trace id for ${kind} span: ${String(childTraceId)}`);
   }

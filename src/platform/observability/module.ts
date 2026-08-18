@@ -34,11 +34,7 @@
 
 import { Module, type Provider } from '@nestjs/common';
 
-import {
-  REDACTION_RULES,
-  RETENTION_RULES,
-  TRACE_ID_GENERATOR,
-} from './domain/services/tokens';
+import { REDACTION_RULES, RETENTION_RULES, TRACE_ID_GENERATOR } from './domain/services/tokens';
 import {
   FORBIDDEN_KEY_PATTERNS,
   SENSITIVE_KEY_PATTERNS,
@@ -61,18 +57,22 @@ import {
   deriveTrace,
 } from './domain/services/trace-id.generator';
 
-import { LOG_SANITIZER, APP_LOGGER, SECURITY_LOGGER, RETENTION_EXECUTOR, LOG_STORAGE, LOG_WRITER, LOG_QUERY } from './logging/tokens';
+import {
+  LOG_SANITIZER,
+  APP_LOGGER,
+  SECURITY_LOGGER,
+  RETENTION_EXECUTOR,
+  LOG_STORAGE,
+  LOG_WRITER,
+  LOG_QUERY,
+} from './logging/tokens';
 import { DefaultLogSanitizer } from './logging/sanitizer';
 import { NestAppLogger } from './logging/app-logger';
 import { NestSecurityLogger } from './logging/security-log';
 import { DefaultRetentionExecutor } from './logging/retention';
 import { DefaultLogQueryUseCase } from './logging/log-query.use-case';
 
-import {
-  SPAN_LINK,
-  CORRELATION,
-  TRACE_CONTEXT,
-} from './tracing/tokens';
+import { SPAN_LINK, CORRELATION, TRACE_CONTEXT } from './tracing/tokens';
 import { DefaultSpanLinkFactory } from './tracing/span-link';
 import { DefaultCorrelation } from './tracing/correlation';
 import {
@@ -99,19 +99,14 @@ import { ProcessAppStatusPort } from './status-page/app-status';
 import { NotWiredDbStatusPort } from './status-page/db-status';
 import { NotWiredTaskSummaryPort } from './status-page/task-summary';
 import { NotWiredDepLatestPort } from './status-page/dep-latest';
-import {
-  RejectAllStatusPageAuthorizer,
-} from './status-page/status-page-authorizer';
+import { RejectAllStatusPageAuthorizer } from './status-page/status-page-authorizer';
 import { DefaultStatusSummaryQueryService } from './status-page/status-summary-query.service';
 import { StatusPageController } from './status-page/page-controller';
 
 import { HEALTH_SUMMARY_SERVICE } from './health-summary/tokens';
 import { DefaultHealthSummaryService } from './health-summary/health-summary';
 
-import {
-  BACKUP_REPORT_PORT,
-  BACKUP_REPORT_SERVICE,
-} from './backup-report/tokens';
+import { BACKUP_REPORT_PORT, BACKUP_REPORT_SERVICE } from './backup-report/tokens';
 import {
   DefaultBackupReportService,
   NotWiredBackupReportPort,
@@ -233,10 +228,7 @@ const APP_STATUS_PORT_PROVIDER: Provider = {
   // 首版 version 来源兜底；1.5 配置骨架完善后由 RanaMinderConfig 注入真实 version
   // + 启动时间戳。
   useFactory: () =>
-    new ProcessAppStatusPort(
-      process.env['npm_package_version'] ?? '0.0.0',
-      new Date(),
-    ),
+    new ProcessAppStatusPort(process.env['npm_package_version'] ?? '0.0.0', new Date()),
 };
 
 const DB_STATUS_PORT_PROVIDER: Provider = {
@@ -262,8 +254,7 @@ const STATUS_PAGE_AUTHORIZER_PROVIDER: Provider = {
 
 const STATUS_SUMMARY_QUERY_PROVIDER: Provider = {
   provide: STATUS_SUMMARY_QUERY,
-  useFactory: (app, db, task, dep) =>
-    new DefaultStatusSummaryQueryService(app, db, task, dep),
+  useFactory: (app, db, task, dep) => new DefaultStatusSummaryQueryService(app, db, task, dep),
   inject: [APP_STATUS_PORT, DB_STATUS_PORT, TASK_SUMMARY_PORT, DEP_LATEST_PORT],
 };
 

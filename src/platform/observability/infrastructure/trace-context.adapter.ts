@@ -16,10 +16,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import {
-  generateTraceId,
-  isTraceId,
-} from '../domain/services/trace-id.generator';
+import { generateTraceId, isTraceId } from '../domain/services/trace-id.generator';
 
 export interface TraceContext {
   readonly traceId: string;
@@ -44,10 +41,7 @@ class AsyncLocalStorageTraceContext implements TraceContextAdapter {
     if (!isTraceId(parent.traceId)) {
       throw new TypeError(`Invalid parent trace id: ${String(parent.traceId)}`);
     }
-    return this.als.run(
-      { traceId: generateTraceId(), parentTraceId: parent.traceId },
-      fn,
-    );
+    return this.als.run({ traceId: generateTraceId(), parentTraceId: parent.traceId }, fn);
   }
 
   runWithNewRoot<T>(fn: () => T): T {

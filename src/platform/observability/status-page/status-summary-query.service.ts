@@ -12,7 +12,11 @@
  * 时间口径：now 由调用方传入，便于测试固定时钟。
  */
 
-import { DefaultStaleUnknownRule, type StaleUnknownRule, type StatusSourceState } from './stale-unknown';
+import {
+  DefaultStaleUnknownRule,
+  type StaleUnknownRule,
+  type StatusSourceState,
+} from './stale-unknown';
 import { type AppStatusPort, type AppStatusSnapshot } from './app-status';
 import { type DbStatusPort, type DbPingResult } from './db-status';
 import { type TaskSummaryPort, type TaskSummarySnapshot } from './task-summary';
@@ -57,10 +61,7 @@ export class DefaultStatusSummaryQueryService implements StatusSummaryQueryServi
     private readonly rule: StaleUnknownRule = new DefaultStaleUnknownRule(),
   ) {}
 
-  async execute(
-    now: Date,
-    options: StatusSummaryQueryOptions = {},
-  ): Promise<StatusSummaryView> {
+  async execute(now: Date, options: StatusSummaryQueryOptions = {}): Promise<StatusSummaryView> {
     const dbStale = options.staleMs?.db ?? DEFAULT_DB_STALE_MS;
     const depStale = options.staleMs?.dep ?? DEFAULT_DEP_STALE_MS;
     const taskStale = options.staleMs?.task ?? DEFAULT_TASK_STALE_MS;

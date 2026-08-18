@@ -29,11 +29,7 @@ export interface LogStoragePort {
 }
 
 export class NotWiredLogStoragePort implements LogStoragePort {
-  async write(
-    _tier: LogTier,
-    _rawRecord: LogRecord,
-    _sanitizedRecord: LogRecord,
-  ): Promise<void> {
+  async write(_tier: LogTier, _rawRecord: LogRecord, _sanitizedRecord: LogRecord): Promise<void> {
     // 未连接真实存储：no-op；LogWriterAdapter 仍会镜像到 NestJS Logger（stdout）。
   }
 
