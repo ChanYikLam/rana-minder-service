@@ -9,6 +9,9 @@
  * - status-page：stale-unknown rule + 5 个端口（app/db/task/dep/authorizer）+ 状态汇总
  *   查询用例 + Controller（仅超管、只读、过期即未知；DB/任务/适配器端口当前为
  *   "未连接"桩实现，返回 'unknown' 以满足 ADR-011 §2.1 第 2 条）
+ * - health-summary：基于 StatusSummaryQueryService 的对内子系统健康汇总判定
+ *   （不是机器健康端点；不对外暴露 HTTP）
+ * - backup-report：备份/恢复最近事件只读视图（不替代备份系统、不成为完成证明）
  *
  * 后续接入顺序（不在本 MR 范围，按 PR #32 §2.2 B 子任务次序）：
  *   health-summary/ → backup-report/
@@ -103,6 +106,18 @@ import {
 } from './status-page/status-page-authorizer';
 import { DefaultStatusSummaryQueryService } from './status-page/status-summary-query.service';
 import { StatusPageController } from './status-page/page-controller';
+
+import { HEALTH_SUMMARY_SERVICE } from './health-summary/tokens';
+import { DefaultHealthSummaryService } from './health-summary/health-summary';
+
+import {
+  BACKUP_REPORT_PORT,
+  BACKUP_REPORT_SERVICE,
+} from './backup-report/tokens';
+import {
+  DefaultBackupReportService,
+  NotWiredBackupReportPort,
+} from './backup-report/backup-report';
 
 // ----- domain/services providers -----
 
@@ -236,6 +251,27 @@ const STATUS_SUMMARY_QUERY_PROVIDER: Provider = {
   inject: [APP_STATUS_PORT, DB_STATUS_PORT, TASK_SUMMARY_PORT, DEP_LATEST_PORT],
 };
 
+// ----- health-summary providers -----
+
+const HEALTH_SUMMARY_SERVICE_PROVIDER: Provider = {
+  provide: HEALTH_SUMMARY_SERVICE,
+  useFactory: (query) => new DefaultHealthSummaryService(query),
+  inject: [STATUS_SUMMARY_QUERY],
+};
+
+// ----- backup-report providers -----
+
+const BACKUP_REPORT_PORT_PROVIDER: Provider = {
+  provide: BACKUP_REPORT_PORT,
+  useFactory: () => new NotWiredBackupReportPort(),
+};
+
+const BACKUP_REPORT_SERVICE_PROVIDER: Provider = {
+  provide: BACKUP_REPORT_SERVICE,
+  useFactory: (port) => new DefaultBackupReportService(port),
+  inject: [BACKUP_REPORT_PORT],
+};
+
 @Module({
   imports: [],
   controllers: [StatusPageController],
@@ -258,6 +294,9 @@ const STATUS_SUMMARY_QUERY_PROVIDER: Provider = {
     DEP_LATEST_PORT_PROVIDER,
     STATUS_PAGE_AUTHORIZER_PROVIDER,
     STATUS_SUMMARY_QUERY_PROVIDER,
+    HEALTH_SUMMARY_SERVICE_PROVIDER,
+    BACKUP_REPORT_PORT_PROVIDER,
+    BACKUP_REPORT_SERVICE_PROVIDER,
   ],
   exports: [
     REDACTION_RULES,
@@ -278,6 +317,9 @@ const STATUS_SUMMARY_QUERY_PROVIDER: Provider = {
     DEP_LATEST_PORT,
     STATUS_PAGE_AUTHORIZER,
     STATUS_SUMMARY_QUERY,
+    HEALTH_SUMMARY_SERVICE,
+    BACKUP_REPORT_PORT,
+    BACKUP_REPORT_SERVICE,
   ],
 })
 export class ObservabilityModule {}
