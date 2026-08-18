@@ -1,14 +1,13 @@
 /**
  * 脱敏规则——纯领域规则。
  *
- * 覆盖：ADR-011 §2.1、ops/README §6.1、AUD-013、AUD-014。
+ * 覆盖：ADR-011 §2.1、observability/README §6.1、AUD-013、AUD-014。
  *
  * 不做：I/O、HTTP、日志框架适配、配置加载——这些由 infrastructure/LogWriterAdapter
  * 承接。
  *
- * 路径迁移：本文件位于 src/modules/ops/domain/services/，与 ops/README.md §5 分层
- * 落位一致；如 PR #32（平台支撑模块按 src/platform/* 重组）落地，需整体迁移至
- * src/platform/observability/domain/services/。
+ * 位置：src/platform/observability/domain/services/（PR #32 §2.2 B；2026-08-18 由
+ * src/modules/ops/domain/services/ 整体迁移）。
  */
 
 export type RedactionDecision =

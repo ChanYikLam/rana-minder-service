@@ -4,8 +4,8 @@
  * 本文件仅作为 domain 层的导出入口；不引入 NestJS DI、不做 I/O、不读环境变量。
  * 后续由 infrastructure/LogWriterAdapter、TraceContextAdapter 消费本规则。
  *
- * 路径迁移：本目录位于 src/modules/ops/domain/services/，与 ops/README.md §5
- * 一致；如 PR #32 落地，需整体迁移至 src/platform/observability/domain/services/。
+ * 路径：src/platform/observability/domain/services/（PR #32 §2.2 B；2026-08-18 由
+ * src/modules/ops/domain/services/ 整体迁移）。
  */
 
 export {
