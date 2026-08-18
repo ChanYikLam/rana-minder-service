@@ -61,16 +61,12 @@ import {
   deriveTrace,
 } from './domain/services/trace-id.generator';
 
-import {
-  LOG_SANITIZER,
-  APP_LOGGER,
-  SECURITY_LOGGER,
-  RETENTION_EXECUTOR,
-} from './logging/tokens';
+import { LOG_SANITIZER, APP_LOGGER, SECURITY_LOGGER, RETENTION_EXECUTOR, LOG_STORAGE, LOG_WRITER, LOG_QUERY } from './logging/tokens';
 import { DefaultLogSanitizer } from './logging/sanitizer';
 import { NestAppLogger } from './logging/app-logger';
 import { NestSecurityLogger } from './logging/security-log';
 import { DefaultRetentionExecutor } from './logging/retention';
+import { DefaultLogQueryUseCase } from './logging/log-query.use-case';
 
 import {
   SPAN_LINK,
@@ -83,6 +79,8 @@ import {
   createTraceContextAdapter,
   type TraceContextAdapter,
 } from './infrastructure/trace-context.adapter';
+import { NotWiredLogStoragePort } from './infrastructure/log-storage.port';
+import { DefaultLogWriterAdapter } from './infrastructure/log-writer.adapter';
 
 import { AUDIT_BOUNDARY_ASSERT } from './audit-link/tokens';
 import { DefaultAuditBoundaryAssert } from './audit-link/audit-boundary';
@@ -177,6 +175,24 @@ const SECURITY_LOGGER_PROVIDER: Provider = {
 const RETENTION_EXECUTOR_PROVIDER: Provider = {
   provide: RETENTION_EXECUTOR,
   useFactory: () => new DefaultRetentionExecutor(),
+};
+
+const LOG_STORAGE_PROVIDER: Provider = {
+  provide: LOG_STORAGE,
+  useFactory: () => new NotWiredLogStoragePort(),
+};
+
+const LOG_WRITER_PROVIDER: Provider = {
+  provide: LOG_WRITER,
+  useFactory: (sanitizer, auditBoundary, appLogger, securityLogger, storage) =>
+    new DefaultLogWriterAdapter(sanitizer, auditBoundary, appLogger, securityLogger, storage),
+  inject: [LOG_SANITIZER, AUDIT_BOUNDARY_ASSERT, APP_LOGGER, SECURITY_LOGGER, LOG_STORAGE],
+};
+
+const LOG_QUERY_PROVIDER: Provider = {
+  provide: LOG_QUERY,
+  useFactory: (storage, sanitizer) => new DefaultLogQueryUseCase(storage, sanitizer),
+  inject: [LOG_STORAGE, LOG_SANITIZER],
 };
 
 // ----- tracing providers -----
@@ -283,6 +299,9 @@ const BACKUP_REPORT_SERVICE_PROVIDER: Provider = {
     APP_LOGGER_PROVIDER,
     SECURITY_LOGGER_PROVIDER,
     RETENTION_EXECUTOR_PROVIDER,
+    LOG_STORAGE_PROVIDER,
+    LOG_WRITER_PROVIDER,
+    LOG_QUERY_PROVIDER,
     SPAN_LINK_PROVIDER,
     CORRELATION_PROVIDER,
     TRACE_CONTEXT_PROVIDER,
@@ -306,6 +325,9 @@ const BACKUP_REPORT_SERVICE_PROVIDER: Provider = {
     APP_LOGGER,
     SECURITY_LOGGER,
     RETENTION_EXECUTOR,
+    LOG_STORAGE,
+    LOG_WRITER,
+    LOG_QUERY,
     SPAN_LINK,
     CORRELATION,
     TRACE_CONTEXT,
