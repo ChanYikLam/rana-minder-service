@@ -152,7 +152,7 @@ bash scripts/ci/check-license-registry.sh
 | 流水线配置（.cnb.yml） | 已落地（main/dev × PR/push、v* × tag）                                                                                                                         |
 | CI-001 十一阶段映射    | 已映射（§3 表）；全部阶段已激活并随对应流水线真实执行                                                                                                          |
 | CI-002 触发策略        | 已落地（ifModify 分流、纯文档只跑 9+11、tag 全量+证据）                                                                                                        |
-| 检查脚本               | check-docs-links.sh（已激活，当前仓库 886 个相对链接零断链）；check-license-registry.sh（已激活，校验 DEP-003 登记表）                                         |
+| 检查脚本               | check-docs-links.sh（已激活，当前仓库 897 个相对链接零断链）；check-license-registry.sh（已激活，校验 DEP-003 登记表）                                         |
 | 镜像构建输入           | Dockerfile/.dockerignore/docker-compose.dev.yml 已随 [Docker 镜像构建规范](Docker镜像构建规范-v1.0.md) 落地；阶段 8 门禁同步为 package.json＋Dockerfile 双条件 |
 | 既有断链修复           | src/modules/分层实现规范.md 15 处链接已修复（`../architecture/` 等缺少 `../../docs/` 前缀）                                                                    |
 | 密钥                   | 无入仓秘密；私有凭据预留密钥仓库 imports 通道                                                                                                                  |
