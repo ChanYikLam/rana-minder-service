@@ -2,9 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { DefaultHealthSummaryService } from './health-summary';
-import {
-  DefaultStatusSummaryQueryService,
-} from '../status-page/status-summary-query.service';
+import { DefaultStatusSummaryQueryService } from '../status-page/status-summary-query.service';
 import { ProcessAppStatusPort } from '../status-page/app-status';
 import { NotWiredDbStatusPort } from '../status-page/db-status';
 import { NotWiredTaskSummaryPort } from '../status-page/task-summary';
@@ -42,7 +40,16 @@ describe('health-summary (DefaultHealthSummaryService)', () => {
   it('subsystems 列表包含全部 8 个（app/db/task + 5 deps）', async () => {
     const view = await makeService().execute(NOW);
     const names = view.subsystems.map((s) => s.name).sort();
-    assert.deepEqual(names, ['app', 'backup', 'casdoor', 'db', 'file-check', 'mail', 'notify', 'task']);
+    assert.deepEqual(names, [
+      'app',
+      'backup',
+      'casdoor',
+      'db',
+      'file-check',
+      'mail',
+      'notify',
+      'task',
+    ]);
   });
 
   it('app 字段始终 fresh（snapshot 必有）', async () => {

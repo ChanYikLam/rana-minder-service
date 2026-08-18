@@ -1,10 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  DefaultAuditBoundaryAssert,
-  AuditBoundaryViolation,
-} from './audit-boundary';
+import { DefaultAuditBoundaryAssert, AuditBoundaryViolation } from './audit-boundary';
 
 describe('audit-boundary (DefaultAuditBoundaryAssert / XCC-GEN-007)', () => {
   const assert1 = new DefaultAuditBoundaryAssert();

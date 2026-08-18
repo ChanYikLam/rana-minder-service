@@ -15,10 +15,7 @@ describe('trace-context.adapter (AsyncLocalStorage)', () => {
 
   it('runWithNewChild 派生 child trace', () => {
     const parentId = generateTraceId();
-    const child = adapter.runWithNewChild(
-      { traceId: parentId },
-      () => adapter.current(),
-    );
+    const child = adapter.runWithNewChild({ traceId: parentId }, () => adapter.current());
     assert.ok(child);
     assert.ok(child.traceId.startsWith('tr_'));
     assert.notEqual(child.traceId, parentId);
@@ -44,18 +41,17 @@ describe('trace-context.adapter (AsyncLocalStorage)', () => {
 
   it('异步上下文传递：在 setTimeout 回调中仍能取到', async () => {
     const id = generateTraceId();
-    const seen = await adapter.run({ traceId: id }, () =>
-      new Promise<string | undefined>((resolve) => {
-        setTimeout(() => resolve(adapter.current()?.traceId), 10);
-      }),
+    const seen = await adapter.run(
+      { traceId: id },
+      () =>
+        new Promise<string | undefined>((resolve) => {
+          setTimeout(() => resolve(adapter.current()?.traceId), 10);
+        }),
     );
     assert.equal(seen, id);
   });
 
   it('非法 parent 抛 TypeError', () => {
-    assert.throws(
-      () => adapter.runWithNewChild({ traceId: 'bad' }, () => undefined),
-      TypeError,
-    );
+    assert.throws(() => adapter.runWithNewChild({ traceId: 'bad' }, () => undefined), TypeError);
   });
 });

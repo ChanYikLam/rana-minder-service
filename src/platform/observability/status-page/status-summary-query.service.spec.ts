@@ -6,28 +6,24 @@ import {
   type StatusSourceView,
 } from './status-summary-query.service';
 import { DefaultStaleUnknownRule } from './stale-unknown';
-import {
-  ProcessAppStatusPort,
-} from './app-status';
-import {
-  NotWiredDbStatusPort,
-  type DbPingResult,
-} from './db-status';
-import {
-  NotWiredTaskSummaryPort,
-} from './task-summary';
-import {
-  NotWiredDepLatestPort,
-  type DepLatest,
-} from './dep-latest';
+import { ProcessAppStatusPort } from './app-status';
+import { NotWiredDbStatusPort, type DbPingResult } from './db-status';
+import { NotWiredTaskSummaryPort } from './task-summary';
+import { NotWiredDepLatestPort, type DepLatest } from './dep-latest';
 
 class FakeDbStatusPort {
   constructor(private readonly result: DbPingResult) {}
-  async ping(): Promise<DbPingResult> { return this.result; }
+  async ping(): Promise<DbPingResult> {
+    return this.result;
+  }
 }
 
 class FakeDepLatestPort {
-  constructor(private readonly map: Partial<Record<'casdoor' | 'mail' | 'file-check' | 'notify' | 'backup', DepLatest>>) {}
+  constructor(
+    private readonly map: Partial<
+      Record<'casdoor' | 'mail' | 'file-check' | 'notify' | 'backup', DepLatest>
+    >,
+  ) {}
   async latest(dep: 'casdoor' | 'mail' | 'file-check' | 'notify' | 'backup'): Promise<DepLatest> {
     return this.map[dep] ?? { state: 'unknown' };
   }

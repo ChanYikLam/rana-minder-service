@@ -1,11 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  DEFAULT_RETENTION_POLICIES,
-  resolveRetention,
-  isLogTier,
-} from './retention.rules';
+import { DEFAULT_RETENTION_POLICIES, resolveRetention, isLogTier } from './retention.rules';
 
 describe('retention.rules', () => {
   it('普通日志：30 天在线 + 60 天归档 = 90 天', () => {

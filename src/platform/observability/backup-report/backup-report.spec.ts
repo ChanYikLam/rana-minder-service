@@ -62,7 +62,10 @@ describe('backup-report (DefaultBackupReportService)', () => {
     const port = {
       lastBackup: async () => undefined,
       lastRestore: async () => undefined,
-      recentBackups: async (l: number) => { captured = l; return []; },
+      recentBackups: async (l: number) => {
+        captured = l;
+        return [];
+      },
       recentRestores: async () => [],
     };
     await new DefaultBackupReportService(port).execute(NOW, { backupLimit: 9999 });
@@ -74,7 +77,10 @@ describe('backup-report (DefaultBackupReportService)', () => {
     const port = {
       lastBackup: async () => undefined,
       lastRestore: async () => undefined,
-      recentBackups: async (l: number) => { captured = l; return []; },
+      recentBackups: async (l: number) => {
+        captured = l;
+        return [];
+      },
       recentRestores: async () => [],
     };
     await new DefaultBackupReportService(port).execute(NOW, { backupLimit: -5 });

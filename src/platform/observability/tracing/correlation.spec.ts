@@ -1,10 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  DefaultCorrelation,
-  CorrelationDistinctViolation,
-} from './correlation';
+import { DefaultCorrelation, CorrelationDistinctViolation } from './correlation';
 import { generateTraceId } from '../domain/services/trace-id.generator';
 
 describe('correlation (DefaultCorrelation / XCC-GEN-001)', () => {

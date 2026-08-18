@@ -1,12 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  decide,
-  redactRecord,
-  redactValue,
-  DEFAULT_TRUNCATE_MAX,
-} from './redaction.rules';
+import { decide, redactRecord, redactValue, DEFAULT_TRUNCATE_MAX } from './redaction.rules';
 
 describe('redaction.rules', () => {
   describe('decide()', () => {
@@ -94,7 +89,7 @@ describe('redaction.rules', () => {
       });
       assert.equal(out['userId'], 'u1');
       assert.ok((out['phone'] as string).includes('***'));
-      assert.equal((out['path'] as string), '/v***/l***');
+      assert.equal(out['path'] as string, '/v***/l***');
       assert.equal('form.responses.q1' in out, false);
     });
   });
