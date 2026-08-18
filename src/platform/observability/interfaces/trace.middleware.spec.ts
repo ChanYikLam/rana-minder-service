@@ -47,7 +47,9 @@ describe('TraceMiddleware', () => {
     const req = makeReq({ 'x-trace-id': traceId });
     const res = makeRes();
     let nextCalled = false;
-    mw.use(req as never, res as never, () => { nextCalled = true; });
+    mw.use(req as never, res as never, () => {
+      nextCalled = true;
+    });
     assert.equal(nextCalled, true);
     assert.equal(res.headers[TRACE_ID_HEADER], traceId);
   });

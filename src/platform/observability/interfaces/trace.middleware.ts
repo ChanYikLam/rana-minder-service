@@ -26,9 +26,7 @@ import { TRACE_ID_HEADER } from './trace-headers';
 
 @Injectable()
 export class TraceMiddleware implements NestMiddleware {
-  constructor(
-    @Inject(TRACE_CONTEXT) private readonly ctx: TraceContextAdapter,
-  ) {}
+  constructor(@Inject(TRACE_CONTEXT) private readonly ctx: TraceContextAdapter) {}
 
   use(req: Request, res: Response, next: NextFunction): void {
     const incoming = readHeader(req, TRACE_ID_HEADER);

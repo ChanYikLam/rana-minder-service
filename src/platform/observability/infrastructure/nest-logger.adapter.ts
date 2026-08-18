@@ -84,7 +84,7 @@ export class NestLoggerServiceAdapter implements LoggerService {
       record['context'] = context;
     }
     if (error !== undefined) {
-      record['error'] = error instanceof Error ? error.stack ?? String(error) : stringify(error);
+      record['error'] = error instanceof Error ? (error.stack ?? String(error)) : stringify(error);
     }
     return record;
   }

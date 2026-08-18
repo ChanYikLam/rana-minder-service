@@ -8,9 +8,15 @@ import type { LogRecord } from '../logging/sanitizer';
 
 class FakeAppLogger implements AppLogger {
   readonly records: { level: 'info' | 'warn' | 'error'; record: LogRecord }[] = [];
-  info(record: LogRecord): void { this.records.push({ level: 'info', record }); }
-  warn(record: LogRecord): void { this.records.push({ level: 'warn', record }); }
-  error(record: LogRecord): void { this.records.push({ level: 'error', record }); }
+  info(record: LogRecord): void {
+    this.records.push({ level: 'info', record });
+  }
+  warn(record: LogRecord): void {
+    this.records.push({ level: 'warn', record });
+  }
+  error(record: LogRecord): void {
+    this.records.push({ level: 'error', record });
+  }
 }
 
 describe('NestLoggerServiceAdapter', () => {
