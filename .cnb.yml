@@ -13,11 +13,10 @@
 #   v*.tag_push：
 #     - release-check：全量阶段 + 发布门证据摘要（CI-002 规则 3、CI-004）
 #
-# 代码未开工保护：所有代码阶段以 package.json / 锁文件存在为前提
-# （if 条件），仓库当前为纯文档状态时全部自动跳过，流水线保持绿色；
-# 代码开工后（package.json 出现）各阶段按 CI-001 门禁严格生效。
-# 包管理器为 pnpm（package.json 声明 packageManager: pnpm），阶段 1 安装
-# 用 pnpm install --frozen-lockfile（锁文件为 pnpm-lock.yaml）。
+# 代码阶段保护：代码阶段以 package.json 存在为前提（阶段 8 另需 Dockerfile），
+# 仓库无 package.json 时全部自动跳过；阶段 1 在 package.json 出现后执行
+# corepack pnpm install --frozen-lockfile，锁文件缺失/漂移即失败。
+# 包管理器为 pnpm（package.json 声明 packageManager: pnpm，锁文件为 pnpm-lock.yaml）。
 # ============================================================
 
 # ------------------------------------------------------------
@@ -59,9 +58,9 @@
         - "!*.md"
         - "!(scripts/ci/**)"
       stages:
-        # 阶段 1：安装（pnpm 锁文件驱动；pnpm-lock.yaml 缺失/漂移即失败——代码开工后生效）
+        # 阶段 1：安装（pnpm 锁文件驱动；package.json 出现后 pnpm-lock.yaml 缺失/漂移即失败）
         - name: 1-安装
-          if: "[ -f pnpm-lock.yaml ]"
+          if: "[ -f package.json ]"
           script: |
             # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本
             corepack pnpm install --frozen-lockfile
@@ -77,11 +76,11 @@
             npm run format:check
         # 阶段 4：单元测试 L1（领域规则，覆盖率新增代码须有对应用例）
         - name: 4-单元测试L1
-          if: "[ -f package.json ] && ( [ -f jest.config.js ] || [ -f jest.config.mjs ] || [ -f jest.config.ts ] )"
+          if: "[ -f package.json ]"
           script: npm run test:unit
         # 阶段 5：集成测试 L2（真实 PG18：pg_trgm/btree_gist 扩展；dind 已声明）
         - name: 5-集成测试L2
-          if: "[ -f package.json ] && ( [ -f jest.config.js ] || [ -f jest.config.mjs ] || [ -f jest.config.ts ] )"
+          if: "[ -f package.json ]"
           script: |
             set -e
             # 启动真实 PG18 测试容器（应用连接信息由 package.json 的 test:integration 脚本传入）
@@ -106,10 +105,11 @@
             # 与开发环境 scripts/dev/postgres-init.sql 保持一致的扩展初始化
             docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
               -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
+            export CI=true
             npm run test:integration
         # 阶段 6：契约测试 L3（HTTP 级：信封/错误码/分页/幂等/脱敏）
         - name: 6-契约测试L3
-          if: "[ -f package.json ] && ( [ -f jest.config.js ] || [ -f jest.config.mjs ] || [ -f jest.config.ts ] )"
+          if: "[ -f package.json ]"
           script: npm run test:contract
         # 阶段 7：构建（HTTP 应用 + Worker 双入口，ADR-001/ADR-013）
         - name: 7-构建
@@ -160,7 +160,7 @@
         - "!(scripts/ci/**)"
       stages:
         - name: 1-安装
-          if: "[ -f pnpm-lock.yaml ]"
+          if: "[ -f package.json ]"
           script: |
             # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本
             corepack pnpm install --frozen-lockfile
@@ -173,10 +173,10 @@
             npm run lint
             npm run format:check
         - name: 4-单元测试L1
-          if: "[ -f package.json ] && ( [ -f jest.config.js ] || [ -f jest.config.mjs ] || [ -f jest.config.ts ] )"
+          if: "[ -f package.json ]"
           script: npm run test:unit
         - name: 5-集成测试L2
-          if: "[ -f package.json ] && ( [ -f jest.config.js ] || [ -f jest.config.mjs ] || [ -f jest.config.ts ] )"
+          if: "[ -f package.json ]"
           script: |
             set -e
             docker run -d --name pg18-ci \
@@ -198,9 +198,10 @@
             done
             docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
               -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
+            export CI=true
             npm run test:integration
         - name: 6-契约测试L3
-          if: "[ -f package.json ] && ( [ -f jest.config.js ] || [ -f jest.config.mjs ] || [ -f jest.config.ts ] )"
+          if: "[ -f package.json ]"
           script: npm run test:contract
         - name: 7-构建
           if: "[ -f package.json ]"
@@ -241,7 +242,7 @@
           script: |
             bash scripts/ci/check-docs-links.sh
         - name: 1-安装
-          if: "[ -f pnpm-lock.yaml ]"
+          if: "[ -f package.json ]"
           script: |
             # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本
             corepack pnpm install --frozen-lockfile
@@ -254,10 +255,10 @@
             npm run lint
             npm run format:check
         - name: 4-单元测试L1
-          if: "[ -f package.json ] && ( [ -f jest.config.js ] || [ -f jest.config.mjs ] || [ -f jest.config.ts ] )"
+          if: "[ -f package.json ]"
           script: npm run test:unit
         - name: 5-集成测试L2
-          if: "[ -f package.json ] && ( [ -f jest.config.js ] || [ -f jest.config.mjs ] || [ -f jest.config.ts ] )"
+          if: "[ -f package.json ]"
           script: |
             set -e
             docker run -d --name pg18-ci \
@@ -279,9 +280,10 @@
             done
             docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
               -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
+            export CI=true
             npm run test:integration
         - name: 6-契约测试L3
-          if: "[ -f package.json ] && ( [ -f jest.config.js ] || [ -f jest.config.mjs ] || [ -f jest.config.ts ] )"
+          if: "[ -f package.json ]"
           script: npm run test:contract
         - name: 7-构建
           if: "[ -f package.json ]"

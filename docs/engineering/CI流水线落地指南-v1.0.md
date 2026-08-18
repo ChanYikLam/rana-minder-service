@@ -10,36 +10,36 @@
 
 `CIL-001`：本仓库 CI 由两部分组成，均入库版本控制：
 
-| 产物 | 位置 | 内容 |
-|---|---|---|
-| 流水线配置 | 仓库根 `.cnb.yml` | 分支×事件触发的流水线定义（docs-check / code-check / release-check） |
-| 检查脚本 | `scripts/ci/check-docs-links.sh` | 文档相对链接一致性检查（CI-001 阶段 11） |
-| 检查脚本 | `scripts/ci/check-license-registry.sh` | 依赖许可证登记一致性检查（CI-001 阶段 10 辅助，DEP-003） |
-| 落地说明 | 本文件 | 阶段映射、维护与复现说明 |
+| 产物       | 位置                                   | 内容                                                                 |
+| ---------- | -------------------------------------- | -------------------------------------------------------------------- |
+| 流水线配置 | 仓库根 `.cnb.yml`                      | 分支×事件触发的流水线定义（docs-check / code-check / release-check） |
+| 检查脚本   | `scripts/ci/check-docs-links.sh`       | 文档相对链接一致性检查（CI-001 阶段 11）                             |
+| 检查脚本   | `scripts/ci/check-license-registry.sh` | 依赖许可证登记一致性检查（CI-001 阶段 10 辅助，DEP-003）             |
+| 落地说明   | 本文件                                 | 阶段映射、维护与复现说明                                             |
 
 `CIL-002`：平台为 cnb.cool（腾讯云 CODING 云原生构建），使用声明式 `.cnb.yml`（script + stages 语法，分支/事件/条件体系为 CNB 自研，**不兼容** `.woodpecker.yml`）。
 
 `CIL-003`：与门禁定义的映射：
 
-| 门禁定义条目 | 落地情况 |
-|---|---|
+| 门禁定义条目          | 落地情况                                                                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CI-001 十一阶段流水线 | 全部落入配置（§3 逐项映射）；阶段 1~8、10 由 code-check / release-check 承载，阶段 9、11 由 docs-check / release-check 承载（docs-check 无条件执行覆盖所有 MR/push） |
-| CI-002 触发策略 | 落地（§2）：MR/push 全量（ifModify 分流）、纯文档变更只跑阶段 9+11、发布 tag 全量+发布证据 |
-| CI-003 合并门 | 由流水线结果＋保护分支状态检查承载；第 2~6 项为人工评审门，CI 提供对应证据 |
-| CI-004 发布门 | release-check 的 endStages 输出证据摘要；真实验证（TVER-*）与演练（OPS-VER-*）仍为人工门 |
-| CI-005 失败处置 | 见 §5：失败即阻断，人工重跑，例外走治理记录 |
-| CI-006 证据关系 | 见 §5：流水线日志归档为执行证据，结论回填测试规格/运维手册 |
+| CI-002 触发策略       | 落地（§2）：MR/push 全量（ifModify 分流）、纯文档变更只跑阶段 9+11、发布 tag 全量+发布证据                                                                           |
+| CI-003 合并门         | 由流水线结果＋保护分支状态检查承载；第 2~6 项为人工评审门，CI 提供对应证据                                                                                           |
+| CI-004 发布门         | release-check 的 endStages 输出证据摘要；真实验证（TVER-_）与演练（OPS-VER-_）仍为人工门                                                                             |
+| CI-005 失败处置       | 见 §5：失败即阻断，人工重跑，例外走治理记录                                                                                                                          |
+| CI-006 证据关系       | 见 §5：流水线日志归档为执行证据，结论回填测试规格/运维手册                                                                                                           |
 
 ## 2. 触发矩阵
 
 `CIL-010`：分支×事件×流水线：
 
-| 分支（glob） | 事件 | 执行流水线 | 依据 |
-|---|---|---|---|
-| `(main\|dev)` | `pull_request`（含推送更新） | docs-check ＋ code-check | CI-002 规则 1 |
-| `(main\|dev)` | `push`（合并后回归） | docs-check ＋ code-check | CI-001 精神，合并后分支自身质量可观测 |
-| `v*` | `tag_push` | release-check（全量＋发布证据） | CI-002 规则 3 |
-| 其他分支 | 任意 | 无流水线 | 分支自身无配置则不触发；MR 到 main/dev 时按**目标分支**配置执行（CNB 规则：PR 事件读取目标分支配置） |
+| 分支（glob）  | 事件                         | 执行流水线                      | 依据                                                                                                 |
+| ------------- | ---------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `(main\|dev)` | `pull_request`（含推送更新） | docs-check ＋ code-check        | CI-002 规则 1                                                                                        |
+| `(main\|dev)` | `push`（合并后回归）         | docs-check ＋ code-check        | CI-001 精神，合并后分支自身质量可观测                                                                |
+| `v*`          | `tag_push`                   | release-check（全量＋发布证据） | CI-002 规则 3                                                                                        |
+| 其他分支      | 任意                         | 无流水线                        | 分支自身无配置则不触发；MR 到 main/dev 时按**目标分支**配置执行（CNB 规则：PR 事件读取目标分支配置） |
 
 `CIL-011`：**docs-check 无条件执行**——任何变更（含纯文档、`.cnb.yml` 自身）都先过秘密扫描与文档链接检查，对应 CI-002 规则 2"纯文档变更保留阶段 9 与 11"。
 
@@ -47,34 +47,34 @@
 
 ```yaml
 ifModify:
-  - "**"                 # 命中一切变更
-  - "!(docs/**)"         # 排除文档目录
-  - "!(**/*.md)"         # 排除所有 Markdown
-  - "!*.md"
-  - "!(scripts/ci/**)"   # 排除 CI 脚本自身
+  - '**' # 命中一切变更
+  - '!(docs/**)' # 排除文档目录
+  - '!(**/*.md)' # 排除所有 Markdown
+  - '!*.md'
+  - '!(scripts/ci/**)' # 排除 CI 脚本自身
 ```
 
 即：变更 `src/**`、`test/**`、构建配置、`.cnb.yml` 等时执行；纯文档/纯 CI 脚本变更时不执行。PR 事件按 PR 变更文件统计，push 事件按 before/after 差异统计（新分支 push 无法统计时视为命中，全量执行）。
 
-`CIL-013`：**代码未开工保护**：仓库当前无 `package.json`（代码未开工，GOV-CODE-WAIVER-001 后仍处于文档期）。所有代码阶段以 `if` 条件检查 `package.json` / 锁文件存在性，不存在即跳过（不影响流水线状态）；**代码开工后（首个 `package.json` 合入）各阶段自动激活，此后锁文件缺失/漂移即失败**（CI-001 阶段 1 门禁）。当前仓库状态下：docs-check 两条阶段真实执行，code-check 全部阶段跳过，流水线保持绿色。
+`CIL-013`：**代码阶段保护**：仓库已包含 `package.json` 与 `pnpm-lock.yaml`，代码阶段已全部激活。阶段 1 在 `package.json` 存在时执行 `corepack pnpm install --frozen-lockfile`，`pnpm-lock.yaml` 缺失/漂移即失败（CI-001 阶段 1 门禁）。测试阶段 4/5/6 以 `package.json` 存在为条件，使用仓库内置的 Node 测试运行器（`node --test`）执行，不再依赖 Jest 配置文件。
 
 ## 3. 阶段实现明细（CI-001 十一阶段 → 配置映射）
 
 `CIL-020`：下表为逐阶段映射；命令名（`npm run test:unit` 等）为按工程约定的建议名，代码开工落地 package.json 时按 [后端工程约定](后端工程约定-v1.0.md) 与 [测试执行计划](测试执行计划-v1.0.md) 对齐，**命令名变更不影响门禁语义**。
 
-| CI-001 阶段 | 流水线 | 配置位置 | 命令 | 门禁 | 当前状态 |
-|---|---|---|---|---|---|
-| 1 安装 | code-check / release-check | 阶段 `1-安装` | `pnpm install --frozen-lockfile`（pnpm 锁文件驱动） | 通过；pnpm-lock.yaml 缺失/漂移失败 | 代码就绪后激活 |
-| 2 类型检查 | code-check / release-check | 阶段 `2-类型检查` | `npx tsc --noEmit -p tsconfig.json` | 通过 | 代码就绪后激活 |
-| 3 Lint | code-check / release-check | 阶段 `3-Lint与格式` | `npm run lint` ＋ `npm run format:check` | 通过 | 代码就绪后激活 |
-| 4 单元测试 L1 | code-check / release-check | 阶段 `4-单元测试L1` | `npm run test:unit` | 通过；覆盖率不设硬下限，新增代码须有对应用例 | 代码就绪后激活 |
-| 5 集成测试 L2 | code-check / release-check | 阶段 `5-集成测试L2` | 启动 PG18 容器（pg18-ci，扩展 pg_trgm/btree_gist）→ `npm run test:integration`（见 §7.2） | 通过 | 代码就绪后激活 |
-| 6 契约测试 L3 | code-check / release-check | 阶段 `6-契约测试L3` | `npm run test:contract` | 通过 | 代码就绪后激活 |
-| 7 构建 | code-check / release-check | 阶段 `7-构建` | `npm run build` ＋ `npm run build:worker`（HTTP 与 Worker 双入口，ADR-001/ADR-013） | 通过 | 代码就绪后激活 |
-| 8 镜像 | code-check / release-check | 阶段 `8-镜像构建`（release 为 `8-镜像构建推送`） | `docker build`，tag 为提交 SHA（release 为版本 Tag）；push 至 CNB 制品库 | 通过（tag 非 latest） | Dockerfile 出现后激活 |
-| 9 秘密扫描 | docs-check / code-check / release-check | 阶段 `9-秘密扫描` | gitleaks v8.30.0（固定版本，见 §4.3）`detect --source . --redact` | 0 命中 | **已激活** |
-| 10 依赖审计 | code-check / release-check | 阶段 `10-依赖审计与许可证登记` | `corepack pnpm audit --audit-level=high`（corepack 匹配 packageManager）＋ `scripts/ci/check-license-registry.sh` | 无关键/高危未处置项；DEP-003 登记一致 | 代码就绪后激活（登记检查脚本已就位） |
-| 11 文档一致性 | docs-check / code-check / release-check | 阶段 `11-文档链接一致性` | `bash scripts/ci/check-docs-links.sh` | 全部相对链接有效 | **已激活** |
+| CI-001 阶段   | 流水线                     | 配置位置                                         | 命令                                                                                                              | 门禁                                         | 当前状态   |
+| ------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ---------- |
+| 1 安装        | code-check / release-check | 阶段 `1-安装`                                    | `corepack pnpm install --frozen-lockfile`（pnpm 锁文件驱动）                                                      | 通过；pnpm-lock.yaml 缺失/漂移失败           | **已激活** |
+| 2 类型检查    | code-check / release-check | 阶段 `2-类型检查`                                | `npx tsc --noEmit -p tsconfig.json`                                                                               | 通过                                         | **已激活** |
+| 3 Lint        | code-check / release-check | 阶段 `3-Lint与格式`                              | `npm run lint` ＋ `npm run format:check`                                                                          | 通过                                         | **已激活** |
+| 4 单元测试 L1 | code-check / release-check | 阶段 `4-单元测试L1`                              | `npm run test:unit`                                                                                               | 通过；覆盖率不设硬下限，新增代码须有对应用例 | **已激活** |
+| 5 集成测试 L2 | code-check / release-check | 阶段 `5-集成测试L2`                              | 启动 PG18 容器（pg18-ci，扩展 pg_trgm/btree_gist）→ `npm run test:integration`（见 §7.2）                         | 通过                                         | **已激活** |
+| 6 契约测试 L3 | code-check / release-check | 阶段 `6-契约测试L3`                              | `npm run test:contract`                                                                                           | 通过                                         | **已激活** |
+| 7 构建        | code-check / release-check | 阶段 `7-构建`                                    | `npm run build` ＋ `npm run build:worker`（HTTP 与 Worker 双入口，ADR-001/ADR-013）                               | 通过                                         | **已激活** |
+| 8 镜像        | code-check / release-check | 阶段 `8-镜像构建`（release 为 `8-镜像构建推送`） | `docker build`，tag 为提交 SHA（code-check 仅构建，release 构建并 push 至 CNB 制品库）                            | 通过（tag 非 latest）                        | **已激活** |
+| 9 秘密扫描    | docs-check / release-check | 阶段 `9-秘密扫描`                                | gitleaks v8.30.0（固定版本，见 §4.3）`detect --source . --redact`                                                 | 0 命中                                       | **已激活** |
+| 10 依赖审计   | code-check / release-check | 阶段 `10-依赖审计与许可证登记`                   | `corepack pnpm audit --audit-level=high`（corepack 匹配 packageManager）＋ `scripts/ci/check-license-registry.sh` | 无关键/高危未处置项；DEP-003 登记一致        | **已激活** |
+| 11 文档一致性 | docs-check / release-check | 阶段 `11-文档链接一致性`                         | `bash scripts/ci/check-docs-links.sh`                                                                             | 全部相对链接有效                             | **已激活** |
 
 `CIL-021`：阶段 9、11 在 `docs-check`（PR/push 两处）与 `release-check`（tag 一处）出现；`code-check` 不重复承载，因为 docs-check 在任何 MR/push 中无条件执行，阶段 9、11 已覆盖全部变更。修改 gitleaks 下载地址或链接检查命令时，须同步这三处；§6 给出本地复现命令。
 
@@ -117,7 +117,7 @@ curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitlea
 tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
 gitleaks detect --source . --no-banner --redact
 
-# 阶段 10 辅助：许可证登记一致性（当前仓库无 package.json 时输出 SKIP）
+# 阶段 10 辅助：许可证登记一致性（package.json 存在时校验 DEP-003 登记表）
 bash scripts/ci/check-license-registry.sh
 ```
 
@@ -147,13 +147,13 @@ bash scripts/ci/check-license-registry.sh
 
 ## 8. 检查结论
 
-| 检查项 | 结果 |
-|---|---|
-| 流水线配置（.cnb.yml） | 已落地（main/dev × PR/push、v* × tag） |
-| CI-001 十一阶段映射 | 已映射（§3 表）；阶段 9、11 当前真实执行，其余代码就绪后自动激活 |
-| CI-002 触发策略 | 已落地（ifModify 分流、纯文档只跑 9+11、tag 全量+证据） |
-| 检查脚本 | check-docs-links.sh（已激活，当前仓库 882 个相对链接零断链）；check-license-registry.sh（待代码就绪激活） |
-| 镜像构建输入 | Dockerfile/.dockerignore/docker-compose.dev.yml 已随 [Docker 镜像构建规范](Docker镜像构建规范-v1.0.md) 落地；阶段 8 门禁同步为 package.json＋Dockerfile 双条件 |
-| 既有断链修复 | src/modules/分层实现规范.md 15 处链接已修复（`../architecture/` 等缺少 `../../docs/` 前缀） |
-| 密钥 | 无入仓秘密；私有凭据预留密钥仓库 imports 通道 |
-| 前端对应阶段 | 由 rana-minder-web 仓库单独承载（§7.1） |
+| 检查项                 | 结果                                                                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 流水线配置（.cnb.yml） | 已落地（main/dev × PR/push、v* × tag）                                                                                                                         |
+| CI-001 十一阶段映射    | 已映射（§3 表）；全部阶段已激活并随对应流水线真实执行                                                                                                          |
+| CI-002 触发策略        | 已落地（ifModify 分流、纯文档只跑 9+11、tag 全量+证据）                                                                                                        |
+| 检查脚本               | check-docs-links.sh（已激活，当前仓库 886 个相对链接零断链）；check-license-registry.sh（已激活，校验 DEP-003 登记表）                                         |
+| 镜像构建输入           | Dockerfile/.dockerignore/docker-compose.dev.yml 已随 [Docker 镜像构建规范](Docker镜像构建规范-v1.0.md) 落地；阶段 8 门禁同步为 package.json＋Dockerfile 双条件 |
+| 既有断链修复           | src/modules/分层实现规范.md 15 处链接已修复（`../architecture/` 等缺少 `../../docs/` 前缀）                                                                    |
+| 密钥                   | 无入仓秘密；私有凭据预留密钥仓库 imports 通道                                                                                                                  |
+| 前端对应阶段           | 由 rana-minder-web 仓库单独承载（§7.1）                                                                                                                        |

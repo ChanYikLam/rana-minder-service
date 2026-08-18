@@ -12,13 +12,7 @@
  */
 
 export type FileStatus =
-  | 'uploading'
-  | 'uploaded'
-  | 'checking'
-  | 'quarantined'
-  | 'approved'
-  | 'rejected'
-  | 'deleted';
+  'uploading' | 'uploaded' | 'checking' | 'quarantined' | 'approved' | 'rejected' | 'deleted';
 
 /** GET /api/files/:fileId 响应 data */
 export interface FileMetadata {

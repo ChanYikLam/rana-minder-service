@@ -7,9 +7,11 @@
 
 import type { ApiListResponse } from './api-envelope';
 
-export type MemberStatus = 'non_member' | 'pending_effective' | 'active' | 'exiting' | 'exited' | 'sync_anomaly';
+export type MemberStatus =
+  'non_member' | 'pending_effective' | 'active' | 'exiting' | 'exited' | 'sync_anomaly';
 
-export type PositionStatus = 'active' | 'pending_confirmation' | 'transferring' | 'suspended' | 'ended';
+export type PositionStatus =
+  'active' | 'pending_confirmation' | 'transferring' | 'suspended' | 'ended';
 
 export type AppointmentCommandAction = 'appoint' | 'transfer' | 'dismiss';
 
@@ -57,7 +59,12 @@ export interface MemberListItem {
   studentId: string;
   email: string;
   phone: string;
-  positions: Array<{ departmentId: string; departmentName: string; title: string; status: PositionStatus }>;
+  positions: Array<{
+    departmentId: string;
+    departmentName: string;
+    title: string;
+    status: PositionStatus;
+  }>;
   department: string;
   title: string;
   status: MemberStatus;
@@ -418,4 +425,5 @@ export type DepartmentApplyApiListResult = ApiListResponse<DepartmentApplyItem>;
 export type ResignationApiListResult = ApiListResponse<ResignationItem>;
 export type MembershipInvitationApiListResult = ApiListResponse<MembershipInvitationRow>;
 export type BatchCandidateListResult = ApiListResponse<BatchCandidateItem>;
-export type MembershipInvitationCandidateListResult = ApiListResponse<MembershipInvitationCandidate>;
+export type MembershipInvitationCandidateListResult =
+  ApiListResponse<MembershipInvitationCandidate>;
