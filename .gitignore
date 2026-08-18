@@ -1,5 +1,45 @@
+# ---------- 依赖与构建产物 ----------
 node_modules/
+.pnpm-store/
 dist/
-*.log
+build/
+*.tsbuildinfo
+.nest/
+
+# ---------- 环境变量（按 ADR-010 仅 .env.example 可入版本控制） ----------
 .env
+.env.local
+.env.*.local
+!.env.example
+
+# ---------- 编辑器与 IDE ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------- 操作系统 ----------
 .DS_Store
+Thumbs.db
+
+# ---------- 日志 ----------
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------- 测试与覆盖 ----------
+coverage/
+.nyc_output/
+
+# ---------- 临时与缓存 ----------
+.tmp/
+.cache/
+*.tmp
+.eslintcache
+
+# ---------- 文档与脚本生成的本地材料 ----------
+docs/_local/
+scripts/_local/

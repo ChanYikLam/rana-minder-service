@@ -44,10 +44,14 @@ describe('DirectoryQueryService（C3.1 公开目录入口）', () => {
   it('匿名可读且筛选透传（name 单一名称模式）', async () => {
     const { query, calls } = makeQueryMock();
     const service = new DirectoryQueryService(query, makeRegistry());
-    const result = await service.find(clubScope, auth({ principalId: null, visitor: 'ANONYMOUS', grantedScopes: [] }), {
-      name: '招新',
-      limit: 10,
-    });
+    const result = await service.find(
+      clubScope,
+      auth({ principalId: null, visitor: 'ANONYMOUS', grantedScopes: [] }),
+      {
+        name: '招新',
+        limit: 10,
+      },
+    );
     assert.ok(result);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].projectionType, 'PUBLIC_DIRECTORY');
@@ -98,7 +102,10 @@ describe('PersonalCenterQueryService（C3.2 个人中心入口）', () => {
   it('未认证 → 拒绝', async () => {
     const { query } = makeQueryMock();
     const service = new PersonalCenterQueryService(query, makeRegistry());
-    await assert.rejects(service.queryMy(auth({ principalId: null }), { limit: 10 }), /IFC-ERR-FORBIDDEN/);
+    await assert.rejects(
+      service.queryMy(auth({ principalId: null }), { limit: 10 }),
+      /IFC-ERR-FORBIDDEN/,
+    );
   });
 
   it('kind 筛选透传', async () => {

@@ -8,19 +8,18 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | -- |
-| `IFC-TX-002` | 直接权益与通知 | -- |
-| `IFC-TX-003` | Casdoor 外部写入 | -- |
-| `IFC-TX-004` | 文件上传/检查/绑定 | -- |
-| `IFC-TX-005` | 通知渠道投递 | -- |
-| `IFC-TX-006` | 受控批量 | -- |
-| `IFC-TX-007` | 正式删除 | -- |
-| `IFC-TX-008` | 派生刷新与重建 | ✓ 派生刷新/重建（经 job 持久化任务执行） |
+| 边界         | 名称               | 本模块参与                               |
+| ------------ | ------------------ | ---------------------------------------- |
+| `IFC-TX-001` | 本地业务状态转换   | --                                       |
+| `IFC-TX-002` | 直接权益与通知     | --                                       |
+| `IFC-TX-003` | Casdoor 外部写入   | --                                       |
+| `IFC-TX-004` | 文件上传/检查/绑定 | --                                       |
+| `IFC-TX-005` | 通知渠道投递       | --                                       |
+| `IFC-TX-006` | 受控批量           | --                                       |
+| `IFC-TX-007` | 正式删除           | --                                       |
+| `IFC-TX-008` | 派生刷新与重建     | ✓ 派生刷新/重建（经 job 持久化任务执行） |
 
 注：派生刷新/重建经 job 模块持久化任务执行，本模块自身无 worker 侧组件、不得自行异步写库。
-
 
 ## 1. 定位与责任
 
@@ -34,50 +33,50 @@
 
 ## 2. 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `PublicDirectoryController` | Controller（interfaces） | 未认证可读的"找社团""找活动"搜索入口 |
-| `PersonalCenterController` | Controller（interfaces） | 全局个人中心查询入口（本人事项+当前有权角色型事项） |
-| `WorkbenchController` | Controller（interfaces） | 当前社团管理工作台查询入口（固定当前社团） |
-| `PublicDirectoryQueryService` | 查询用例（application/queries） | 公开目录派生查询：搜索规范化、可见性派生、字段投影 |
-| `PersonalCenterQueryService` | 查询用例（application/queries） | 个人中心聚合：本人事项+角色型事项，失权后失效 |
-| `WorkbenchQueryService` | 查询用例（application/queries） | 工作台聚合：固定当前社团管理数据，逐对象重验授权 |
-| `SearchNormalizer` | 领域服务（domain/services） | 搜索文本规范化（NFC->大小写折叠->再 NFC->去空白->压缩）、分层排序规则 |
-| `VisibilityDerivationRules` | 领域服务（domain/services） | 可见性派生规则：发布状态、访问者类型、字段投影（纯函数） |
-| `CacheKeyBuilder` | 领域服务（domain/services） | 缓存键构造：必须包含社团/协作域/访问者范围维度 |
-| `PostgresReadRepository` | 基础设施适配（infrastructure） | PostgreSQL 查询与索引、pg_trgm 检索实现 |
-| `RebuildableCacheAdapter` | 基础设施适配（infrastructure） | 可重建缓存载体：丢失/过期/清空时可回源，可替换 |
+| 组件                          | 类型                            | 职责                                                                  |
+| ----------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| `PublicDirectoryController`   | Controller（interfaces）        | 未认证可读的"找社团""找活动"搜索入口                                  |
+| `PersonalCenterController`    | Controller（interfaces）        | 全局个人中心查询入口（本人事项+当前有权角色型事项）                   |
+| `WorkbenchController`         | Controller（interfaces）        | 当前社团管理工作台查询入口（固定当前社团）                            |
+| `PublicDirectoryQueryService` | 查询用例（application/queries） | 公开目录派生查询：搜索规范化、可见性派生、字段投影                    |
+| `PersonalCenterQueryService`  | 查询用例（application/queries） | 个人中心聚合：本人事项+角色型事项，失权后失效                         |
+| `WorkbenchQueryService`       | 查询用例（application/queries） | 工作台聚合：固定当前社团管理数据，逐对象重验授权                      |
+| `SearchNormalizer`            | 领域服务（domain/services）     | 搜索文本规范化（NFC->大小写折叠->再 NFC->去空白->压缩）、分层排序规则 |
+| `VisibilityDerivationRules`   | 领域服务（domain/services）     | 可见性派生规则：发布状态、访问者类型、字段投影（纯函数）              |
+| `CacheKeyBuilder`             | 领域服务（domain/services）     | 缓存键构造：必须包含社团/协作域/访问者范围维度                        |
+| `PostgresReadRepository`      | 基础设施适配（infrastructure）  | PostgreSQL 查询与索引、pg_trgm 检索实现                               |
+| `RebuildableCacheAdapter`     | 基础设施适配（infrastructure）  | 可重建缓存载体：丢失/过期/清空时可回源，可替换                        |
 
 ### 当前实现组件（与代码一致）
 
-| 组件 | 位置 | 职责 |
-|---|---|---|
-| `ReadModelQueryService` | query/query-service.ts | 查询编排：授权 → 读投影 → 回源重建/明确不可用；游标绑投影类型/作用域/筛选（v2） |
-| `QueryEntryRegistry` | query/entry-registry.ts | 入口登记目录（IFC-QRY-008）：筛选键/值类型/操作符/空值/枚举/排序/分页/作用域/匿名；未知项一律拒绝 |
-| `DirectoryQueryService` | query/directory-query.ts | 公开目录入口（C3.1）：匿名可读、单一筛选键（name/activityType/signupStatus/deadline/deadlineRange） |
-| `PersonalCenterQueryService` | query/me-query.ts | 个人中心入口（C3.2）：作用域强制本人（subjectId=principalId），kind 筛选 |
-| `WorkbenchQueryService` | query/workbench-query.ts | 工作台入口（C3.3）：作用域强制 clubId；verifyObject 逐对象重验（C6.11） |
-| `SearchNormalizer` | derivation/search-normalizer.ts | 搜索文本规范化固定顺序（C6.6） |
-| `SearchLayering` | derivation/search-layering.ts | 搜索分层（C6.3/C6.5）：精确→连续子串→近似；近似不超直接命中；排序固定 |
-| `SimilarityScorer` | derivation/similarity.ts | 近似相似度（C6.4 应用侧降级；权威 pg_trgm 0.6 由基础设施执行） |
-| `VisibilityDerivationRules` | derivation/visibility-derivation.ts | 可见性派生：发布状态/访问者类型/字段投影（纯函数） |
-| `DeadlineFilterRule` | derivation/deadline-filter.ts | 截止筛选（C6.7）：平台时区自然日窗口 TODAY/3DAYS/7DAYS + CUSTOM 起止 |
-| `ClubDirectoryRule` / `ActivityDirectoryRule` | projection/public-directory/ | 找社团（C6.1）/找活动（C6.2，首次公布语义 C6.8）子规则 |
-| `ProjectionStore`(+内存实现) | projection/ | 可重建投影载体：save/load/invalidate/clear/TTL 过期（C2.1） |
-| `CacheInvalidationService` | invalidation/ | 失效服务：标记投影失效 + 索引失效（C4.2）+ 登记重算意图 |
-| `RefreshHandler` | refresh/refresh-handler.ts | 消费 A 的 recompute：旧水位不覆盖新结果、失败上报 ops（C5.3） |
-| `ObjectAuthorizationPort`(+占位) | contracts/authorization-port.ts | 对象级授权端口（C6.9-C6.11 逐对象重验；占位 fail-closed） |
-| `OpsTelemetryPort`(+占位) | contracts/ops-telemetry-port.ts | ops 遥测端口（C5.3 技术证据；占位日志） |
-| `SearchIndexPort` / `PostgresTrgmSearchRepository` | infrastructure/postgres-trgm-search.ts | pg_trgm 检索端口与 PostgreSQL 实现模板（SQL/DDL；未接入明确不可用） |
+| 组件                                               | 位置                                   | 职责                                                                                                |
+| -------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `ReadModelQueryService`                            | query/query-service.ts                 | 查询编排：授权 → 读投影 → 回源重建/明确不可用；游标绑投影类型/作用域/筛选（v2）                     |
+| `QueryEntryRegistry`                               | query/entry-registry.ts                | 入口登记目录（IFC-QRY-008）：筛选键/值类型/操作符/空值/枚举/排序/分页/作用域/匿名；未知项一律拒绝   |
+| `DirectoryQueryService`                            | query/directory-query.ts               | 公开目录入口（C3.1）：匿名可读、单一筛选键（name/activityType/signupStatus/deadline/deadlineRange） |
+| `PersonalCenterQueryService`                       | query/me-query.ts                      | 个人中心入口（C3.2）：作用域强制本人（subjectId=principalId），kind 筛选                            |
+| `WorkbenchQueryService`                            | query/workbench-query.ts               | 工作台入口（C3.3）：作用域强制 clubId；verifyObject 逐对象重验（C6.11）                             |
+| `SearchNormalizer`                                 | derivation/search-normalizer.ts        | 搜索文本规范化固定顺序（C6.6）                                                                      |
+| `SearchLayering`                                   | derivation/search-layering.ts          | 搜索分层（C6.3/C6.5）：精确→连续子串→近似；近似不超直接命中；排序固定                               |
+| `SimilarityScorer`                                 | derivation/similarity.ts               | 近似相似度（C6.4 应用侧降级；权威 pg_trgm 0.6 由基础设施执行）                                      |
+| `VisibilityDerivationRules`                        | derivation/visibility-derivation.ts    | 可见性派生：发布状态/访问者类型/字段投影（纯函数）                                                  |
+| `DeadlineFilterRule`                               | derivation/deadline-filter.ts          | 截止筛选（C6.7）：平台时区自然日窗口 TODAY/3DAYS/7DAYS + CUSTOM 起止                                |
+| `ClubDirectoryRule` / `ActivityDirectoryRule`      | projection/public-directory/           | 找社团（C6.1）/找活动（C6.2，首次公布语义 C6.8）子规则                                              |
+| `ProjectionStore`(+内存实现)                       | projection/                            | 可重建投影载体：save/load/invalidate/clear/TTL 过期（C2.1）                                         |
+| `CacheInvalidationService`                         | invalidation/                          | 失效服务：标记投影失效 + 索引失效（C4.2）+ 登记重算意图                                             |
+| `RefreshHandler`                                   | refresh/refresh-handler.ts             | 消费 A 的 recompute：旧水位不覆盖新结果、失败上报 ops（C5.3）                                       |
+| `ObjectAuthorizationPort`(+占位)                   | contracts/authorization-port.ts        | 对象级授权端口（C6.9-C6.11 逐对象重验；占位 fail-closed）                                           |
+| `OpsTelemetryPort`(+占位)                          | contracts/ops-telemetry-port.ts        | ops 遥测端口（C5.3 技术证据；占位日志）                                                             |
+| `SearchIndexPort` / `PostgresTrgmSearchRepository` | infrastructure/postgres-trgm-search.ts | pg_trgm 检索端口与 PostgreSQL 实现模板（SQL/DDL；未接入明确不可用）                                 |
 
 ## 3. 权威与边界
 
-| 本模块可以 | 本模块禁止 |
-|---|---|
-| 读取各领域模块的权威对象并按查询派生响应 | 保存可独立推进的业务状态 |
-| 持有可重建的派生投影/缓存（丢失后可回源） | 从缓存、投影或旧索引授权 |
-| 触发派生刷新/重建任务（经 job 模块） | 跨社团合并管理数据或过滤作用域 |
-| 按当前访问者类型做字段投影 | 把派生数据滞后当作"新权威结果" |
+| 本模块可以                                | 本模块禁止                     |
+| ----------------------------------------- | ------------------------------ |
+| 读取各领域模块的权威对象并按查询派生响应  | 保存可独立推进的业务状态       |
+| 持有可重建的派生投影/缓存（丢失后可回源） | 从缓存、投影或旧索引授权       |
+| 触发派生刷新/重建任务（经 job 模块）      | 跨社团合并管理数据或过滤作用域 |
+| 按当前访问者类型做字段投影                | 把派生数据滞后当作"新权威结果" |
 
 核心不变量：
 
@@ -136,12 +135,12 @@ infrastructure/ PostgreSQL 查询与索引、可重建缓存、pg_trgm 检索实
 
 ## 7. 与相邻模块协作
 
-| 协作对象 | 关系 |
-|---|---|
-| 各领域模块（identity/organization/recruitment/joint 等） | 只读其权威对象；不得写入任何领域状态 |
-| job 模块 | 派生刷新/重建意图经 job 持久化任务执行（`IFC-TX-008`）；本模块不得自行异步写库 |
-| ops 模块 | 重建失败、失效失败等技术证据进入脱敏日志与内置状态，不由本模块自行断言 |
-| 权限/授权能力 | 由组织与授权模块判定；本模块只承接判定结果 |
+| 协作对象                                                 | 关系                                                                           |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 各领域模块（identity/organization/recruitment/joint 等） | 只读其权威对象；不得写入任何领域状态                                           |
+| job 模块                                                 | 派生刷新/重建意图经 job 持久化任务执行（`IFC-TX-008`）；本模块不得自行异步写库 |
+| ops 模块                                                 | 重建失败、失效失败等技术证据进入脱敏日志与内置状态，不由本模块自行断言         |
+| 权限/授权能力                                            | 由组织与授权模块判定；本模块只承接判定结果                                     |
 
 ## 8. 测试要求
 

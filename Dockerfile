@@ -10,13 +10,14 @@
 # ---- 构建阶段（node:24 官方，含完整工具链）----
 FROM node:24 AS build
 WORKDIR /app
-# 锁文件驱动安装（package-lock.json 或 npm-shrinkwrap.json），依赖未变时命中缓存层
-COPY package.json package-lock.json* npm-shrinkwrap.json* ./
-RUN npm ci
-# 编译产物：dist/main.js（HTTP 应用）、dist/worker.js（后台任务），
+# 锁文件驱动安装（pnpm-lock.yaml），依赖未变时命中缓存层；
+# 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
+# 编译产物：dist/main.js（HTTP 应用）、dist/main.worker.js（后台任务），
 # 共用同一编译产物，见 src/启动入口文档.md
 COPY . .
-RUN npm run build
+RUN pnpm run build && pnpm run build:worker
 
 # ---- 运行阶段（node:24-slim，DEP-Q-003 强候选）----
 FROM node:24-slim AS runtime
@@ -34,8 +35,8 @@ RUN groupadd --gid 10001 ranaminder && \
     chown -R ranaminder:ranaminder /app /etc/ranaminder
 
 # 生产依赖独立安装（锁文件驱动；不复制构建期 node_modules，DOCK-021）
-COPY --from=build /app/package.json /app/package-lock.json* /app/npm-shrinkwrap.json* ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+RUN corepack enable && pnpm install --prod --frozen-lockfile && pnpm store prune
 
 # 编译产物（源码、docs、test 等不进入运行阶段，见 .dockerignore）
 COPY --from=build /app/dist ./dist
@@ -44,5 +45,5 @@ USER ranaminder
 EXPOSE 3000
 
 # 双入口：默认 HTTP 应用；后台任务以编排层命令覆盖：
-#   command: ["node", "dist/worker.js"]
+#   command: ["node", "dist/main.worker.js"]
 CMD ["node", "dist/main.js"]

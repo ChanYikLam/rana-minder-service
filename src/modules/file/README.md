@@ -7,17 +7,16 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | -- |
-| `IFC-TX-002` | 直接权益与通知 | -- |
-| `IFC-TX-003` | Casdoor 外部写入 | -- |
-| `IFC-TX-004` | 文件上传/检查/绑定 | ✓ 上传/检查/绑定 |
-| `IFC-TX-005` | 通知渠道投递 | -- |
-| `IFC-TX-006` | 受控批量 | -- |
-| `IFC-TX-007` | 正式删除 | ✓ 正式删除（跨存储清单逐项执行与核验） |
-| `IFC-TX-008` | 派生刷新与重建 | -- |
-
+| 边界         | 名称               | 本模块参与                             |
+| ------------ | ------------------ | -------------------------------------- |
+| `IFC-TX-001` | 本地业务状态转换   | --                                     |
+| `IFC-TX-002` | 直接权益与通知     | --                                     |
+| `IFC-TX-003` | Casdoor 外部写入   | --                                     |
+| `IFC-TX-004` | 文件上传/检查/绑定 | ✓ 上传/检查/绑定                       |
+| `IFC-TX-005` | 通知渠道投递       | --                                     |
+| `IFC-TX-006` | 受控批量           | --                                     |
+| `IFC-TX-007` | 正式删除           | ✓ 正式删除（跨存储清单逐项执行与核验） |
+| `IFC-TX-008` | 派生刷新与重建     | --                                     |
 
 ## 核心职责
 
@@ -25,14 +24,14 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `FileController`、`FileCheckCallbackController` | Controller（interfaces） | 上传初始化、字节完成、检查回调、预览/下载请求的路由与请求适配 |
-| `InitiateUploadCommand`、`CompleteUploadCommand`、`AskFileCheckCommand`、`PromoteFileCommand`（检查收口）、`BindFileCommand`、`ReplaceDraftFileCommand`、`RemoveDraftFileCommand`、`QueueFormalDeleteCommand` | 应用命令（application/commands） | SRS-SM-FILE-001 各转换与文件生命周期用例 |
-| `FileAccessQuery`、`FileStatusQuery` | 查询用例（application/queries） | 每次预览/下载的实时鉴权与检查/绑定状态查询（IFC-QRY-006） |
-| `FileModel`、`FileVersion`、`FileReference` | 领域模型（domain/models） | 文件逻辑记录、不可变版本、业务引用 |
-| `FileStateMachine` | 状态机（domain/state-machines） | 11 条转换规则 |
-| `FileRepository`、`ObjectStoreAdapter`、`FileCheckAdapter`、`SignedUrlProvider`、`DeleteManifestHandler` | 基础设施适配（infrastructure） | 元数据持久化、对象字节与派生物、检查服务适配、短时地址与水印、删除清单逐项执行与核验 |
+| 组件                                                                                                                                                                                                          | 类型                             | 职责                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------ |
+| `FileController`、`FileCheckCallbackController`                                                                                                                                                               | Controller（interfaces）         | 上传初始化、字节完成、检查回调、预览/下载请求的路由与请求适配                        |
+| `InitiateUploadCommand`、`CompleteUploadCommand`、`AskFileCheckCommand`、`PromoteFileCommand`（检查收口）、`BindFileCommand`、`ReplaceDraftFileCommand`、`RemoveDraftFileCommand`、`QueueFormalDeleteCommand` | 应用命令（application/commands） | SRS-SM-FILE-001 各转换与文件生命周期用例                                             |
+| `FileAccessQuery`、`FileStatusQuery`                                                                                                                                                                          | 查询用例（application/queries）  | 每次预览/下载的实时鉴权与检查/绑定状态查询（IFC-QRY-006）                            |
+| `FileModel`、`FileVersion`、`FileReference`                                                                                                                                                                   | 领域模型（domain/models）        | 文件逻辑记录、不可变版本、业务引用                                                   |
+| `FileStateMachine`                                                                                                                                                                                            | 状态机（domain/state-machines）  | 11 条转换规则                                                                        |
+| `FileRepository`、`ObjectStoreAdapter`、`FileCheckAdapter`、`SignedUrlProvider`、`DeleteManifestHandler`                                                                                                      | 基础设施适配（infrastructure）   | 元数据持久化、对象字节与派生物、检查服务适配、短时地址与水印、删除清单逐项执行与核验 |
 
 ## 对外接口
 

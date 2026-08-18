@@ -65,7 +65,11 @@ export class VisibilityDerivationRules {
     if (input.deadlineAt !== undefined && input.deadlineAt <= input.now) {
       return { visible: false, outcome: VisibilityOutcome.DEADLINE_PASSED, projectedFields: [] };
     }
-    return { visible: true, outcome: VisibilityOutcome.VISIBLE, projectedFields: this.projectFields(input.visitor) };
+    return {
+      visible: true,
+      outcome: VisibilityOutcome.VISIBLE,
+      projectedFields: this.projectFields(input.visitor),
+    };
   }
 
   private projectFields(visitor: VisitorType): readonly string[] {

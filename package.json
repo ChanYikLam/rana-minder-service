@@ -1,19 +1,28 @@
 {
   "name": "ranaminder-service",
-  "version": "0.1.0",
-  "description": "RanaMinder 高校学生社团人员管理系统后端服务",
+  "version": "0.0.0",
+  "description": "高校学生社团人员管理系统 · 后端服务（NestJS + TypeScript，按 ADR-001 / ADR-013 / ADR-014）",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.12.0",
   "scripts": {
     "build": "nest build",
-    "build:worker": "nest build",
-    "start": "nest start",
+    "build:all": "nest build",
+    "build:worker": "nest build ranaminder-worker",
+    "start": "node dist/main.js",
+    "start:worker": "node dist/main.worker.js",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main",
-    "start:worker": "node dist/worker",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"package.json\" \"tsconfig*.json\"",
+    "start:dev:worker": "nest start --watch --entryFile main.worker",
+    "lint": "eslint \"{src,test,apps,packages}/**/*.ts\"",
+    "lint:fix": "eslint \"{src,test,apps,packages}/**/*.ts\" --fix",
+    "format": "prettier --write \"{src,test,apps,packages}/**/*.{ts,json,md}\"",
+    "format:check": "prettier --check \"{src,test,apps,packages}/**/*.{ts,json,md}\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test -r ts-node/register \"src/platform/read-model/**/*.spec.ts\"",
     "test:unit": "node --test -r ts-node/register \"src/platform/read-model/**/*.spec.ts\"",
     "test:integration": "node --test -r ts-node/register \"test/integration/**/*.spec.ts\"",
@@ -27,17 +36,26 @@
     "class-validator": "^0.15.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "yaml": "^2.6.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9",
     "@nestjs/cli": "^11.0.24",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.0",
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.2",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.6",
     "ts-node": "^10.9.2",
-    "typescript": "^5.6.3",
+    "typescript": "~5.7.0",
     "typescript-eslint": "^8.67.0"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "ignoreMissing": []
+    }
   }
 }

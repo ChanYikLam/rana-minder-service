@@ -7,17 +7,16 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | ✓ 申请/审批/撤回 |
-| `IFC-TX-002` | 直接权益与通知 | -- |
-| `IFC-TX-003` | Casdoor 外部写入 | ✓ 关系写入与退出执行 |
-| `IFC-TX-004` | 文件上传/检查/绑定 | -- |
-| `IFC-TX-005` | 通知渠道投递 | -- |
-| `IFC-TX-006` | 受控批量 | ✓ 年度换届（先确认新任再移除旧任） |
-| `IFC-TX-007` | 正式删除 | -- |
-| `IFC-TX-008` | 派生刷新与重建 | -- |
-
+| 边界         | 名称               | 本模块参与                         |
+| ------------ | ------------------ | ---------------------------------- |
+| `IFC-TX-001` | 本地业务状态转换   | ✓ 申请/审批/撤回                   |
+| `IFC-TX-002` | 直接权益与通知     | --                                 |
+| `IFC-TX-003` | Casdoor 外部写入   | ✓ 关系写入与退出执行               |
+| `IFC-TX-004` | 文件上传/检查/绑定 | --                                 |
+| `IFC-TX-005` | 通知渠道投递       | --                                 |
+| `IFC-TX-006` | 受控批量           | ✓ 年度换届（先确认新任再移除旧任） |
+| `IFC-TX-007` | 正式删除           | --                                 |
+| `IFC-TX-008` | 派生刷新与重建     | --                                 |
 
 ## 核心职责
 
@@ -25,16 +24,16 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `MembershipController` | Controller（interfaces） | 成员经历、退出/移除 HTTP 入口 |
-| `DepartmentRelationController` | Controller（interfaces） | 部门/职位关系变更、结束、同步异常修复入口 |
-| `DepartmentApplicationController` | Controller（interfaces） | 部门关系申请提交/撤回/审批入口 |
-| `ApproveDeparture`、`RemoveMember`、`ChangeDepartmentRelation`、`ApproveDepartmentApplication` | 应用命令（application/commands） | 状态转换用例；加入部门＋任职/跨部门调动为单一业务命令（MEM-009） |
-| `MemberPeriodQuery`、`DepartmentRelationQuery` | 查询用例（application/queries） | 经历时间线、当前关系与可操作项 |
-| `MembershipPeriod`、`DepartmentRelation`、`DepartmentApplication` | 领域模型（domain/models） | 经历段、关系段、申请与不可变历史 |
-| `MembershipPeriodStateMachine`、`DepartmentRelationStateMachine`、`DepartmentApplicationStateMachine` | 状态机（domain/state-machines） | 三个状态机转换、连续性/自审等前置规则 |
-| `MembershipRepository`、`CasdoorGroupAdapter`、`JobTaskWriter` | 基础设施适配（infrastructure） | 权威对象持久化；Group 写入/回读/外部变更对账；关系任务与换届批次 |
+| 组件                                                                                                  | 类型                             | 职责                                                             |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------- |
+| `MembershipController`                                                                                | Controller（interfaces）         | 成员经历、退出/移除 HTTP 入口                                    |
+| `DepartmentRelationController`                                                                        | Controller（interfaces）         | 部门/职位关系变更、结束、同步异常修复入口                        |
+| `DepartmentApplicationController`                                                                     | Controller（interfaces）         | 部门关系申请提交/撤回/审批入口                                   |
+| `ApproveDeparture`、`RemoveMember`、`ChangeDepartmentRelation`、`ApproveDepartmentApplication`        | 应用命令（application/commands） | 状态转换用例；加入部门＋任职/跨部门调动为单一业务命令（MEM-009） |
+| `MemberPeriodQuery`、`DepartmentRelationQuery`                                                        | 查询用例（application/queries）  | 经历时间线、当前关系与可操作项                                   |
+| `MembershipPeriod`、`DepartmentRelation`、`DepartmentApplication`                                     | 领域模型（domain/models）        | 经历段、关系段、申请与不可变历史                                 |
+| `MembershipPeriodStateMachine`、`DepartmentRelationStateMachine`、`DepartmentApplicationStateMachine` | 状态机（domain/state-machines）  | 三个状态机转换、连续性/自审等前置规则                            |
+| `MembershipRepository`、`CasdoorGroupAdapter`、`JobTaskWriter`                                        | 基础设施适配（infrastructure）   | 权威对象持久化；Group 写入/回读/外部变更对账；关系任务与换届批次 |
 
 ## 对外接口
 

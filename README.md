@@ -72,9 +72,55 @@ rana-minder-service/
 - **CI 流水线**：`docs/engineering/CI与质量门定义-v1.0.md`（门禁权威）、`docs/engineering/CI流水线落地指南-v1.0.md`（`.cnb.yml` 实现明细与维护）
 - **容器与镜像**：`docs/engineering/Docker镜像构建规范-v1.0.md`（镜像构建规则，Dockerfile/.dockerignore 已落地）；开发环境依赖编排见 `docker-compose.dev.yml`
 
+## 启动与开发
+
+> 本节给出 1.1 工程脚手架阶段的可执行命令与约束；版本与库选择处于
+> `DEP-001 候选基线，待首批技术验证后复核锁定`，不得视为已冻结。
+
+### 环境
+
+- Node.js 24 LTS（`engines.node` 约束）
+- pnpm ≥ 9（`packageManager: pnpm@9.12.0`）
+- monorepo 工作区声明见 `pnpm-workspace.yaml`（当前仅启用根包）
+
+### 安装与脚本
+
+```bash
+pnpm install                  # 安装依赖（须 DNS 可达 npm registry）
+pnpm typecheck                # 仅类型检查，不产出
+pnpm lint                     # ESLint（@typescript-eslint 推荐集）
+pnpm format                   # Prettier 写入
+pnpm format:check             # 仅校验格式
+pnpm build                    # nest build → dist/
+```
+
+### 双入口运行（ADR-013）
+
+应用形态为模块化单体，HTTP 应用与后台任务独立启动：
+
+```bash
+pnpm start:dev                # 监听变更，启动 HTTP 应用（src/main.ts → NestApplication）
+pnpm start:dev:worker         # 监听变更，启动后台任务（src/main.worker.ts → NestApplicationContext）
+pnpm start                    # 生产：node dist/main.js（默认 0.0.0.0:3000，PORT 覆盖）
+pnpm start:worker             # 生产：node dist/main.worker.js（无 HTTP 监听）
+```
+
+两个入口共用 `AppModule` 模块图；worker 不创建 HTTP 监听器、不注册 controllers。HTTP
+端口由 `PORT` 覆盖；监听地址由 `HOST` 覆盖（默认 `0.0.0.0`）。
+
+### 当前可写与不可写范围
+
+- **可写**：工程脚手架、根模块聚合点、TS/ESLint/Prettier/EditorConfig 风格、`.gitignore` / `.npmrc`、
+  CI 验证脚本（已在 `scripts/ci/` 由团队提供）。
+- **待团队决策后接入**：`src/database/` 实体与迁移、`src/common/` 错误基础设施、`src/adapters/`
+  适配（db / casdoor / mail / storage）、12 个领域模块、3 个平台支撑模块（`observability`
+  / `job` / `read-model`）。
+- **受控范围**：数据库迁移仅限开发 / 测试环境；真实数据与生产发布门继续关闭。
+
 ## 当前状态
 
 - 需求、架构、数据、接口、安全、测试与运维文档均已完成内部确认
+- 1.1 工程脚手架已落地（NestJS 11 + TS 5.7 + pnpm 9 + 双入口）
 - 代码编写已按 `GOV-CODE-WAIVER-001` 豁免开放
 - 全部实现测试、部署验证和恢复演练仍为"未执行"
 - 生产发布与真实数据启用门继续关闭

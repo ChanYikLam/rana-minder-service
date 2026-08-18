@@ -36,14 +36,17 @@ const makeRecord = (scope: ProjectionScope, items: unknown[] = ['a', 'b']): Proj
 });
 
 /** 构造 service：registry 只注册一个 PUBLIC_DIRECTORY builder，rebuild 可定制 */
-const makeService = (rebuildImpl?: (scope: ProjectionScope) => Promise<ProjectionRecord | null>) => {
+const makeService = (
+  rebuildImpl?: (scope: ProjectionScope) => Promise<ProjectionRecord | null>,
+) => {
   const store = new InMemoryProjectionStore();
   const registry = {
     get: (t: ProjectionType) => {
       assert.equal(t, TYPE);
       return {
         projectionType: TYPE,
-        rebuild: async (scope: ProjectionScope) => (rebuildImpl ? rebuildImpl(scope) : makeRecord(scope)),
+        rebuild: async (scope: ProjectionScope) =>
+          rebuildImpl ? rebuildImpl(scope) : makeRecord(scope),
       };
     },
     list: () => [],
@@ -54,7 +57,10 @@ const makeService = (rebuildImpl?: (scope: ProjectionScope) => Promise<Projectio
 describe('ReadModelQueryService（C3.5 授权/游标/负向）', () => {
   it('未授权作用域 → IFC-ERR-FORBIDDEN（R2 不从投影授权）', async () => {
     const { service } = makeService();
-    await assert.rejects(service.query(TYPE, clubScope('c-other'), auth(), opts()), /IFC-ERR-FORBIDDEN/);
+    await assert.rejects(
+      service.query(TYPE, clubScope('c-other'), auth(), opts()),
+      /IFC-ERR-FORBIDDEN/,
+    );
   });
 
   it('公开目录允许匿名读取', async () => {
@@ -87,8 +93,14 @@ describe('ReadModelQueryService（C3.5 授权/游标/负向）', () => {
 
   it('limit 越界（0 与 101）→ 拒绝', async () => {
     const { service } = makeService();
-    await assert.rejects(service.query(TYPE, clubScope('c1'), auth(), opts({ limit: 0 })), /IFC-ERR-VALIDATION/);
-    await assert.rejects(service.query(TYPE, clubScope('c1'), auth(), opts({ limit: 101 })), /IFC-ERR-VALIDATION/);
+    await assert.rejects(
+      service.query(TYPE, clubScope('c1'), auth(), opts({ limit: 0 })),
+      /IFC-ERR-VALIDATION/,
+    );
+    await assert.rejects(
+      service.query(TYPE, clubScope('c1'), auth(), opts({ limit: 101 })),
+      /IFC-ERR-VALIDATION/,
+    );
   });
 
   it('未知操作符 → 拒绝（IFC-QRY-008：未知操作符必须拒绝，不静默放宽）', async () => {

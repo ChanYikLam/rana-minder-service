@@ -20,7 +20,11 @@ export interface PersonalCenterItem {
   /** 该事项的真实作用域（不得跨社团合并或扩大） */
   readonly sourceScope: ProjectionScope;
   /** 稳定目标引用（详情与执行逐对象重验，IFC-QRY-003） */
-  readonly targetRef: { readonly objectType: string; readonly objectId: string; readonly version: number };
+  readonly targetRef: {
+    readonly objectType: string;
+    readonly objectId: string;
+    readonly version: number;
+  };
   readonly deadlineAt?: string;
   readonly status: string;
 }
@@ -39,7 +43,10 @@ export interface PersonalCenterSourceView {
  * 个人中心派生规则：从主体相关权威对象派生事项条目（确定性）。
  */
 @Injectable()
-export class PersonalCenterRule implements DerivationRule<AuthoritativeSnapshot, readonly PersonalCenterItem[]> {
+export class PersonalCenterRule implements DerivationRule<
+  AuthoritativeSnapshot,
+  readonly PersonalCenterItem[]
+> {
   readonly ruleName = 'personal-center';
 
   derive(source: AuthoritativeSnapshot): readonly PersonalCenterItem[] {

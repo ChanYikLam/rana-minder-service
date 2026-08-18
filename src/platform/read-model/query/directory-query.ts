@@ -102,8 +102,14 @@ export class DirectoryQueryService {
 
   private toFilter(
     params: DirectoryQueryParams,
-  ): { key: string; value: string | { from?: string; to?: string }; operator: 'EQ' | 'RANGE' } | undefined {
-    const chosen: { key: string; value: string | { from?: string; to?: string }; operator: 'EQ' | 'RANGE' }[] = [];
+  ):
+    | { key: string; value: string | { from?: string; to?: string }; operator: 'EQ' | 'RANGE' }
+    | undefined {
+    const chosen: {
+      key: string;
+      value: string | { from?: string; to?: string };
+      operator: 'EQ' | 'RANGE';
+    }[] = [];
     if (params.name !== undefined && params.name !== '') {
       chosen.push({ key: 'name', value: params.name, operator: 'EQ' });
     }

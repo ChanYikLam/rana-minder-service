@@ -7,17 +7,16 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | ✓ 草稿/发布 |
-| `IFC-TX-002` | 直接权益与通知 | ✓ 权益变化同事务保存通知事实 |
-| `IFC-TX-003` | Casdoor 外部写入 | -- |
-| `IFC-TX-004` | 文件上传/检查/绑定 | ✓ 正式提交与文件绑定 |
-| `IFC-TX-005` | 通知渠道投递 | -- |
-| `IFC-TX-006` | 受控批量 | -- |
-| `IFC-TX-007` | 正式删除 | -- |
-| `IFC-TX-008` | 派生刷新与重建 | -- |
-
+| 边界         | 名称               | 本模块参与                   |
+| ------------ | ------------------ | ---------------------------- |
+| `IFC-TX-001` | 本地业务状态转换   | ✓ 草稿/发布                  |
+| `IFC-TX-002` | 直接权益与通知     | ✓ 权益变化同事务保存通知事实 |
+| `IFC-TX-003` | Casdoor 外部写入   | --                           |
+| `IFC-TX-004` | 文件上传/检查/绑定 | ✓ 正式提交与文件绑定         |
+| `IFC-TX-005` | 通知渠道投递       | --                           |
+| `IFC-TX-006` | 受控批量           | --                           |
+| `IFC-TX-007` | 正式删除           | --                           |
+| `IFC-TX-008` | 派生刷新与重建     | --                           |
 
 ## 核心职责
 
@@ -25,16 +24,16 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `FormDefinitionController` / `FormSubmissionController` | Controller（interfaces） | 表单设计/发布/停用、草稿保存、提交与修订的 HTTP 路由与请求适配 |
-| `CreateFormDraftCommand`、`UpdateFormDraftCommand`、`RunPreviewTestCommand`、`PublishFormVersionCommand`、`DeprecateFormVersionCommand`、`ReuseFormVersionCommand` | 应用命令（application/commands） | SRS-SM-FORM-001 各转换的用例编排 |
-| `SaveSubmissionDraftCommand`、`MigrateDraftCommand`、`RequestSubmitCommand`、`CompleteSubmitCommand`（检查通过收口）、`OpenRevisionCommand`、`LockSubmissionCommand`、`RequestCorrectionCommand`、`CleanupDraftCommand` | 应用命令（application/commands） | SRS-SM-FORM-002 各转换的用例编排 |
-| `FormDefinitionModel`、`FormVersionModel`、`FormSubmissionModel`、`FormRevisionModel` | 领域模型（domain/models） | 表单根与不可变版本、提交骨架与可还原修订快照 |
-| `FormDefinitionStateMachine`、`FormSubmissionStateMachine` | 状态机（domain/state-machines） | 转换前置校验 |
-| `FormDraftMigrator`、`FieldPermissionRule` | 领域服务（domain/services） | 草稿跨版本迁移、字段级权限收紧与条件校验规则（纯规则，不依赖存储） |
-| `FormDefinitionQueryService`、`SubmissionQueryService` | 查询用例（application/queries） | 当前指针/版本树、提交与修订详情查询（IFC-QRY-001/002），回源权威、不从缓存或通知推断授权 |
-| `FormDefinitionRepository`、`FormSubmissionRepository`、`AnswerSnapshotStore` | 基础设施适配（infrastructure） | PostgreSQL 关系骨架与 JSONB 答案快照读写、版本与唯一性约束落地 |
+| 组件                                                                                                                                                                                                                    | 类型                             | 职责                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
+| `FormDefinitionController` / `FormSubmissionController`                                                                                                                                                                 | Controller（interfaces）         | 表单设计/发布/停用、草稿保存、提交与修订的 HTTP 路由与请求适配                           |
+| `CreateFormDraftCommand`、`UpdateFormDraftCommand`、`RunPreviewTestCommand`、`PublishFormVersionCommand`、`DeprecateFormVersionCommand`、`ReuseFormVersionCommand`                                                      | 应用命令（application/commands） | SRS-SM-FORM-001 各转换的用例编排                                                         |
+| `SaveSubmissionDraftCommand`、`MigrateDraftCommand`、`RequestSubmitCommand`、`CompleteSubmitCommand`（检查通过收口）、`OpenRevisionCommand`、`LockSubmissionCommand`、`RequestCorrectionCommand`、`CleanupDraftCommand` | 应用命令（application/commands） | SRS-SM-FORM-002 各转换的用例编排                                                         |
+| `FormDefinitionModel`、`FormVersionModel`、`FormSubmissionModel`、`FormRevisionModel`                                                                                                                                   | 领域模型（domain/models）        | 表单根与不可变版本、提交骨架与可还原修订快照                                             |
+| `FormDefinitionStateMachine`、`FormSubmissionStateMachine`                                                                                                                                                              | 状态机（domain/state-machines）  | 转换前置校验                                                                             |
+| `FormDraftMigrator`、`FieldPermissionRule`                                                                                                                                                                              | 领域服务（domain/services）      | 草稿跨版本迁移、字段级权限收紧与条件校验规则（纯规则，不依赖存储）                       |
+| `FormDefinitionQueryService`、`SubmissionQueryService`                                                                                                                                                                  | 查询用例（application/queries）  | 当前指针/版本树、提交与修订详情查询（IFC-QRY-001/002），回源权威、不从缓存或通知推断授权 |
+| `FormDefinitionRepository`、`FormSubmissionRepository`、`AnswerSnapshotStore`                                                                                                                                           | 基础设施适配（infrastructure）   | PostgreSQL 关系骨架与 JSONB 答案快照读写、版本与唯一性约束落地                           |
 
 ## 对外接口
 

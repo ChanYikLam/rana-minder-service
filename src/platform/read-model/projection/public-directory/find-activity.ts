@@ -29,7 +29,10 @@ export interface ActivityDirectorySourceView {
  *
  * 进入公开结果条件（C6.8）：发布后的普通招新，或首次公布后的联合活动。
  */
-export class ActivityDirectoryRule implements DerivationRule<AuthoritativeSnapshot, readonly PublicDirectoryItem[]> {
+export class ActivityDirectoryRule implements DerivationRule<
+  AuthoritativeSnapshot,
+  readonly PublicDirectoryItem[]
+> {
   readonly ruleName = 'find-activity';
 
   derive(source: AuthoritativeSnapshot): readonly PublicDirectoryItem[] {

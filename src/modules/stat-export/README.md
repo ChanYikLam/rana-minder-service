@@ -7,19 +7,18 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | ✓ 导出申请（任务＋快照＋审计同事务） |
-| `IFC-TX-002` | 直接权益与通知 | -- |
-| `IFC-TX-003` | Casdoor 外部写入 | -- |
-| `IFC-TX-004` | 文件上传/检查/绑定 | -- |
-| `IFC-TX-005` | 通知渠道投递 | -- |
-| `IFC-TX-006` | 受控批量 | -- |
-| `IFC-TX-007` | 正式删除 | -- |
-| `IFC-TX-008` | 派生刷新与重建 | ✓ 失权/过期派生失效 |
+| 边界         | 名称               | 本模块参与                           |
+| ------------ | ------------------ | ------------------------------------ |
+| `IFC-TX-001` | 本地业务状态转换   | ✓ 导出申请（任务＋快照＋审计同事务） |
+| `IFC-TX-002` | 直接权益与通知     | --                                   |
+| `IFC-TX-003` | Casdoor 外部写入   | --                                   |
+| `IFC-TX-004` | 文件上传/检查/绑定 | --                                   |
+| `IFC-TX-005` | 通知渠道投递       | --                                   |
+| `IFC-TX-006` | 受控批量           | --                                   |
+| `IFC-TX-007` | 正式删除           | --                                   |
+| `IFC-TX-008` | 派生刷新与重建     | ✓ 失权/过期派生失效                  |
 
 注：导出生成阶段为外部效果命令（IFC-CMD-002，先持久化意图、未可信收口前返回处理中），不属于上述本地事务边界。
-
 
 ## 核心职责
 
@@ -27,13 +26,13 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `StatisticsController`、`ExportController` | Controller（interfaces） | 统计查询、导出申请/重试/提前删除/下载/状态入口与授权上下文 |
-| `ClubStatisticsQuery`、`RecruitmentFunnelQuery`、`JointActivityStatisticsQuery` | 查询用例（application/queries） | 同步只读统计：口径计算、普通社团隔离、联合参与方边界、下钻权限 |
-| `ExportApplyCommand`、`ExportRetryCommand`、`ExportDeleteCommand` | 应用命令（application/commands） | 推进 `SRS-SM-EXP-001`；申请幂等、快照冻结、租约/版本竞争 |
-| `StatisticsSpecification`、`ExportTaskAggregate`、`ExportSnapshot` | 领域模型（domain/models） | 指标口径与失效传播规则；任务状态、范围/字段/附件快照、失权/过期判定 |
-| `ExportFileWriter`、`ShortLivedUrlProvider`、`ExportDisposal` | 基础设施适配（infrastructure） | 对象存储写入（水印/公式转义）、短期下载地址、失效清理与删除传播 |
+| 组件                                                                            | 类型                             | 职责                                                                |
+| ------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------- |
+| `StatisticsController`、`ExportController`                                      | Controller（interfaces）         | 统计查询、导出申请/重试/提前删除/下载/状态入口与授权上下文          |
+| `ClubStatisticsQuery`、`RecruitmentFunnelQuery`、`JointActivityStatisticsQuery` | 查询用例（application/queries）  | 同步只读统计：口径计算、普通社团隔离、联合参与方边界、下钻权限      |
+| `ExportApplyCommand`、`ExportRetryCommand`、`ExportDeleteCommand`               | 应用命令（application/commands） | 推进 `SRS-SM-EXP-001`；申请幂等、快照冻结、租约/版本竞争            |
+| `StatisticsSpecification`、`ExportTaskAggregate`、`ExportSnapshot`              | 领域模型（domain/models）        | 指标口径与失效传播规则；任务状态、范围/字段/附件快照、失权/过期判定 |
+| `ExportFileWriter`、`ShortLivedUrlProvider`、`ExportDisposal`                   | 基础设施适配（infrastructure）   | 对象存储写入（水印/公式转义）、短期下载地址、失效清理与删除传播     |
 
 ## 对外接口
 

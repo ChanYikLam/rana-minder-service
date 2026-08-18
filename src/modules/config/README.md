@@ -7,17 +7,16 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | ✓ 不产生权益通知的配置修改 |
-| `IFC-TX-002` | 直接权益与通知 | ✓ 影响学生权益/管理员权限的版本发布（同事务保存通知事实） |
-| `IFC-TX-003` | Casdoor 外部写入 | -- |
-| `IFC-TX-004` | 文件上传/检查/绑定 | -- |
-| `IFC-TX-005` | 通知渠道投递 | -- |
-| `IFC-TX-006` | 受控批量 | -- |
-| `IFC-TX-007` | 正式删除 | -- |
-| `IFC-TX-008` | 派生刷新与重建 | ✓ 发布后缓存失效（提交后派生刷新） |
-
+| 边界         | 名称               | 本模块参与                                                |
+| ------------ | ------------------ | --------------------------------------------------------- |
+| `IFC-TX-001` | 本地业务状态转换   | ✓ 不产生权益通知的配置修改                                |
+| `IFC-TX-002` | 直接权益与通知     | ✓ 影响学生权益/管理员权限的版本发布（同事务保存通知事实） |
+| `IFC-TX-003` | Casdoor 外部写入   | --                                                        |
+| `IFC-TX-004` | 文件上传/检查/绑定 | --                                                        |
+| `IFC-TX-005` | 通知渠道投递       | --                                                        |
+| `IFC-TX-006` | 受控批量           | --                                                        |
+| `IFC-TX-007` | 正式删除           | --                                                        |
+| `IFC-TX-008` | 派生刷新与重建     | ✓ 发布后缓存失效（提交后派生刷新）                        |
 
 ## 核心职责
 
@@ -25,13 +24,13 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `ConfigController`、`ConfigPublishController` | Controller（interfaces） | 配置查看/修改/预览/发布/回滚入口与授权上下文（含高风险重认证） |
-| `PublishConfigCommand`、`RollbackConfigCommand`、`SnapshotConfigCommand` | 应用命令（application/commands） | 基于旧版本创建新版本、影响预览与差异校验、原子发布、活动快照冻结 |
-| `ConfigVersionAggregate` | 领域模型（domain/models） | 版本不可变性、安全开关版本规则 |
-| `ConfigScopeResolver` | 领域服务（domain/services） | 平台->社团->活动快照三级范围解析 |
-| `ConfigRepository`、`CacheInvalidationClient` | 基础设施适配（infrastructure） | 版本、当前指针与发布记录持久化（PostgreSQL）；权限模板/安全开关发布后缓存立即失效 |
+| 组件                                                                     | 类型                             | 职责                                                                              |
+| ------------------------------------------------------------------------ | -------------------------------- | --------------------------------------------------------------------------------- |
+| `ConfigController`、`ConfigPublishController`                            | Controller（interfaces）         | 配置查看/修改/预览/发布/回滚入口与授权上下文（含高风险重认证）                    |
+| `PublishConfigCommand`、`RollbackConfigCommand`、`SnapshotConfigCommand` | 应用命令（application/commands） | 基于旧版本创建新版本、影响预览与差异校验、原子发布、活动快照冻结                  |
+| `ConfigVersionAggregate`                                                 | 领域模型（domain/models）        | 版本不可变性、安全开关版本规则                                                    |
+| `ConfigScopeResolver`                                                    | 领域服务（domain/services）      | 平台->社团->活动快照三级范围解析                                                  |
+| `ConfigRepository`、`CacheInvalidationClient`                            | 基础设施适配（infrastructure）   | 版本、当前指针与发布记录持久化（PostgreSQL）；权限模板/安全开关发布后缓存立即失效 |
 
 ## 对外接口
 

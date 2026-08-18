@@ -19,18 +19,19 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `CasdoorUserAdapter` | 基础设施适配 | 当前身份解析与账号状态读取（CAS-READ-002/003）、重新认证证据核验（CAS-READ-006） |
-| `CasdoorGroupAdapter` | 基础设施适配 | Organization/Group 定义与主体关系读取（CAS-READ-004/005）、Group 写入执行 |
-| `CasdoorWriteService` | 基础设施适配 | 写后定向读回、有界重试、补偿与第三值识别（CAS-WR-006 至 012）；未确认前不开放新权限 |
-| `CasdoorReconcileRunner` | 后台任务 | 周期全量对账：运行编号、范围、水位、分页扫描与差异候选（CAS-REC-005 至 009） |
-| `CasdoorEventReceiver` | 入口组件 | Webhook 接收（默认关闭）：去重、受限触发定向读回；不直接改变业务状态（CAS-EVT-004/005） |
-| `ExternalResult` / `ExternalError` | 公共类型 | 可信当前值/旧观测/不存在/不唯一/部分结果/不可用/不确定的分类与安全错误信息（CAS-FAIL-005） |
+| 组件                               | 类型         | 职责                                                                                       |
+| ---------------------------------- | ------------ | ------------------------------------------------------------------------------------------ |
+| `CasdoorUserAdapter`               | 基础设施适配 | 当前身份解析与账号状态读取（CAS-READ-002/003）、重新认证证据核验（CAS-READ-006）           |
+| `CasdoorGroupAdapter`              | 基础设施适配 | Organization/Group 定义与主体关系读取（CAS-READ-004/005）、Group 写入执行                  |
+| `CasdoorWriteService`              | 基础设施适配 | 写后定向读回、有界重试、补偿与第三值识别（CAS-WR-006 至 012）；未确认前不开放新权限        |
+| `CasdoorReconcileRunner`           | 后台任务     | 周期全量对账：运行编号、范围、水位、分页扫描与差异候选（CAS-REC-005 至 009）               |
+| `CasdoorEventReceiver`             | 入口组件     | Webhook 接收（默认关闭）：去重、受限触发定向读回；不直接改变业务状态（CAS-EVT-004/005）    |
+| `ExternalResult` / `ExternalError` | 公共类型     | 可信当前值/旧观测/不存在/不唯一/部分结果/不可用/不确定的分类与安全错误信息（CAS-FAIL-005） |
 
 ## 核心接口
 
 CasdoorAdapter 核心接口：
+
 - getUser(userId: string): Promise<ExternalResult<CasdoorUser>>
 - updateUser(userId: string, patch: CasdoorUserPatch): Promise<ExternalResult<void>>
 - getUserGroups(userId: string): Promise<ExternalResult<CasdoorGroup[]>>

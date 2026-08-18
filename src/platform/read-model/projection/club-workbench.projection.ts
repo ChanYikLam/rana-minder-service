@@ -21,7 +21,11 @@ export interface WorkbenchItem {
   /** 社团/联合域作用域（不跨社团合并） */
   readonly targetScope: ProjectionScope;
   /** 源对象/版本（打开/执行时重新授权） */
-  readonly sourceRef: { readonly objectType: string; readonly objectId: string; readonly version: number };
+  readonly sourceRef: {
+    readonly objectType: string;
+    readonly objectId: string;
+    readonly version: number;
+  };
   readonly status: string;
   readonly deadlineAt?: string;
 }
@@ -41,7 +45,10 @@ export interface WorkbenchSourceView {
  * 工作台派生规则：从社团作用域内角色型对象派生条目（确定性）。
  */
 @Injectable()
-export class ClubWorkbenchRule implements DerivationRule<AuthoritativeSnapshot, readonly WorkbenchItem[]> {
+export class ClubWorkbenchRule implements DerivationRule<
+  AuthoritativeSnapshot,
+  readonly WorkbenchItem[]
+> {
   readonly ruleName = 'club-workbench';
 
   derive(source: AuthoritativeSnapshot): readonly WorkbenchItem[] {

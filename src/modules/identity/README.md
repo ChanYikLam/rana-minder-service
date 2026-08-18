@@ -7,17 +7,16 @@
 
 对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
 
-| 边界 | 名称 | 本模块参与 |
-|---|---|---|
-| `IFC-TX-001` | 本地业务状态转换 | ✓ 账号事件与资料写入门 |
-| `IFC-TX-002` | 直接权益与通知 | -- |
-| `IFC-TX-003` | Casdoor 外部写入 | ✓ Casdoor 同步链路（外部写入/回读/补偿） |
-| `IFC-TX-004` | 文件上传/检查/绑定 | -- |
-| `IFC-TX-005` | 通知渠道投递 | ✓ 验证邮件渠道投递 |
-| `IFC-TX-006` | 受控批量 | -- |
-| `IFC-TX-007` | 正式删除 | -- |
-| `IFC-TX-008` | 派生刷新与重建 | -- |
-
+| 边界         | 名称               | 本模块参与                               |
+| ------------ | ------------------ | ---------------------------------------- |
+| `IFC-TX-001` | 本地业务状态转换   | ✓ 账号事件与资料写入门                   |
+| `IFC-TX-002` | 直接权益与通知     | --                                       |
+| `IFC-TX-003` | Casdoor 外部写入   | ✓ Casdoor 同步链路（外部写入/回读/补偿） |
+| `IFC-TX-004` | 文件上传/检查/绑定 | --                                       |
+| `IFC-TX-005` | 通知渠道投递       | ✓ 验证邮件渠道投递                       |
+| `IFC-TX-006` | 受控批量           | --                                       |
+| `IFC-TX-007` | 正式删除           | --                                       |
+| `IFC-TX-008` | 派生刷新与重建     | --                                       |
 
 ## 核心职责
 
@@ -33,19 +32,19 @@
 
 ## 关键组件
 
-| 组件 | 类型 | 职责 |
-|---|---|---|
-| `ProfilesController` | Controller（interfaces） | 本人资料读写、资料门状态与受限范围查询 |
-| `AccountAccessController` | Controller（interfaces） | 账号访问/降级窗口状态查询与白名单能力判定 |
-| `SaveProfileUseCase` | 应用命令（application/commands） | 保存资料新版本、重算全部资料门、生成同步意图 |
-| `EmailVerificationUseCase` | 应用命令（application/commands） | 发送/重发验证邮件，消费验证链接（单次令牌、24 小时） |
-| `HandleAccountStatusEventUseCase` | 应用命令（application/commands） | 接收禁用/删除/暂不可确认事件与对账结果，推进 IDN-001 |
-| `ApplyProfileSyncStepUseCase` | 应用命令（application/commands） | 被 job 同步任务逐次调用：执行写入、回读收口、回退或转冲突 |
-| `AccountAccessStateMachine` | 状态机（domain/state-machines） | IDN-001 转换门（有效/禁用/删除/暂不可确认） |
-| `ProfileWriteGateStateMachine` | 状态机（domain/state-machines） | IDN-002 复合派生门（待补充/待邮箱验证/可写/分范围受限），含资料门重算规则 |
-| `ProfileSyncStateMachine` | 状态机（domain/state-machines） | IDN-003 同步链路（待同步/重试中/待读回核验/冲突待本人选择/已回退） |
-| `CasdoorUserAdapter` | 基础设施适配（infrastructure） | 账号状态读取（CAS-READ-003）、资料写回与定向读回（CAS-WR-*、CAS-REC-001） |
-| `ProfileSyncTaskWriter` | 基础设施适配（infrastructure） | 向 job 模块登记同步/读回/对账任务 |
+| 组件                              | 类型                             | 职责                                                                      |
+| --------------------------------- | -------------------------------- | ------------------------------------------------------------------------- |
+| `ProfilesController`              | Controller（interfaces）         | 本人资料读写、资料门状态与受限范围查询                                    |
+| `AccountAccessController`         | Controller（interfaces）         | 账号访问/降级窗口状态查询与白名单能力判定                                 |
+| `SaveProfileUseCase`              | 应用命令（application/commands） | 保存资料新版本、重算全部资料门、生成同步意图                              |
+| `EmailVerificationUseCase`        | 应用命令（application/commands） | 发送/重发验证邮件，消费验证链接（单次令牌、24 小时）                      |
+| `HandleAccountStatusEventUseCase` | 应用命令（application/commands） | 接收禁用/删除/暂不可确认事件与对账结果，推进 IDN-001                      |
+| `ApplyProfileSyncStepUseCase`     | 应用命令（application/commands） | 被 job 同步任务逐次调用：执行写入、回读收口、回退或转冲突                 |
+| `AccountAccessStateMachine`       | 状态机（domain/state-machines）  | IDN-001 转换门（有效/禁用/删除/暂不可确认）                               |
+| `ProfileWriteGateStateMachine`    | 状态机（domain/state-machines）  | IDN-002 复合派生门（待补充/待邮箱验证/可写/分范围受限），含资料门重算规则 |
+| `ProfileSyncStateMachine`         | 状态机（domain/state-machines）  | IDN-003 同步链路（待同步/重试中/待读回核验/冲突待本人选择/已回退）        |
+| `CasdoorUserAdapter`              | 基础设施适配（infrastructure）   | 账号状态读取（CAS-READ-003）、资料写回与定向读回（CAS-WR-*、CAS-REC-001） |
+| `ProfileSyncTaskWriter`           | 基础设施适配（infrastructure）   | 向 job 模块登记同步/读回/对账任务                                         |
 
 ## 对外接口
 
