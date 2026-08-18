@@ -14,26 +14,26 @@
 
 ## 文件索引
 
-| 文件 | 对应端点域 | 清单章节 |
-|---|---|---|
-| `api-envelope.ts` | 通用请求/响应/任务/列表信封 | §1.1/§1.2/§1.4 |
-| `api-error.ts` | 17 类错误码与 HTTP 状态映射 | §1.3、接口实现规格 §7 |
-| `pagination.ts` | 游标分页契约 | §1.4、接口实现规格 §9 |
-| `api-paths.ts` | API 路径常量与路径构造纯函数 | §1.5、接口实现规格 §6 |
-| `auth.contracts.ts` | 身份与会话 auth | §4 |
-| `explore.contracts.ts` | 公开探索 explore | §6 |
-| `notifications.contracts.ts` | 通知 notifications（含邮件配置/熔断） | §7、§14.4、§15.9 |
-| `me.contracts.ts` | 个人中心 me | §8 |
-| `files.contracts.ts` | 文件 files | §9 |
-| `org.contracts.ts` | 组织工作空间 org context/dashboard | §5 |
-| `members.contracts.ts` | 成员生命周期 members | §10 |
-| `recruitment.contracts.ts` | 普通招新 recruitment | §11 |
-| `joint.contracts.ts` | 联合活动 joint | §12 |
-| `forms.contracts.ts` | 动态表单 forms | §13 |
-| `config.contracts.ts` | 组织配置与统计 | §14.1/§14.2 |
-| `exports.contracts.ts` | 统计与导出 exports | §14.3 |
-| `admin.contracts.ts` | 平台管理 admin | §15 |
-| `audit.contracts.ts` | 事实纠错与审计 corrections/audit | §16 |
+| 文件                         | 对应端点域                            | 清单章节              |
+| ---------------------------- | ------------------------------------- | --------------------- |
+| `api-envelope.ts`            | 通用请求/响应/任务/列表信封           | §1.1/§1.2/§1.4        |
+| `api-error.ts`               | 17 类错误码与 HTTP 状态映射           | §1.3、接口实现规格 §7 |
+| `pagination.ts`              | 游标分页契约                          | §1.4、接口实现规格 §9 |
+| `api-paths.ts`               | API 路径常量与路径构造纯函数          | §1.5、接口实现规格 §6 |
+| `auth.contracts.ts`          | 身份与会话 auth                       | §4                    |
+| `explore.contracts.ts`       | 公开探索 explore                      | §6                    |
+| `notifications.contracts.ts` | 通知 notifications（含邮件配置/熔断） | §7、§14.4、§15.9      |
+| `me.contracts.ts`            | 个人中心 me                           | §8                    |
+| `files.contracts.ts`         | 文件 files                            | §9                    |
+| `org.contracts.ts`           | 组织工作空间 org context/dashboard    | §5                    |
+| `members.contracts.ts`       | 成员生命周期 members                  | §10                   |
+| `recruitment.contracts.ts`   | 普通招新 recruitment                  | §11                   |
+| `joint.contracts.ts`         | 联合活动 joint                        | §12                   |
+| `forms.contracts.ts`         | 动态表单 forms                        | §13                   |
+| `config.contracts.ts`        | 组织配置与统计                        | §14.1/§14.2           |
+| `exports.contracts.ts`       | 统计与导出 exports                    | §14.3                 |
+| `admin.contracts.ts`         | 平台管理 admin                        | §15                   |
+| `audit.contracts.ts`         | 事实纠错与审计 corrections/audit      | §16                   |
 
 ## 使用与准入规则
 

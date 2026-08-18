@@ -13,13 +13,7 @@ import type { ApiListResponse } from './api-envelope';
 /* ============ 领域枚举（传输层对外契约） ============ */
 
 export type RecruitmentActivityStatus =
-  | 'draft'
-  | 'in_progress'
-  | 'paused'
-  | 'completed'
-  | 'cancelled'
-  | 'force_completed'
-  | 'archived';
+  'draft' | 'in_progress' | 'paused' | 'completed' | 'cancelled' | 'force_completed' | 'archived';
 
 export type RecruitmentChannelStatus = 'not_open' | 'open' | 'paused' | 'closed';
 
@@ -46,11 +40,7 @@ export type InterviewStatus =
   | 'invalidated';
 
 export type RecruitmentInvitationStatus =
-  | 'pending_acceptance'
-  | 'accepted'
-  | 'rejected'
-  | 'withdrawn'
-  | 'expired';
+  'pending_acceptance' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
 
 export type InterviewAttendance = 'none' | 'leave' | 'late' | 'absent' | 'present';
 
@@ -482,4 +472,8 @@ export type RecruitmentRoundListResult = ApiListResponse<RecRound>;
 export type RecInterviewListResult = ApiListResponse<RecInterview>;
 export type RecInvitationListResult = ApiListResponse<RecInvitation>;
 export type ReviewListResult = ApiListResponse<ReviewItem>;
-export type InterviewerCandidateListResult = ApiListResponse<{ id: string; name: string; role: string }>;
+export type InterviewerCandidateListResult = ApiListResponse<{
+  id: string;
+  name: string;
+  role: string;
+}>;

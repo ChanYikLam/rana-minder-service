@@ -56,7 +56,8 @@ export const orgPath = {
   members: (clubId: string) => `/api/org/${clubId}/members`,
   memberDetail: (clubId: string, memberId: string) => `/api/org/${clubId}/members/${memberId}`,
   recruitment: (clubId: string) => `/api/org/${clubId}/recruitment`,
-  recruitmentDetail: (clubId: string, activityId: string) => `/api/org/${clubId}/recruitment/${activityId}`,
+  recruitmentDetail: (clubId: string, activityId: string) =>
+    `/api/org/${clubId}/recruitment/${activityId}`,
   joint: (clubId: string) => `/api/org/${clubId}/joint`,
   jointDetail: (clubId: string, jointId: string) => `/api/org/${clubId}/joint/${jointId}`,
   forms: (clubId: string) => `/api/org/${clubId}/forms`,

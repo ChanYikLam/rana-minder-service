@@ -10,21 +10,30 @@
  */
 
 import type { ApiListResponse } from './api-envelope';
-import type { EmailConfigInput, EmailConfigView, NotificationKind, NotificationKillSwitchState } from './notifications.contracts';
+import type {
+  EmailConfigInput,
+  EmailConfigView,
+  NotificationKind,
+  NotificationKillSwitchState,
+} from './notifications.contracts';
 import type { FormDetail, FormDesignerState, FormField, FormListItem } from './forms.contracts';
 
 /* ============ 社团接入与治理 ============ */
 
 export type ClubAccessStatus =
-  | 'wizard_pending'
-  | 'enabled'
-  | 'suspended'
-  | 'sync_abnormal_ro'
-  | 'pending_rebind';
+  'wizard_pending' | 'enabled' | 'suspended' | 'sync_abnormal_ro' | 'pending_rebind';
 
 export interface ClubSyncEvent {
   id: string;
-  kind: 'group_lost' | 'repair' | 'rebind' | 'disconnect' | 'reaccess' | 'suspend' | 'recover' | 'import';
+  kind:
+    | 'group_lost'
+    | 'repair'
+    | 'rebind'
+    | 'disconnect'
+    | 'reaccess'
+    | 'suspend'
+    | 'recover'
+    | 'import';
   at: string;
   note: string;
 }

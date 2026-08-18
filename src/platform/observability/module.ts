@@ -24,11 +24,7 @@
 
 import { Module, type Provider } from '@nestjs/common';
 
-import {
-  REDACTION_RULES,
-  RETENTION_RULES,
-  TRACE_ID_GENERATOR,
-} from './domain/services/tokens';
+import { REDACTION_RULES, RETENTION_RULES, TRACE_ID_GENERATOR } from './domain/services/tokens';
 import {
   FORBIDDEN_KEY_PATTERNS,
   SENSITIVE_KEY_PATTERNS,
