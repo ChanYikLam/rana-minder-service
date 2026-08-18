@@ -32,7 +32,7 @@
  * 规则保持 `Object.freeze` 不可变，便于在测试中辨别误改。
  */
 
-import { Module, type Provider } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule, type Provider } from '@nestjs/common';
 
 import { REDACTION_RULES, RETENTION_RULES, TRACE_ID_GENERATOR } from './domain/services/tokens';
 import {
@@ -65,6 +65,7 @@ import {
   LOG_STORAGE,
   LOG_WRITER,
   LOG_QUERY,
+  NEST_LOGGER_SERVICE,
 } from './logging/tokens';
 import { DefaultLogSanitizer } from './logging/sanitizer';
 import { NestAppLogger } from './logging/app-logger';
@@ -81,6 +82,7 @@ import {
 } from './infrastructure/trace-context.adapter';
 import { NotWiredLogStoragePort } from './infrastructure/log-storage.port';
 import { DefaultLogWriterAdapter } from './infrastructure/log-writer.adapter';
+import { NestLoggerServiceAdapter } from './infrastructure/nest-logger.adapter';
 
 import { AUDIT_BOUNDARY_ASSERT } from './audit-link/tokens';
 import { DefaultAuditBoundaryAssert } from './audit-link/audit-boundary';
@@ -102,6 +104,8 @@ import { NotWiredDepLatestPort } from './status-page/dep-latest';
 import { RejectAllStatusPageAuthorizer } from './status-page/status-page-authorizer';
 import { DefaultStatusSummaryQueryService } from './status-page/status-summary-query.service';
 import { StatusPageController } from './status-page/page-controller';
+
+import { TraceMiddleware } from './interfaces/trace.middleware';
 
 import { HEALTH_SUMMARY_SERVICE } from './health-summary/tokens';
 import { DefaultHealthSummaryService } from './health-summary/health-summary';
@@ -188,6 +192,12 @@ const LOG_QUERY_PROVIDER: Provider = {
   provide: LOG_QUERY,
   useFactory: (storage, sanitizer) => new DefaultLogQueryUseCase(storage, sanitizer),
   inject: [LOG_STORAGE, LOG_SANITIZER],
+};
+
+const NEST_LOGGER_SERVICE_PROVIDER: Provider = {
+  provide: NEST_LOGGER_SERVICE,
+  useFactory: (sanitizer, appLogger) => new NestLoggerServiceAdapter({ sanitizer, appLogger }),
+  inject: [LOG_SANITIZER, APP_LOGGER],
 };
 
 // ----- tracing providers -----
@@ -293,6 +303,7 @@ const BACKUP_REPORT_SERVICE_PROVIDER: Provider = {
     LOG_STORAGE_PROVIDER,
     LOG_WRITER_PROVIDER,
     LOG_QUERY_PROVIDER,
+    NEST_LOGGER_SERVICE_PROVIDER,
     SPAN_LINK_PROVIDER,
     CORRELATION_PROVIDER,
     TRACE_CONTEXT_PROVIDER,
@@ -319,6 +330,7 @@ const BACKUP_REPORT_SERVICE_PROVIDER: Provider = {
     LOG_STORAGE,
     LOG_WRITER,
     LOG_QUERY,
+    NEST_LOGGER_SERVICE,
     SPAN_LINK,
     CORRELATION,
     TRACE_CONTEXT,
@@ -335,4 +347,10 @@ const BACKUP_REPORT_SERVICE_PROVIDER: Provider = {
     BACKUP_REPORT_SERVICE,
   ],
 })
-export class ObservabilityModule {}
+export class ObservabilityModule implements NestModule {
+  // 全局挂 TraceMiddleware：让每一次 HTTP 请求都进入 AsyncLocalStorage 上下文，
+  // 业务代码 / 拦截器 / 守卫 / 管道都可通过 TraceContextAdapter.current() 取到 traceId。
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(TraceMiddleware).forRoutes('*');
+  }
+}
