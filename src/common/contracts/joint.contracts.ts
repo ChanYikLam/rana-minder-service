@@ -21,18 +21,14 @@ export type JointActivityStatus =
   | 'force_closed';
 
 export type JointClubStatus =
-  | 'invited'
-  | 'accepted'
-  | 'confirm_pending'
-  | 'locked'
-  | 'force_suspended'
-  | 'removed';
+  'invited' | 'accepted' | 'confirm_pending' | 'locked' | 'force_suspended' | 'removed';
 
 export type JointChannelStatus = 'not_open' | 'open' | 'paused' | 'closed';
 
 export type JointApplicationStatus = 'draft' | 'submitted' | 'archived';
 
-export type JointConclusionStatus = 'pending' | 'evaluating' | 'invite_pending' | 'accepted_locked' | 'archived';
+export type JointConclusionStatus =
+  'pending' | 'evaluating' | 'invite_pending' | 'accepted_locked' | 'archived';
 
 export type JointInterviewStatus =
   | 'pending_selection'
@@ -46,7 +42,8 @@ export type JointInterviewStatus =
   | 'cancelled_archived'
   | 'completed_archived';
 
-export type JointInvitationStatus = 'pending_acceptance' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
+export type JointInvitationStatus =
+  'pending_acceptance' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
 
 export type JointInvitationType = 'admit' | 'join';
 
