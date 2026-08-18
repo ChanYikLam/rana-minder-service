@@ -70,12 +70,14 @@ export class DefaultHealthSummaryService implements HealthSummaryService {
     ];
 
     let overall: HealthVerdict;
-    if (subsystems.every((s) => s.state === 'fresh')) {
-      overall = 'ok';
-    } else if (subsystems.some((s) => s.state === 'stale' || s.state === 'unknown')) {
+    const allUnknown = subsystems.every((s) => s.state === 'unknown');
+    const anyDegraded = subsystems.some((s) => s.state === 'stale' || s.state === 'unknown');
+    if (allUnknown) {
+      overall = 'unknown';
+    } else if (anyDegraded) {
       overall = 'degraded';
     } else {
-      overall = 'unknown';
+      overall = 'ok';
     }
 
     return { now, overall, subsystems };
