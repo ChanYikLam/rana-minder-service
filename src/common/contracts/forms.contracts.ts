@@ -124,7 +124,8 @@ export interface CloneFormResult {
   version: number;
 }
 
-export type FormSubmissionStatus = 'draft' | 'checking' | 'submitted' | 'deleted' | 'revision' | 'locked';
+export type FormSubmissionStatus =
+  'draft' | 'checking' | 'submitted' | 'deleted' | 'revision' | 'locked';
 
 /** 表单提交完整对象（FormSubmission） */
 export interface FormSubmission {
