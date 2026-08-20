@@ -10,19 +10,12 @@ import assert from 'node:assert/strict';
 import { DefaultProfileWriteGateStateMachine } from '../../domain/state-machines/profile-write-gate.state-machine';
 import { DefaultProfileGatePolicy } from '../../domain/services/profile-gate.policy';
 import { ProfileWriteGateState } from '../../domain/state-machines/profile-write-gate.state-machine';
-import type {
-  ProfileRepository,
-} from '../ports/profile-repository.port';
-import type {
-  ProfileSyncIntentRepository,
-} from '../ports/profile-sync-intent-repository.port';
+import type { ProfileRepository } from '../ports/profile-repository.port';
+import type { ProfileSyncIntentRepository } from '../ports/profile-sync-intent-repository.port';
 import type { RequiredFieldRulesPort } from '../ports/required-field-rules.port';
 import type { ProfileSyncTaskPort } from '../ports/profile-sync-task.port';
 import type { IdentityAuditPort } from '../ports/identity-audit.port';
-import {
-  DefaultSaveProfileUseCase,
-  type SaveProfileInput,
-} from './save-profile.use-case';
+import { DefaultSaveProfileUseCase, type SaveProfileInput } from './save-profile.use-case';
 import { IdentityErrorCode } from '../errors';
 import type { ProfileSnapshot } from '../../domain/models/profile';
 
@@ -184,9 +177,7 @@ describe('SaveProfileUseCase（IFC-SM-002 R001）', () => {
     const intentRepository = inMemorySyncIntentRepository();
     const useCase = createUseCase({ repository, intentRepository });
 
-    const result = await useCase.execute(
-      inputFor({ fields: { email: 'new@example.com' } }),
-    );
+    const result = await useCase.execute(inputFor({ fields: { email: 'new@example.com' } }));
 
     assert.equal(result.profile.pendingEmail, 'new@example.com');
     assert.equal(result.profile.verifiedEmail, null);

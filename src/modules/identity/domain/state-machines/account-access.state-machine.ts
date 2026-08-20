@@ -18,7 +18,7 @@
  * 守卫要点（SRS 原文）：
  * - 事件无效、账号不匹配或无法确认时不改为禁用/删除，保持有效并进入审计/对账；
  * - 无法确认删除时不得猜测删除；
-*  - 恢复与禁用/删除事件竞争时以可验证的 Casdoor 当前状态为准。
+ *  - 恢复与禁用/删除事件竞争时以可验证的 Casdoor 当前状态为准。
  */
 
 export const AccountAccessState = {
@@ -47,9 +47,7 @@ export type AccountAccessEvent = (typeof AccountAccessEvent)[keyof typeof Accoun
 
 /** 降级白名单命令类别（IDN-009/SRS-FAIL-001；判定在 DegradationPolicy） */
 export type DegradationCommandCategory =
-  | 'PUBLIC_PAGE'
-  | 'OWN_BASIC_PROFILE_READ'
-  | 'OWN_EXISTING_DRAFT_EDIT';
+  'PUBLIC_PAGE' | 'OWN_BASIC_PROFILE_READ' | 'OWN_EXISTING_DRAFT_EDIT';
 
 export interface WhitelistVerdict {
   /** 是否允许执行该降级白名单命令 */
@@ -78,10 +76,7 @@ export interface AccountAccessTransitionResult {
   readonly reason: string | null;
 }
 
-function reject(
-  currentState: AccountAccessState,
-  reason: string,
-): AccountAccessTransitionResult {
+function reject(currentState: AccountAccessState, reason: string): AccountAccessTransitionResult {
   return {
     allowed: false,
     nextState: currentState,
@@ -162,7 +157,10 @@ export class DefaultAccountAccessStateMachine implements AccountAccessStateMachi
       }
       case AccountAccessEvent.ACCOUNT_REENABLED: {
         if (input.currentState !== AccountAccessState.DISABLED) {
-          return reject(input.currentState, '仅禁用状态可恢复；账号仍禁用/已删除/无法确认时保持原状态');
+          return reject(
+            input.currentState,
+            '仅禁用状态可恢复；账号仍禁用/已删除/无法确认时保持原状态',
+          );
         }
         return accept(AccountAccessState.ACTIVE, { reauthenticationRequired: true });
       }

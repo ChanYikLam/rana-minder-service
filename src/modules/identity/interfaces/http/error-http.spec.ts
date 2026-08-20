@@ -33,7 +33,8 @@ describe('toApiError（API-ERR-001）', () => {
       404,
     );
     assert.equal(
-      toApiError(new IdentityCommandError(IdentityErrorCode.DEPENDENCY_UNAVAILABLE, '依赖不可用')).status,
+      toApiError(new IdentityCommandError(IdentityErrorCode.DEPENDENCY_UNAVAILABLE, '依赖不可用'))
+        .status,
       503,
     );
   });

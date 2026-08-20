@@ -13,7 +13,10 @@
  *   拒绝由会话/授权层（HTTP 401/403）先于控制器执行。
  */
 
-import type { GetMyProfileQuery, GetMyProfileResult } from '../../application/queries/get-my-profile.query';
+import type {
+  GetMyProfileQuery,
+  GetMyProfileResult,
+} from '../../application/queries/get-my-profile.query';
 import type { GetAccountAccessQuery } from '../../application/queries/get-account-access.query';
 import type { DegradationCommandCategory } from '../../domain/services/degradation.policy';
 import type { ActorContext } from './profiles.controller';
@@ -50,7 +53,8 @@ export interface AccessCheckResponse {
   readonly reason: string | null;
 }
 
-export type AccountAccessControllerResult<T> = { readonly ok: true; readonly value: T } | ApiErrorResult;
+export type AccountAccessControllerResult<T> =
+  { readonly ok: true; readonly value: T } | ApiErrorResult;
 
 export class AccountAccessController {
   constructor(
@@ -61,7 +65,10 @@ export class AccountAccessController {
   /** GET /api/auth/session */
   async getSession(actor: ActorContext): Promise<AccountAccessControllerResult<SessionResponse>> {
     try {
-      const profile = await this.getMyProfile.execute({ subjectId: actor.subjectId, now: actor.now });
+      const profile = await this.getMyProfile.execute({
+        subjectId: actor.subjectId,
+        now: actor.now,
+      });
       const access = await this.getAccountAccess.execute({
         subjectId: actor.subjectId,
         now: actor.now,
@@ -102,7 +109,12 @@ export class AccountAccessController {
 
 function toSessionResponse(
   profile: GetMyProfileResult,
-  access: { readonly state: string; readonly degraded: boolean; readonly degradedSince: Date | null; readonly remainingWindowMs: number },
+  access: {
+    readonly state: string;
+    readonly degraded: boolean;
+    readonly degradedSince: Date | null;
+    readonly remainingWindowMs: number;
+  },
 ): SessionResponse {
   return {
     profile: {

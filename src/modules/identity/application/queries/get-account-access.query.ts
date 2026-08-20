@@ -6,7 +6,10 @@
  */
 
 import type { AccountAccessRepository } from '../ports/account-access-repository.port';
-import type { DegradationPolicy, DegradationCommandCategory } from '../../domain/services/degradation.policy';
+import type {
+  DegradationPolicy,
+  DegradationCommandCategory,
+} from '../../domain/services/degradation.policy';
 import { identityErrors } from '../errors';
 
 export interface GetAccountAccessInput {

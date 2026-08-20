@@ -15,7 +15,10 @@
 
 import type { DbAdapter } from '../../../shared/db-adapter';
 import type { IdentityUnitOfWork } from './unit-of-work';
-import type { IdentityAuditPort, IdentityAuditFact } from '../application/ports/identity-audit.port';
+import type {
+  IdentityAuditPort,
+  IdentityAuditFact,
+} from '../application/ports/identity-audit.port';
 
 export class PostgresIdentityAudit implements IdentityAuditPort {
   constructor(

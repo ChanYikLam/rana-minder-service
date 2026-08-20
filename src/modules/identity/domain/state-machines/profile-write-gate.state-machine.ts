@@ -84,9 +84,7 @@ export interface ProfileWriteGateStateMachine {
 }
 
 export class DefaultProfileWriteGateStateMachine implements ProfileWriteGateStateMachine {
-  transition(
-    input: ProfileWriteGateTransitionInput,
-  ): StateTransitionResult<ProfileWriteGateState> {
+  transition(input: ProfileWriteGateTransitionInput): StateTransitionResult<ProfileWriteGateState> {
     const g = ProfileWriteGateState;
     switch (input.event) {
       case ProfileWriteGateEvent.SAVE_PLATFORM_PROFILE: {
@@ -110,10 +108,7 @@ export class DefaultProfileWriteGateStateMachine implements ProfileWriteGateStat
       }
       case ProfileWriteGateEvent.SEND_VERIFICATION_EMAIL: {
         if (input.currentState !== g.PENDING_EMAIL_VERIFICATION) {
-          return rejectTransition(
-            g.PENDING_EMAIL_VERIFICATION,
-            '仅待邮箱验证状态可发送验证邮件',
-          );
+          return rejectTransition(g.PENDING_EMAIL_VERIFICATION, '仅待邮箱验证状态可发送验证邮件');
         }
         if (!input.emailValid) {
           return rejectTransition(g.PENDING_EMAIL_VERIFICATION, '邮箱格式无效');

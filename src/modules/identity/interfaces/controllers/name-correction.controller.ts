@@ -32,7 +32,8 @@ export interface ReviewNameCorrectionResponse {
   readonly newName: string | null;
 }
 
-export type NameCorrectionControllerResult<T> = { readonly ok: true; readonly value: T } | ApiErrorResult;
+export type NameCorrectionControllerResult<T> =
+  { readonly ok: true; readonly value: T } | ApiErrorResult;
 
 export class NameCorrectionController {
   constructor(
@@ -43,20 +44,20 @@ export class NameCorrectionController {
   ) {}
 
   /** POST /api/auth/profile/name-correction */
-  async submit(actor: ActorContext, body: unknown): Promise<NameCorrectionControllerResult<SubmitNameCorrectionResponse>> {
+  async submit(
+    actor: ActorContext,
+    body: unknown,
+  ): Promise<NameCorrectionControllerResult<SubmitNameCorrectionResponse>> {
     try {
       const envelope = parseRequestEnvelope(body);
       const input = envelope.input ?? {};
       const requestedName = typeof input.requestedName === 'string' ? input.requestedName : null;
       if (!requestedName) {
-        throw new IdentityCommandError(
-          IdentityErrorCode.VALIDATION_FAILED,
-          '缺少新姓名',
-          { fieldErrors: { requestedName: ['必填'] } },
-        );
+        throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少新姓名', {
+          fieldErrors: { requestedName: ['必填'] },
+        });
       }
-      const proofReference =
-        typeof input.proofReference === 'string' ? input.proofReference : null;
+      const proofReference = typeof input.proofReference === 'string' ? input.proofReference : null;
 
       const oldName = await this.trustedNameProvider(actor.subjectId);
       if (!oldName) {
@@ -82,7 +83,10 @@ export class NameCorrectionController {
   }
 
   /** POST /api/auth/profile/name-correction/review */
-  async review(actor: ActorContext, body: unknown): Promise<NameCorrectionControllerResult<ReviewNameCorrectionResponse>> {
+  async review(
+    actor: ActorContext,
+    body: unknown,
+  ): Promise<NameCorrectionControllerResult<ReviewNameCorrectionResponse>> {
     try {
       const envelope = parseRequestEnvelope(body);
       const input = envelope.input ?? {};
@@ -90,13 +94,18 @@ export class NameCorrectionController {
       const decision = typeof input.decision === 'string' ? input.decision : null;
       const reason = typeof input.reason === 'string' ? input.reason : null;
       if (!requestId || !decision || !reason) {
-        throw new IdentityCommandError(
-          IdentityErrorCode.VALIDATION_FAILED,
-          '裁决请求不完整',
-          { fieldErrors: { requestId: [requestId ? '' : '必填'], decision: [decision ? '' : '必填'], reason: [reason ? '' : '必填'] } },
-        );
+        throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '裁决请求不完整', {
+          fieldErrors: {
+            requestId: [requestId ? '' : '必填'],
+            decision: [decision ? '' : '必填'],
+            reason: [reason ? '' : '必填'],
+          },
+        });
       }
-      if (decision !== NameCorrectionDecision.APPROVE && decision !== NameCorrectionDecision.REJECT) {
+      if (
+        decision !== NameCorrectionDecision.APPROVE &&
+        decision !== NameCorrectionDecision.REJECT
+      ) {
         throw new IdentityCommandError(
           IdentityErrorCode.VALIDATION_FAILED,
           '裁决只能为 APPROVE 或 REJECT',

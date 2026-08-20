@@ -120,7 +120,11 @@ export class DefaultResolveSyncConflictUseCase implements ResolveSyncConflictUse
     });
     const nextSnapshot = nextIntent.toSnapshot();
 
-    await this.profileRepository.save(profile.toSnapshot(), profile.events, profileSnapshot.version);
+    await this.profileRepository.save(
+      profile.toSnapshot(),
+      profile.events,
+      profileSnapshot.version,
+    );
     await this.syncIntentRepository.save(nextSnapshot, nextIntent.events);
     await this.taskPort.scheduleProfileSync(
       input.subjectId,
@@ -159,12 +163,22 @@ export class DefaultResolveSyncConflictUseCase implements ResolveSyncConflictUse
     }
     const profile = Profile.fromSnapshot(profileSnapshot);
     if (
-      !profile.adoptExternalValue(this.gateMachine, this.gatePolicy, input.field, input.chosenValue, input.now)
+      !profile.adoptExternalValue(
+        this.gateMachine,
+        this.gatePolicy,
+        input.field,
+        input.chosenValue,
+        input.now,
+      )
     ) {
       throw identityErrors.preconditionFailed('本地无法采用 Casdoor 当前值');
     }
 
-    await this.profileRepository.save(profile.toSnapshot(), profile.events, profileSnapshot.version);
+    await this.profileRepository.save(
+      profile.toSnapshot(),
+      profile.events,
+      profileSnapshot.version,
+    );
     await this.syncIntentRepository.save(intent.toSnapshot(), intent.events);
     await this.audit.record({
       type: 'PROFILE_SYNC_CONFLICT',

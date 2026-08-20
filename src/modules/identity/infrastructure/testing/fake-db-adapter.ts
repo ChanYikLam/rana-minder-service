@@ -100,7 +100,10 @@ function handleUpsert(
   if (!returning) {
     return [];
   }
-  const conflictKey = /ON CONFLICT\s*\(([a-z_,\s]+)\)/i.exec(sql)?.[1].replace(/\s+/g, '').toLowerCase();
+  const conflictKey = /ON CONFLICT\s*\(([a-z_,\s]+)\)/i
+    .exec(sql)?.[1]
+    .replace(/\s+/g, '')
+    .toLowerCase();
   const guard = matchVersionGuard(sql);
   const existingRows = tables.get(insert.table) ?? [];
   if (conflictKey) {

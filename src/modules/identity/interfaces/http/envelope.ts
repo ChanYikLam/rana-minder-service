@@ -24,11 +24,9 @@ export function parseRequestEnvelope(body: unknown): ApiRequestEnvelope<Record<s
   const record = body as Record<string, unknown>;
   for (const key of Object.keys(record)) {
     if (!ENVELOPE_KEYS.has(key)) {
-      throw new IdentityCommandError(
-        IdentityErrorCode.VALIDATION_FAILED,
-        '请求信封包含未知字段',
-        { fieldErrors: { [key]: ['未知信封字段，业务字段应位于 input 内'] } },
-      );
+      throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '请求信封包含未知字段', {
+        fieldErrors: { [key]: ['未知信封字段，业务字段应位于 input 内'] },
+      });
     }
   }
   if (record.expectedVersion !== undefined && !Number.isInteger(record.expectedVersion)) {
@@ -45,18 +43,23 @@ export function parseRequestEnvelope(body: unknown): ApiRequestEnvelope<Record<s
       { fieldErrors: { expectedVersion: ['必须是正整数'] } },
     );
   }
-  if (record.input !== undefined && (record.input === null || typeof record.input !== 'object' || Array.isArray(record.input))) {
-    throw new IdentityCommandError(
-      IdentityErrorCode.VALIDATION_FAILED,
-      'input 必须是对象',
-      { fieldErrors: { input: ['必须是对象'] } },
-    );
+  if (
+    record.input !== undefined &&
+    (record.input === null || typeof record.input !== 'object' || Array.isArray(record.input))
+  ) {
+    throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, 'input 必须是对象', {
+      fieldErrors: { input: ['必须是对象'] },
+    });
   }
   return {
     ...(record.action !== undefined ? { action: String(record.action) } : {}),
     ...(record.targetId !== undefined ? { targetId: String(record.targetId) } : {}),
-    ...(record.expectedVersion !== undefined ? { expectedVersion: record.expectedVersion as number } : {}),
-    ...(record.idempotencyKey !== undefined ? { idempotencyKey: String(record.idempotencyKey) } : {}),
+    ...(record.expectedVersion !== undefined
+      ? { expectedVersion: record.expectedVersion as number }
+      : {}),
+    ...(record.idempotencyKey !== undefined
+      ? { idempotencyKey: String(record.idempotencyKey) }
+      : {}),
     ...(record.input !== undefined ? { input: record.input as Record<string, unknown> } : {}),
   };
 }

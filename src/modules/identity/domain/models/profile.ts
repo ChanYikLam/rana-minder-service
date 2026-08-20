@@ -349,14 +349,11 @@ export class Profile {
     if (!isEditableProfileField(field)) {
       return false; // 只读权威字段不经本人选择（R008 守卫）
     }
-    const emailVerified =
-      field === EditableProfileField.EMAIL ? true : this.snapshot.emailVerified;
+    const emailVerified = field === EditableProfileField.EMAIL ? true : this.snapshot.emailVerified;
     this.snapshot = {
       ...this.snapshot,
       emailVerified,
-      ...(field === EditableProfileField.EMAIL
-        ? { verifiedEmail: value, pendingEmail: null }
-        : {}),
+      ...(field === EditableProfileField.EMAIL ? { verifiedEmail: value, pendingEmail: null } : {}),
       fields: { ...this.snapshot.fields, [field]: value },
     };
 

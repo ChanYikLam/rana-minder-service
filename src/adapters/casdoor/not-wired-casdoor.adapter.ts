@@ -7,10 +7,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { CasdoorAdapter, CasdoorUser, CasdoorUserPatch } from './casdoor-adapter';
-import {
-  externalFailure,
-  type ExternalResult,
-} from '../../common/contracts/external-result';
+import { externalFailure, type ExternalResult } from '../../common/contracts/external-result';
 
 export class NotWiredCasdoorAdapter implements CasdoorAdapter {
   async getUser(_userId: string): Promise<ExternalResult<CasdoorUser>> {

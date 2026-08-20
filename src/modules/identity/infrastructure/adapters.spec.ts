@@ -17,7 +17,11 @@ import { MailVerificationChannel } from './mail-verification.channel';
 import { IdentityUnitOfWork } from './unit-of-work';
 import { FakeDbAdapter } from './testing/fake-db-adapter';
 import { AccountAccessState } from '../domain/state-machines/account-access.state-machine';
-import type { CasdoorAdapter, CasdoorUser, CasdoorUserPatch } from '../../../adapters/casdoor/casdoor-adapter';
+import type {
+  CasdoorAdapter,
+  CasdoorUser,
+  CasdoorUserPatch,
+} from '../../../adapters/casdoor/casdoor-adapter';
 import type { MailChannelAdapter } from '../../../adapters/mail/mail-channel-adapter';
 import {
   externalSuccess,
@@ -55,7 +59,9 @@ function fakeCasdoor(getUser: () => Promise<ExternalResult<CasdoorUser>>): Casdo
 
 describe('CasdoorUserAdapter（CAS-READ-002/003、CAS-WR-*）', () => {
   it('readAccountStatus：ACTIVE → 观测成功，携带外部版本证据', async () => {
-    const adapter = new CasdoorUserAdapter(fakeCasdoor(async () => externalSuccess(casdoorUser(), 'a-1', now)));
+    const adapter = new CasdoorUserAdapter(
+      fakeCasdoor(async () => externalSuccess(casdoorUser(), 'a-1', now)),
+    );
 
     const result = await adapter.readAccountStatus('user-1');
 
@@ -78,7 +84,12 @@ describe('CasdoorUserAdapter（CAS-READ-002/003、CAS-WR-*）', () => {
   it('readAccountStatus：外部不可用 → UNAVAILABLE 透传（IFC-ERR-012 语义）', async () => {
     const adapter = new CasdoorUserAdapter(
       fakeCasdoor(async () =>
-        externalFailure('UNAVAILABLE', { code: 'CAS-DOWN', message: '不可用', retryable: true, rawStatusCode: 503 }, 'a-1', now),
+        externalFailure(
+          'UNAVAILABLE',
+          { code: 'CAS-DOWN', message: '不可用', retryable: true, rawStatusCode: 503 },
+          'a-1',
+          now,
+        ),
       ),
     );
 
@@ -89,7 +100,9 @@ describe('CasdoorUserAdapter（CAS-READ-002/003、CAS-WR-*）', () => {
   });
 
   it('readProfileField：按字段抽取（email/phone/name/studentId）', async () => {
-    const adapter = new CasdoorUserAdapter(fakeCasdoor(async () => externalSuccess(casdoorUser(), 'a-1', now)));
+    const adapter = new CasdoorUserAdapter(
+      fakeCasdoor(async () => externalSuccess(casdoorUser(), 'a-1', now)),
+    );
 
     assert.equal((await adapter.readProfileField('user-1', 'phone')).data?.value, '13800000000');
     assert.equal((await adapter.readProfileField('user-1', 'email')).data?.value, 'a@example.com');

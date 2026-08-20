@@ -70,7 +70,9 @@ export class DefaultSaveProfileUseCase implements SaveProfileUseCase {
       if (input.expectedVersion !== snapshot.version) {
         throw identityErrors.versionConflict();
       }
-      throw identityErrors.preconditionFailed('没有可保存的白名单字段，或包含只读权威字段/未知字段');
+      throw identityErrors.preconditionFailed(
+        '没有可保存的白名单字段，或包含只读权威字段/未知字段',
+      );
     }
 
     const required = await this.requiredFields.getPlatformRequiredFields(input.now);
@@ -82,7 +84,7 @@ export class DefaultSaveProfileUseCase implements SaveProfileUseCase {
     profile.recomputeGate(this.gateMachine, this.gatePolicy, missingFields, input.now);
 
     const syncFields = profile.events
-      .flatMap((e) => (e.type === 'PROFILE_SAVED' ? e.payload.pendingSyncFields ?? [] : []))
+      .flatMap((e) => (e.type === 'PROFILE_SAVED' ? (e.payload.pendingSyncFields ?? []) : []))
       .filter((f) => f !== EditableProfileField.EMAIL);
 
     const syncIntentIds: string[] = [];
@@ -122,7 +124,7 @@ export class DefaultSaveProfileUseCase implements SaveProfileUseCase {
       summary: {
         version: profile.version,
         changedFields: profile.events
-          .flatMap((e) => (e.type === 'PROFILE_SAVED' ? e.payload.changedFields ?? [] : []))
+          .flatMap((e) => (e.type === 'PROFILE_SAVED' ? (e.payload.changedFields ?? []) : []))
           .filter((f) => f !== EditableProfileField.EMAIL),
         pendingEmail: profile.pendingEmail === null ? null : true,
       },
@@ -131,7 +133,7 @@ export class DefaultSaveProfileUseCase implements SaveProfileUseCase {
     return {
       profile,
       changedFields: profile.events.flatMap((e) =>
-        e.type === 'PROFILE_SAVED' ? e.payload.changedFields ?? [] : [],
+        e.type === 'PROFILE_SAVED' ? (e.payload.changedFields ?? []) : [],
       ),
       pendingSyncFields: syncFields,
       syncIntentIds,

@@ -14,22 +14,40 @@ import assert from 'node:assert/strict';
 import { ExecutionContext, HttpException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
-import { createTraceContextAdapter, type TraceContextAdapter } from '../../../../platform/observability/infrastructure/trace-context.adapter';
+import {
+  createTraceContextAdapter,
+  type TraceContextAdapter,
+} from '../../../../platform/observability/infrastructure/trace-context.adapter';
 import { TRACE_CONTEXT } from '../../../../platform/observability/tracing/tokens';
 
 import { AuthGuard } from './auth.guard';
 import { ProfilesNestController } from './profiles.nest.controller';
 import { AccountAccessNestController } from './account-access.nest.controller';
 import type { AuthSession, AuthSessionProvider } from './auth-session';
-import { PROFILES_CONTROLLER, ACCOUNT_ACCESS_CONTROLLER, AUTH_SESSION_PROVIDER } from '../../tokens';
-import type { ProfilesController, MyProfileResponse, ActorContext } from '../controllers/profiles.controller';
-import type { AccountAccessController, SessionResponse } from '../controllers/account-access.controller';
+import {
+  PROFILES_CONTROLLER,
+  ACCOUNT_ACCESS_CONTROLLER,
+  AUTH_SESSION_PROVIDER,
+} from '../../tokens';
+import type {
+  ProfilesController,
+  MyProfileResponse,
+  ActorContext,
+} from '../controllers/profiles.controller';
+import type {
+  AccountAccessController,
+  SessionResponse,
+} from '../controllers/account-access.controller';
 import type { ApiErrorResult } from '../http/error-http';
 
 const session: AuthSession = { subjectId: 'user-1', now: new Date('2026-08-20T12:00:00.000Z') };
 
 function fixedSessionProvider(sessionOrNull: AuthSession | null): AuthSessionProvider {
-  return { async resolveSession() { return sessionOrNull; } };
+  return {
+    async resolveSession() {
+      return sessionOrNull;
+    },
+  };
 }
 
 function fakeExecutionContext(request: Record<string, unknown>): ExecutionContext {
@@ -101,9 +119,7 @@ describe('ProfilesNestController（API-AUTH-002 传输落地）', () => {
     } as unknown as ProfilesController;
     const { profiles, trace } = await buildController(plain);
 
-    const result = trace.runWithNewRoot(() =>
-      profiles.getMyProfile({ authSession: session }),
-    );
+    const result = trace.runWithNewRoot(() => profiles.getMyProfile({ authSession: session }));
 
     assert.deepEqual(await result, { code: 0, data: profileView });
     const actor = received[0] as { subjectId: string; traceId: string };
@@ -159,7 +175,12 @@ describe('ProfilesNestController（API-AUTH-002 传输落地）', () => {
     const errorResult: ApiErrorResult = {
       ok: false,
       status: 422,
-      body: { code: 'IFC-ERR-007', message: '验证码错误或过期', supportId: 'tr-2', fieldErrors: { code: ['错误或过期'] } },
+      body: {
+        code: 'IFC-ERR-007',
+        message: '验证码错误或过期',
+        supportId: 'tr-2',
+        fieldErrors: { code: ['错误或过期'] },
+      },
     };
     const plain: ProfilesController = {
       async verifyEmail() {
@@ -173,7 +194,8 @@ describe('ProfilesNestController（API-AUTH-002 传输落地）', () => {
       (error: unknown) =>
         error instanceof HttpException &&
         error.getStatus() === 422 &&
-        (error.getResponse() as { fieldErrors: { code: string[] } }).fieldErrors.code[0] === '错误或过期',
+        (error.getResponse() as { fieldErrors: { code: string[] } }).fieldErrors.code[0] ===
+          '错误或过期',
     );
   });
 });
@@ -181,8 +203,22 @@ describe('ProfilesNestController（API-AUTH-002 传输落地）', () => {
 describe('AccountAccessNestController（GET /api/auth/session）', () => {
   it('成功 → { code:0, data }（本人资料 + 账号访问状态）', async () => {
     const sessionView: SessionResponse = {
-      profile: { version: 1, studentId: null, name: null, email: null, phone: null, emailVerified: false, profileComplete: false, syncStatus: {} },
-      accountAccess: { state: 'ACTIVE', degraded: false, degradedSince: null, remainingWindowMs: 0 },
+      profile: {
+        version: 1,
+        studentId: null,
+        name: null,
+        email: null,
+        phone: null,
+        emailVerified: false,
+        profileComplete: false,
+        syncStatus: {},
+      },
+      accountAccess: {
+        state: 'ACTIVE',
+        degraded: false,
+        degradedSince: null,
+        remainingWindowMs: 0,
+      },
     };
     const plain: AccountAccessController = {
       async getSession() {
@@ -213,12 +249,29 @@ function fakeAccountAccess(): AccountAccessController {
       return {
         ok: true,
         value: {
-          profile: { version: 1, studentId: null, name: null, email: null, phone: null, emailVerified: false, profileComplete: false, syncStatus: {} },
-          accountAccess: { state: 'ACTIVE', degraded: false, degradedSince: null, remainingWindowMs: 0 },
+          profile: {
+            version: 1,
+            studentId: null,
+            name: null,
+            email: null,
+            phone: null,
+            emailVerified: false,
+            profileComplete: false,
+            syncStatus: {},
+          },
+          accountAccess: {
+            state: 'ACTIVE',
+            degraded: false,
+            degradedSince: null,
+            remainingWindowMs: 0,
+          },
         },
       };
     },
-    async checkAccess(): Promise<{ ok: true; value: { allowed: boolean; degraded: boolean; reason: string | null } } | ApiErrorResult> {
+    async checkAccess(): Promise<
+      | { ok: true; value: { allowed: boolean; degraded: boolean; reason: string | null } }
+      | ApiErrorResult
+    > {
       return { ok: true, value: { allowed: false, degraded: false, reason: null } };
     },
   } as unknown as AccountAccessController;

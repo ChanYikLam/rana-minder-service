@@ -9,10 +9,7 @@
  * 恢复不自动恢复已结束业务/已撤销任务/历史角色；审计与状态转换同事务（ENG-004）。
  */
 
-import {
-  AccountAccess,
-  type AccountAccessSource,
-} from '../../domain/models/account-access';
+import { AccountAccess, type AccountAccessSource } from '../../domain/models/account-access';
 import type { AccountAccessTransitionResult } from '../../domain/state-machines/account-access.state-machine';
 import { AccountAccessState } from '../../domain/state-machines/account-access.state-machine';
 import type { AccountAccessStateMachine } from '../../domain/state-machines/account-access.state-machine';
@@ -58,11 +55,15 @@ export class DefaultHandleAccountStatusEventUseCase implements HandleAccountStat
 
   async execute(input: HandleAccountStatusEventInput): Promise<HandleAccountStatusEventResult> {
     const snapshot = await this.accountRepository.load(input.subjectId);
-    const account = snapshot ? AccountAccess.fromSnapshot(snapshot) : AccountAccess.create(input.subjectId, input.now);
+    const account = snapshot
+      ? AccountAccess.fromSnapshot(snapshot)
+      : AccountAccess.create(input.subjectId, input.now);
 
     const applied = this.applyEvent(account, input);
     if (!applied) {
-      throw identityErrors.preconditionFailed('当前账号状态不接受该事件（仅有效状态可禁用/删除/降级，删除后不得猜测禁用）');
+      throw identityErrors.preconditionFailed(
+        '当前账号状态不接受该事件（仅有效状态可禁用/删除/降级，删除后不得猜测禁用）',
+      );
     }
 
     const nextSnapshot = account.toSnapshot();
@@ -85,7 +86,10 @@ export class DefaultHandleAccountStatusEventUseCase implements HandleAccountStat
     const sessionRevoke = account.lastTransitionResult?.sessionRevoke ?? false;
     if (sessionRevoke) {
       // IDN-008：禁用/删除可信确认 → 立即终止该主体全部会话并撤销当前权限（同事务）
-      await this.sessionRevocation.invalidateSessions(input.subjectId, nextSnapshot.sessionRevokeVersion);
+      await this.sessionRevocation.invalidateSessions(
+        input.subjectId,
+        nextSnapshot.sessionRevokeVersion,
+      );
     }
     await this.audit.record({
       type: 'ACCOUNT_ACCESS_CHANGED',

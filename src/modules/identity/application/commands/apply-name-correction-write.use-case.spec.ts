@@ -64,22 +64,43 @@ function inMemoryRepository(): NameCorrectionRequestRepository & {
 function casdoor(writeResult: { status: string }): CasdoorUserPort {
   const port: CasdoorUserPort = {
     async readAccountStatus() {
-      return externalFailure('UNAVAILABLE', { code: 'CAS-NOT-WIRED', message: 'stub', retryable: true, rawStatusCode: null }, 'x', new Date());
+      return externalFailure(
+        'UNAVAILABLE',
+        { code: 'CAS-NOT-WIRED', message: 'stub', retryable: true, rawStatusCode: null },
+        'x',
+        new Date(),
+      );
     },
     async readProfileField() {
-      return externalFailure('UNAVAILABLE', { code: 'CAS-NOT-WIRED', message: 'stub', retryable: true, rawStatusCode: null }, 'x', new Date());
+      return externalFailure(
+        'UNAVAILABLE',
+        { code: 'CAS-NOT-WIRED', message: 'stub', retryable: true, rawStatusCode: null },
+        'x',
+        new Date(),
+      );
     },
     async writeProfileField() {
       if (writeResult.status === 'SUCCESS') {
-        return externalSuccess({ field: 'name', value: '新姓名', externalVersion: null, observedAt: now }, 'x', now);
+        return externalSuccess(
+          { field: 'name', value: '新姓名', externalVersion: null, observedAt: now },
+          'x',
+          now,
+        );
       }
-      return externalFailure('UNAVAILABLE', { code: 'CAS-NOT-WIRED', message: 'stub', retryable: true, rawStatusCode: null }, 'x', now);
+      return externalFailure(
+        'UNAVAILABLE',
+        { code: 'CAS-NOT-WIRED', message: 'stub', retryable: true, rawStatusCode: null },
+        'x',
+        now,
+      );
     },
   };
   return port;
 }
 
-function inputFor(overrides?: Partial<ApplyNameCorrectionWriteInput>): ApplyNameCorrectionWriteInput {
+function inputFor(
+  overrides?: Partial<ApplyNameCorrectionWriteInput>,
+): ApplyNameCorrectionWriteInput {
   return {
     requestId: 'req-1',
     subjectId: 'user-1',
@@ -96,7 +117,11 @@ describe('DefaultApplyNameCorrectionWriteUseCase（IDN-016 写回收口）', () 
     const repository = inMemoryRepository();
     repository.seed(approvedSnapshot());
     const captured: { summary: Record<string, unknown> | null } = { summary: null };
-    const audit: IdentityAuditPort = { async record(fact) { captured.summary = fact.summary; } };
+    const audit: IdentityAuditPort = {
+      async record(fact) {
+        captured.summary = fact.summary;
+      },
+    };
     const useCase = new DefaultApplyNameCorrectionWriteUseCase(
       repository,
       casdoor({ status: 'SUCCESS' }),
@@ -116,8 +141,16 @@ describe('DefaultApplyNameCorrectionWriteUseCase（IDN-016 写回收口）', () 
     const repository = inMemoryRepository();
     repository.seed({ ...approvedSnapshot(), appliedAt: new Date('2026-08-20T11:55:00Z') });
     let audited = 0;
-    const audit: IdentityAuditPort = { async record() { audited += 1; } };
-    const useCase = new DefaultApplyNameCorrectionWriteUseCase(repository, casdoor({ status: 'SUCCESS' }), audit);
+    const audit: IdentityAuditPort = {
+      async record() {
+        audited += 1;
+      },
+    };
+    const useCase = new DefaultApplyNameCorrectionWriteUseCase(
+      repository,
+      casdoor({ status: 'SUCCESS' }),
+      audit,
+    );
 
     const result = await useCase.execute(inputFor());
 
@@ -128,24 +161,34 @@ describe('DefaultApplyNameCorrectionWriteUseCase（IDN-016 写回收口）', () 
   it('REV：申请未批准 → 拒绝执行（异常任务，重试至失败留证据）', async () => {
     const repository = inMemoryRepository();
     repository.seed({ ...approvedSnapshot(), status: NameCorrectionState.REJECTED });
-    const useCase = new DefaultApplyNameCorrectionWriteUseCase(repository, casdoor({ status: 'SUCCESS' }), { async record() {} });
+    const useCase = new DefaultApplyNameCorrectionWriteUseCase(
+      repository,
+      casdoor({ status: 'SUCCESS' }),
+      { async record() {} },
+    );
 
     await assert.rejects(
       useCase.execute(inputFor()),
       (error: unknown) =>
-        error instanceof IdentityCommandError && error.code === IdentityErrorCode.PRECONDITION_FAILED,
+        error instanceof IdentityCommandError &&
+        error.code === IdentityErrorCode.PRECONDITION_FAILED,
     );
   });
 
   it('REV：载荷与申请事实不一致 → 拒绝', async () => {
     const repository = inMemoryRepository();
     repository.seed(approvedSnapshot());
-    const useCase = new DefaultApplyNameCorrectionWriteUseCase(repository, casdoor({ status: 'SUCCESS' }), { async record() {} });
+    const useCase = new DefaultApplyNameCorrectionWriteUseCase(
+      repository,
+      casdoor({ status: 'SUCCESS' }),
+      { async record() {} },
+    );
 
     await assert.rejects(
       useCase.execute(inputFor({ subjectId: 'user-999' })),
       (error: unknown) =>
-        error instanceof IdentityCommandError && error.code === IdentityErrorCode.PRECONDITION_FAILED,
+        error instanceof IdentityCommandError &&
+        error.code === IdentityErrorCode.PRECONDITION_FAILED,
     );
   });
 

@@ -77,7 +77,11 @@ export class DefaultApplyProfileSyncStepUseCase implements ApplyProfileSyncStepU
         occurredAt: input.now,
         actor: input.actor,
         traceId: input.traceId,
-        summary: { field: input.field, targetVersion: input.targetVersion, outcome: 'STALE_SKIPPED' },
+        summary: {
+          field: input.field,
+          targetVersion: input.targetVersion,
+          outcome: 'STALE_SKIPPED',
+        },
       });
       return { kind: 'IDLE' };
     }
@@ -109,7 +113,11 @@ export class DefaultApplyProfileSyncStepUseCase implements ApplyProfileSyncStepU
     }
 
     const snapshot = intent.toSnapshot();
-    const write = await this.casdoor.writeProfileField(input.subjectId, input.field, snapshot.targetValue);
+    const write = await this.casdoor.writeProfileField(
+      input.subjectId,
+      input.field,
+      snapshot.targetValue,
+    );
     if (write.status !== 'SUCCESS' || write.data === null) {
       return this.handleFailure(intent, input, write.status, write.attemptId);
     }

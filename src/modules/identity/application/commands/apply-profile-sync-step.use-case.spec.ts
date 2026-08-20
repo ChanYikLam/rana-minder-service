@@ -99,10 +99,16 @@ function createUseCase(overrides?: {
         return externalSuccess({ state: 'ACTIVE', observedAt: now, externalVersion: null }, 'a1');
       },
       async readProfileField() {
-        return externalSuccess({ field: 'phone', value: '13800000000', externalVersion: null, observedAt: now }, 'a2');
+        return externalSuccess(
+          { field: 'phone', value: '13800000000', externalVersion: null, observedAt: now },
+          'a2',
+        );
       },
       async writeProfileField() {
-        return externalSuccess({ field: 'phone', value: '13800000000', externalVersion: null, observedAt: now }, 'a3');
+        return externalSuccess(
+          { field: 'phone', value: '13800000000', externalVersion: null, observedAt: now },
+          'a3',
+        );
       },
     },
     overrides?.taskPort ?? {
@@ -154,10 +160,16 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
         return externalSuccess({ state: 'ACTIVE', observedAt: now, externalVersion: null }, 'a1');
       },
       async readProfileField() {
-        return externalSuccess({ field: 'phone', value: '13700000000', externalVersion: null, observedAt: now }, 'a2');
+        return externalSuccess(
+          { field: 'phone', value: '13700000000', externalVersion: null, observedAt: now },
+          'a2',
+        );
       },
       async writeProfileField() {
-        return externalSuccess({ field: 'phone', value: '13800000000', externalVersion: null, observedAt: now }, 'a3');
+        return externalSuccess(
+          { field: 'phone', value: '13800000000', externalVersion: null, observedAt: now },
+          'a3',
+        );
       },
     };
     const useCase = createUseCase({ intentRepository, casdoor });
@@ -180,10 +192,16 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
         return externalSuccess({ state: 'ACTIVE', observedAt: now, externalVersion: null }, 'a1');
       },
       async readProfileField() {
-        return externalSuccess({ field: 'phone', value: '13911112222', externalVersion: null, observedAt: now }, 'a2');
+        return externalSuccess(
+          { field: 'phone', value: '13911112222', externalVersion: null, observedAt: now },
+          'a2',
+        );
       },
       async writeProfileField() {
-        return externalSuccess({ field: 'phone', value: '13800000000', externalVersion: null, observedAt: now }, 'a3');
+        return externalSuccess(
+          { field: 'phone', value: '13800000000', externalVersion: null, observedAt: now },
+          'a3',
+        );
       },
     };
     const useCase = createUseCase({ intentRepository, casdoor });
@@ -207,10 +225,16 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
         return externalSuccess({ state: 'ACTIVE', observedAt: now, externalVersion: null }, 'a1');
       },
       async readProfileField() {
-        return externalSuccess({ field: 'phone', value: '13700000000', externalVersion: null, observedAt: now }, 'a2');
+        return externalSuccess(
+          { field: 'phone', value: '13700000000', externalVersion: null, observedAt: now },
+          'a2',
+        );
       },
       async writeProfileField() {
-        return externalSuccess({ field: 'phone', value: '13800000000', externalVersion: null, observedAt: now }, 'a3');
+        return externalSuccess(
+          { field: 'phone', value: '13800000000', externalVersion: null, observedAt: now },
+          'a3',
+        );
       },
     };
     const useCase = createUseCase({ intentRepository, casdoor });
@@ -230,7 +254,10 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
         return externalSuccess({ state: 'ACTIVE', observedAt: now, externalVersion: null }, 'a1');
       },
       async readProfileField() {
-        return externalSuccess({ field: 'phone', value: '13800000000', externalVersion: null, observedAt: now }, 'a2');
+        return externalSuccess(
+          { field: 'phone', value: '13800000000', externalVersion: null, observedAt: now },
+          'a2',
+        );
       },
       async writeProfileField() {
         return externalFailure(
@@ -275,7 +302,10 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
         return externalSuccess({ state: 'ACTIVE', observedAt: now, externalVersion: null }, 'a1');
       },
       async readProfileField() {
-        return externalSuccess({ field: 'phone', value: '13800000000', externalVersion: null, observedAt: now }, 'a2');
+        return externalSuccess(
+          { field: 'phone', value: '13800000000', externalVersion: null, observedAt: now },
+          'a2',
+        );
       },
       async writeProfileField() {
         return externalFailure(
@@ -299,7 +329,10 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
     const outcome = await useCase.execute(inputFor());
 
     assert.equal(outcome.kind, 'READBACK_SCHEDULED');
-    assert.equal(intentRepository.saved.at(-1).state, ProfileSyncState.PENDING_READBACK_VERIFICATION);
+    assert.equal(
+      intentRepository.saved.at(-1).state,
+      ProfileSyncState.PENDING_READBACK_VERIFICATION,
+    );
     assert.equal(readbackScheduled, 1);
   });
 
@@ -314,7 +347,7 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
         async load(_subjectId: string) {
           return profileSnapshot(5); // 本地版本已更新到 5
         },
-async save(_snapshot, _events, _expectedVersion) {},
+        async save(_snapshot, _events, _expectedVersion) {},
       },
       audit: {
         async record() {
@@ -338,7 +371,10 @@ async save(_snapshot, _events, _expectedVersion) {},
         return externalSuccess({ state: 'ACTIVE', observedAt: now, externalVersion: null }, 'a1');
       },
       async readProfileField() {
-        return externalSuccess({ field: 'phone', value: '13800000000', externalVersion: null, observedAt: now }, 'a2');
+        return externalSuccess(
+          { field: 'phone', value: '13800000000', externalVersion: null, observedAt: now },
+          'a2',
+        );
       },
       async writeProfileField() {
         return externalFailure(

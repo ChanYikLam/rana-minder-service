@@ -13,10 +13,7 @@
 
 import type { ExternalResult } from '../../../../common/contracts/external-result';
 import type { AccountAccessState } from '../../domain/state-machines/account-access.state-machine';
-import type {
-  EditableProfileField,
-  ProfileField,
-} from '../../domain/models/profile-field';
+import type { EditableProfileField, ProfileField } from '../../domain/models/profile-field';
 
 /** 账号状态可信观测（CAS-READ-003） */
 export interface CasdoorAccountStatusObservation {

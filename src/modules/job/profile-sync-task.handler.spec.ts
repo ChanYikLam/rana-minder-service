@@ -10,7 +10,10 @@ import assert from 'node:assert/strict';
 import { ProfileSyncTaskHandler, JOB_SERVICE_ACCOUNT } from './profile-sync-task.handler';
 import { IdentityUnitOfWork } from '../identity/infrastructure/unit-of-work';
 import { FakeDbAdapter } from '../identity/infrastructure/testing/fake-db-adapter';
-import type { ApplyProfileSyncStepUseCase, ApplyProfileSyncStepInput } from '../identity/application/commands/apply-profile-sync-step.use-case';
+import type {
+  ApplyProfileSyncStepUseCase,
+  ApplyProfileSyncStepInput,
+} from '../identity/application/commands/apply-profile-sync-step.use-case';
 import type { ClaimedJobTask } from './job-task.store';
 
 function claimedTask(overrides?: Partial<ClaimedJobTask>): ClaimedJobTask {
@@ -69,8 +72,15 @@ describe('ProfileSyncTaskHandler（服务账号执行单元）', () => {
   });
 
   it('任务载荷损坏 → 拒绝（不进入业务，任务层重试）', async () => {
-    const useCase: ApplyProfileSyncStepUseCase = { async execute() { throw new Error('不应被调用'); } };
-    const handler = new ProfileSyncTaskHandler(useCase, new IdentityUnitOfWork(new FakeDbAdapter()));
+    const useCase: ApplyProfileSyncStepUseCase = {
+      async execute() {
+        throw new Error('不应被调用');
+      },
+    };
+    const handler = new ProfileSyncTaskHandler(
+      useCase,
+      new IdentityUnitOfWork(new FakeDbAdapter()),
+    );
 
     await assert.rejects(
       handler.execute(claimedTask({ payload: { subjectId: 'user-1' } })),

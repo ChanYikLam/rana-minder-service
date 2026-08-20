@@ -18,7 +18,10 @@ describe('NotWiredDbAdapter（DB 未连接失败关闭）', () => {
     await assert.rejects(db.query({ id: 'tx-1' }, 'SELECT 1', []), DbUnavailableError);
     await assert.rejects(db.commit({ id: 'tx-1' }), DbUnavailableError);
     await assert.rejects(db.rollback({ id: 'tx-1' }), DbUnavailableError);
-    await assert.rejects(db.setRlsContext({ id: 'tx-1' }, { kind: 'single', subjectId: 'u' }), DbUnavailableError);
+    await assert.rejects(
+      db.setRlsContext({ id: 'tx-1' }, { kind: 'single', subjectId: 'u' }),
+      DbUnavailableError,
+    );
     await assert.rejects(db.clearRlsContext({ id: 'tx-1' }), DbUnavailableError);
   });
 });

@@ -15,7 +15,10 @@
 
 import type { DomainEvent } from './domain-event';
 import type { NameCorrectionStateMachine } from '../state-machines/name-correction.state-machine';
-import { NameCorrectionEvent, NameCorrectionState } from '../state-machines/name-correction.state-machine';
+import {
+  NameCorrectionEvent,
+  NameCorrectionState,
+} from '../state-machines/name-correction.state-machine';
 
 export interface NameCorrectionRequestSnapshot {
   readonly id: string;

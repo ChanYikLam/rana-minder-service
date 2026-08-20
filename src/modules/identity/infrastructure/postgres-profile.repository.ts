@@ -21,11 +21,7 @@
 import type { DbAdapter } from '../../../shared/db-adapter';
 import type { TransactionContext } from '../../../shared/db-adapter';
 import type { IdentityUnitOfWork } from './unit-of-work';
-import type {
-  ProfileSnapshot,
-  ProfileDomainEvent,
-  ProfileFields,
-} from '../domain/models/profile';
+import type { ProfileSnapshot, ProfileDomainEvent, ProfileFields } from '../domain/models/profile';
 import type { ProfileRepository } from '../application/ports/profile-repository.port';
 import { identityErrors } from '../application/errors';
 

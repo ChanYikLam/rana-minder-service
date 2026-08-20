@@ -62,7 +62,10 @@ export class DefaultGetMyProfileQuery implements GetMyProfileQuery {
     private readonly degradation: DegradationPolicy,
   ) {}
 
-  async execute(input: GetMyProfileInput, knownSnapshot?: ProfileSnapshot): Promise<GetMyProfileResult> {
+  async execute(
+    input: GetMyProfileInput,
+    knownSnapshot?: ProfileSnapshot,
+  ): Promise<GetMyProfileResult> {
     const snapshot = knownSnapshot ?? (await this.profileRepository.load(input.subjectId));
     if (!snapshot) {
       throw identityErrors.notFound('资料');

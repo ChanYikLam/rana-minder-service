@@ -12,8 +12,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { DefaultResolveSyncConflictUseCase } from './resolve-sync-conflict.use-case';
-import { ProfileSyncState, DefaultProfileSyncStateMachine } from '../../domain/state-machines/profile-sync.state-machine';
-import { DefaultProfileWriteGateStateMachine, ProfileWriteGateState } from '../../domain/state-machines/profile-write-gate.state-machine';
+import {
+  ProfileSyncState,
+  DefaultProfileSyncStateMachine,
+} from '../../domain/state-machines/profile-sync.state-machine';
+import {
+  DefaultProfileWriteGateStateMachine,
+  ProfileWriteGateState,
+} from '../../domain/state-machines/profile-write-gate.state-machine';
 import { DefaultProfileGatePolicy } from '../../domain/services/profile-gate.policy';
 import { EditableProfileField } from '../../domain/models/profile-field';
 import type { ProfileSnapshot } from '../../domain/models/profile';
@@ -66,7 +72,12 @@ interface Fakes {
   profiles: Map<string, ProfileSnapshot>;
   intents: Map<string, ProfileSyncIntentSnapshot>;
   readback: { value: string | null } | null;
-  saved: { profiles: ProfileSnapshot[]; intents: ProfileSyncIntentSnapshot[]; tasks: unknown[]; audits: unknown[] };
+  saved: {
+    profiles: ProfileSnapshot[];
+    intents: ProfileSyncIntentSnapshot[];
+    tasks: unknown[];
+    audits: unknown[];
+  };
 }
 
 const fakes: Fakes = {
@@ -111,19 +122,28 @@ function createUseCase() {
     },
     async readProfileField() {
       if (fakes.readback === null) {
-        return externalFailure('UNAVAILABLE', {
-          code: 'CAS-READ-UNAVAILABLE',
-          message: 'Casdoor 暂不可用',
-          retryable: true,
-          rawStatusCode: null,
-        }, 'a-1', now);
+        return externalFailure(
+          'UNAVAILABLE',
+          {
+            code: 'CAS-READ-UNAVAILABLE',
+            message: 'Casdoor 暂不可用',
+            retryable: true,
+            rawStatusCode: null,
+          },
+          'a-1',
+          now,
+        );
       }
-      return externalSuccess({
-        field: 'phone',
-        value: fakes.readback.value,
-        externalVersion: 'v-9',
-        observedAt: now,
-      }, 'a-1', now);
+      return externalSuccess(
+        {
+          field: 'phone',
+          value: fakes.readback.value,
+          externalVersion: 'v-9',
+          observedAt: now,
+        },
+        'a-1',
+        now,
+      );
     },
     async writeProfileField() {
       throw new Error('not used');
@@ -211,15 +231,20 @@ describe('ResolveSyncConflictUseCase（IFC-SM-003 R009/R010）', () => {
 
   it('R010：接受 Casdoor 邮箱值 → emailVerified 落位并重算资料门', async () => {
     const useCase = createUseCase();
-    fakes.intents.set('user-1:email', conflictIntent({
-      field: EditableProfileField.EMAIL,
-      targetValue: 'new@example.com',
-      readbackValue: 'casdoor@example.com',
-      conflictVersion: 4,
-    }));
+    fakes.intents.set(
+      'user-1:email',
+      conflictIntent({
+        field: EditableProfileField.EMAIL,
+        targetValue: 'new@example.com',
+        readbackValue: 'casdoor@example.com',
+        conflictVersion: 4,
+      }),
+    );
     fakes.readback = { value: 'casdoor@example.com' };
 
-    const result = await useCase.execute(input({ field: 'email', chosenValue: 'casdoor@example.com' }));
+    const result = await useCase.execute(
+      input({ field: 'email', chosenValue: 'casdoor@example.com' }),
+    );
 
     assert.equal(result.kind, 'ACCEPTED_CASDOOR');
     const savedProfile = fakes.saved.profiles[0];

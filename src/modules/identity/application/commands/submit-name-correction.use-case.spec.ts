@@ -62,7 +62,11 @@ describe('DefaultSubmitNameCorrectionUseCase（IDN-016 提交）', () => {
   it('NOM：提交申请 → 保存 + 审计保留旧姓名（action=SUBMITTED）', async () => {
     const repository = inMemoryRepository();
     const captured: { summary: Record<string, unknown> | null } = { summary: null };
-    const audit: IdentityAuditPort = { async record(fact) { captured.summary = fact.summary; } };
+    const audit: IdentityAuditPort = {
+      async record(fact) {
+        captured.summary = fact.summary;
+      },
+    };
     const useCase = new DefaultSubmitNameCorrectionUseCase(repository, audit);
 
     const result = await useCase.execute(inputFor());
@@ -98,23 +102,32 @@ describe('DefaultSubmitNameCorrectionUseCase（IDN-016 提交）', () => {
     await assert.rejects(
       useCase.execute(inputFor({ requestedName: '再一个姓名' })),
       (error: unknown) =>
-        error instanceof IdentityCommandError && error.code === IdentityErrorCode.PRECONDITION_FAILED,
+        error instanceof IdentityCommandError &&
+        error.code === IdentityErrorCode.PRECONDITION_FAILED,
     );
   });
 
   it('REV：新姓名与旧姓名相同 → 拒绝', async () => {
-    const useCase = new DefaultSubmitNameCorrectionUseCase(inMemoryRepository(), { async record() {} });
+    const useCase = new DefaultSubmitNameCorrectionUseCase(inMemoryRepository(), {
+      async record() {},
+    });
     await assert.rejects(
       useCase.execute(inputFor({ requestedName: '旧姓名' })),
       (error: unknown) =>
-        error instanceof IdentityCommandError && error.code === IdentityErrorCode.PRECONDITION_FAILED,
+        error instanceof IdentityCommandError &&
+        error.code === IdentityErrorCode.PRECONDITION_FAILED,
     );
   });
 
   it('REV：空/超长姓名或超长证明引用 → 拒绝', async () => {
-    const useCase = new DefaultSubmitNameCorrectionUseCase(inMemoryRepository(), { async record() {} });
+    const useCase = new DefaultSubmitNameCorrectionUseCase(inMemoryRepository(), {
+      async record() {},
+    });
     await assert.rejects(useCase.execute(inputFor({ requestedName: '' })), IdentityCommandError);
-    await assert.rejects(useCase.execute(inputFor({ requestedName: 'x'.repeat(65) })), IdentityCommandError);
+    await assert.rejects(
+      useCase.execute(inputFor({ requestedName: 'x'.repeat(65) })),
+      IdentityCommandError,
+    );
     await assert.rejects(
       useCase.execute(inputFor({ proofReference: 'x'.repeat(513) })),
       IdentityCommandError,

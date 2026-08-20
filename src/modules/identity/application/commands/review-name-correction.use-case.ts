@@ -61,10 +61,7 @@ export class DefaultReviewNameCorrectionUseCase implements ReviewNameCorrectionU
       throw identityErrors.preconditionFailed('裁决原因必填（二次确认要求说明）');
     }
     if (!(await this.superAdminVerifier.isSuperAdmin(input.reviewerId))) {
-      throw new IdentityCommandError(
-        IdentityErrorCode.FORBIDDEN,
-        '仅超级管理员可裁决姓名更正申请',
-      );
+      throw new IdentityCommandError(IdentityErrorCode.FORBIDDEN, '仅超级管理员可裁决姓名更正申请');
     }
     await this.reauthGuard.assertFreshReauth(input.reviewerId, input.now);
 

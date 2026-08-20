@@ -12,7 +12,12 @@ const now = new Date('2026-08-20T12:00:00.000Z');
 const tenMinutes = 10 * 60 * 1000;
 
 function reauthProvider(reauthAt: Date | null): ReauthEvidencePort {
-  return { async latestReauthAt() { return reauthAt; }, async record() {} };
+  return {
+    async latestReauthAt() {
+      return reauthAt;
+    },
+    async record() {},
+  };
 }
 
 describe('HighRiskCommandGuard（CAS-REC-003）', () => {
@@ -27,12 +32,13 @@ describe('HighRiskCommandGuard（CAS-REC-003）', () => {
   });
 
   it('超过 10 分钟 → 过期拒绝（IFC-ERR-002）', async () => {
-    const guard = new HighRiskCommandGuard(reauthProvider(new Date(now.getTime() - tenMinutes - 1)));
+    const guard = new HighRiskCommandGuard(
+      reauthProvider(new Date(now.getTime() - tenMinutes - 1)),
+    );
     await assert.rejects(
       guard.assertFreshReauth('user-1', now),
       (error: unknown) =>
-        error instanceof IdentityCommandError &&
-        error.code === IdentityErrorCode.REAUTH_REQUIRED,
+        error instanceof IdentityCommandError && error.code === IdentityErrorCode.REAUTH_REQUIRED,
     );
   });
 

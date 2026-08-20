@@ -16,5 +16,8 @@ export interface NameCorrectionRequestRepository {
   /** 查本人待裁决申请（同一主体同时最多一条，IDN-016） */
   findPendingBySubject(subjectId: string): Promise<NameCorrectionRequestSnapshot | null>;
   /** 原子保存：新快照 + 本次领域事件 */
-  save(snapshot: NameCorrectionRequestSnapshot, events: readonly NameCorrectionDomainEvent[]): Promise<void>;
+  save(
+    snapshot: NameCorrectionRequestSnapshot,
+    events: readonly NameCorrectionDomainEvent[],
+  ): Promise<void>;
 }

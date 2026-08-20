@@ -20,7 +20,10 @@ import { JobTaskRunner, type JobTaskHandlerRegistry } from './job-task-runner';
 import { ProfileSyncTaskHandler } from './profile-sync-task.handler';
 import { ProfileNameWriteTaskHandler } from './profile-name-write-task.handler';
 import { JOB_TASK_STORE, JOB_TASK_HANDLERS } from './tokens';
-import { APPLY_PROFILE_SYNC_STEP_USE_CASE, APPLY_NAME_CORRECTION_WRITE_USE_CASE } from '../identity/tokens';
+import {
+  APPLY_PROFILE_SYNC_STEP_USE_CASE,
+  APPLY_NAME_CORRECTION_WRITE_USE_CASE,
+} from '../identity/tokens';
 import { IdentityUnitOfWork } from '../identity/infrastructure/unit-of-work';
 
 @Module({

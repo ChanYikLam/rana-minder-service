@@ -101,11 +101,7 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
 
 @Module({
   imports: [AdaptersModule, ObservabilityModule],
-  controllers: [
-    ProfilesNestController,
-    AccountAccessNestController,
-    NameCorrectionNestController,
-  ],
+  controllers: [ProfilesNestController, AccountAccessNestController, NameCorrectionNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
     { provide: AUTH_SESSION_PROVIDER, useClass: RejectAllAuthSessionProvider },
@@ -175,7 +171,11 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     },
     { provide: REQUIRED_FIELD_RULES_PORT, useClass: StaticRequiredFieldRules },
     { provide: SUPER_ADMIN_VERIFIER, useClass: NotWiredSuperAdminVerifier },
-    { provide: HighRiskCommandGuard, useFactory: (reauth) => new HighRiskCommandGuard(reauth), inject: [REAUTH_EVIDENCE_PORT] },
+    {
+      provide: HighRiskCommandGuard,
+      useFactory: (reauth) => new HighRiskCommandGuard(reauth),
+      inject: [REAUTH_EVIDENCE_PORT],
+    },
     // ----- 状态机与策略（纯规则单例）-----
     { provide: PROFILE_WRITE_GATE_MACHINE, useClass: DefaultProfileWriteGateStateMachine },
     { provide: PROFILE_SYNC_MACHINE, useClass: DefaultProfileSyncStateMachine },
@@ -188,32 +188,123 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     {
       provide: SAVE_PROFILE_USE_CASE,
       useFactory: (profileRepo, intentRepo, required, taskPort, audit, gateMachine, gatePolicy) =>
-        new DefaultSaveProfileUseCase(profileRepo, intentRepo, required, taskPort, audit, gateMachine, gatePolicy),
-      inject: [PROFILE_REPOSITORY, PROFILE_SYNC_INTENT_REPOSITORY, REQUIRED_FIELD_RULES_PORT, PROFILE_SYNC_TASK_PORT, IDENTITY_AUDIT_PORT, PROFILE_WRITE_GATE_MACHINE, PROFILE_GATE_POLICY],
+        new DefaultSaveProfileUseCase(
+          profileRepo,
+          intentRepo,
+          required,
+          taskPort,
+          audit,
+          gateMachine,
+          gatePolicy,
+        ),
+      inject: [
+        PROFILE_REPOSITORY,
+        PROFILE_SYNC_INTENT_REPOSITORY,
+        REQUIRED_FIELD_RULES_PORT,
+        PROFILE_SYNC_TASK_PORT,
+        IDENTITY_AUDIT_PORT,
+        PROFILE_WRITE_GATE_MACHINE,
+        PROFILE_GATE_POLICY,
+      ],
     },
     {
       provide: EMAIL_VERIFICATION_USE_CASE,
-      useFactory: (profileRepo, verificationRepo, intentRepo, mailPort, taskPort, audit, gateMachine, gatePolicy) =>
-        new DefaultEmailVerificationUseCase(profileRepo, verificationRepo, intentRepo, mailPort, taskPort, audit, gateMachine, gatePolicy),
-      inject: [PROFILE_REPOSITORY, EMAIL_VERIFICATION_REPOSITORY, PROFILE_SYNC_INTENT_REPOSITORY, MAIL_VERIFICATION_PORT, PROFILE_SYNC_TASK_PORT, IDENTITY_AUDIT_PORT, PROFILE_WRITE_GATE_MACHINE, PROFILE_GATE_POLICY],
+      useFactory: (
+        profileRepo,
+        verificationRepo,
+        intentRepo,
+        mailPort,
+        taskPort,
+        audit,
+        gateMachine,
+        gatePolicy,
+      ) =>
+        new DefaultEmailVerificationUseCase(
+          profileRepo,
+          verificationRepo,
+          intentRepo,
+          mailPort,
+          taskPort,
+          audit,
+          gateMachine,
+          gatePolicy,
+        ),
+      inject: [
+        PROFILE_REPOSITORY,
+        EMAIL_VERIFICATION_REPOSITORY,
+        PROFILE_SYNC_INTENT_REPOSITORY,
+        MAIL_VERIFICATION_PORT,
+        PROFILE_SYNC_TASK_PORT,
+        IDENTITY_AUDIT_PORT,
+        PROFILE_WRITE_GATE_MACHINE,
+        PROFILE_GATE_POLICY,
+      ],
     },
     {
       provide: RESOLVE_SYNC_CONFLICT_USE_CASE,
-      useFactory: (intentRepo, profileRepo, casdoor, taskPort, audit, machine, gateMachine, gatePolicy) =>
-        new DefaultResolveSyncConflictUseCase(intentRepo, profileRepo, casdoor, taskPort, audit, machine, gateMachine, gatePolicy),
-      inject: [PROFILE_SYNC_INTENT_REPOSITORY, PROFILE_REPOSITORY, CASDOOR_USER_PORT, PROFILE_SYNC_TASK_PORT, IDENTITY_AUDIT_PORT, PROFILE_SYNC_MACHINE, PROFILE_WRITE_GATE_MACHINE, PROFILE_GATE_POLICY],
+      useFactory: (
+        intentRepo,
+        profileRepo,
+        casdoor,
+        taskPort,
+        audit,
+        machine,
+        gateMachine,
+        gatePolicy,
+      ) =>
+        new DefaultResolveSyncConflictUseCase(
+          intentRepo,
+          profileRepo,
+          casdoor,
+          taskPort,
+          audit,
+          machine,
+          gateMachine,
+          gatePolicy,
+        ),
+      inject: [
+        PROFILE_SYNC_INTENT_REPOSITORY,
+        PROFILE_REPOSITORY,
+        CASDOOR_USER_PORT,
+        PROFILE_SYNC_TASK_PORT,
+        IDENTITY_AUDIT_PORT,
+        PROFILE_SYNC_MACHINE,
+        PROFILE_WRITE_GATE_MACHINE,
+        PROFILE_GATE_POLICY,
+      ],
     },
     {
       provide: APPLY_PROFILE_SYNC_STEP_USE_CASE,
       useFactory: (intentRepo, profileRepo, casdoor, taskPort, audit, machine, policy) =>
-        new DefaultApplyProfileSyncStepUseCase(intentRepo, profileRepo, casdoor, taskPort, audit, machine, policy),
-      inject: [PROFILE_SYNC_INTENT_REPOSITORY, PROFILE_REPOSITORY, CASDOOR_USER_PORT, PROFILE_SYNC_TASK_PORT, IDENTITY_AUDIT_PORT, PROFILE_SYNC_MACHINE, PROFILE_SYNC_POLICY],
+        new DefaultApplyProfileSyncStepUseCase(
+          intentRepo,
+          profileRepo,
+          casdoor,
+          taskPort,
+          audit,
+          machine,
+          policy,
+        ),
+      inject: [
+        PROFILE_SYNC_INTENT_REPOSITORY,
+        PROFILE_REPOSITORY,
+        CASDOOR_USER_PORT,
+        PROFILE_SYNC_TASK_PORT,
+        IDENTITY_AUDIT_PORT,
+        PROFILE_SYNC_MACHINE,
+        PROFILE_SYNC_POLICY,
+      ],
     },
     {
       provide: HANDLE_ACCOUNT_STATUS_EVENT_USE_CASE,
       useFactory: (accountRepo, machine, audit, sessionRevocation) =>
         new DefaultHandleAccountStatusEventUseCase(accountRepo, machine, audit, sessionRevocation),
-      inject: [ACCOUNT_ACCESS_REPOSITORY, ACCOUNT_ACCESS_MACHINE, IDENTITY_AUDIT_PORT, SESSION_REVOCATION_PORT],
+      inject: [
+        ACCOUNT_ACCESS_REPOSITORY,
+        ACCOUNT_ACCESS_MACHINE,
+        IDENTITY_AUDIT_PORT,
+        SESSION_REVOCATION_PORT,
+      ],
     },
     {
       provide: SUBMIT_NAME_CORRECTION_USE_CASE,
@@ -223,23 +314,44 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     {
       provide: REVIEW_NAME_CORRECTION_USE_CASE,
       useFactory: (repo, superAdmin, reauthGuard, taskPort, audit, machine) =>
-        new DefaultReviewNameCorrectionUseCase(repo, superAdmin, reauthGuard, taskPort, audit, machine),
-      inject: [NAME_CORRECTION_REPOSITORY, SUPER_ADMIN_VERIFIER, HighRiskCommandGuard, PROFILE_SYNC_TASK_PORT, IDENTITY_AUDIT_PORT, NAME_CORRECTION_MACHINE],
+        new DefaultReviewNameCorrectionUseCase(
+          repo,
+          superAdmin,
+          reauthGuard,
+          taskPort,
+          audit,
+          machine,
+        ),
+      inject: [
+        NAME_CORRECTION_REPOSITORY,
+        SUPER_ADMIN_VERIFIER,
+        HighRiskCommandGuard,
+        PROFILE_SYNC_TASK_PORT,
+        IDENTITY_AUDIT_PORT,
+        NAME_CORRECTION_MACHINE,
+      ],
     },
     {
       provide: APPLY_NAME_CORRECTION_WRITE_USE_CASE,
-      useFactory: (repo, casdoor, audit) => new DefaultApplyNameCorrectionWriteUseCase(repo, casdoor, audit),
+      useFactory: (repo, casdoor, audit) =>
+        new DefaultApplyNameCorrectionWriteUseCase(repo, casdoor, audit),
       inject: [NAME_CORRECTION_REPOSITORY, CASDOOR_USER_PORT, IDENTITY_AUDIT_PORT],
     },
     {
       provide: GET_MY_PROFILE_QUERY,
       useFactory: (profileRepo, intentRepo, accountRepo, degradation) =>
         new DefaultGetMyProfileQuery(profileRepo, intentRepo, accountRepo, degradation),
-      inject: [PROFILE_REPOSITORY, PROFILE_SYNC_INTENT_REPOSITORY, ACCOUNT_ACCESS_REPOSITORY, DEGRADATION_POLICY],
+      inject: [
+        PROFILE_REPOSITORY,
+        PROFILE_SYNC_INTENT_REPOSITORY,
+        ACCOUNT_ACCESS_REPOSITORY,
+        DEGRADATION_POLICY,
+      ],
     },
     {
       provide: GET_ACCOUNT_ACCESS_QUERY,
-      useFactory: (accountRepo, degradation) => new DefaultGetAccountAccessQuery(accountRepo, degradation),
+      useFactory: (accountRepo, degradation) =>
+        new DefaultGetAccountAccessQuery(accountRepo, degradation),
       inject: [ACCOUNT_ACCESS_REPOSITORY, DEGRADATION_POLICY],
     },
     // ----- 传输中立控制器 -----
@@ -247,11 +359,17 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
       provide: PROFILES_CONTROLLER,
       useFactory: (saveProfile, emailVerification, resolveSyncConflict, getMyProfile) =>
         new ProfilesController(saveProfile, emailVerification, resolveSyncConflict, getMyProfile),
-      inject: [SAVE_PROFILE_USE_CASE, EMAIL_VERIFICATION_USE_CASE, RESOLVE_SYNC_CONFLICT_USE_CASE, GET_MY_PROFILE_QUERY],
+      inject: [
+        SAVE_PROFILE_USE_CASE,
+        EMAIL_VERIFICATION_USE_CASE,
+        RESOLVE_SYNC_CONFLICT_USE_CASE,
+        GET_MY_PROFILE_QUERY,
+      ],
     },
     {
       provide: ACCOUNT_ACCESS_CONTROLLER,
-      useFactory: (getMyProfile, getAccountAccess) => new AccountAccessController(getMyProfile, getAccountAccess),
+      useFactory: (getMyProfile, getAccountAccess) =>
+        new AccountAccessController(getMyProfile, getAccountAccess),
       inject: [GET_MY_PROFILE_QUERY, GET_ACCOUNT_ACCESS_QUERY],
     },
     {
@@ -259,7 +377,10 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
       useFactory: (submit, review, casdoor) =>
         new NameCorrectionController(submit, review, async (subjectId) => {
           // 旧姓名以可信观测为准（CAS-REC-001）；不可信/不可用时提交拒绝（fail-closed）
-          const observation = await casdoor.readProfileField(subjectId, AuthoritativeProfileField.NAME);
+          const observation = await casdoor.readProfileField(
+            subjectId,
+            AuthoritativeProfileField.NAME,
+          );
           return observation.status === 'SUCCESS' ? observation.data.value : null;
         }),
       inject: [SUBMIT_NAME_CORRECTION_USE_CASE, REVIEW_NAME_CORRECTION_USE_CASE, CASDOOR_USER_PORT],

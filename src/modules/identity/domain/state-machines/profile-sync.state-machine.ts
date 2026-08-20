@@ -93,8 +93,10 @@ export interface ProfileSyncStateMachine {
 export class DefaultProfileSyncStateMachine implements ProfileSyncStateMachine {
   transition(input: ProfileSyncTransitionInput): StateTransitionResult<ProfileSyncState> {
     const s = ProfileSyncState;
-    const reject = (expected: ProfileSyncState, reason: string): StateTransitionResult<ProfileSyncState> =>
-      rejectTransition(expected, reason);
+    const reject = (
+      expected: ProfileSyncState,
+      reason: string,
+    ): StateTransitionResult<ProfileSyncState> => rejectTransition(expected, reason);
     const notCurrent = (): StateTransitionResult<ProfileSyncState> =>
       reject(s.PENDING_SYNC, '存在更晚本地版本，旧同步意图不得推进');
 
@@ -124,10 +126,7 @@ export class DefaultProfileSyncStateMachine implements ProfileSyncStateMachine {
         return allowTransition(s.SYNCED);
       }
       case ProfileSyncEvent.TRANSIENT_FAILURE: {
-        if (
-          input.currentState !== s.PENDING_SYNC &&
-          input.currentState !== s.RETRYING
-        ) {
+        if (input.currentState !== s.PENDING_SYNC && input.currentState !== s.RETRYING) {
           return reject(s.RETRYING, '仅待同步/重试中状态可登记临时失败');
         }
         if (input.isCurrentVersion === false) {
@@ -146,10 +145,7 @@ export class DefaultProfileSyncStateMachine implements ProfileSyncStateMachine {
       }
       case ProfileSyncEvent.READBACK_TARGET: {
         if (input.currentState !== s.PENDING_READBACK_VERIFICATION) {
-          return reject(
-            s.PENDING_READBACK_VERIFICATION,
-            '仅待读回核验状态可回读确认目标值',
-          );
+          return reject(s.PENDING_READBACK_VERIFICATION, '仅待读回核验状态可回读确认目标值');
         }
         if (input.isCurrentVersion === false) {
           return notCurrent();
@@ -170,10 +166,7 @@ export class DefaultProfileSyncStateMachine implements ProfileSyncStateMachine {
       }
       case ProfileSyncEvent.READBACK_THIRD_VALUE: {
         if (input.currentState !== s.PENDING_READBACK_VERIFICATION) {
-          return reject(
-            s.PENDING_READBACK_VERIFICATION,
-            '仅待读回核验状态可进入第三值冲突选择',
-          );
+          return reject(s.PENDING_READBACK_VERIFICATION, '仅待读回核验状态可进入第三值冲突选择');
         }
         if (input.isCurrentVersion === false) {
           return notCurrent();
@@ -218,19 +211,13 @@ export class DefaultProfileSyncStateMachine implements ProfileSyncStateMachine {
       }
       case ProfileSyncEvent.READBACK_AUTHORITATIVE_THIRD: {
         if (input.currentState !== s.PENDING_READBACK_VERIFICATION) {
-          return reject(
-            s.PENDING_READBACK_VERIFICATION,
-            '仅待读回核验状态可收敛只读权威字段',
-          );
+          return reject(s.PENDING_READBACK_VERIFICATION, '仅待读回核验状态可收敛只读权威字段');
         }
         if (input.isCurrentVersion === false) {
           return notCurrent();
         }
         if (input.editableField) {
-          return reject(
-            s.PENDING_READBACK_VERIFICATION,
-            '可编辑字段第三值必须进入本人选择',
-          );
+          return reject(s.PENDING_READBACK_VERIFICATION, '可编辑字段第三值必须进入本人选择');
         }
         return allowTransition(s.SYNCED);
       }
@@ -239,10 +226,7 @@ export class DefaultProfileSyncStateMachine implements ProfileSyncStateMachine {
           input.currentState !== s.ROLLED_BACK &&
           input.currentState !== s.PENDING_READBACK_VERIFICATION
         ) {
-          return reject(
-            s.ROLLED_BACK,
-            '仅已回退/待读回核验状态可人工处理并重新发起同步',
-          );
+          return reject(s.ROLLED_BACK, '仅已回退/待读回核验状态可人工处理并重新发起同步');
         }
         if (input.retryTarget !== s.PENDING_SYNC && input.retryTarget !== s.MANUAL_INTERVENTION) {
           return reject(s.ROLLED_BACK, '人工处置目标必须是待同步或人工处理');

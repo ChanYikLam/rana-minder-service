@@ -36,7 +36,9 @@ type FailureStatus =
 export class CasdoorUserAdapter implements CasdoorUserPort {
   constructor(private readonly casdoor: CasdoorAdapter) {}
 
-  async readAccountStatus(subjectId: string): Promise<ExternalResult<CasdoorAccountStatusObservation>> {
+  async readAccountStatus(
+    subjectId: string,
+  ): Promise<ExternalResult<CasdoorAccountStatusObservation>> {
     const user = await this.casdoor.getUser(subjectId);
     if (user.status !== 'SUCCESS' || user.data === null) {
       return externalFailure(
@@ -50,7 +52,12 @@ export class CasdoorUserAdapter implements CasdoorUserPort {
     if (!state) {
       return externalFailure(
         'UNCERTAIN',
-        { code: 'CAS-STATE-UNKNOWN', message: '账号状态无法映射，按结果不确定处理', retryable: true, rawStatusCode: null },
+        {
+          code: 'CAS-STATE-UNKNOWN',
+          message: '账号状态无法映射，按结果不确定处理',
+          retryable: true,
+          rawStatusCode: null,
+        },
         randomUUID(),
         new Date(),
       );
@@ -137,11 +144,17 @@ function extractField(user: CasdoorUser, field: ProfileField): string | null {
   }
 }
 
-function unknownError(status: string): { code: string; message: string; retryable: boolean; rawStatusCode: null } {
+function unknownError(status: string): {
+  code: string;
+  message: string;
+  retryable: boolean;
+  rawStatusCode: null;
+} {
   return {
     code: `CAS-${status}`,
     message: 'Casdoor 调用失败',
-    retryable: status === 'RETRYABLE_FAILURE' || status === 'RATE_LIMITED' || status === 'UNAVAILABLE',
+    retryable:
+      status === 'RETRYABLE_FAILURE' || status === 'RATE_LIMITED' || status === 'UNAVAILABLE',
     rawStatusCode: null,
   };
 }

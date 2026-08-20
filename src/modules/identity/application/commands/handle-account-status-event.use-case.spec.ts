@@ -52,7 +52,9 @@ function inMemoryAccountRepository(): AccountAccessRepository & {
   };
 }
 
-function inMemorySessionRevocation(): SessionRevocationPort & { invalidated: { subjectId: string; version: number }[] } {
+function inMemorySessionRevocation(): SessionRevocationPort & {
+  invalidated: { subjectId: string; version: number }[];
+} {
   return {
     invalidated: [],
     async invalidateSessions(subjectId, version) {
@@ -74,7 +76,9 @@ function createUseCase(overrides?: {
   );
 }
 
-function inputFor(overrides?: Partial<HandleAccountStatusEventInput>): HandleAccountStatusEventInput {
+function inputFor(
+  overrides?: Partial<HandleAccountStatusEventInput>,
+): HandleAccountStatusEventInput {
   return {
     subjectId: 'user-1',
     event: { type: 'DISABLED' },
@@ -112,9 +116,7 @@ describe('HandleAccountStatusEventUseCase（IFC-SM-001）', () => {
     assert.equal(audited, 1);
     assert.equal(auditSubject, 'user-1');
     // IDN-008：禁用可信确认 → 同事务立即失效全部会话
-    assert.deepEqual(sessionRevocation.invalidated, [
-      { subjectId: 'user-1', version: 1 },
-    ]);
+    assert.deepEqual(sessionRevocation.invalidated, [{ subjectId: 'user-1', version: 1 }]);
   });
 
   it('幂等：重复禁用 → 仅返回既有结果（不产生新状态变化）', async () => {

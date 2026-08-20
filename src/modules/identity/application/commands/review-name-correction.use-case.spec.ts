@@ -69,15 +69,28 @@ function inMemoryRepository(): NameCorrectionRequestRepository & {
 }
 
 function freshReauthGuard(): HighRiskCommandGuard {
-  return new HighRiskCommandGuard({ async latestReauthAt() { return new Date(now.getTime() - 60_000); }, async record() {} });
+  return new HighRiskCommandGuard({
+    async latestReauthAt() {
+      return new Date(now.getTime() - 60_000);
+    },
+    async record() {},
+  });
 }
 
 function superAdmin(allowed = true): SuperAdminVerifierPort {
-  return { async isSuperAdmin() { return allowed; } };
+  return {
+    async isSuperAdmin() {
+      return allowed;
+    },
+  };
 }
 
-function taskPort(): ProfileSyncTaskPort & { nameWriteTasks: { requestId: string; subjectId: string; newName: string }[] } {
-  const port: ProfileSyncTaskPort & { nameWriteTasks: { requestId: string; subjectId: string; newName: string }[] } = {
+function taskPort(): ProfileSyncTaskPort & {
+  nameWriteTasks: { requestId: string; subjectId: string; newName: string }[];
+} {
+  const port: ProfileSyncTaskPort & {
+    nameWriteTasks: { requestId: string; subjectId: string; newName: string }[];
+  } = {
     nameWriteTasks: [],
     async scheduleProfileSync() {},
     async scheduleProfileReadback() {},
@@ -106,7 +119,11 @@ describe('DefaultReviewNameCorrectionUseCase（IDN-016 裁决）', () => {
     const repository = inMemoryRepository();
     repository.seed(pendingSnapshot());
     const captured: { summary: Record<string, unknown> | null } = { summary: null };
-    const audit: IdentityAuditPort = { async record(fact) { captured.summary = fact.summary; } };
+    const audit: IdentityAuditPort = {
+      async record(fact) {
+        captured.summary = fact.summary;
+      },
+    };
     const tasks = taskPort();
     const useCase = new DefaultReviewNameCorrectionUseCase(
       repository,
@@ -154,7 +171,12 @@ describe('DefaultReviewNameCorrectionUseCase（IDN-016 裁决）', () => {
   it('REV：重认证过期/缺失 → 拒绝（IFC-ERR-002 高风险命令）', async () => {
     const repository = inMemoryRepository();
     repository.seed(pendingSnapshot());
-    const staleGuard = new HighRiskCommandGuard({ async latestReauthAt() { return null; }, async record() {} });
+    const staleGuard = new HighRiskCommandGuard({
+      async latestReauthAt() {
+        return null;
+      },
+      async record() {},
+    });
     const useCase = new DefaultReviewNameCorrectionUseCase(
       repository,
       superAdmin(true),
@@ -175,7 +197,11 @@ describe('DefaultReviewNameCorrectionUseCase（IDN-016 裁决）', () => {
     const repository = inMemoryRepository();
     repository.seed(pendingSnapshot());
     let auditedAction: string | null = null;
-    const audit: IdentityAuditPort = { async record(fact) { auditedAction = fact.summary.action as string; } };
+    const audit: IdentityAuditPort = {
+      async record(fact) {
+        auditedAction = fact.summary.action as string;
+      },
+    };
     const tasks = taskPort();
     const useCase = new DefaultReviewNameCorrectionUseCase(
       repository,
@@ -197,7 +223,11 @@ describe('DefaultReviewNameCorrectionUseCase（IDN-016 裁决）', () => {
 
   it('REV：终态重复裁决 → 拒绝（裁决只一次）', async () => {
     const repository = inMemoryRepository();
-    repository.seed({ ...pendingSnapshot(), status: NameCorrectionState.APPROVED, decidedBy: 'admin-1' });
+    repository.seed({
+      ...pendingSnapshot(),
+      status: NameCorrectionState.APPROVED,
+      decidedBy: 'admin-1',
+    });
     const useCase = new DefaultReviewNameCorrectionUseCase(
       repository,
       superAdmin(true),
@@ -210,7 +240,8 @@ describe('DefaultReviewNameCorrectionUseCase（IDN-016 裁决）', () => {
     await assert.rejects(
       useCase.execute(inputFor()),
       (error: unknown) =>
-        error instanceof IdentityCommandError && error.code === IdentityErrorCode.PRECONDITION_FAILED,
+        error instanceof IdentityCommandError &&
+        error.code === IdentityErrorCode.PRECONDITION_FAILED,
     );
   });
 
@@ -226,7 +257,8 @@ describe('DefaultReviewNameCorrectionUseCase（IDN-016 裁决）', () => {
     await assert.rejects(
       useCase.execute(inputFor({ reason: '  ' })),
       (error: unknown) =>
-        error instanceof IdentityCommandError && error.code === IdentityErrorCode.PRECONDITION_FAILED,
+        error instanceof IdentityCommandError &&
+        error.code === IdentityErrorCode.PRECONDITION_FAILED,
     );
   });
 });

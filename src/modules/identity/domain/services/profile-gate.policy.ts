@@ -34,10 +34,7 @@ export interface ProfileGateFacts {
 }
 
 export type ProfileGateDerivation =
-  | 'PENDING_COMPLETION'
-  | 'PENDING_EMAIL_VERIFICATION'
-  | 'WRITABLE'
-  | 'PARTIALLY_RESTRICTED';
+  'PENDING_COMPLETION' | 'PENDING_EMAIL_VERIFICATION' | 'WRITABLE' | 'PARTIALLY_RESTRICTED';
 
 export interface ProfileGatePolicy {
   /** 从事实重算派生门状态（原子重算入口；IDN-010） */

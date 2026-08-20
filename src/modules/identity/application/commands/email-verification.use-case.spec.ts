@@ -143,7 +143,11 @@ describe('EmailVerificationUseCase R003 发送/重发验证邮件', () => {
           sent.push({ toEmail: input.toEmail, token: input.token });
         },
       },
-      audit: { async record() { audited += 1; } },
+      audit: {
+        async record() {
+          audited += 1;
+        },
+      },
     });
 
     await useCase.sendVerificationEmail({

@@ -50,7 +50,10 @@ export class PostgresProfileSyncIntentRepository implements ProfileSyncIntentRep
     private readonly uow: IdentityUnitOfWork,
   ) {}
 
-  async load(subjectId: string, field: EditableProfileField): Promise<ProfileSyncIntentSnapshot | null> {
+  async load(
+    subjectId: string,
+    field: EditableProfileField,
+  ): Promise<ProfileSyncIntentSnapshot | null> {
     const rows = await this.db.query<Row>(
       this.uow.active,
       `SELECT subject_id, field, id, target_version, prior_value, target_value, readback_value,

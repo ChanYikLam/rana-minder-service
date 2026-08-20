@@ -13,8 +13,14 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { AccountAccessController, type AccessCheckInput } from './account-access.controller';
 import type { ActorContext } from './profiles.controller';
-import type { GetMyProfileQuery, GetMyProfileResult } from '../../application/queries/get-my-profile.query';
-import type { GetAccountAccessQuery, GetAccountAccessResult } from '../../application/queries/get-account-access.query';
+import type {
+  GetMyProfileQuery,
+  GetMyProfileResult,
+} from '../../application/queries/get-my-profile.query';
+import type {
+  GetAccountAccessQuery,
+  GetAccountAccessResult,
+} from '../../application/queries/get-account-access.query';
 import { IdentityCommandError, IdentityErrorCode } from '../../application/errors';
 
 const now = new Date('2026-08-20T12:00:00.000Z');
@@ -201,7 +207,10 @@ describe('AccountAccessController.checkAccess（SRS-FAIL-001 逐请求判定）'
         reason: '会话未在故障前可信登录，不授予白名单',
       },
     });
-    const result = await controller.checkAccess(actor(), input({ sessionAuthenticatedBeforeFailure: false }));
+    const result = await controller.checkAccess(
+      actor(),
+      input({ sessionAuthenticatedBeforeFailure: false }),
+    );
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -211,7 +220,10 @@ describe('AccountAccessController.checkAccess（SRS-FAIL-001 逐请求判定）'
   it('AUT：判定强制使用会话 subjectId 与传入类别，不经由客户端权限声明', async () => {
     fakeQueries.accessCalls = [];
     const controller = createController();
-    await controller.checkAccess(actor({ subjectId: 'user-session' }), input({ category: 'PUBLIC_PAGE' }));
+    await controller.checkAccess(
+      actor({ subjectId: 'user-session' }),
+      input({ category: 'PUBLIC_PAGE' }),
+    );
 
     assert.equal(fakeQueries.accessCalls[0].subjectId, 'user-session');
     assert.equal(fakeQueries.accessCalls[0].category, 'PUBLIC_PAGE');

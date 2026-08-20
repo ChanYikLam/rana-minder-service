@@ -43,13 +43,22 @@ describe('PostgresNameCorrectionRepository（IDN-016）', () => {
     await uow.run({ kind: 'single', subjectId: 'user-1' }, async () => {
       await repository.save(snapshot(), []);
       db.seed('name_correction_requests', [
-        { id: 'req-1', subject_id: 'user-1', old_name: '旧姓名', requested_name: '新姓名', status: 'SUBMITTED' },
+        {
+          id: 'req-1',
+          subject_id: 'user-1',
+          old_name: '旧姓名',
+          requested_name: '新姓名',
+          status: 'SUBMITTED',
+        },
       ]);
       const loaded = await repository.load('req-1');
       assert.equal(loaded?.id, 'req-1');
       assert.equal(loaded?.requestedName, '新姓名');
     });
-    assert.equal(db.queries.some((q) => q.sql.includes('FROM name_correction_requests')), true);
+    assert.equal(
+      db.queries.some((q) => q.sql.includes('FROM name_correction_requests')),
+      true,
+    );
   });
 
   it('findPendingBySubject 只查询 SUBMITTED（部分唯一约束语义）', async () => {

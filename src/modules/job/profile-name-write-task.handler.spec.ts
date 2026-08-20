@@ -7,10 +7,16 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ProfileNameWriteTaskHandler, JOB_SERVICE_ACCOUNT } from './profile-name-write-task.handler';
+import {
+  ProfileNameWriteTaskHandler,
+  JOB_SERVICE_ACCOUNT,
+} from './profile-name-write-task.handler';
 import { IdentityUnitOfWork } from '../identity/infrastructure/unit-of-work';
 import { FakeDbAdapter } from '../identity/infrastructure/testing/fake-db-adapter';
-import type { ApplyNameCorrectionWriteInput, ApplyNameCorrectionWriteUseCase } from '../identity/application/commands/apply-name-correction-write.use-case';
+import type {
+  ApplyNameCorrectionWriteInput,
+  ApplyNameCorrectionWriteUseCase,
+} from '../identity/application/commands/apply-name-correction-write.use-case';
 import type { ClaimedJobTask } from './job-task.store';
 
 function claimedTask(overrides?: Partial<ClaimedJobTask>): ClaimedJobTask {
@@ -68,8 +74,15 @@ describe('ProfileNameWriteTaskHandler（姓名写回执行单元）', () => {
   });
 
   it('任务载荷损坏 → 拒绝（不进入业务，任务层重试）', async () => {
-    const useCase: ApplyNameCorrectionWriteUseCase = { async execute() { throw new Error('不应被调用'); } };
-    const handler = new ProfileNameWriteTaskHandler(useCase, new IdentityUnitOfWork(new FakeDbAdapter()));
+    const useCase: ApplyNameCorrectionWriteUseCase = {
+      async execute() {
+        throw new Error('不应被调用');
+      },
+    };
+    const handler = new ProfileNameWriteTaskHandler(
+      useCase,
+      new IdentityUnitOfWork(new FakeDbAdapter()),
+    );
 
     await assert.rejects(
       handler.execute(claimedTask({ payload: { requestId: 'req-1' } })),

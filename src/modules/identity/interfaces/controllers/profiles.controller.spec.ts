@@ -13,10 +13,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { ProfilesController, type ActorContext } from './profiles.controller';
-import type { SaveProfileUseCase, SaveProfileResult } from '../../application/commands/save-profile.use-case';
+import type {
+  SaveProfileUseCase,
+  SaveProfileResult,
+} from '../../application/commands/save-profile.use-case';
 import type { EmailVerificationUseCase } from '../../application/commands/email-verification.use-case';
 import type { ResolveSyncConflictUseCase } from '../../application/commands/resolve-sync-conflict.use-case';
-import type { GetMyProfileQuery, GetMyProfileResult } from '../../application/queries/get-my-profile.query';
+import type {
+  GetMyProfileQuery,
+  GetMyProfileResult,
+} from '../../application/queries/get-my-profile.query';
 import { IdentityCommandError, IdentityErrorCode } from '../../application/errors';
 
 const now = new Date('2026-08-20T12:00:00.000Z');
@@ -128,7 +134,10 @@ function createController(overrides?: {
     async sendVerificationEmail(input) {
       fakeEmail.sendInput = input;
       if (input.mailCapable === false) {
-        throw new IdentityCommandError(IdentityErrorCode.PRECONDITION_FAILED, '平台发信能力不可用，无法发送验证邮件');
+        throw new IdentityCommandError(
+          IdentityErrorCode.PRECONDITION_FAILED,
+          '平台发信能力不可用，无法发送验证邮件',
+        );
       }
       if (fakeEmail.sendError !== null) {
         throw fakeEmail.sendError;
@@ -152,7 +161,12 @@ function createController(overrides?: {
       return { kind: 'KEPT_LOCAL', nextIntentId: 'intent-2' };
     },
   };
-  const controller = new ProfilesController(fakeSaveUseCase, fakeEmailUseCase, fakeResolveUseCase, fakeQuery);
+  const controller = new ProfilesController(
+    fakeSaveUseCase,
+    fakeEmailUseCase,
+    fakeResolveUseCase,
+    fakeQuery,
+  );
   return { controller, fakeQuery };
 }
 
@@ -195,17 +209,19 @@ describe('ProfilesController.saveMyProfile（PUT /api/auth/profile）', () => {
   it('NOM：信封+expectedVersion 保存并返回最新本人资料', async () => {
     fakeSave.error = null;
     const { controller, fakeQuery } = createController();
-    const result = await controller.saveMyProfile(
-      actor(),
-      { expectedVersion: 4, input: { phone: '13800000000' } },
-    );
+    const result = await controller.saveMyProfile(actor(), {
+      expectedVersion: 4,
+      input: { phone: '13800000000' },
+    });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.value.phone, '13800000000');
     assert.equal(fakeSave.lastInput?.expectedVersion, 4);
     assert.equal(fakeSave.lastInput?.fields.phone, '13800000000');
-    const queryCall = (fakeQuery as unknown as { calls: { input: { subjectId: string }; knownSnapshot: unknown }[] }).calls.at(-1);
+    const queryCall = (
+      fakeQuery as unknown as { calls: { input: { subjectId: string }; knownSnapshot: unknown }[] }
+    ).calls.at(-1);
     assert.equal(queryCall?.input.subjectId, 'user-1');
     assert.ok(queryCall?.knownSnapshot); // 复用 save 返回值，不再整份重新回源
   });
@@ -213,10 +229,11 @@ describe('ProfilesController.saveMyProfile（PUT /api/auth/profile）', () => {
   it('AUT：保存强制使用会话 subjectId，信封 targetId 不被采纳', async () => {
     fakeSave.error = null;
     const { controller } = createController();
-    await controller.saveMyProfile(
-      actor({ subjectId: 'user-session' }),
-      { targetId: 'user-other', expectedVersion: 4, input: { phone: '13900000000' } },
-    );
+    await controller.saveMyProfile(actor({ subjectId: 'user-session' }), {
+      targetId: 'user-other',
+      expectedVersion: 4,
+      input: { phone: '13900000000' },
+    });
 
     assert.equal(fakeSave.lastInput?.subjectId, 'user-session');
   });
@@ -226,10 +243,10 @@ describe('ProfilesController.saveMyProfile（PUT /api/auth/profile）', () => {
     const { controller } = createController({
       profile: { version: 5, fields: { phone: '13700000000' } },
     });
-    const result = await controller.saveMyProfile(
-      actor(),
-      { expectedVersion: 4, input: { phone: '13900000000' } },
-    );
+    const result = await controller.saveMyProfile(actor(), {
+      expectedVersion: 4,
+      input: { phone: '13900000000' },
+    });
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -250,10 +267,10 @@ describe('ProfilesController.saveMyProfile（PUT /api/auth/profile）', () => {
 
   it('校验：不可编辑字段 → 422 IFC-ERR-005 + fieldErrors', async () => {
     const { controller } = createController();
-    const result = await controller.saveMyProfile(
-      actor(),
-      { expectedVersion: 4, input: { studentId: '20240001' } },
-    );
+    const result = await controller.saveMyProfile(actor(), {
+      expectedVersion: 4,
+      input: { studentId: '20240001' },
+    });
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -289,10 +306,9 @@ describe('ProfilesController.sendEmailCode（POST send-email-code）', () => {
   it('发信能力缺失 → 按不可用映射（此处应用层前置条件 422）', async () => {
     fakeEmail.sendError = null;
     const { controller } = createController();
-    const result = await controller.sendEmailCode(
-      actor({ mailCapable: false }),
-      { input: { email: 'new@example.com' } },
-    );
+    const result = await controller.sendEmailCode(actor({ mailCapable: false }), {
+      input: { email: 'new@example.com' },
+    });
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -353,10 +369,9 @@ describe('ProfilesController.resolveSyncConflict（POST sync-conflict）', () =>
   it('NOM：选择本地目标值 → 返回最新资料快照', async () => {
     fakeResolve.error = null;
     const { controller } = createController();
-    const result = await controller.resolveSyncConflict(
-      actor(),
-      { input: { field: 'phone', chosenValue: '13800000000' } },
-    );
+    const result = await controller.resolveSyncConflict(actor(), {
+      input: { field: 'phone', chosenValue: '13800000000' },
+    });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -369,20 +384,18 @@ describe('ProfilesController.resolveSyncConflict（POST sync-conflict）', () =>
   it('AUT：subjectId 恒来自会话', async () => {
     fakeResolve.error = null;
     const { controller } = createController();
-    await controller.resolveSyncConflict(
-      actor({ subjectId: 'user-session' }),
-      { input: { field: 'phone', chosenValue: '13800000000' } },
-    );
+    await controller.resolveSyncConflict(actor({ subjectId: 'user-session' }), {
+      input: { field: 'phone', chosenValue: '13800000000' },
+    });
 
     assert.equal(fakeResolve.lastInput?.subjectId, 'user-session');
   });
 
   it('拒绝：只读权威字段（name/studentId）→ 422 IFC-ERR-006', async () => {
     const { controller } = createController();
-    const result = await controller.resolveSyncConflict(
-      actor(),
-      { input: { field: 'name', chosenValue: '张三' } },
-    );
+    const result = await controller.resolveSyncConflict(actor(), {
+      input: { field: 'name', chosenValue: '张三' },
+    });
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -396,10 +409,9 @@ describe('ProfilesController.resolveSyncConflict（POST sync-conflict）', () =>
       '该字段不存在待选择的同步冲突',
     );
     const { controller } = createController();
-    const result = await controller.resolveSyncConflict(
-      actor(),
-      { input: { field: 'phone', chosenValue: '13800000000' } },
-    );
+    const result = await controller.resolveSyncConflict(actor(), {
+      input: { field: 'phone', chosenValue: '13800000000' },
+    });
 
     assert.equal(result.ok, false);
     if (result.ok) return;

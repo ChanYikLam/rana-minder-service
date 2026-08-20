@@ -41,7 +41,9 @@ describe('parseRequestEnvelope（API-GEN-003）', () => {
         assert.ok(error instanceof IdentityCommandError);
         assert.equal(error.code, IdentityErrorCode.VALIDATION_FAILED);
         assert.ok(error.details?.fieldErrors);
-        assert.deepEqual(Object.keys(error.details.fieldErrors as Record<string, unknown>), ['email']);
+        assert.deepEqual(Object.keys(error.details.fieldErrors as Record<string, unknown>), [
+          'email',
+        ]);
         return true;
       },
     );
@@ -78,7 +80,8 @@ describe('parseRequestEnvelope（API-GEN-003）', () => {
       assert.throws(
         () => parseRequestEnvelope({ expectedVersion: bad }),
         (error: unknown) =>
-          error instanceof IdentityCommandError && error.code === IdentityErrorCode.VALIDATION_FAILED,
+          error instanceof IdentityCommandError &&
+          error.code === IdentityErrorCode.VALIDATION_FAILED,
         `expectedVersion=${bad} 应拒绝`,
       );
     }

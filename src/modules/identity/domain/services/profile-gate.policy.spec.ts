@@ -70,10 +70,7 @@ describe('IDN-019 分范围限制：作用域键唯一 + 多限制并集', () =>
     const rest = [restriction('club-1'), restriction('club-2'), restriction('application-9')];
     const remaining = policy.remainingRestrictions(rest, 'club-1');
     assert.equal(remaining.length, 2);
-    assert.deepEqual(
-      remaining.map((r) => r.scopeKey).sort(),
-      ['application-9', 'club-2'],
-    );
+    assert.deepEqual(remaining.map((r) => r.scopeKey).sort(), ['application-9', 'club-2']);
   });
 
   it('解除不存在的限制返回原集合（无副作用）', () => {

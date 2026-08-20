@@ -6,19 +6,16 @@
  * 全部经 AuthGuard 认证；subjectId 恒来自会话（AUT）。
  */
 
-import {
-  Body,
-  Controller,
-  Inject,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Inject, Post, Req, UseGuards } from '@nestjs/common';
 
 import { TRACE_CONTEXT } from '../../../../platform/observability/tracing/tokens';
 import type { TraceContextAdapter } from '../../../../platform/observability/infrastructure/trace-context.adapter';
 import { NAME_CORRECTION_CONTROLLER } from '../../tokens';
-import type { NameCorrectionController, SubmitNameCorrectionResponse, ReviewNameCorrectionResponse } from '../controllers/name-correction.controller';
+import type {
+  NameCorrectionController,
+  SubmitNameCorrectionResponse,
+  ReviewNameCorrectionResponse,
+} from '../controllers/name-correction.controller';
 import { AuthGuard } from './auth.guard';
 import { toHttpResponse, actorFromRequest } from './response-mapper';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';

@@ -16,7 +16,13 @@ function task(id: string, type: string, attempts = 1): ClaimedJobTask {
   return { id, type, subjectId: 'user-1', payload: {}, attempts };
 }
 
-function memoryStore(): { store: JobTaskStore; claimed: ClaimedJobTask[]; completed: string[]; retried: { id: string; at: Date }[]; failed: { id: string; error: string }[] } {
+function memoryStore(): {
+  store: JobTaskStore;
+  claimed: ClaimedJobTask[];
+  completed: string[];
+  retried: { id: string; at: Date }[];
+  failed: { id: string; error: string }[];
+} {
   const state = {
     claimed: [] as ClaimedJobTask[],
     completed: [] as string[],
@@ -44,7 +50,12 @@ describe('JobTaskRunner（租约结算）', () => {
   it('成功执行 → complete', async () => {
     const { store, completed, claimed } = memoryStore();
     claimed.push(task('t-1', 'profile_sync'));
-    const runner = new JobTaskRunner(store, { profile_sync: { execute: async () => {} } }, 5, 60_000);
+    const runner = new JobTaskRunner(
+      store,
+      { profile_sync: { execute: async () => {} } },
+      5,
+      60_000,
+    );
 
     assert.equal(await runner.runOnce(now), 1);
     assert.deepEqual(completed, ['t-1']);
@@ -53,7 +64,18 @@ describe('JobTaskRunner（租约结算）', () => {
   it('抛错且未达上限 → 指数退避重试（下一轮可再领取）', async () => {
     const { store, retried, claimed } = memoryStore();
     claimed.push(task('t-1', 'profile_sync', 1));
-    const runner = new JobTaskRunner(store, { profile_sync: { execute: async () => { throw new Error('casdoor down'); } } }, 5, 60_000);
+    const runner = new JobTaskRunner(
+      store,
+      {
+        profile_sync: {
+          execute: async () => {
+            throw new Error('casdoor down');
+          },
+        },
+      },
+      5,
+      60_000,
+    );
 
     await runner.runOnce(now);
 
@@ -65,7 +87,18 @@ describe('JobTaskRunner（租约结算）', () => {
   it('达上限 → failed 保留错误证据（不再重试）', async () => {
     const { store, failed, retried, claimed } = memoryStore();
     claimed.push(task('t-1', 'profile_sync', 5));
-    const runner = new JobTaskRunner(store, { profile_sync: { execute: async () => { throw new Error('boom'); } } }, 5, 60_000);
+    const runner = new JobTaskRunner(
+      store,
+      {
+        profile_sync: {
+          execute: async () => {
+            throw new Error('boom');
+          },
+        },
+      },
+      5,
+      60_000,
+    );
 
     await runner.runOnce(now);
 
@@ -93,7 +126,11 @@ describe('JobTaskRunner（租约结算）', () => {
       store,
       {
         good: { execute: async () => {} },
-        bad: { execute: async () => { throw new Error('boom'); } },
+        bad: {
+          execute: async () => {
+            throw new Error('boom');
+          },
+        },
       },
       5,
       60_000,
@@ -101,7 +138,10 @@ describe('JobTaskRunner（租约结算）', () => {
 
     assert.equal(await runner.runOnce(now), 3);
     assert.deepEqual(completed, ['t-1', 't-3']);
-    assert.deepEqual(failed.map((f) => f.id), ['t-2']);
+    assert.deepEqual(
+      failed.map((f) => f.id),
+      ['t-2'],
+    );
     assert.equal(retried.length, 0);
   });
 });

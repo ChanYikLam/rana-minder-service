@@ -56,7 +56,10 @@ export function toApiError(error: unknown): ApiErrorResult {
  * HTTP 422 + fieldErrors.code。
  */
 export function toVerifyEmailError(error: unknown): ApiErrorResult {
-  if (error instanceof IdentityCommandError && error.code === IdentityErrorCode.PRECONDITION_FAILED) {
+  if (
+    error instanceof IdentityCommandError &&
+    error.code === IdentityErrorCode.PRECONDITION_FAILED
+  ) {
     return {
       ok: false,
       status: 422,

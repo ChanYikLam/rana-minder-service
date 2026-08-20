@@ -42,7 +42,9 @@ describe('PostgresProfileRepository', () => {
         pending_email: null,
         version: 4,
         gate_state: ProfileWriteGateState.WRITABLE,
-        restrictions: JSON.stringify([{ scopeKey: 'club:2', reason: 'x', since: now.toISOString() }]),
+        restrictions: JSON.stringify([
+          { scopeKey: 'club:2', reason: 'x', since: now.toISOString() },
+        ]),
       },
     ]);
     const uow = new IdentityUnitOfWork(db);
@@ -153,8 +155,26 @@ describe('PostgresEmailVerificationRepository', () => {
   it('save→load 往返与 findLatestBySubjectAndEmail 排序', async () => {
     const db = new FakeDbAdapter();
     db.seed('email_verification_requests', [
-      { id: 'v-1', subject_id: 'user-1', email: 'new@example.com', token_hash: 'abc123', expires_at: snapshot.expiresAt, consumed_at: null, request_version: 2, created_at: now },
-      { id: 'v-0', subject_id: 'user-1', email: 'new@example.com', token_hash: 'old', expires_at: now, consumed_at: null, request_version: 1, created_at: new Date(now.getTime() - 60000) },
+      {
+        id: 'v-1',
+        subject_id: 'user-1',
+        email: 'new@example.com',
+        token_hash: 'abc123',
+        expires_at: snapshot.expiresAt,
+        consumed_at: null,
+        request_version: 2,
+        created_at: now,
+      },
+      {
+        id: 'v-0',
+        subject_id: 'user-1',
+        email: 'new@example.com',
+        token_hash: 'old',
+        expires_at: now,
+        consumed_at: null,
+        request_version: 1,
+        created_at: new Date(now.getTime() - 60000),
+      },
     ]);
     const uow = new IdentityUnitOfWork(db);
     const repo = new PostgresEmailVerificationRepository(db, uow);
@@ -163,7 +183,9 @@ describe('PostgresEmailVerificationRepository', () => {
     assert.equal(loaded?.email, 'new@example.com');
     assert.equal(loaded?.requestVersion, 2);
 
-    const latest = await inTx(uow, () => repo.findLatestBySubjectAndEmail('user-1', 'new@example.com'));
+    const latest = await inTx(uow, () =>
+      repo.findLatestBySubjectAndEmail('user-1', 'new@example.com'),
+    );
     assert.equal(latest?.id, 'v-1');
     assert.equal(latest?.requestVersion, 2);
   });
@@ -221,7 +243,13 @@ describe('PostgresProfileSyncIntentRepository', () => {
     const event: ProfileSyncDomainEvent = {
       type: 'SYNC_STATE_TRANSITIONED',
       occurredAt: now,
-      payload: { subjectId: 'user-1', field: 'phone', targetVersion: 4, fromState: 'PENDING_SYNC', toState: 'RETRYING' },
+      payload: {
+        subjectId: 'user-1',
+        field: 'phone',
+        targetVersion: 4,
+        fromState: 'PENDING_SYNC',
+        toState: 'RETRYING',
+      },
     };
     await inTx(uow, () => repo.save(upserted, [event]));
     assert.equal(db.queries.length, 3);

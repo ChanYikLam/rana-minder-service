@@ -16,15 +16,13 @@ export const NameCorrectionState = {
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
 } as const;
-export type NameCorrectionState =
-  (typeof NameCorrectionState)[keyof typeof NameCorrectionState];
+export type NameCorrectionState = (typeof NameCorrectionState)[keyof typeof NameCorrectionState];
 
 export const NameCorrectionEvent = {
   APPROVE: 'APPROVE',
   REJECT: 'REJECT',
 } as const;
-export type NameCorrectionEvent =
-  (typeof NameCorrectionEvent)[keyof typeof NameCorrectionEvent];
+export type NameCorrectionEvent = (typeof NameCorrectionEvent)[keyof typeof NameCorrectionEvent];
 
 export interface NameCorrectionTransitionResult {
   readonly allowed: boolean;

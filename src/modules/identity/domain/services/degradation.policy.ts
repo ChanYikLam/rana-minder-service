@@ -22,9 +22,7 @@
 export const DEGRADATION_WINDOW_MS = 15 * 60 * 1000;
 
 export type DegradationCommandCategory =
-  | 'PUBLIC_PAGE'
-  | 'OWN_BASIC_PROFILE_READ'
-  | 'OWN_EXISTING_DRAFT_EDIT';
+  'PUBLIC_PAGE' | 'OWN_BASIC_PROFILE_READ' | 'OWN_EXISTING_DRAFT_EDIT';
 
 export const DegradationCommandCategory = {
   PUBLIC_PAGE: 'PUBLIC_PAGE',
@@ -93,7 +91,10 @@ export class DefaultDegradationPolicy implements DegradationPolicy {
         reason: '会话未在故障前可信登录，不授予白名单',
       };
     }
-    if (input.category === 'OWN_BASIC_PROFILE_READ' || input.category === 'OWN_EXISTING_DRAFT_EDIT') {
+    if (
+      input.category === 'OWN_BASIC_PROFILE_READ' ||
+      input.category === 'OWN_EXISTING_DRAFT_EDIT'
+    ) {
       return { allowed: true, remainingMs, withinWindow, reason: null };
     }
     return {

@@ -235,7 +235,11 @@ export class ProfileSyncIntent {
   }
 
   /** R010 本人选择接受 Casdoor 当前值 */
-  acceptCasdoor(machine: ProfileSyncStateMachine, snapshotStillMatches: boolean, now: Date): boolean {
+  acceptCasdoor(
+    machine: ProfileSyncStateMachine,
+    snapshotStillMatches: boolean,
+    now: Date,
+  ): boolean {
     const ok = this.advance(
       machine,
       {

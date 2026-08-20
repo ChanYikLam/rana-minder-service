@@ -11,7 +11,10 @@ import { Controller, Get, Inject, Req, UseGuards } from '@nestjs/common';
 import { TRACE_CONTEXT } from '../../../../platform/observability/tracing/tokens';
 import type { TraceContextAdapter } from '../../../../platform/observability/infrastructure/trace-context.adapter';
 import { ACCOUNT_ACCESS_CONTROLLER } from '../../tokens';
-import type { AccountAccessController, SessionResponse } from '../controllers/account-access.controller';
+import type {
+  AccountAccessController,
+  SessionResponse,
+} from '../controllers/account-access.controller';
 import { AuthGuard } from './auth.guard';
 import { toHttpResponse, actorFromRequest } from './response-mapper';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';

@@ -7,10 +7,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { MailChannelAdapter, VerificationEmailDispatch } from './mail-channel-adapter';
-import {
-  externalFailure,
-  type ExternalResult,
-} from '../../common/contracts/external-result';
+import { externalFailure, type ExternalResult } from '../../common/contracts/external-result';
 
 export class NotWiredMailChannelAdapter implements MailChannelAdapter {
   async sendVerificationEmail(_input: VerificationEmailDispatch): Promise<ExternalResult<void>> {

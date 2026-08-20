@@ -68,7 +68,10 @@ export class ProfilesController {
   /** GET /api/auth/profile */
   async getMyProfile(actor: ActorContext): Promise<ProfilesControllerResult<MyProfileResponse>> {
     try {
-      const profile = await this.getMyProfileQuery.execute({ subjectId: actor.subjectId, now: actor.now });
+      const profile = await this.getMyProfileQuery.execute({
+        subjectId: actor.subjectId,
+        now: actor.now,
+      });
       return { ok: true, value: toMyProfileResponse(profile) };
     } catch (error) {
       return toApiError(error);
@@ -76,7 +79,10 @@ export class ProfilesController {
   }
 
   /** PUT /api/auth/profile（信封：expectedVersion + input 字段） */
-  async saveMyProfile(actor: ActorContext, body: unknown): Promise<ProfilesControllerResult<MyProfileResponse>> {
+  async saveMyProfile(
+    actor: ActorContext,
+    body: unknown,
+  ): Promise<ProfilesControllerResult<MyProfileResponse>> {
     try {
       const envelope = parseRequestEnvelope(body);
       if (envelope.input === undefined || Object.keys(envelope.input).length === 0) {
@@ -109,7 +115,10 @@ export class ProfilesController {
       );
       return { ok: true, value: toMyProfileResponse(profile) };
     } catch (error) {
-      if (error instanceof IdentityCommandError && error.code === IdentityErrorCode.VERSION_CONFLICT) {
+      if (
+        error instanceof IdentityCommandError &&
+        error.code === IdentityErrorCode.VERSION_CONFLICT
+      ) {
         return toVersionConflict(await this.currentDataOrNull(actor), error);
       }
       return toApiError(error);
@@ -117,17 +126,18 @@ export class ProfilesController {
   }
 
   /** POST /api/auth/profile/send-email-code */
-  async sendEmailCode(actor: ActorContext, body: unknown): Promise<ProfilesControllerResult<SendEmailCodeResponse>> {
+  async sendEmailCode(
+    actor: ActorContext,
+    body: unknown,
+  ): Promise<ProfilesControllerResult<SendEmailCodeResponse>> {
     try {
       const envelope = parseRequestEnvelope(body);
       const input = envelope.input ?? {};
       const email = typeof input.email === 'string' ? input.email : null;
       if (!email) {
-        throw new IdentityCommandError(
-          IdentityErrorCode.VALIDATION_FAILED,
-          '缺少邮箱字段',
-          { fieldErrors: { email: ['必填'] } },
-        );
+        throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少邮箱字段', {
+          fieldErrors: { email: ['必填'] },
+        });
       }
       await this.emailVerification.sendVerificationEmail({
         subjectId: actor.subjectId,
@@ -137,23 +147,27 @@ export class ProfilesController {
         actor: actor.subjectId,
         traceId: actor.traceId,
       });
-      return { ok: true, value: { sent: true, expiresIn: Math.floor(EMAIL_VERIFICATION_TTL_MS / 1000) } };
+      return {
+        ok: true,
+        value: { sent: true, expiresIn: Math.floor(EMAIL_VERIFICATION_TTL_MS / 1000) },
+      };
     } catch (error) {
       return toApiError(error);
     }
   }
 
   /** POST /api/auth/profile/verify-email（input.code = `<verificationId>:<secret>`） */
-  async verifyEmail(actor: ActorContext, body: unknown): Promise<ProfilesControllerResult<{ readonly emailVerified: true }>> {
+  async verifyEmail(
+    actor: ActorContext,
+    body: unknown,
+  ): Promise<ProfilesControllerResult<{ readonly emailVerified: true }>> {
     try {
       const envelope = parseRequestEnvelope(body);
       const code = typeof envelope.input?.code === 'string' ? envelope.input.code : null;
       if (!code) {
-        throw new IdentityCommandError(
-          IdentityErrorCode.VALIDATION_FAILED,
-          '缺少验证码字段',
-          { fieldErrors: { code: ['必填'] } },
-        );
+        throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少验证码字段', {
+          fieldErrors: { code: ['必填'] },
+        });
       }
       const { verificationId, secret } = splitVerificationCode(code);
       await this.emailVerification.consumeVerificationToken({
@@ -177,7 +191,8 @@ export class ProfilesController {
     try {
       const envelope = parseRequestEnvelope(body);
       const field = typeof envelope.input?.field === 'string' ? envelope.input.field : null;
-      const chosenValue = typeof envelope.input?.chosenValue === 'string' ? envelope.input.chosenValue : null;
+      const chosenValue =
+        typeof envelope.input?.chosenValue === 'string' ? envelope.input.chosenValue : null;
       if (!field || !isEditableFieldKey(field)) {
         throw new IdentityCommandError(
           IdentityErrorCode.PRECONDITION_FAILED,
@@ -186,11 +201,9 @@ export class ProfilesController {
         );
       }
       if (!chosenValue) {
-        throw new IdentityCommandError(
-          IdentityErrorCode.VALIDATION_FAILED,
-          '缺少选择值',
-          { fieldErrors: { chosenValue: ['必填'] } },
-        );
+        throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少选择值', {
+          fieldErrors: { chosenValue: ['必填'] },
+        });
       }
       await this.resolveSyncConflictUseCase.execute({
         subjectId: actor.subjectId,
@@ -200,7 +213,10 @@ export class ProfilesController {
         actor: actor.subjectId,
         traceId: actor.traceId,
       });
-      const profile = await this.getMyProfileQuery.execute({ subjectId: actor.subjectId, now: actor.now });
+      const profile = await this.getMyProfileQuery.execute({
+        subjectId: actor.subjectId,
+        now: actor.now,
+      });
       return { ok: true, value: toMyProfileResponse(profile) };
     } catch (error) {
       return toApiError(error);
@@ -211,7 +227,10 @@ export class ProfilesController {
     actor: ActorContext,
   ): Promise<{ email: string | null; phone: string | null } | null> {
     try {
-      const profile = await this.getMyProfileQuery.execute({ subjectId: actor.subjectId, now: actor.now });
+      const profile = await this.getMyProfileQuery.execute({
+        subjectId: actor.subjectId,
+        now: actor.now,
+      });
       return { email: profile.fields.email ?? null, phone: profile.fields.phone ?? null };
     } catch {
       return null;
@@ -257,7 +276,9 @@ function toMyProfileResponse(profile: {
   };
 }
 
-function parseEditableFields(input: Record<string, unknown>): Partial<Record<EditableProfileField, string>> {
+function parseEditableFields(
+  input: Record<string, unknown>,
+): Partial<Record<EditableProfileField, string>> {
   const fields: Partial<Record<EditableProfileField, string>> = {};
   for (const [key, value] of Object.entries(input)) {
     if (value === undefined) {
@@ -282,10 +303,7 @@ function isEditableFieldKey(key: string): key is EditableProfileField {
 function splitVerificationCode(code: string): { verificationId: string; secret: string } {
   const separator = code.indexOf(':');
   if (separator <= 0 || separator === code.length - 1) {
-    throw new IdentityCommandError(
-      IdentityErrorCode.PRECONDITION_FAILED,
-      '验证码格式不正确',
-    );
+    throw new IdentityCommandError(IdentityErrorCode.PRECONDITION_FAILED, '验证码格式不正确');
   }
   return { verificationId: code.slice(0, separator), secret: code.slice(separator + 1) };
 }

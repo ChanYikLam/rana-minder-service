@@ -23,5 +23,8 @@ export interface ProfileSyncIntentRepository {
     fields: readonly EditableProfileField[],
   ): Promise<ProfileSyncIntentSnapshot[]>;
   /** 原子保存：新快照 + 本次变更领域事件 */
-  save(snapshot: ProfileSyncIntentSnapshot, events: readonly ProfileSyncDomainEvent[]): Promise<void>;
+  save(
+    snapshot: ProfileSyncIntentSnapshot,
+    events: readonly ProfileSyncDomainEvent[],
+  ): Promise<void>;
 }

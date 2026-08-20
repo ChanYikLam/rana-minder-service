@@ -7,10 +7,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  DefaultProfileSyncPolicy,
-  PROFILE_SYNC_FAILURE_WINDOW_MS,
-} from './profile-sync.policy';
+import { DefaultProfileSyncPolicy, PROFILE_SYNC_FAILURE_WINDOW_MS } from './profile-sync.policy';
 
 const policy = new DefaultProfileSyncPolicy();
 const now = new Date('2026-08-20T12:00:00.000Z');
@@ -24,24 +21,15 @@ const base = {
 
 describe('IDN-003 读回收口路由（R006/R007/R008）', () => {
   it('读回=目标值 → SYNCED（目标收口）', () => {
-    assert.equal(
-      policy.decideReadback({ ...base, readbackValue: '13800000000' }),
-      'SYNCED',
-    );
+    assert.equal(policy.decideReadback({ ...base, readbackValue: '13800000000' }), 'SYNCED');
   });
 
   it('读回=修改前有效值 → ROLLED_BACK（先可信读回才回退）', () => {
-    assert.equal(
-      policy.decideReadback({ ...base, readbackValue: '13700000000' }),
-      'ROLLED_BACK',
-    );
+    assert.equal(policy.decideReadback({ ...base, readbackValue: '13700000000' }), 'ROLLED_BACK');
   });
 
   it('普通可编辑字段读回第三值 → CONFLICT（本人选择）', () => {
-    assert.equal(
-      policy.decideReadback({ ...base, readbackValue: '13911112222' }),
-      'CONFLICT',
-    );
+    assert.equal(policy.decideReadback({ ...base, readbackValue: '13911112222' }), 'CONFLICT');
   });
 });
 

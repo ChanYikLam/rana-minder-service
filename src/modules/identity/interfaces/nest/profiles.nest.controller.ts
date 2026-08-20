@@ -6,21 +6,16 @@
  * 全部经 AuthGuard 认证；subjectId 恒来自会话（AUT：targetId 不被采纳）。
  */
 
-import {
-  Body,
-  Controller,
-  Get,
-  Inject,
-  Post,
-  Put,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Put, Req, UseGuards } from '@nestjs/common';
 
 import { TRACE_CONTEXT } from '../../../../platform/observability/tracing/tokens';
 import type { TraceContextAdapter } from '../../../../platform/observability/infrastructure/trace-context.adapter';
 import { PROFILES_CONTROLLER } from '../../tokens';
-import type { ProfilesController, MyProfileResponse, SendEmailCodeResponse } from '../controllers/profiles.controller';
+import type {
+  ProfilesController,
+  MyProfileResponse,
+  SendEmailCodeResponse,
+} from '../controllers/profiles.controller';
 import { AuthGuard } from './auth.guard';
 import { toHttpResponse, actorFromRequest } from './response-mapper';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
@@ -36,7 +31,9 @@ export class ProfilesNestController {
   ) {}
 
   @Get()
-  async getMyProfile(@Req() request: Record<string, unknown>): Promise<ApiSuccess<MyProfileResponse>> {
+  async getMyProfile(
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<MyProfileResponse>> {
     return toHttpResponse(await this.controller.getMyProfile(this.actor(request)));
   }
 

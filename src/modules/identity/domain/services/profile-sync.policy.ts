@@ -19,11 +19,7 @@
 import type { EditableProfileField } from '../models/profile-field';
 
 export type ReadbackDecision =
-  | 'SYNCED'
-  | 'ROLLED_BACK'
-  | 'CONFLICT'
-  | 'CONVERGE_AUTHORITATIVE'
-  | 'READBACK_UNTRUSTWORTHY';
+  'SYNCED' | 'ROLLED_BACK' | 'CONFLICT' | 'CONVERGE_AUTHORITATIVE' | 'READBACK_UNTRUSTWORTHY';
 
 export interface ReadbackFacts<TValue = string | null> {
   readonly field: EditableProfileField | 'studentId' | 'name';

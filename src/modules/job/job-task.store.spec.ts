@@ -32,7 +32,12 @@ function task(overrides?: Partial<TaskRow>): TaskRow {
     id: 'profile_sync:user-1:phone:4',
     type: 'profile_sync',
     subject_id: 'user-1',
-    payload: JSON.stringify({ subjectId: 'user-1', field: 'phone', targetVersion: 4, intentId: 'intent-1' }),
+    payload: JSON.stringify({
+      subjectId: 'user-1',
+      field: 'phone',
+      targetVersion: 4,
+      intentId: 'intent-1',
+    }),
     status: 'pending',
     attempts: 0,
     next_run_at: null,
@@ -109,7 +114,7 @@ class FakeJobTaskDb implements DbAdapter {
         }
         return false;
       })
-      .sort((a, b) => (a.created_at.getTime() - b.created_at.getTime()) || (a.id < b.id ? -1 : 1))
+      .sort((a, b) => a.created_at.getTime() - b.created_at.getTime() || (a.id < b.id ? -1 : 1))
       .slice(0, batchSize);
     return candidates.map((row) => {
       const claimed: TaskRow = {
@@ -184,7 +189,10 @@ describe('PostgresJobTaskStore（ADR-004 租约领取/结算）', () => {
 
     const claimed = await store.claim(10, now, minute);
 
-    assert.deepEqual(claimed.map((c) => c.id), ['t-due']);
+    assert.deepEqual(
+      claimed.map((c) => c.id),
+      ['t-due'],
+    );
     assert.equal(claimed[0].attempts, 1);
     assert.equal(claimed[0].subjectId, 'user-1');
     assert.equal((claimed[0].payload as { field: string }).field, 'phone');
@@ -195,14 +203,22 @@ describe('PostgresJobTaskStore（ADR-004 租约领取/结算）', () => {
   it('claim：过期租约可被再次领取（至少一次执行，幂等收口）', async () => {
     const db = new FakeJobTaskDb();
     db.seed(
-      task({ id: 't-expired', status: 'running', leased_until: new Date(now.getTime() - 1_000), attempts: 2 }),
+      task({
+        id: 't-expired',
+        status: 'running',
+        leased_until: new Date(now.getTime() - 1_000),
+        attempts: 2,
+      }),
       task({ id: 't-held', status: 'running', leased_until: new Date(now.getTime() + minute) }),
     );
     const store = new PostgresJobTaskStore(db);
 
     const claimed = await store.claim(10, now, minute);
 
-    assert.deepEqual(claimed.map((c) => c.id), ['t-expired']);
+    assert.deepEqual(
+      claimed.map((c) => c.id),
+      ['t-expired'],
+    );
     assert.equal(claimed[0].attempts, 3);
     assert.equal(db.rows.get('t-held')?.status, 'running');
   });

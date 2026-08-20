@@ -6,7 +6,13 @@
  * 不终止 worker（下一轮继续），异常细节由 observability 日志层承接。
  */
 
-import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnApplicationShutdown,
+} from '@nestjs/common';
 
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../config';
 import { JobTaskRunner } from './job-task-runner';
@@ -47,7 +53,9 @@ export class JobTaskPoller implements OnApplicationBootstrap, OnApplicationShutd
         this.logger.log(`任务执行：${label} 完成 ${count} 个任务`);
       }
     } catch (error) {
-      this.logger.warn(`任务轮询异常（${label}）：${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(
+        `任务轮询异常（${label}）：${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       this.running = false;
     }

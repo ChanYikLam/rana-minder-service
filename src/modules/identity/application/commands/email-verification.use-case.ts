@@ -72,7 +72,9 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
     private readonly gatePolicy: ProfileGatePolicy,
   ) {}
 
-  async sendVerificationEmail(input: SendVerificationEmailInput): Promise<SendVerificationEmailResult> {
+  async sendVerificationEmail(
+    input: SendVerificationEmailInput,
+  ): Promise<SendVerificationEmailResult> {
     const snapshot = await this.profileRepository.load(input.subjectId);
     if (!snapshot) {
       throw identityErrors.notFound('资料');
@@ -82,7 +84,8 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
       input.subjectId,
       normalized,
     );
-    const resendAllowed = !latest || latest.createdAt.getTime() + RESEND_COOLDOWN_MS <= input.now.getTime();
+    const resendAllowed =
+      !latest || latest.createdAt.getTime() + RESEND_COOLDOWN_MS <= input.now.getTime();
 
     if (!input.mailCapable) {
       throw identityErrors.preconditionFailed('平台发信能力不可用，无法发送验证邮件');
@@ -93,12 +96,20 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
 
     const profile = Profile.fromSnapshot(snapshot);
     if (!profile.requestEmailVerification(this.gateMachine, normalized, input.now)) {
-      throw identityErrors.preconditionFailed('当前资料状态不允许发送验证邮件（仅待邮箱验证状态可发送）');
+      throw identityErrors.preconditionFailed(
+        '当前资料状态不允许发送验证邮件（仅待邮箱验证状态可发送）',
+      );
     }
 
     const id = randomUUID();
     const requestVersion = latest ? latest.requestVersion + 1 : 1;
-    const { verification, token } = EmailVerification.issue(id, input.subjectId, normalized, requestVersion, input.now);
+    const { verification, token } = EmailVerification.issue(
+      id,
+      input.subjectId,
+      normalized,
+      requestVersion,
+      input.now,
+    );
 
     if (latest) {
       const prev = EmailVerification.fromSnapshot(latest);
@@ -183,7 +194,11 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
 
     await this.verificationRepository.save(verification.toSnapshot());
     await this.syncIntentRepository.save(intentSnapshot, intent.events);
-    await this.profileRepository.save(profile.toSnapshot(), profile.events, profileSnapshot.version);
+    await this.profileRepository.save(
+      profile.toSnapshot(),
+      profile.events,
+      profileSnapshot.version,
+    );
     await this.taskPort.scheduleProfileSync(
       profile.subjectId,
       EditableProfileField.EMAIL,
