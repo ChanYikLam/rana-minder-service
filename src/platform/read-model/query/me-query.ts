@@ -3,7 +3,6 @@ import { ProjectionType } from '../contracts';
 import type { ProjectionScope } from '../contracts';
 import { QueryEntryRegistry } from './entry-registry';
 import type { QueryAuthContext } from './query-context';
-import { QuerySource } from './query-result';
 import type { ReadModelQueryResult } from './query-result';
 import { ReadModelQueryService } from './query-service';
 import type { PersonalCenterItem } from '../projection/personal-center.projection';

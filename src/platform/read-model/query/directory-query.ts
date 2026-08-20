@@ -3,10 +3,8 @@ import { ProjectionType } from '../contracts';
 import type { ProjectionScope, ProjectionType as PT } from '../contracts';
 import { QueryEntryRegistry } from './entry-registry';
 import type { QueryAuthContext } from './query-context';
-import { QuerySource } from './query-result';
 import type { ReadModelQueryResult } from './query-result';
 import { ReadModelQueryService } from './query-service';
-import type { QueryOptions } from './query-options';
 import type { PublicDirectoryItem } from '../projection/public-directory.projection';
 
 /** 公开目录入口登记（IFC-QRY-008）：找社团/找活动（单一名称模式，ADR-007 §8） */
