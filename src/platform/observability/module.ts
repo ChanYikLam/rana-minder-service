@@ -46,6 +46,9 @@ import {
   isTraceId,
   deriveTrace,
 } from './domain/services/trace-id.generator';
+import { LogWriterAdapter } from './infrastructure/log-writer.adapter';
+import { TraceContextAdapter } from './infrastructure/trace-context.adapter';
+import { TraceContextMiddleware } from './infrastructure/trace-context.middleware';
 
 const REDACTION_RULES_PROVIDER: Provider = {
   provide: REDACTION_RULES,
@@ -82,7 +85,21 @@ const TRACE_ID_PROVIDER: Provider = {
 
 @Module({
   imports: [],
-  providers: [REDACTION_RULES_PROVIDER, RETENTION_RULES_PROVIDER, TRACE_ID_PROVIDER],
-  exports: [REDACTION_RULES, RETENTION_RULES, TRACE_ID_GENERATOR],
+  providers: [
+    REDACTION_RULES_PROVIDER,
+    RETENTION_RULES_PROVIDER,
+    TRACE_ID_PROVIDER,
+    TraceContextAdapter,
+    LogWriterAdapter,
+    TraceContextMiddleware,
+  ],
+  exports: [
+    REDACTION_RULES,
+    RETENTION_RULES,
+    TRACE_ID_GENERATOR,
+    TraceContextAdapter,
+    LogWriterAdapter,
+    TraceContextMiddleware,
+  ],
 })
 export class ObservabilityModule {}

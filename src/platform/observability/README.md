@@ -47,6 +47,22 @@
 | `TraceContextAdapter`       | 基础设施适配（infrastructure）   | 追踪上下文传递：HTTP 请求->应用命令->外部调用/后台任务                                                                 |
 | `StatusSummaryRepository`   | 基础设施适配（infrastructure）   | 状态摘要存储、备份恢复结果证据读取                                                                                     |
 
+### 当前实现状态（2026-08-20）
+
+已落地：
+
+- `RedactionRules` / `RetentionRules` / `TraceIdGenerator`：纯领域规则
+- `LogWriterAdapter`：脱敏日志写入适配器（基于 NestJS Logger）
+- `TraceContextAdapter`：AsyncLocalStorage 追踪上下文适配器
+- `TraceContextMiddleware`：HTTP 请求追踪中间件（后续接入 main.ts）
+- 领域规则与基础设施单测：redaction / retention / trace-id / trace-context / log-writer
+
+待实现：
+
+- `StatusPageController`、`StatusSummaryQueryService`、`LogQueryUseCase`
+- `StatusSummaryRepository`、`LogWriterAdapter` 的持久化/归档切换
+- `TraceContextAdapter` 与 HTTP/worker 入口的实际装配
+
 ## 3. 权威与边界
 
 | 本模块可以                                                                                       | 本模块禁止（首版明确不做）                                 |
