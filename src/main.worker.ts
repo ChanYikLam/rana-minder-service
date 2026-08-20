@@ -33,6 +33,7 @@ import { WorkerAppModule } from './worker-app.module';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from './config';
 import { NEST_LOGGER_SERVICE } from './platform/observability/logging/tokens';
 import { type NestLoggerServiceAdapter } from './platform/observability/infrastructure/nest-logger.adapter';
+import { TasksWorker } from './platform/tasks/worker-entry';
 
 async function bootstrap(): Promise<void> {
   // 使用 NestApplicationContext 而非 NestApplication：不监听 HTTP、不暴露端口。
@@ -53,6 +54,10 @@ async function bootstrap(): Promise<void> {
     `Worker application context started; scheduler interval=${config.job.schedulerIntervalMs}ms, log level=${config.observability.logLevel}.`,
     'WorkerBootstrap',
   );
+
+  // 后台任务与批量编排独立入口：仅 worker 进程启动调度循环，HTTP 入口不启动。
+  const tasksWorker = appContext.get(TasksWorker);
+  tasksWorker.start('ranaminder-tasks-worker');
 }
 
 bootstrap().catch((err) => {
