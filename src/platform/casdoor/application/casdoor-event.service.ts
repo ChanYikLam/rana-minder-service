@@ -18,15 +18,33 @@ export interface WebhookHandleResult {
   readonly envelope: WebhookEnvelope | null;
 }
 
+const DEFAULT_MAX_SEEN_ENTRIES = 10_000;
+
 @Injectable()
 export class CasdoorEventService {
   private readonly seen = new Set<string>();
+  private readonly seenOrder: string[] = [];
+  private readonly maxSeenEntries: number;
   private readonly enabled: boolean;
   private readonly staticSecret: string | null;
 
-  constructor(options: { enabled?: boolean; staticSecret?: string | null } = {}) {
+  constructor(
+    options: { enabled?: boolean; staticSecret?: string | null; maxSeenEntries?: number } = {},
+  ) {
     this.enabled = options.enabled ?? WEBHOOK_DEFAULT_ENABLED;
     this.staticSecret = options.staticSecret ?? null;
+    this.maxSeenEntries = options.maxSeenEntries ?? DEFAULT_MAX_SEEN_ENTRIES;
+  }
+
+  /** 有界去重：容量超限时淘汰最早记录，防止长期运行内存无界增长。 */
+  private remember(digest: string): void {
+    if (this.seen.has(digest)) return;
+    this.seen.add(digest);
+    this.seenOrder.push(digest);
+    if (this.seenOrder.length > this.maxSeenEntries) {
+      const oldest = this.seenOrder.shift();
+      if (oldest !== undefined) this.seen.delete(oldest);
+    }
   }
 
   async handleWebhook(input: {
@@ -55,7 +73,7 @@ export class CasdoorEventService {
       return { accepted: false, reason: decision.reason, envelope: null };
     }
 
-    this.seen.add(input.rawBodyDigest);
+    this.remember(input.rawBodyDigest);
     return { accepted: true, reason: decision.reason, envelope: decision.envelope };
   }
 }

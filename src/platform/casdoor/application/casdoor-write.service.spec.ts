@@ -118,6 +118,29 @@ describe('CasdoorWriteService', () => {
     assert.equal(conclusion.kind, 'DEPENDENCY_UNAVAILABLE');
   });
 
+  it('同时增删时 add 与 remove 都执行并达成目标关系（不互斥）', async () => {
+    const store = makeStore();
+    const recording = new RecordingWritePort(store);
+    const service = new CasdoorWriteService(recording, clock);
+    const conclusion = await service.writeGroupMembership({
+      commandId: 'cmd-mixed',
+      idempotencyKey: 'idem-mixed',
+      groupRef: group.ref,
+      originalMemberIds: ['a', 'x'],
+      targetMemberIds: ['a', 'b'],
+      requestedAt: fixedNow.toISOString(),
+    });
+    assert.equal(conclusion.kind, 'CONFIRMED');
+    assert.ok(recording.calls.some((c) => c.startsWith('add:')));
+    assert.ok(recording.calls.some((c) => c.startsWith('remove:')));
+    const readback = await store.readbackGroupMembers({
+      ref: group.ref,
+      requestId: 'check',
+      trackingId: 't',
+    });
+    assert.deepEqual([...(readback.value ?? [])].sort(), ['a', 'b']);
+  });
+
   it('复合新增按低权限到高权限执行；部分失败补偿已新增关系', async () => {
     const store = makeStore();
 

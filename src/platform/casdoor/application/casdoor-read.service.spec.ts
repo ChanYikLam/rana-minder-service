@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { CasdoorReadService } from './casdoor-read.service';
 import { InMemoryCasdoorStore } from '../infrastructure/in-memory-casdoor-store';
 import { InMemoryMappingStore } from '../infrastructure/in-memory-mapping-store';
+import { groupRefKey } from '../contracts/types';
 import type { ClockPort } from '../contracts/ports';
 
 const fixedNow = new Date('2026-08-20T10:00:00.000Z');
@@ -61,6 +62,53 @@ describe('CasdoorReadService', () => {
     const relations = await mappings.listRelationsBySubject('u1');
     assert.equal(relations.length, 1);
     assert.equal(relations[0]?.groupRef.name, 'g');
+  });
+
+  it('读回后陈旧 Group 关系标记为非当前，不残留为当前关系', async () => {
+    const store = new InMemoryCasdoorStore({
+      users: [{ externalId: 'cas-u1', name: 'Alice', state: 'ACTIVE' }],
+      groups: [
+        {
+          ref: { owner: 'o', name: 'g1' },
+          displayName: 'G1',
+          parentRef: null,
+          memberIds: ['cas-u1'],
+          state: 'ACTIVE',
+        },
+        {
+          ref: { owner: 'o', name: 'g2' },
+          displayName: 'G2',
+          parentRef: null,
+          memberIds: ['cas-u1'],
+          state: 'ACTIVE',
+        },
+      ],
+    });
+    const mappings = new InMemoryMappingStore();
+    const service = new CasdoorReadService(store, mappings, clock);
+
+    await service.readAndStoreUserGroups({
+      localSubjectId: 'u1',
+      externalUserId: 'cas-u1',
+      trackingId: 'tr-6',
+    });
+    let relations = await mappings.listRelationsBySubject('u1');
+    assert.equal(relations.length, 2);
+    assert.ok(relations.every((r) => r.current));
+
+    // 外部 g2 关系被移除后再次读回，g2 关系应标记为非当前
+    const g2 = store.groups.get(groupRefKey({ owner: 'o', name: 'g2' }));
+    store.groups.set(groupRefKey({ owner: 'o', name: 'g2' }), { ...g2!, memberIds: [] });
+
+    await service.readAndStoreUserGroups({
+      localSubjectId: 'u1',
+      externalUserId: 'cas-u1',
+      trackingId: 'tr-7',
+    });
+    relations = await mappings.listRelationsBySubject('u1');
+    assert.equal(relations.length, 2);
+    assert.equal(relations.find((r) => r.groupRef.name === 'g1')?.current, true);
+    assert.equal(relations.find((r) => r.groupRef.name === 'g2')?.current, false);
   });
 
   it('重新认证证据过期 → 拒绝', () => {

@@ -21,6 +21,13 @@ export class InMemoryMappingStore implements MappingStore {
   private readonly relations = new Map<string, SubjectGroupRelation[]>();
 
   async saveSubjectMapping(mapping: SubjectMapping): Promise<void> {
+    const existing = this.subjects.get(mapping.localSubjectId);
+    if (existing && existing.externalSubjectId !== mapping.externalSubjectId) {
+      const prevLocal = this.subjectsByExternal.get(existing.externalSubjectId);
+      if (prevLocal === mapping.localSubjectId) {
+        this.subjectsByExternal.delete(existing.externalSubjectId);
+      }
+    }
     this.subjects.set(mapping.localSubjectId, mapping);
     this.subjectsByExternal.set(mapping.externalSubjectId, mapping.localSubjectId);
   }
@@ -43,6 +50,13 @@ export class InMemoryMappingStore implements MappingStore {
   }
 
   async saveGroupMapping(mapping: GroupMapping): Promise<void> {
+    const existing = this.groupsByLocal.get(mapping.localObjectRef);
+    if (existing && groupRefKey(existing.externalRef) !== groupRefKey(mapping.externalRef)) {
+      const prevLocal = this.groupsByExternal.get(groupRefKey(existing.externalRef));
+      if (prevLocal === mapping.localObjectRef) {
+        this.groupsByExternal.delete(groupRefKey(existing.externalRef));
+      }
+    }
     this.groupsByLocal.set(mapping.localObjectRef, mapping);
     this.groupsByExternal.set(groupRefKey(mapping.externalRef), mapping.localObjectRef);
   }

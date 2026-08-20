@@ -25,6 +25,7 @@ import type {
   Page,
   SubjectMapping,
 } from '../contracts/types';
+import { groupRefKey } from '../contracts/types';
 
 @Injectable()
 export class CasdoorReadService {
@@ -142,6 +143,18 @@ export class CasdoorReadService {
     });
     if (result.status === 'TRUSTED_CURRENT' && result.value !== null) {
       const now = this.clock.now().toISOString();
+      const currentKeys = new Set(result.value.map((g) => groupRefKey(g.ref)));
+      const existing = await this.mappings.listRelationsBySubject(request.localSubjectId);
+      for (const relation of existing) {
+        if (!currentKeys.has(groupRefKey(relation.groupRef))) {
+          await this.mappings.saveRelation({
+            ...relation,
+            current: false,
+            observedAt: now,
+            source: 'LIVE_READ',
+          });
+        }
+      }
       for (const group of result.value) {
         await this.mappings.saveRelation({
           localSubjectId: request.localSubjectId,

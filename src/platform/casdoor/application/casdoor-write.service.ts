@@ -85,22 +85,28 @@ export class CasdoorWriteService {
       const addIds = [...target].filter((id) => !original.has(id));
       const removeIds = [...original].filter((id) => !target.has(id));
 
-      let transportResult: ExternalResult<void>;
+      const transportResults: ExternalResult<void>[] = [];
       if (addIds.length > 0) {
-        transportResult = await this.write.addGroupMembers({
-          ref: input.groupRef,
-          userIds: addIds,
-          requestId: attemptId,
-          trackingId: input.idempotencyKey,
-        });
-      } else if (removeIds.length > 0) {
-        transportResult = await this.write.removeGroupMembers({
-          ref: input.groupRef,
-          userIds: removeIds,
-          requestId: attemptId,
-          trackingId: input.idempotencyKey,
-        });
-      } else {
+        transportResults.push(
+          await this.write.addGroupMembers({
+            ref: input.groupRef,
+            userIds: addIds,
+            requestId: attemptId,
+            trackingId: input.idempotencyKey,
+          }),
+        );
+      }
+      if (removeIds.length > 0) {
+        transportResults.push(
+          await this.write.removeGroupMembers({
+            ref: input.groupRef,
+            userIds: removeIds,
+            requestId: attemptId,
+            trackingId: input.idempotencyKey,
+          }),
+        );
+      }
+      if (transportResults.length === 0) {
         return this.conclusion(
           'CONFIRMED',
           input.commandId,
@@ -126,7 +132,7 @@ export class CasdoorWriteService {
 
       // CAS-WR-008：传输层不可用优先于读回分类判定。写请求未送达时读回往往仍
       // 显示原值，若按分类走会误判为 OLD_VALUE_STILL_PRESENT，掩盖真实故障。
-      if (transportResult.status === 'DEPENDENCY_UNAVAILABLE') {
+      if (transportResults.some((r) => r.status === 'DEPENDENCY_UNAVAILABLE')) {
         return this.conclusion(
           'DEPENDENCY_UNAVAILABLE',
           input.commandId,
