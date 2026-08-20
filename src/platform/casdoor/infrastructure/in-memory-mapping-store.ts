@@ -41,6 +41,10 @@ export class InMemoryMappingStore implements MappingStore {
     return local ? (this.subjects.get(local) ?? null) : null;
   }
 
+  async listSubjectMappings(): Promise<SubjectMapping[]> {
+    return [...this.subjects.values()];
+  }
+
   async saveOrganizationMapping(mapping: OrganizationMapping): Promise<void> {
     this.organizations.set(mapping.localPlatformId, mapping);
   }

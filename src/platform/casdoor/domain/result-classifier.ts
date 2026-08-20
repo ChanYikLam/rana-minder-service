@@ -40,11 +40,14 @@ export function classifyMembershipReadback(input: {
   }
   const missingExpected = [...expected].some((id) => !actual.has(id));
   const hasThirdValue = [...actual].some((id) => !expected.has(id) && !original.has(id));
+  // 撤权校验：应被移除的原成员仍残留在读回中，说明撤权未完成（CAS-WR-009）。
+  const staleRemovedPresent = [...original].some((id) => !expected.has(id) && actual.has(id));
 
   if (hitExpected > 0 && missingExpected) {
     return hasThirdValue ? 'THIRD' : 'PARTIAL';
   }
   if (hasThirdValue) return 'THIRD';
+  if (staleRemovedPresent) return 'PARTIAL';
   if (hitExpected > 0) return 'TARGET';
   return 'THIRD';
 }

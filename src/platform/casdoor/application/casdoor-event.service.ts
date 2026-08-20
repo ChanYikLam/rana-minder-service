@@ -5,6 +5,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 
 import {
   decideWebhookHandling,
@@ -47,6 +48,15 @@ export class CasdoorEventService {
     }
   }
 
+  /** 常量时间比较静态秘密，避免时间侧信道（CAS-EVT-002）。 */
+  private secretMatches(input: string | undefined): boolean {
+    if (this.staticSecret === null || input === undefined) return false;
+    const expected = Buffer.from(this.staticSecret);
+    const actual = Buffer.from(input);
+    if (expected.length !== actual.length) return false;
+    return timingSafeEqual(expected, actual);
+  }
+
   async handleWebhook(input: {
     readonly receivedAt: string;
     readonly localEventId: string;
@@ -59,7 +69,7 @@ export class CasdoorEventService {
     const decision = decideWebhookHandling({
       enabled: this.enabled,
       staticSecretConfigured: this.staticSecret !== null,
-      secretHeaderMatches: this.staticSecret !== null && input.secretHeader === this.staticSecret,
+      secretHeaderMatches: this.secretMatches(input.secretHeader),
       rateLimitAvailable: input.rateLimitAvailable,
       dedupSeen: this.seen.has(input.rawBodyDigest),
       receivedAt: input.receivedAt,

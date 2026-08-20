@@ -52,6 +52,42 @@ describe('Casdoor 写后读回分类', () => {
     );
   });
 
+  it('撤权未完成：应移除的原成员仍残留 → PARTIAL，不误判为 TARGET', () => {
+    assert.equal(
+      classifyMembershipReadback({
+        originalMemberIds: ['a', 'b', 'c'],
+        expectedMemberIds: ['a'],
+        readbackMemberIds: ['a', 'b'],
+        readbackStatus: 'TRUSTED_CURRENT',
+      }),
+      'PARTIAL',
+    );
+  });
+
+  it('撤权未完成：仅残留应移除成员且无目标成员 → PARTIAL', () => {
+    assert.equal(
+      classifyMembershipReadback({
+        originalMemberIds: ['a', 'b', 'c'],
+        expectedMemberIds: ['a'],
+        readbackMemberIds: ['b'],
+        readbackStatus: 'TRUSTED_CURRENT',
+      }),
+      'PARTIAL',
+    );
+  });
+
+  it('撤权完成且目标成员齐全 → TARGET', () => {
+    assert.equal(
+      classifyMembershipReadback({
+        originalMemberIds: ['a', 'b', 'c'],
+        expectedMemberIds: ['a', 'b'],
+        readbackMemberIds: ['a', 'b'],
+        readbackStatus: 'TRUSTED_CURRENT',
+      }),
+      'TARGET',
+    );
+  });
+
   it('响应不确定 → UNKNOWN', () => {
     assert.equal(
       classifyMembershipReadback({

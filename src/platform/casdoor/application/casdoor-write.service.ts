@@ -43,6 +43,8 @@ export interface ProfileWriteInput {
 }
 
 const DEFAULT_GROUP_RETRY_MS = 15 * 60 * 1000;
+const RETRY_BASE_DELAY_MS = 200;
+const RETRY_MAX_DELAY_MS = 2_000;
 
 @Injectable()
 export class CasdoorWriteService {
@@ -200,7 +202,14 @@ export class CasdoorWriteService {
           now,
         );
       }
+      // 指数退避后再重试，避免瞬时抖动时连续空转（200ms → 400ms → 800ms）。
+      await this.backoff(attempt);
     }
+  }
+
+  private async backoff(attempt: number): Promise<void> {
+    const delay = Math.min(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), RETRY_MAX_DELAY_MS);
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
   async updateUserProfile(input: ProfileWriteInput): Promise<WriteConclusion> {

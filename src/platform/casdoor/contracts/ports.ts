@@ -161,6 +161,7 @@ export interface MappingStore {
   saveSubjectMapping(mapping: SubjectMapping): Promise<void>;
   findSubjectMapping(localSubjectId: string): Promise<SubjectMapping | null>;
   findSubjectMappingByExternal(externalSubjectId: string): Promise<SubjectMapping | null>;
+  listSubjectMappings(): Promise<SubjectMapping[]>;
   saveOrganizationMapping(mapping: OrganizationMapping): Promise<void>;
   findOrganizationMapping(localPlatformId: string): Promise<OrganizationMapping | null>;
   saveGroupMapping(mapping: GroupMapping): Promise<void>;
