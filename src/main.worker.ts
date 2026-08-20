@@ -27,17 +27,22 @@
  */
 
 import { NestFactory } from '@nestjs/core';
-import { Logger } from '@nestjs/common';
 
 import { AppModule } from './app.module';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from './config';
+import { NEST_LOGGER_SERVICE } from './platform/observability/logging/tokens';
+import { type NestLoggerServiceAdapter } from './platform/observability/infrastructure/nest-logger.adapter';
 
 async function bootstrap(): Promise<void> {
-  const logger = new Logger('WorkerBootstrap');
   // 使用 NestApplicationContext 而非 NestApplication：不监听 HTTP、不暴露端口。
+  // 关闭 NestJS 默认 console logger；observability NestLoggerServiceAdapter 接管。
   const appContext = await NestFactory.createApplicationContext(AppModule, {
     bufferLogs: false,
+    logger: false,
   });
+
+  const logger = appContext.get<NestLoggerServiceAdapter>(NEST_LOGGER_SERVICE);
+  appContext.useLogger(logger);
 
   appContext.enableShutdownHooks();
 
@@ -45,11 +50,12 @@ async function bootstrap(): Promise<void> {
 
   logger.log(
     `Worker application context started; scheduler interval=${config.job.schedulerIntervalMs}ms, log level=${config.observability.logLevel}.`,
+    'WorkerBootstrap',
   );
 }
 
 bootstrap().catch((err) => {
-  // 启动失败时直接以非零状态退出；具体错误原因由日志层（1.4）承接。
+  // 启动失败时直接以非零状态退出；具体错误原因由 observability 日志层承接。
   console.error('Fatal: worker application failed to bootstrap', err);
   process.exit(1);
 });
