@@ -11,6 +11,10 @@
  * - ObservabilityModule（平台支撑：运维与可观测性，ADR-002 §2.2 + ADR-011；
  *   当前仅注册脱敏/保留期/追踪编号三个纯规则，后续 logging/tracing/status-page
  *   子模块按 PR #32 §2.2 B 子任务次序接入）
+ * - AdaptersModule（平台适配边界 @Global：DB/Casdoor/Mail 未连接态失败关闭桩，
+ *   DEP-Q-001/002 锁定后替换真实实现）
+ * - IdentityModule（领域：身份与资料，IFC-SM-001~003；会话认证链路接入前
+ *   受保护端点统一 401 IFC-ERR-001）
  *
  * 后续接入顺序（不在本 MR 范围）：
  *
@@ -33,6 +37,8 @@ import { ConfigurationModule } from './config';
 import { DatabaseModule } from './database/database.module';
 import { ObservabilityModule } from './platform/observability/module';
 import { ReadModelModule } from './platform/read-model/module';
+import { AdaptersModule } from './adapters/adapters.module';
+import { IdentityModule } from './modules/identity/identity.module';
 
 @Module({
   imports: [
@@ -41,6 +47,8 @@ import { ReadModelModule } from './platform/read-model/module';
     DatabaseModule,
     ObservabilityModule,
     ReadModelModule,
+    AdaptersModule,
+    IdentityModule,
   ],
   controllers: [],
   providers: [],

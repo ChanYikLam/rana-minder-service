@@ -19,16 +19,17 @@
  * - 启动骨架已就绪，ConfigurationModule 已挂入；
  * - 持久任务库、消息设施、租约实现与具体重试/退避参数均待
  *   `docs/engineering/依赖与版本基线-v1.0.md`（DEP-001）首批技术验证后选定；
- * - 1.3 通用任务信封（XCC-JOB-001 与 `DATA-JOB-001..004`）落地后，本入口会接入
- *   `PlatformTasksModule` 与 `PlatformJobModule`；当前不导入任何业务模块。
- * - 已接入 read-model 平台支撑模块：job 任务领取循环落地后，本入口将消费
- *   派生刷新/重建（RecomputeIntent）等批量任务（消费接力，ADR-002 §2.2）；
- *   当前不做任务调度与领取。
+ * - 已接入 JobWorkerModule（JobCoreModule + JobTaskPoller）：轮询 job_tasks 表
+ *   领取 profile_sync / profile_readback 任务并交 identity 用例执行
+ *   （ADR-004 租约执行单元；数据访问经 DB_ADAPTER，当前为未连接桩，
+ *   领取即失败并告警，真实连接层由 adapters/db 接入后生效）；
+ * - 已接入 read-model 平台支撑模块：派生刷新/重建（RecomputeIntent）等批量任务
+ *   消费接力随 job 领取循环落地。
  */
 
 import { NestFactory } from '@nestjs/core';
 
-import { AppModule } from './app.module';
+import { WorkerAppModule } from './worker-app.module';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from './config';
 import { NEST_LOGGER_SERVICE } from './platform/observability/logging/tokens';
 import { type NestLoggerServiceAdapter } from './platform/observability/infrastructure/nest-logger.adapter';
@@ -36,7 +37,7 @@ import { type NestLoggerServiceAdapter } from './platform/observability/infrastr
 async function bootstrap(): Promise<void> {
   // 使用 NestApplicationContext 而非 NestApplication：不监听 HTTP、不暴露端口。
   // 关闭 NestJS 默认 console logger；observability NestLoggerServiceAdapter 接管。
-  const appContext = await NestFactory.createApplicationContext(AppModule, {
+  const appContext = await NestFactory.createApplicationContext(WorkerAppModule, {
     bufferLogs: false,
     logger: false,
   });
