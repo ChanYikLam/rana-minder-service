@@ -1,64 +1,58 @@
 /**
- * 追踪上下文适配器（ADR-011 §2.2）。
+ * 追踪上下文传递适配——HTTP 请求 → 应用命令 → 外部调用/后台任务。
  *
- * 使用 AsyncLocalStorage 在 HTTP 请求、后台任务和外部调用之间传递唯一追踪编号。
- * 追踪编号只用于关联，不用于业务幂等；调用方不得把 traceId 当作幂等键。
+ * 路径：src/platform/observability/infrastructure/（PR #32 §2.2 B）。
+ *
+ * 使用 Node `AsyncLocalStorage` 在调用栈内隐式传递 trace context，**无需**
+ * 业务代码显式传 trace 参数。
+ *
+ * 不做：
+ * - 跨进程 / 跨 HTTP 实例的 trace 上下文恢复（需通过 HTTP 请求头
+ *   `X-Trace-Id` 显式传递，由 HTTP 适配层在 7️⃣ 阶段接入）；
+ * - 异步队列/任务系统的上下文串接（worker 入口由 worker bootstrap 在
+ *   7️⃣ 阶段接入 `runWithNewRoot`）；
+ * - 业务幂等键（XCC-GEN-001）。
  */
+
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import { Injectable } from '@nestjs/common';
-
-import { deriveTrace, generateTraceId, isTraceId } from '../domain/services/trace-id.generator';
+import { generateTraceId, isTraceId } from '../domain/services/trace-id.generator';
 
 export interface TraceContext {
   readonly traceId: string;
   readonly parentTraceId?: string;
 }
 
-export interface RunWithTraceOptions {
-  readonly parentTraceId?: string;
+export interface TraceContextAdapter {
+  run<T>(ctx: TraceContext, fn: () => T): T;
+  runWithNewChild<T>(parent: TraceContext, fn: () => T): T;
+  runWithNewRoot<T>(fn: () => T): T;
+  current(): TraceContext | undefined;
 }
 
-@Injectable()
-export class TraceContextAdapter {
-  private readonly storage = new AsyncLocalStorage<TraceContext>();
+class AsyncLocalStorageTraceContext implements TraceContextAdapter {
+  private readonly als = new AsyncLocalStorage<TraceContext>();
 
-  /**
-   * 在给定上下文中执行操作；未指定 parentTraceId 时生成全新根追踪编号。
-   */
-  runWithTrace<T>(operation: () => T, options: RunWithTraceOptions = {}): T {
-    const parentTraceId = options.parentTraceId;
-    if (parentTraceId !== undefined && !isTraceId(parentTraceId)) {
-      throw new TypeError(`Invalid parent trace id: ${String(parentTraceId)}`);
+  run<T>(ctx: TraceContext, fn: () => T): T {
+    return this.als.run(ctx, fn);
+  }
+
+  runWithNewChild<T>(parent: TraceContext, fn: () => T): T {
+    if (!isTraceId(parent.traceId)) {
+      throw new TypeError(`Invalid parent trace id: ${String(parent.traceId)}`);
     }
-    const traceId = generateTraceId();
-    const derived = deriveTrace(traceId, parentTraceId);
-    const context: TraceContext = {
-      traceId: derived.childTraceId,
-      parentTraceId: derived.parentTraceId,
-    };
-    return this.storage.run(context, operation);
+    return this.als.run({ traceId: generateTraceId(), parentTraceId: parent.traceId }, fn);
   }
 
-  /**
-   * 异步版本：AsyncLocalStorage 在 Promise 链中依然保持上下文。
-   */
-  async runWithTraceAsync<T>(
-    operation: () => Promise<T>,
-    options: RunWithTraceOptions = {},
-  ): Promise<T> {
-    return this.runWithTrace(operation, options);
+  runWithNewRoot<T>(fn: () => T): T {
+    return this.als.run({ traceId: generateTraceId() }, fn);
   }
 
-  getTraceId(): string | undefined {
-    return this.storage.getStore()?.traceId;
+  current(): TraceContext | undefined {
+    return this.als.getStore();
   }
+}
 
-  getParentTraceId(): string | undefined {
-    return this.storage.getStore()?.parentTraceId;
-  }
-
-  getContext(): TraceContext | undefined {
-    return this.storage.getStore();
-  }
+export function createTraceContextAdapter(): TraceContextAdapter {
+  return new AsyncLocalStorageTraceContext();
 }

@@ -1,44 +1,57 @@
-/**
- * TraceContextAdapter 测试（ADR-011 §2.2）。
- */
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
-import { TraceContextAdapter } from './trace-context.adapter';
-import { isTraceId } from '../domain/services/trace-id.generator';
+import { createTraceContextAdapter } from './trace-context.adapter';
+import { generateTraceId } from '../domain/services/trace-id.generator';
 
-test('runWithTrace：上下文内可读取 traceId，外部不可见', () => {
-  const adapter = new TraceContextAdapter();
-  assert.equal(adapter.getTraceId(), undefined);
+describe('trace-context.adapter (AsyncLocalStorage)', () => {
+  const adapter = createTraceContextAdapter();
 
-  adapter.runWithTrace(() => {
-    assert.ok(isTraceId(adapter.getTraceId() as string));
+  it('run 注入并取出同一上下文', () => {
+    const id = generateTraceId();
+    const seen = adapter.run({ traceId: id }, () => adapter.current()?.traceId);
+    assert.equal(seen, id);
   });
 
-  assert.equal(adapter.getTraceId(), undefined);
-});
-
-test('runWithTrace：支持父追踪编号派生', () => {
-  const adapter = new TraceContextAdapter();
-  const parent = 'tr_11111111-1111-1111-1111-111111111111';
-
-  adapter.runWithTrace(
-    () => {
-      assert.equal(adapter.getParentTraceId(), parent);
-      assert.notEqual(adapter.getTraceId(), parent);
-    },
-    { parentTraceId: parent },
-  );
-});
-
-test('runWithTraceAsync：Promise 链路保持上下文', async () => {
-  const adapter = new TraceContextAdapter();
-  const traceId = await adapter.runWithTraceAsync(async () => {
-    const id = adapter.getTraceId() as string;
-    await Promise.resolve();
-    assert.equal(adapter.getTraceId(), id);
-    return id;
+  it('runWithNewChild 派生 child trace', () => {
+    const parentId = generateTraceId();
+    const child = adapter.runWithNewChild({ traceId: parentId }, () => adapter.current());
+    assert.ok(child);
+    assert.ok(child.traceId.startsWith('tr_'));
+    assert.notEqual(child.traceId, parentId);
+    assert.equal(child.parentTraceId, parentId);
   });
-  assert.ok(isTraceId(traceId));
-  assert.equal(adapter.getTraceId(), undefined);
+
+  it('runWithNewRoot 不携带 parent', () => {
+    const ctx = adapter.runWithNewRoot(() => adapter.current());
+    assert.ok(ctx);
+    assert.ok(ctx.traceId.startsWith('tr_'));
+    assert.equal(ctx.parentTraceId, undefined);
+  });
+
+  it('嵌套 run：内层覆盖外层', () => {
+    const outer = generateTraceId();
+    const inner = generateTraceId();
+    const out = adapter.run({ traceId: outer }, () =>
+      adapter.run({ traceId: inner }, () => adapter.current()?.traceId),
+    );
+    assert.equal(out, inner);
+    assert.equal(adapter.current(), undefined);
+  });
+
+  it('异步上下文传递：在 setTimeout 回调中仍能取到', async () => {
+    const id = generateTraceId();
+    const seen = await adapter.run(
+      { traceId: id },
+      () =>
+        new Promise<string | undefined>((resolve) => {
+          setTimeout(() => resolve(adapter.current()?.traceId), 10);
+        }),
+    );
+    assert.equal(seen, id);
+  });
+
+  it('非法 parent 抛 TypeError', () => {
+    assert.throws(() => adapter.runWithNewChild({ traceId: 'bad' }, () => undefined), TypeError);
+  });
 });

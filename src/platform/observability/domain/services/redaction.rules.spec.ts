@@ -1,36 +1,96 @@
-/**
- * 脱敏规则测试（ADR-011 §2.1、AUD-013/AUD-014）。
- */
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
-import { decide, redactRecord } from './redaction.rules';
+import { decide, redactRecord, redactValue, DEFAULT_TRUNCATE_MAX } from './redaction.rules';
 
-test('decide：安全字段放行，敏感字段遮蔽，禁止字段丢弃，未知字段截断', () => {
-  assert.equal(decide('traceId').kind, 'allow');
-  assert.equal(decide('userId').kind, 'allow');
-  assert.equal(decide('token').kind, 'mask');
-  assert.equal(decide('password').kind, 'mask');
-  assert.equal(decide('form.responses.answer').kind, 'omit');
-  assert.equal(decide('message').kind, 'truncate');
-});
+describe('redaction.rules', () => {
+  describe('decide()', () => {
+    it('FORBIDDEN key 命中 → omit', () => {
+      assert.deepEqual(decide('form.responses.0'), { kind: 'omit' });
+      assert.deepEqual(decide('evaluation.content'), { kind: 'omit' });
+      assert.deepEqual(decide('audit.raw'), { kind: 'omit' });
+    });
 
-test('redactRecord：输出不包含禁止字段，敏感字段不可逆，安全字段保留', () => {
-  const input = {
-    traceId: 'tr_12345678-1234-1234-1234-123456789abc',
-    userId: 'user-1',
-    token: 'secret-token-value',
-    password: 'p@ss',
-    'form.responses.answer': '不应出现在日志',
-    message: 'x'.repeat(500),
-  };
+    it('SAFE key 命中 → allow', () => {
+      assert.deepEqual(decide('userId'), { kind: 'allow' });
+      assert.deepEqual(decide('status'), { kind: 'allow' });
+      assert.deepEqual(decide('_traceId'), { kind: 'allow' });
+    });
 
-  const out = redactRecord(input);
+    it('SENSITIVE key 命中 → mask', () => {
+      const d = decide('phone');
+      assert.equal(d.kind, 'mask');
+    });
 
-  assert.equal(out.traceId, input.traceId);
-  assert.equal(out.userId, input.userId);
-  assert.equal(out.token, 'secr***[len=18]');
-  assert.equal(out.password, '***');
-  assert.equal('form.responses.answer' in out, false);
-  assert.match(out.message as string, /\[truncated\]$/);
+    it('PATH key 命中 → mask with hint=path', () => {
+      assert.deepEqual(decide('path'), { kind: 'mask', hint: 'path' });
+    });
+
+    it('未命中任何列表 → 默认 truncate(200)', () => {
+      assert.deepEqual(decide('somethingUnknown'), {
+        kind: 'truncate',
+        max: DEFAULT_TRUNCATE_MAX,
+      });
+    });
+  });
+
+  describe('redactValue()', () => {
+    it('mask 对 8 字符以内返回 ***', () => {
+      assert.equal(redactValue('abcdef', { kind: 'mask' }), '***');
+    });
+
+    it('mask 对长字符串保留前 4 位 + 长度提示', () => {
+      const v = redactValue('abcdefghijklmnop', { kind: 'mask' });
+      assert.equal(v, 'abcd***[len=16]');
+    });
+
+    it('truncate 超过 max 加 [truncated]', () => {
+      const long = 'x'.repeat(300);
+      const v = redactValue(long, { kind: 'truncate', max: 10 });
+      assert.equal(typeof v, 'string');
+      assert.ok((v as string).endsWith('...[truncated]'));
+    });
+
+    it('mask path 按段首字母+***', () => {
+      const v = redactValue('/var/lib/postgres', { kind: 'mask', hint: 'path' });
+      assert.equal(v, '/v***/l***/p***');
+    });
+
+    it('mask path：单段也按规则遮蔽', () => {
+      const v = redactValue('/var', { kind: 'mask', hint: 'path' });
+      assert.equal(v, '/v***');
+    });
+  });
+
+  describe('redactRecord()', () => {
+    it('drop forbidden keys 整字段丢弃', () => {
+      const out = redactRecord({ id: 'u1', 'form.responses.0': 'secret' });
+      assert.deepEqual(Object.keys(out).sort(), ['id']);
+    });
+
+    it('mask sensitive values', () => {
+      const out = redactRecord({ phone: '13800000000' });
+      assert.ok((out['phone'] as string).startsWith('1380'));
+      assert.ok((out['phone'] as string).includes('***'));
+    });
+
+    it('keep safe keys 原样', () => {
+      const out = redactRecord({ userId: 'u1', status: 'ok' });
+      assert.equal(out['userId'], 'u1');
+      assert.equal(out['status'], 'ok');
+    });
+
+    it('混合字段：safe/sensitive/forbidden 三类同时存在', () => {
+      const out = redactRecord({
+        userId: 'u1',
+        phone: '13800000000',
+        'form.responses.q1': 'hello',
+        path: '/var/lib',
+      });
+      assert.equal(out['userId'], 'u1');
+      assert.ok((out['phone'] as string).includes('***'));
+      assert.equal(out['path'] as string, '/v***/l***');
+      assert.equal('form.responses.q1' in out, false);
+    });
+  });
 });

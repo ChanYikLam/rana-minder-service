@@ -24,16 +24,24 @@
  */
 
 import { NestFactory } from '@nestjs/core';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 
 import { AppModule } from './app.module';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from './config';
+import { NEST_LOGGER_SERVICE } from './platform/observability/logging/tokens';
+import { type NestLoggerServiceAdapter } from './platform/observability/infrastructure/nest-logger.adapter';
 
 async function bootstrap(): Promise<void> {
-  const logger = new Logger('Bootstrap');
+  // 关闭 NestJS 默认 console logger——避免启动横幅/路由表/异常以非脱敏形式
+  // 打到 stdout；observability NestLoggerServiceAdapter 在 useLogger() 之后接管。
   const app = await NestFactory.create(AppModule, {
     bufferLogs: false,
+    logger: false,
   });
+
+  // 通过 DI 取 observability 的 NestLoggerServiceAdapter：经 sanitize 后镜像 stdout。
+  const logger = app.get<NestLoggerServiceAdapter>(NEST_LOGGER_SERVICE);
+  app.useLogger(logger);
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableShutdownHooks();
@@ -42,11 +50,14 @@ async function bootstrap(): Promise<void> {
 
   await app.listen(config.server.port, config.server.host);
 
-  logger.log(`HTTP application listening on http://${config.server.host}:${config.server.port}`);
+  logger.log(
+    `HTTP application listening on http://${config.server.host}:${config.server.port}`,
+    'Bootstrap',
+  );
 }
 
 bootstrap().catch((err) => {
-  // 启动失败时直接以非零状态退出；具体错误原因由日志层（1.4）承接。
+  // 启动失败时直接以非零状态退出；具体错误原因由 observability 日志层承接。
   console.error('Fatal: HTTP application failed to bootstrap', err);
   process.exit(1);
 });

@@ -1,38 +1,42 @@
-/**
- * 日志保留期规则测试（ADR-011 §2.1）。
- */
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
-import { DEFAULT_RETENTION_POLICIES, isLogTier, resolveRetention } from './retention.rules';
+import { DEFAULT_RETENTION_POLICIES, resolveRetention, isLogTier } from './retention.rules';
 
-test('默认保留策略：普通 90 天、网络/安全 180 天', () => {
-  assert.deepEqual(DEFAULT_RETENTION_POLICIES.normal, {
-    onlineDays: 30,
-    archiveDays: 60,
-    totalDays: 90,
+describe('retention.rules', () => {
+  it('普通日志：30 天在线 + 60 天归档 = 90 天', () => {
+    const p = DEFAULT_RETENTION_POLICIES.normal;
+    assert.equal(p.onlineDays, 30);
+    assert.equal(p.archiveDays, 60);
+    assert.equal(p.totalDays, 90);
   });
-  assert.deepEqual(DEFAULT_RETENTION_POLICIES.network, {
-    onlineDays: 30,
-    archiveDays: 150,
-    totalDays: 180,
-  });
-  assert.deepEqual(DEFAULT_RETENTION_POLICIES.security, {
-    onlineDays: 30,
-    archiveDays: 150,
-    totalDays: 180,
-  });
-});
 
-test('resolveRetention：未知类别回退到 normal', () => {
-  assert.equal(resolveRetention('unknown').totalDays, 90);
-  assert.equal(resolveRetention('normal').totalDays, 90);
-  assert.equal(resolveRetention('security').totalDays, 180);
-});
+  it('网络日志：≥ 6 个月（180 天）', () => {
+    const p = DEFAULT_RETENTION_POLICIES.network;
+    assert.equal(p.totalDays, 180);
+    assert.ok(p.totalDays >= 180);
+  });
 
-test('isLogTier：只接受三类日志级别', () => {
-  assert.equal(isLogTier('normal'), true);
-  assert.equal(isLogTier('network'), true);
-  assert.equal(isLogTier('security'), true);
-  assert.equal(isLogTier('debug'), false);
+  it('安全日志：≥ 6 个月（180 天）', () => {
+    const p = DEFAULT_RETENTION_POLICIES.security;
+    assert.equal(p.totalDays, 180);
+    assert.ok(p.totalDays >= 180);
+  });
+
+  it('resolveRetention：合法 tier 返回对应策略', () => {
+    assert.equal(resolveRetention('normal').totalDays, 90);
+    assert.equal(resolveRetention('network').totalDays, 180);
+    assert.equal(resolveRetention('security').totalDays, 180);
+  });
+
+  it('resolveRetention：未知 tier 降级为 normal', () => {
+    assert.equal(resolveRetention('mystery').totalDays, 90);
+  });
+
+  it('isLogTier：合法/非法分流', () => {
+    assert.equal(isLogTier('normal'), true);
+    assert.equal(isLogTier('security'), true);
+    assert.equal(isLogTier('weird'), false);
+    assert.equal(isLogTier(''), false);
+  });
 });

@@ -1,28 +1,61 @@
-/**
- * 追踪编号规则测试（ADR-011 §2.2、XCC-GEN-001）。
- */
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
-import { deriveTrace, generateTraceId, isTraceId, TRACE_PREFIX } from './trace-id.generator';
+import { TRACE_PREFIX, generateTraceId, isTraceId, deriveTrace } from './trace-id.generator';
 
-test('generateTraceId：生成带前缀且可识别的 UUID', () => {
-  const id = generateTraceId();
-  assert.ok(id.startsWith(TRACE_PREFIX));
-  assert.equal(isTraceId(id), true);
-});
+describe('trace-id.generator', () => {
+  it('generateTraceId 以 tr_ 开头', () => {
+    const id = generateTraceId();
+    assert.ok(id.startsWith(TRACE_PREFIX));
+    assert.equal(id.length, TRACE_PREFIX.length + 36);
+  });
 
-test('isTraceId：拒绝非法输入', () => {
-  assert.equal(isTraceId(''), false);
-  assert.equal(isTraceId('tr_abc'), false);
-  assert.equal(isTraceId('not-a-trace-id'), false);
-});
+  it('两次生成产生不同 ID', () => {
+    const a = generateTraceId();
+    const b = generateTraceId();
+    assert.notEqual(a, b);
+  });
 
-test('deriveTrace：校验父子编号并保持派生关系', () => {
-  const parent = generateTraceId();
-  const child = generateTraceId();
-  assert.deepEqual(deriveTrace(child, parent), { childTraceId: child, parentTraceId: parent });
-  assert.deepEqual(deriveTrace(child), { childTraceId: child, parentTraceId: undefined });
-  assert.throws(() => deriveTrace('bad', parent), TypeError);
-  assert.throws(() => deriveTrace(child, 'bad'), TypeError);
+  it('isTraceId 接受合法 ID', () => {
+    const id = generateTraceId();
+    assert.equal(isTraceId(id), true);
+  });
+
+  it('isTraceId 拒绝非 tr_ 前缀', () => {
+    assert.equal(isTraceId('xx_' + 'a'.repeat(36)), false);
+  });
+
+  it('isTraceId 拒绝空字符串', () => {
+    assert.equal(isTraceId(''), false);
+  });
+
+  it('isTraceId 拒绝非字符串', () => {
+    assert.equal(isTraceId(null), false);
+    assert.equal(isTraceId(undefined), false);
+    assert.equal(isTraceId(123), false);
+  });
+
+  it('deriveTrace 接受 child 与可选 parent', () => {
+    const child = generateTraceId();
+    const parent = generateTraceId();
+    const d = deriveTrace(child, parent);
+    assert.equal(d.childTraceId, child);
+    assert.equal(d.parentTraceId, parent);
+  });
+
+  it('deriveTrace 不带 parent 合法', () => {
+    const child = generateTraceId();
+    const d = deriveTrace(child);
+    assert.equal(d.childTraceId, child);
+    assert.equal(d.parentTraceId, undefined);
+  });
+
+  it('deriveTrace 非法 child 抛 TypeError', () => {
+    assert.throws(() => deriveTrace('not-a-trace'), TypeError);
+  });
+
+  it('deriveTrace 非法 parent 抛 TypeError', () => {
+    const child = generateTraceId();
+    assert.throws(() => deriveTrace(child, 'bad'), TypeError);
+  });
 });
