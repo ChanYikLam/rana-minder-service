@@ -163,7 +163,14 @@ export class CasdoorReconcileService {
       relationsMissingLocally: 0,
     };
 
-    const localRelations = await this.mappings.listAllRelations();
+    // 预载本地映射与关系，建立内存索引，避免对每条外部记录做 N+1 异步查询。
+    const [subjectMappings, groupMappings, localRelations] = await Promise.all([
+      this.mappings.listSubjectMappings(),
+      this.mappings.listGroupMappings(),
+      this.mappings.listAllRelations(),
+    ]);
+    const subjectIndexByExternal = new Map(subjectMappings.map((m) => [m.externalSubjectId, m]));
+    const groupIndexByExternal = new Map(groupMappings.map((m) => [groupRefKey(m.externalRef), m]));
     const localRelationKeys = new Set(
       localRelations
         .filter((r) => r.current)
@@ -171,23 +178,21 @@ export class CasdoorReconcileService {
     );
 
     for (const item of accountItems as readonly CasdoorUser[]) {
-      const mapping = await this.mappings.findSubjectMappingByExternal(item.externalId);
-      if (mapping === null) summary.accountsWithoutLocalMapping += 1;
+      if (!subjectIndexByExternal.has(item.externalId)) summary.accountsWithoutLocalMapping += 1;
     }
 
     for (const item of groupItems as readonly CasdoorGroup[]) {
-      const mapping = await this.mappings.findGroupMappingByExternal(item.ref);
-      if (mapping === null) summary.groupsWithoutLocalMapping += 1;
+      if (!groupIndexByExternal.has(groupRefKey(item.ref))) summary.groupsWithoutLocalMapping += 1;
     }
 
     for (const item of relationItems as readonly {
       externalUserId: string;
       groups: readonly { owner: string; name: string }[];
     }[]) {
-      const subjectMapping = await this.mappings.findSubjectMappingByExternal(item.externalUserId);
+      const subjectMapping = subjectIndexByExternal.get(item.externalUserId);
       for (const ref of item.groups) {
-        const groupMapping = await this.mappings.findGroupMappingByExternal(ref);
-        if (subjectMapping === null || groupMapping === null) {
+        const groupMapping = groupIndexByExternal.get(groupRefKey(ref));
+        if (subjectMapping === undefined || groupMapping === undefined) {
           summary.relationsWithoutLocalMapping += 1;
           continue;
         }

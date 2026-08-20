@@ -161,6 +161,8 @@ export interface MappingStore {
   saveSubjectMapping(mapping: SubjectMapping): Promise<void>;
   findSubjectMapping(localSubjectId: string): Promise<SubjectMapping | null>;
   findSubjectMappingByExternal(externalSubjectId: string): Promise<SubjectMapping | null>;
+  /** 全量列出主体映射，供对账等批量场景预载索引，避免 N+1 查询。 */
+  listSubjectMappings(): Promise<SubjectMapping[]>;
   saveOrganizationMapping(mapping: OrganizationMapping): Promise<void>;
   findOrganizationMapping(localPlatformId: string): Promise<OrganizationMapping | null>;
   saveGroupMapping(mapping: GroupMapping): Promise<void>;

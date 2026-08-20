@@ -208,81 +208,102 @@ export class CasdoorWriteService {
   }
 
   async updateUserProfile(input: ProfileWriteInput): Promise<WriteConclusion> {
-    const now = this.clock.now();
-    const attemptId = `${input.commandId}:1`;
-    const transport = await this.write.updateUser({
-      externalUserId: input.externalUserId,
-      patch: input.patch,
-      requestId: attemptId,
-      trackingId: input.idempotencyKey,
-    });
-    const readback = await this.write.readbackUser({
-      externalUserId: input.externalUserId,
-      requestId: attemptId,
-      trackingId: input.idempotencyKey,
-    });
-    const evidence: EvidenceRef[] = [readback.evidence];
-    const classification = classifyProfileReadback({
-      originalValue: input.originalUser,
-      expectedValue: { ...(input.originalUser as object), ...input.patch },
-      readbackValue: readback.status === 'TRUSTED_CURRENT' ? readback.value : null,
-      readbackStatus: readback.status,
-    });
-    // CAS-WR-009：传输层不可用优先于读回分类判定，避免把写未送达误报为
-    // OLD_VALUE_STILL_PRESENT / UNCERTAIN，掩盖真实故障。
-    if (transport.status === 'DEPENDENCY_UNAVAILABLE') {
-      return this.conclusion(
-        'DEPENDENCY_UNAVAILABLE',
-        input.commandId,
-        [attemptId],
-        evidence,
-        '依赖不可用',
-        true,
-        now,
-      );
-    }
-    if (classification === 'TARGET') {
-      return this.conclusion(
-        'CONFIRMED',
-        input.commandId,
-        [attemptId],
-        evidence,
-        '资料写后定向读回确认',
-        false,
-        now,
-      );
-    }
-    if (classification === 'ORIGINAL') {
-      return this.conclusion(
-        'OLD_VALUE_STILL_PRESENT',
-        input.commandId,
-        [attemptId],
-        evidence,
-        '读回仍为原值，等待同步',
-        true,
-        now,
-      );
-    }
-    if (classification === 'THIRD') {
-      return this.conclusion(
-        'THIRD_VALUE',
-        input.commandId,
-        [attemptId],
-        evidence,
-        '资料第三值冲突，需本人选择',
-        false,
-        now,
-      );
-    }
-    return this.conclusion(
-      'UNCERTAIN',
-      input.commandId,
-      [attemptId],
-      evidence,
-      '响应不确定，需定向读回',
-      true,
-      now,
+    const startedAt = this.clock.now();
+    const deadline = new Date(
+      input.deadline ? Date.parse(input.deadline) : startedAt.getTime() + DEFAULT_GROUP_RETRY_MS,
     );
+    const attempts: string[] = [];
+    const evidence: EvidenceRef[] = [];
+    let attempt = 0;
+    const maxAttempts = 3;
+
+    while (true) {
+      attempt += 1;
+      const attemptId = `${input.commandId}:${attempt}`;
+      attempts.push(attemptId);
+      const now = this.clock.now();
+      if (now.getTime() > deadline.getTime()) {
+        return this.conclusion(
+          'MANUAL_INTERVENTION_REQUIRED',
+          input.commandId,
+          attempts,
+          evidence,
+          '15 分钟自动重试上限已到，需人工核验',
+          false,
+          now,
+        );
+      }
+
+      const transport = await this.write.updateUser({
+        externalUserId: input.externalUserId,
+        patch: input.patch,
+        requestId: attemptId,
+        trackingId: input.idempotencyKey,
+      });
+      const readback = await this.write.readbackUser({
+        externalUserId: input.externalUserId,
+        requestId: attemptId,
+        trackingId: input.idempotencyKey,
+      });
+      evidence.push(readback.evidence);
+
+      // CAS-WR-009：传输层不可用优先于读回分类判定，避免把写未送达误报为
+      // OLD_VALUE_STILL_PRESENT / UNCERTAIN，掩盖真实故障。
+      if (transport.status === 'DEPENDENCY_UNAVAILABLE') {
+        return this.conclusion(
+          'DEPENDENCY_UNAVAILABLE',
+          input.commandId,
+          attempts,
+          evidence,
+          '依赖不可用',
+          true,
+          now,
+        );
+      }
+
+      const classification = classifyProfileReadback({
+        originalValue: input.originalUser,
+        expectedValue: { ...(input.originalUser as object), ...input.patch },
+        readbackValue: readback.status === 'TRUSTED_CURRENT' ? readback.value : null,
+        readbackStatus: readback.status,
+      });
+
+      if (classification === 'TARGET') {
+        return this.conclusion(
+          'CONFIRMED',
+          input.commandId,
+          attempts,
+          evidence,
+          '资料写后定向读回确认',
+          false,
+          now,
+        );
+      }
+      if (classification === 'THIRD') {
+        return this.conclusion(
+          'THIRD_VALUE',
+          input.commandId,
+          attempts,
+          evidence,
+          '资料第三值冲突，需本人选择',
+          false,
+          now,
+        );
+      }
+      // ORIGINAL / UNKNOWN：本调用内做有界重试；仍不确定交给任务调度继续。
+      if (attempt >= maxAttempts) {
+        const kind = classification === 'ORIGINAL' ? 'OLD_VALUE_STILL_PRESENT' : 'UNCERTAIN';
+        return this.conclusion(
+          kind,
+          input.commandId,
+          attempts,
+          evidence,
+          kind === 'OLD_VALUE_STILL_PRESENT' ? '多次读回仍为原值' : '多次读回仍不确定',
+          true,
+          now,
+        );
+      }
+    }
   }
 
   async executeCompositePlan(
