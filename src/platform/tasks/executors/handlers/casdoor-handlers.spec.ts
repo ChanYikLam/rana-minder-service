@@ -45,11 +45,7 @@ function makeTask(taskType: TaskType, payload: unknown): TaskRecord {
   };
 }
 
-function assertTaskExecutionError(
-  err: unknown,
-  retryable: boolean,
-  failureKind: string,
-): boolean {
+function assertTaskExecutionError(err: unknown, retryable: boolean, failureKind: string): boolean {
   assert.ok(err instanceof TaskExecutionError);
   assert.equal(err.retryable, retryable);
   assert.equal(err.failureKind, failureKind);
@@ -108,9 +104,8 @@ describe('CasdoorSyncHandler', () => {
 
   it('payload 不完整 → 抛不可重试错误', async () => {
     const handler = makeHandler(new InMemoryCasdoorStore());
-    await assert.rejects(
-      handler.handle(makeTask(TaskType.CASDOOR_SYNC, {})),
-      (err: unknown) => assertTaskExecutionError(err, false, 'MANUAL_INTERVENTION_REQUIRED'),
+    await assert.rejects(handler.handle(makeTask(TaskType.CASDOOR_SYNC, {})), (err: unknown) =>
+      assertTaskExecutionError(err, false, 'MANUAL_INTERVENTION_REQUIRED'),
     );
   });
 
@@ -146,9 +141,8 @@ describe('ReconciliationHandler', () => {
       users: [{ externalId: 'u1', name: 'A', state: 'ACTIVE' }],
     });
     const handler = makeHandler(store, new InMemoryMappingStore());
-    await assert.rejects(
-      handler.handle(makeTask(TaskType.RECONCILIATION, {})),
-      (err: unknown) => assertTaskExecutionError(err, false, 'MANUAL_INTERVENTION_REQUIRED'),
+    await assert.rejects(handler.handle(makeTask(TaskType.RECONCILIATION, {})), (err: unknown) =>
+      assertTaskExecutionError(err, false, 'MANUAL_INTERVENTION_REQUIRED'),
     );
   });
 
@@ -171,9 +165,8 @@ describe('ReconciliationHandler', () => {
       }),
     }) as typeof store;
     const handler = makeHandler(uncertainRead, new InMemoryMappingStore());
-    await assert.rejects(
-      handler.handle(makeTask(TaskType.RECONCILIATION, {})),
-      (err: unknown) => assertTaskExecutionError(err, true, 'EXTERNAL_UNCERTAIN'),
+    await assert.rejects(handler.handle(makeTask(TaskType.RECONCILIATION, {})), (err: unknown) =>
+      assertTaskExecutionError(err, true, 'EXTERNAL_UNCERTAIN'),
     );
   });
 

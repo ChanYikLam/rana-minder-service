@@ -71,6 +71,8 @@ export class CasdoorGroupHandler implements TaskHandler {
         failureKindForConclusion(conclusion.kind),
       );
     }
-    this.logger.log(`CasdoorGroupHandler 写入已确认：taskId=${task.taskId}, kind=${conclusion.kind}`);
+    this.logger.log(
+      `CasdoorGroupHandler 写入已确认：taskId=${task.taskId}, kind=${conclusion.kind}`,
+    );
   }
 }

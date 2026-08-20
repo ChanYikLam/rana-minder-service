@@ -144,6 +144,8 @@ describe('TaskExecutionPipeline 对 TaskExecutionError 的收口', () => {
     assert.ok(after !== null);
     assert.equal(after.status, TaskStatus.COMPLETED);
     assert.equal(after.attempts, 1);
-    assert.ok(after.resultRef !== null && after.resultRef.startsWith(`task:${task.taskId}:completed:`));
+    assert.ok(
+      after.resultRef !== null && after.resultRef.startsWith(`task:${task.taskId}:completed:`),
+    );
   });
 });

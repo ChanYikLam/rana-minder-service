@@ -46,8 +46,7 @@ export class CasdoorSyncHandler implements TaskHandler {
     });
     if (result.status !== 'TRUSTED_CURRENT') {
       // 读回未确认：依赖不可用/不确定可重试，账号不存在等稳定结论交给人工核验。
-      const retryable =
-        result.status === 'DEPENDENCY_UNAVAILABLE' || result.status === 'UNCERTAIN';
+      const retryable = result.status === 'DEPENDENCY_UNAVAILABLE' || result.status === 'UNCERTAIN';
       throw new TaskExecutionError(
         `CasdoorSyncHandler 读取账号状态未确认：taskId=${task.taskId}, status=${result.status}`,
         retryable,
