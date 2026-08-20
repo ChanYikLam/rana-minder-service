@@ -9,17 +9,24 @@ import type { TaskIntent } from './contracts';
 function makeIntent(overrides: Partial<TaskIntent> = {}): TaskIntent {
   const now = new Date().toISOString();
   return {
-    intentId: 'intent-1', taskType: TaskType.FILE_CHECK,
-    idempotencyKey: 'ik:1', scope: { kind: 'CLUB', clubId: 'c1' },
+    intentId: 'intent-1',
+    taskType: TaskType.FILE_CHECK,
+    idempotencyKey: 'ik:1',
+    scope: { kind: 'CLUB', clubId: 'c1' },
     source: { objectType: 'f', objectId: '1', version: 1, scope: { kind: 'CLUB', clubId: 'c1' } },
-    payload: {}, notBefore: now, createdAt: now, ...overrides,
+    payload: {},
+    notBefore: now,
+    createdAt: now,
+    ...overrides,
   };
 }
 
 describe('InMemoryTaskRepository', () => {
   it('insert creates PENDING task', async () => {
     const repo = new InMemoryTaskRepository();
-    const task = await repo.insert(makeIntent({ intentId: 'intent-1', taskType: TaskType.FILE_CHECK }));
+    const task = await repo.insert(
+      makeIntent({ intentId: 'intent-1', taskType: TaskType.FILE_CHECK }),
+    );
     assert.equal(task.status, TaskStatus.PENDING);
     assert.equal(task.intentId, 'intent-1');
     assert.equal(task.taskId, deriveTrackingNumber('intent-1', TaskType.FILE_CHECK));
@@ -93,7 +100,10 @@ describe('InMemoryTaskRepository', () => {
     const repo = new InMemoryTaskRepository();
     const t = await repo.insert(makeIntent({ intentId: 'i1' }));
     await repo.updateAfterExecution(t.taskId, 0, { status: TaskStatus.COMPLETED });
-    assert.equal(await repo.updateAfterExecution(t.taskId, 0, { status: TaskStatus.PENDING }), null);
+    assert.equal(
+      await repo.updateAfterExecution(t.taskId, 0, { status: TaskStatus.PENDING }),
+      null,
+    );
   });
 
   it('updateAfterExecution version mismatch null', async () => {
@@ -101,7 +111,10 @@ describe('InMemoryTaskRepository', () => {
     const t = await repo.insert(makeIntent({ intentId: 'i1' }));
     const future = new Date(Date.now() + 60000).toISOString();
     await repo.tryClaim(t.taskId, 'w1', future, 1, new Date());
-    assert.equal(await repo.updateAfterExecution(t.taskId, 999, { status: TaskStatus.COMPLETED }), null);
+    assert.equal(
+      await repo.updateAfterExecution(t.taskId, 999, { status: TaskStatus.COMPLETED }),
+      null,
+    );
   });
 
   it('updateAfterExecution normal', async () => {
@@ -110,7 +123,10 @@ describe('InMemoryTaskRepository', () => {
     const future = new Date(Date.now() + 60000).toISOString();
     const claimed = await repo.tryClaim(t.taskId, 'w1', future, 1, new Date());
     const lv = claimed.task?.lease?.leaseVersion ?? 0;
-    const updated = await repo.updateAfterExecution(t.taskId, lv, { status: TaskStatus.COMPLETED, resultRef: 'ref://done' });
+    const updated = await repo.updateAfterExecution(t.taskId, lv, {
+      status: TaskStatus.COMPLETED,
+      resultRef: 'ref://done',
+    });
     assert.equal(updated?.status, TaskStatus.COMPLETED);
     assert.equal(updated?.resultRef, 'ref://done');
   });
@@ -130,7 +146,9 @@ describe('InMemoryTaskRepository', () => {
     const repo = new InMemoryTaskRepository();
     const past = new Date(Date.now() - 10000).toISOString();
     await repo.insert(makeIntent({ intentId: 'd1', taskType: TaskType.DEADLINE, notBefore: past }));
-    await repo.insert(makeIntent({ intentId: 'f1', taskType: TaskType.FILE_CHECK, notBefore: past }));
+    await repo.insert(
+      makeIntent({ intentId: 'f1', taskType: TaskType.FILE_CHECK, notBefore: past }),
+    );
     const ids = await repo.listDeadlineTaskIds(new Date().toISOString(), 10);
     assert.equal(ids.length, 1);
     assert.ok(ids[0].includes('d1'));

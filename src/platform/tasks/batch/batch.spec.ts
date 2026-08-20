@@ -7,14 +7,19 @@ import { InMemoryBatchStore } from './batch-store';
 import { DevelopmentBatchItemAuthorization } from './batch-authorization';
 import { DevelopmentBatchItemExecutor } from './batch-item-executor';
 import {
-  summarizeBatch, deriveBatchStatus, selectRetryableItems,
-  validateRetryBatch, isRetryableItemResult,
+  summarizeBatch,
+  deriveBatchStatus,
+  selectRetryableItems,
+  validateRetryBatch,
+  isRetryableItemResult,
 } from './batch-rules';
 
 function makeItems(count: number): BatchItemInput[] {
   return Array.from({ length: count }, (_, i) => ({
-    itemId: `item-${i + 1}`, version: 1,
-    input: { name: `item-${i + 1}` }, idempotencyKey: `ik:item-${i + 1}`,
+    itemId: `item-${i + 1}`,
+    version: 1,
+    input: { name: `item-${i + 1}` },
+    idempotencyKey: `ik:item-${i + 1}`,
   }));
 }
 
@@ -57,17 +62,38 @@ describe('batch-rules', () => {
     ];
     const retryable = selectRetryableItems(items, results);
     assert.equal(retryable.length, 2);
-    assert.deepEqual(retryable.map(i => i.itemId), ['item-2', 'item-4']);
+    assert.deepEqual(
+      retryable.map((i) => i.itemId),
+      ['item-2', 'item-4'],
+    );
   });
   it('validateRetryBatch operation type mismatch', () => {
-    const original = { frozenItems: makeItems(2), itemResults: [], operationType: 'invite', businessType: 'member', scope: { kind: 'CLUB' as const, clubId: 'c1' } };
+    const original = {
+      frozenItems: makeItems(2),
+      itemResults: [],
+      operationType: 'invite',
+      businessType: 'member',
+      scope: { kind: 'CLUB' as const, clubId: 'c1' },
+    };
     const r = validateRetryBatch(original, makeItems(1), 'delete', 'member', 'CLUB');
     assert.equal(r.ok, false);
     assert.ok(r.reason?.includes('操作类型'));
   });
   it('validateRetryBatch new item rejected', () => {
-    const original = { frozenItems: makeItems(2), itemResults: [], operationType: 'invite', businessType: 'member', scope: { kind: 'CLUB' as const, clubId: 'c1' } };
-    const r = validateRetryBatch(original, [{ itemId: 'item-99', version: 1, input: {}, idempotencyKey: 'ik:99' }], 'invite', 'member', 'CLUB');
+    const original = {
+      frozenItems: makeItems(2),
+      itemResults: [],
+      operationType: 'invite',
+      businessType: 'member',
+      scope: { kind: 'CLUB' as const, clubId: 'c1' },
+    };
+    const r = validateRetryBatch(
+      original,
+      [{ itemId: 'item-99', version: 1, input: {}, idempotencyKey: 'ik:99' }],
+      'invite',
+      'member',
+      'CLUB',
+    );
     assert.equal(r.ok, false);
     assert.ok(r.reason?.includes('新对象'));
   });
@@ -77,7 +103,13 @@ describe('batch-rules', () => {
       { itemId: 'item-1', status: BatchItemStatus.FAILED },
       { itemId: 'item-2', status: BatchItemStatus.FAILED },
     ];
-    const original = { frozenItems: items, itemResults: results, operationType: 'invite', businessType: 'member', scope: { kind: 'CLUB' as const, clubId: 'c1' } };
+    const original = {
+      frozenItems: items,
+      itemResults: results,
+      operationType: 'invite',
+      businessType: 'member',
+      scope: { kind: 'CLUB' as const, clubId: 'c1' },
+    };
     const r = validateRetryBatch(original, [items[0]], 'invite', 'member', 'CLUB');
     assert.equal(r.ok, true);
   });
@@ -91,9 +123,16 @@ describe('InMemoryBatchStore', () => {
   it('save increments version', async () => {
     const store = new InMemoryBatchStore();
     const batch: BatchRecord = {
-      batchId: 'b1', previewVersion: 1, version: 1, scope: { kind: 'CLUB', clubId: 'c1' },
-      operationType: 'invite', businessType: 'member', status: BatchStatus.PREVIEWED,
-      frozenItems: [], itemResults: [], createdAt: new Date().toISOString(),
+      batchId: 'b1',
+      previewVersion: 1,
+      version: 1,
+      scope: { kind: 'CLUB', clubId: 'c1' },
+      operationType: 'invite',
+      businessType: 'member',
+      status: BatchStatus.PREVIEWED,
+      frozenItems: [],
+      itemResults: [],
+      createdAt: new Date().toISOString(),
     };
     await store.save(batch);
     const found = await store.findById('b1');
@@ -102,20 +141,37 @@ describe('InMemoryBatchStore', () => {
   it('saveIfVersion success', async () => {
     const store = new InMemoryBatchStore();
     const batch: BatchRecord = {
-      batchId: 'b1', previewVersion: 1, version: 1, scope: { kind: 'CLUB', clubId: 'c1' },
-      operationType: 'invite', businessType: 'member', status: BatchStatus.PREVIEWED,
-      frozenItems: [], itemResults: [], createdAt: new Date().toISOString(),
+      batchId: 'b1',
+      previewVersion: 1,
+      version: 1,
+      scope: { kind: 'CLUB', clubId: 'c1' },
+      operationType: 'invite',
+      businessType: 'member',
+      status: BatchStatus.PREVIEWED,
+      frozenItems: [],
+      itemResults: [],
+      createdAt: new Date().toISOString(),
     };
     await store.save(batch);
-    const ok = await store.saveIfVersion({ ...batch, version: 2, status: BatchStatus.EXECUTING }, 2);
+    const ok = await store.saveIfVersion(
+      { ...batch, version: 2, status: BatchStatus.EXECUTING },
+      2,
+    );
     assert.equal(ok, true);
   });
   it('saveIfVersion version mismatch', async () => {
     const store = new InMemoryBatchStore();
     const batch: BatchRecord = {
-      batchId: 'b1', previewVersion: 1, version: 1, scope: { kind: 'CLUB', clubId: 'c1' },
-      operationType: 'invite', businessType: 'member', status: BatchStatus.PREVIEWED,
-      frozenItems: [], itemResults: [], createdAt: new Date().toISOString(),
+      batchId: 'b1',
+      previewVersion: 1,
+      version: 1,
+      scope: { kind: 'CLUB', clubId: 'c1' },
+      operationType: 'invite',
+      businessType: 'member',
+      status: BatchStatus.PREVIEWED,
+      frozenItems: [],
+      itemResults: [],
+      createdAt: new Date().toISOString(),
     };
     await store.save(batch);
     const ok = await store.saveIfVersion(batch, 999);
@@ -124,14 +180,29 @@ describe('InMemoryBatchStore', () => {
   it('findByParentBatchId', async () => {
     const store = new InMemoryBatchStore();
     const parent: BatchRecord = {
-      batchId: 'b1', previewVersion: 1, version: 1, scope: { kind: 'CLUB', clubId: 'c1' },
-      operationType: 'invite', businessType: 'member', status: BatchStatus.PARTIALLY_SUCCEEDED,
-      frozenItems: [], itemResults: [], createdAt: new Date().toISOString(),
+      batchId: 'b1',
+      previewVersion: 1,
+      version: 1,
+      scope: { kind: 'CLUB', clubId: 'c1' },
+      operationType: 'invite',
+      businessType: 'member',
+      status: BatchStatus.PARTIALLY_SUCCEEDED,
+      frozenItems: [],
+      itemResults: [],
+      createdAt: new Date().toISOString(),
     };
     const child: BatchRecord = {
-      batchId: 'b1:retry:1', parentBatchId: 'b1', previewVersion: 1, version: 1,
-      scope: { kind: 'CLUB', clubId: 'c1' }, operationType: 'invite', businessType: 'member',
-      status: BatchStatus.RETRYING_FAILED, frozenItems: [], itemResults: [], createdAt: new Date().toISOString(),
+      batchId: 'b1:retry:1',
+      parentBatchId: 'b1',
+      previewVersion: 1,
+      version: 1,
+      scope: { kind: 'CLUB', clubId: 'c1' },
+      operationType: 'invite',
+      businessType: 'member',
+      status: BatchStatus.RETRYING_FAILED,
+      frozenItems: [],
+      itemResults: [],
+      createdAt: new Date().toISOString(),
     };
     await store.save(parent);
     await store.save(child);
@@ -146,8 +217,16 @@ describe('BatchOrchestrator', () => {
     const store = new InMemoryBatchStore();
     const authorization = auth ?? { verify: async () => ({ ok: true }) };
     const executor = exec ?? {
-      execute: async (_pid: string, _op: string, _bt: string, _scope: TaskScope, item: BatchItemInput) => ({
-        itemId: item.itemId, status: BatchItemStatus.SUCCEEDED, resultRef: `ref:${item.itemId}`,
+      execute: async (
+        _pid: string,
+        _op: string,
+        _bt: string,
+        _scope: TaskScope,
+        item: BatchItemInput,
+      ) => ({
+        itemId: item.itemId,
+        status: BatchItemStatus.SUCCEEDED,
+        resultRef: `ref:${item.itemId}`,
       }),
     };
     return new BatchOrchestrator(store, authorization, executor);
@@ -158,7 +237,16 @@ describe('BatchOrchestrator', () => {
   it('preview non-CLUB throws', async () => {
     const orch = makeOrch();
     await assert.rejects(
-      () => orch.preview('b1', { kind: 'PLATFORM' }, 'invite', 'member', [{ itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' }], 'op1', new Date()),
+      () =>
+        orch.preview(
+          'b1',
+          { kind: 'PLATFORM' },
+          'invite',
+          'member',
+          [{ itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' }],
+          'op1',
+          new Date(),
+        ),
       /必须固定一个社团/,
     );
   });
@@ -174,19 +262,34 @@ describe('BatchOrchestrator', () => {
   it('preview duplicate itemId throws', async () => {
     const orch = makeOrch();
     await assert.rejects(
-      () => orch.preview('b1', scope, 'invite', 'member', [
-        { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' },
-        { itemId: 'i1', version: 2, input: {}, idempotencyKey: 'ik:2' },
-      ], 'op1', new Date()),
+      () =>
+        orch.preview(
+          'b1',
+          scope,
+          'invite',
+          'member',
+          [
+            { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' },
+            { itemId: 'i1', version: 2, input: {}, idempotencyKey: 'ik:2' },
+          ],
+          'op1',
+          new Date(),
+        ),
       /重复/,
     );
   });
 
   it('preview success returns BatchPreview', async () => {
     const orch = makeOrch();
-    const preview = await orch.preview('b1', scope, 'invite', 'member', [
-      { itemId: 'i1', version: 1, input: { name: 'test' }, idempotencyKey: 'ik:1' },
-    ], 'op1', new Date());
+    const preview = await orch.preview(
+      'b1',
+      scope,
+      'invite',
+      'member',
+      [{ itemId: 'i1', version: 1, input: { name: 'test' }, idempotencyKey: 'ik:1' }],
+      'op1',
+      new Date(),
+    );
     assert.equal(preview.batchId, 'b1');
     assert.equal(preview.previewVersion, 1);
     assert.equal(preview.items.length, 1);
@@ -195,9 +298,15 @@ describe('BatchOrchestrator', () => {
 
   it('confirmAndFreeze version mismatch throws', async () => {
     const orch = makeOrch();
-    await orch.preview('b1', scope, 'invite', 'member', [
-      { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' },
-    ], 'op1', new Date());
+    await orch.preview(
+      'b1',
+      scope,
+      'invite',
+      'member',
+      [{ itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' }],
+      'op1',
+      new Date(),
+    );
     await assert.rejects(
       () => orch.confirmAndFreeze('b1', 999, 'op1', new Date()),
       /预览版本不匹配/,
@@ -206,9 +315,15 @@ describe('BatchOrchestrator', () => {
 
   it('confirmAndFreeze success', async () => {
     const orch = makeOrch();
-    await orch.preview('b1', scope, 'invite', 'member', [
-      { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' },
-    ], 'op1', new Date());
+    await orch.preview(
+      'b1',
+      scope,
+      'invite',
+      'member',
+      [{ itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' }],
+      'op1',
+      new Date(),
+    );
     const frozen = await orch.confirmAndFreeze('b1', 1, 'op1', new Date());
     assert.equal(frozen.status, BatchStatus.EXECUTING);
     assert.ok(frozen.confirmedAt !== undefined);
@@ -216,9 +331,15 @@ describe('BatchOrchestrator', () => {
 
   it('executeFrozenBatch auth rejected', async () => {
     const orch = makeOrch({ verify: async () => ({ ok: false, reason: '无权操作' }) });
-    await orch.preview('b1', scope, 'invite', 'member', [
-      { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' },
-    ], 'op1', new Date());
+    await orch.preview(
+      'b1',
+      scope,
+      'invite',
+      'member',
+      [{ itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' }],
+      'op1',
+      new Date(),
+    );
     await orch.confirmAndFreeze('b1', 1, 'op1', new Date());
     const task = { taskId: 'task-1', payload: { batchId: 'b1', operatorId: 'op1' } } as any;
     const result = await orch.executeFrozenBatch(task, new Date());
@@ -226,10 +347,20 @@ describe('BatchOrchestrator', () => {
   });
 
   it('executeFrozenBatch execution error', async () => {
-    const orch = makeOrch(undefined, { execute: async () => { throw new Error('exec error'); } });
-    await orch.preview('b1', scope, 'invite', 'member', [
-      { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' },
-    ], 'op1', new Date());
+    const orch = makeOrch(undefined, {
+      execute: async () => {
+        throw new Error('exec error');
+      },
+    });
+    await orch.preview(
+      'b1',
+      scope,
+      'invite',
+      'member',
+      [{ itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' }],
+      'op1',
+      new Date(),
+    );
     await orch.confirmAndFreeze('b1', 1, 'op1', new Date());
     const task = { taskId: 'task-1', payload: { batchId: 'b1', operatorId: 'op1' } } as any;
     const result = await orch.executeFrozenBatch(task, new Date());
@@ -239,8 +370,12 @@ describe('BatchOrchestrator', () => {
   it('retryFailedItems creates retry batch', async () => {
     const store = new InMemoryBatchStore();
     const batch: BatchRecord = {
-      batchId: 'b1', previewVersion: 1, version: 1, scope,
-      operationType: 'invite', businessType: 'member',
+      batchId: 'b1',
+      previewVersion: 1,
+      version: 1,
+      scope,
+      operationType: 'invite',
+      businessType: 'member',
       status: BatchStatus.PARTIALLY_SUCCEEDED,
       frozenItems: [
         { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' },
@@ -254,7 +389,19 @@ describe('BatchOrchestrator', () => {
     };
     await store.save(batch);
     const auth = { verify: async () => ({ ok: true }) };
-    const exec = { execute: async (_pid: string, _op: string, _bt: string, _scope: TaskScope, item: BatchItemInput) => ({ itemId: item.itemId, status: BatchItemStatus.SUCCEEDED, resultRef: `ref:${item.itemId}` }) };
+    const exec = {
+      execute: async (
+        _pid: string,
+        _op: string,
+        _bt: string,
+        _scope: TaskScope,
+        item: BatchItemInput,
+      ) => ({
+        itemId: item.itemId,
+        status: BatchItemStatus.SUCCEEDED,
+        resultRef: `ref:${item.itemId}`,
+      }),
+    };
     const orch = new BatchOrchestrator(store, auth, exec);
     const retry = await orch.retryFailedItems('b1', 'op1', new Date());
     assert.equal(retry.status, BatchStatus.RETRYING_FAILED);
@@ -267,7 +414,12 @@ describe('BatchOrchestrator', () => {
 describe('DevelopmentBatchItemAuthorization', () => {
   it('verify returns ok', async () => {
     const auth = new DevelopmentBatchItemAuthorization();
-    const r = await auth.verify('p1', 'invite', 'member', { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' });
+    const r = await auth.verify('p1', 'invite', 'member', {
+      itemId: 'i1',
+      version: 1,
+      input: {},
+      idempotencyKey: 'ik:1',
+    });
     assert.equal(r.ok, true);
   });
 });
@@ -275,7 +427,13 @@ describe('DevelopmentBatchItemAuthorization', () => {
 describe('DevelopmentBatchItemExecutor', () => {
   it('execute returns SUCCEEDED', async () => {
     const exec = new DevelopmentBatchItemExecutor();
-    const r = await exec.execute('p1', 'invite', 'member', { kind: 'CLUB', clubId: 'c1' }, { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' });
+    const r = await exec.execute(
+      'p1',
+      'invite',
+      'member',
+      { kind: 'CLUB', clubId: 'c1' },
+      { itemId: 'i1', version: 1, input: {}, idempotencyKey: 'ik:1' },
+    );
     assert.equal(r.status, BatchItemStatus.SUCCEEDED);
   });
 });

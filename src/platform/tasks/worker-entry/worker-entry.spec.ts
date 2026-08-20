@@ -7,9 +7,23 @@ function makeWorker(overrides: { schedulerRun?: () => Promise<void> } = {}) {
   const scheduler = { runOnce: overrides.schedulerRun ?? (async () => {}) };
   const config: RanaMinderConfig = {
     server: { port: 3000, host: '0.0.0.0', gracefulShutdownTimeoutMs: 10000 },
-    database: { host: 'localhost', port: 5432, name: 'test', user: 'test', schema: 'app', ssl: false, passwordRef: 'pass' },
+    database: {
+      host: 'localhost',
+      port: 5432,
+      name: 'test',
+      user: 'test',
+      schema: 'app',
+      ssl: false,
+      passwordRef: 'pass',
+    },
     casdoor: { endpoint: '', clientId: '', organization: '', redirectUri: '', clientSecretRef: '' },
-    storage: { endpoint: '', region: '', accessKeyRef: 'a', secretKeyRef: 's', buckets: { quarantine: 'q', primary: 'p', derived: 'd' } },
+    storage: {
+      endpoint: '',
+      region: '',
+      accessKeyRef: 'a',
+      secretKeyRef: 's',
+      buckets: { quarantine: 'q', primary: 'p', derived: 'd' },
+    },
     mail: { host: 'localhost', port: 1025, fromAddress: 'no-reply@test' },
     observability: { logLevel: 'info', traceSamplingRate: 1.0 },
     job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
@@ -20,7 +34,11 @@ function makeWorker(overrides: { schedulerRun?: () => Promise<void> } = {}) {
 describe('TasksWorker', () => {
   it('start registers timer and avoids duplicate start', async () => {
     let calls = 0;
-    const { worker } = makeWorker({ schedulerRun: async () => { calls += 1; } });
+    const { worker } = makeWorker({
+      schedulerRun: async () => {
+        calls += 1;
+      },
+    });
     worker.start('w1');
     assert.equal(worker['timer'] !== null, true);
     const timerBefore = worker['timer'];

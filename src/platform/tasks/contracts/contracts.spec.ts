@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  TaskStatus, TASK_STATUS_SEMANTICS, TERMINAL_TASK_STATUSES, RUNNABLE_TASK_STATUSES,
-  isTerminalTaskStatus, isRunnableTaskStatus, TaskType, TASK_TYPE_OWNER,
-  TaskScopeKind, taskScopeLabel, BatchStatus, BatchItemStatus,
-  deriveTrackingNumber, isTaskSourceVersionCurrent,
+  TaskStatus,
+  TASK_STATUS_SEMANTICS,
+  TERMINAL_TASK_STATUSES,
+  RUNNABLE_TASK_STATUSES,
+  isTerminalTaskStatus,
+  isRunnableTaskStatus,
+  TaskType,
+  TASK_TYPE_OWNER,
+  TaskScopeKind,
+  taskScopeLabel,
+  BatchStatus,
+  BatchItemStatus,
+  deriveTrackingNumber,
+  isTaskSourceVersionCurrent,
 } from './index';
 
 describe('TaskStatus', () => {
@@ -47,7 +57,10 @@ describe('TaskType', () => {
     }
   });
   it('deriveTrackingNumber format', () => {
-    assert.equal(deriveTrackingNumber('intent-42', TaskType.FILE_CHECK), 'task:FILE_CHECK:intent-42');
+    assert.equal(
+      deriveTrackingNumber('intent-42', TaskType.FILE_CHECK),
+      'task:FILE_CHECK:intent-42',
+    );
   });
 });
 
@@ -65,7 +78,12 @@ describe('TaskScope', () => {
 
 describe('TaskSourceRef', () => {
   it('isTaskSourceVersionCurrent', () => {
-    const source = { objectType: 't', objectId: '1', version: 5, scope: { kind: 'CLUB' as const, clubId: 'c1' } };
+    const source = {
+      objectType: 't',
+      objectId: '1',
+      version: 5,
+      scope: { kind: 'CLUB' as const, clubId: 'c1' },
+    };
     assert.equal(isTaskSourceVersionCurrent(source, 5), true);
     assert.equal(isTaskSourceVersionCurrent(source, 3), true);
     assert.equal(isTaskSourceVersionCurrent(source, 6), false);
@@ -73,6 +91,10 @@ describe('TaskSourceRef', () => {
 });
 
 describe('Batch', () => {
-  it('BatchStatus 7 statuses', () => { assert.equal(Object.values(BatchStatus).length, 7); });
-  it('BatchItemStatus 5 statuses', () => { assert.equal(Object.values(BatchItemStatus).length, 5); });
+  it('BatchStatus 7 statuses', () => {
+    assert.equal(Object.values(BatchStatus).length, 7);
+  });
+  it('BatchItemStatus 5 statuses', () => {
+    assert.equal(Object.values(BatchItemStatus).length, 5);
+  });
 });

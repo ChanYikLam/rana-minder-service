@@ -8,10 +8,15 @@ import { TaskType } from '../contracts/task-type';
 function makeIntent(overrides: Partial<TaskIntent> = {}): TaskIntent {
   const now = new Date().toISOString();
   return {
-    intentId: 'intent-1', taskType: TaskType.FILE_CHECK,
-    idempotencyKey: 'ik:1', scope: { kind: 'CLUB', clubId: 'c1' },
+    intentId: 'intent-1',
+    taskType: TaskType.FILE_CHECK,
+    idempotencyKey: 'ik:1',
+    scope: { kind: 'CLUB', clubId: 'c1' },
     source: { objectType: 'f', objectId: '1', version: 1, scope: { kind: 'CLUB', clubId: 'c1' } },
-    payload: {}, notBefore: now, createdAt: now, ...overrides,
+    payload: {},
+    notBefore: now,
+    createdAt: now,
+    ...overrides,
   };
 }
 
@@ -58,7 +63,9 @@ describe('TaskIntentOutbox', () => {
     const outbox = new TaskIntentOutbox(store);
     await store.append(makeIntent({ intentId: 'i1' }));
     const received: string[] = [];
-    const fwd = await outbox.forwardPending(10, async (i) => { received.push(i.intentId); });
+    const fwd = await outbox.forwardPending(10, async (i) => {
+      received.push(i.intentId);
+    });
     assert.equal(fwd, 1);
     assert.deepEqual(received, ['i1']);
     assert.equal((await store.listPending(10)).length, 0);
