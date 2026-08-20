@@ -22,6 +22,12 @@ import type {
   GetAccountAccessResult,
 } from '../../application/queries/get-account-access.query';
 import { IdentityCommandError, IdentityErrorCode } from '../../application/errors';
+import type { IdentityUnitOfWork } from '../../infrastructure/unit-of-work';
+import type { RlsScope } from '../../../../shared/db-adapter';
+
+const uowStub = {
+  run: async <T>(_scope: RlsScope, fn: () => Promise<T>) => fn(),
+} as unknown as IdentityUnitOfWork;
 
 const now = new Date('2026-08-20T12:00:00.000Z');
 const degradedSince = new Date('2026-08-20T11:50:00.000Z'); // 窗口内（10 分钟）
@@ -100,7 +106,7 @@ function createController(overrides?: {
       return access(overrides?.access);
     },
   };
-  return new AccountAccessController(fakeProfile, fakeAccess);
+  return new AccountAccessController(fakeProfile, fakeAccess, uowStub);
 }
 
 describe('AccountAccessController.getSession（GET /api/auth/session）', () => {

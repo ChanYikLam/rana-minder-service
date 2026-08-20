@@ -357,33 +357,50 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     // ----- 传输中立控制器 -----
     {
       provide: PROFILES_CONTROLLER,
-      useFactory: (saveProfile, emailVerification, resolveSyncConflict, getMyProfile) =>
-        new ProfilesController(saveProfile, emailVerification, resolveSyncConflict, getMyProfile),
+      useFactory: (saveProfile, emailVerification, resolveSyncConflict, getMyProfile, uow) =>
+        new ProfilesController(
+          saveProfile,
+          emailVerification,
+          resolveSyncConflict,
+          getMyProfile,
+          uow,
+        ),
       inject: [
         SAVE_PROFILE_USE_CASE,
         EMAIL_VERIFICATION_USE_CASE,
         RESOLVE_SYNC_CONFLICT_USE_CASE,
         GET_MY_PROFILE_QUERY,
+        IdentityUnitOfWork,
       ],
     },
     {
       provide: ACCOUNT_ACCESS_CONTROLLER,
-      useFactory: (getMyProfile, getAccountAccess) =>
-        new AccountAccessController(getMyProfile, getAccountAccess),
-      inject: [GET_MY_PROFILE_QUERY, GET_ACCOUNT_ACCESS_QUERY],
+      useFactory: (getMyProfile, getAccountAccess, uow) =>
+        new AccountAccessController(getMyProfile, getAccountAccess, uow),
+      inject: [GET_MY_PROFILE_QUERY, GET_ACCOUNT_ACCESS_QUERY, IdentityUnitOfWork],
     },
     {
       provide: NAME_CORRECTION_CONTROLLER,
-      useFactory: (submit, review, casdoor) =>
-        new NameCorrectionController(submit, review, async (subjectId) => {
-          // 旧姓名以可信观测为准（CAS-REC-001）；不可信/不可用时提交拒绝（fail-closed）
-          const observation = await casdoor.readProfileField(
-            subjectId,
-            AuthoritativeProfileField.NAME,
-          );
-          return observation.status === 'SUCCESS' ? observation.data.value : null;
-        }),
-      inject: [SUBMIT_NAME_CORRECTION_USE_CASE, REVIEW_NAME_CORRECTION_USE_CASE, CASDOOR_USER_PORT],
+      useFactory: (submit, review, casdoor, uow) =>
+        new NameCorrectionController(
+          submit,
+          review,
+          async (subjectId) => {
+            // 旧姓名以可信观测为准（CAS-REC-001）；不可信/不可用时提交拒绝（fail-closed）
+            const observation = await casdoor.readProfileField(
+              subjectId,
+              AuthoritativeProfileField.NAME,
+            );
+            return observation.status === 'SUCCESS' ? observation.data.value : null;
+          },
+          uow,
+        ),
+      inject: [
+        SUBMIT_NAME_CORRECTION_USE_CASE,
+        REVIEW_NAME_CORRECTION_USE_CASE,
+        CASDOOR_USER_PORT,
+        IdentityUnitOfWork,
+      ],
     },
   ],
   exports: [

@@ -24,6 +24,12 @@ import type {
   GetMyProfileResult,
 } from '../../application/queries/get-my-profile.query';
 import { IdentityCommandError, IdentityErrorCode } from '../../application/errors';
+import type { IdentityUnitOfWork } from '../../infrastructure/unit-of-work';
+import type { RlsScope } from '../../../../shared/db-adapter';
+
+const uowStub = {
+  run: async <T>(_scope: RlsScope, fn: () => Promise<T>) => fn(),
+} as unknown as IdentityUnitOfWork;
 
 const now = new Date('2026-08-20T12:00:00.000Z');
 
@@ -142,7 +148,7 @@ function createController(overrides?: {
       if (fakeEmail.sendError !== null) {
         throw fakeEmail.sendError;
       }
-      return { verificationId: 'v-1', code: 'v-1:secret' };
+      return { verificationId: 'v-1' };
     },
     async consumeVerificationToken(input) {
       fakeEmail.consumeInput = input;
@@ -166,6 +172,7 @@ function createController(overrides?: {
     fakeEmailUseCase,
     fakeResolveUseCase,
     fakeQuery,
+    uowStub,
   );
   return { controller, fakeQuery };
 }
@@ -337,6 +344,7 @@ describe('ProfilesController.verifyEmail（POST verify-email）', () => {
     assert.equal(result.value.emailVerified, true);
     assert.equal(fakeEmail.consumeInput?.verificationId, 'v-1');
     assert.equal(fakeEmail.consumeInput?.token, 'secret');
+    assert.equal(fakeEmail.consumeInput?.subjectId, 'user-1'); // 归属：主体恒来自会话
   });
 
   it('验证码错误/过期 → 422 IFC-ERR-007 + fieldErrors.code（清单 §4 例外）', async () => {

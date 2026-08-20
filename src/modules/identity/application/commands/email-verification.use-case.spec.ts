@@ -304,6 +304,7 @@ describe('EmailVerificationUseCase R005 验证链接成功', () => {
     const result = await useCase.consumeVerificationToken({
       verificationId: 'v-1',
       token,
+      subjectId: 'user-1',
       now,
       actor: 'user-1',
       traceId: null,
@@ -342,6 +343,7 @@ describe('EmailVerificationUseCase R005 验证链接成功', () => {
         useCase.consumeVerificationToken({
           verificationId: 'v-1',
           token: '0'.repeat(64),
+          subjectId: 'user-1',
           now,
           actor: 'user-1',
           traceId: null,
@@ -350,6 +352,36 @@ describe('EmailVerificationUseCase R005 验证链接成功', () => {
     );
     assert.equal(repository.saved.length, 0);
     assert.equal(verificationRepository.saved.length, 0); // 验证请求未被改写
+  });
+
+  it('AUT：跨主体消费他人验证令牌 → IFC-ERR-003 拒绝，无副作用', async () => {
+    const repository = inMemoryProfileRepository();
+    repository.seed(pendingEmailProfile());
+    const verificationRepository = inMemoryVerificationRepository();
+    const { verification, token } = EmailVerification.issue(
+      'v-1',
+      'user-1',
+      'new@example.com',
+      1,
+      new Date(now.getTime() - 60_000),
+    );
+    verificationRepository.seed(verification.toSnapshot());
+    const useCase = createUseCase({ repository, verificationRepository });
+
+    await assert.rejects(
+      () =>
+        useCase.consumeVerificationToken({
+          verificationId: 'v-1',
+          token,
+          subjectId: 'user-other',
+          now,
+          actor: 'user-other',
+          traceId: null,
+        }),
+      (err: any) => err.code === IdentityErrorCode.FORBIDDEN,
+    );
+    assert.equal(repository.saved.length, 0);
+    assert.equal(verificationRepository.saved.length, 0);
   });
 
   it('REV：待验证邮箱已变化（旧链接目标 ≠ 当前 pending）→ 拒绝，不回改 verifiedEmail', async () => {
@@ -372,6 +404,7 @@ describe('EmailVerificationUseCase R005 验证链接成功', () => {
         useCase.consumeVerificationToken({
           verificationId: 'v-1',
           token,
+          subjectId: 'user-1',
           now,
           actor: 'user-1',
           traceId: null,
@@ -401,6 +434,7 @@ describe('EmailVerificationUseCase R005 验证链接成功', () => {
         useCase.consumeVerificationToken({
           verificationId: 'v-1',
           token,
+          subjectId: 'user-1',
           now,
           actor: 'user-1',
           traceId: null,

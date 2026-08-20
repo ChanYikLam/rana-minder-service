@@ -22,6 +22,8 @@ import type { DegradationCommandCategory } from '../../domain/services/degradati
 import type { ActorContext } from './profiles.controller';
 import { toApiError } from '../http/error-http';
 import type { ApiErrorResult } from '../http/error-http';
+import type { IdentityUnitOfWork } from '../../infrastructure/unit-of-work';
+import type { RlsScope } from '../../../../shared/db-adapter';
 
 export interface SessionResponse {
   readonly profile: {
@@ -60,25 +62,34 @@ export class AccountAccessController {
   constructor(
     private readonly getMyProfile: GetMyProfileQuery,
     private readonly getAccountAccess: GetAccountAccessQuery,
+    private readonly uow: IdentityUnitOfWork,
   ) {}
+
+  /** 单主体 RLS 事务边界：全部请求在事务内执行（仓储读写经 ambient 事务） */
+  private run<T>(actor: ActorContext, fn: () => Promise<T>): Promise<T> {
+    const scope: RlsScope = { kind: 'single', subjectId: actor.subjectId };
+    return this.uow.run(scope, fn);
+  }
 
   /** GET /api/auth/session */
   async getSession(actor: ActorContext): Promise<AccountAccessControllerResult<SessionResponse>> {
-    try {
-      const profile = await this.getMyProfile.execute({
-        subjectId: actor.subjectId,
-        now: actor.now,
-      });
-      const access = await this.getAccountAccess.execute({
-        subjectId: actor.subjectId,
-        now: actor.now,
-        category: 'OWN_BASIC_PROFILE_READ',
-        sessionAuthenticatedBeforeFailure: true,
-      });
-      return { ok: true, value: toSessionResponse(profile, access) };
-    } catch (error) {
-      return toApiError(error);
-    }
+    return this.run(actor, async () => {
+      try {
+        const profile = await this.getMyProfile.execute({
+          subjectId: actor.subjectId,
+          now: actor.now,
+        });
+        const access = await this.getAccountAccess.execute({
+          subjectId: actor.subjectId,
+          now: actor.now,
+          category: 'OWN_BASIC_PROFILE_READ',
+          sessionAuthenticatedBeforeFailure: true,
+        });
+        return { ok: true, value: toSessionResponse(profile, access) };
+      } catch (error) {
+        return toApiError(error);
+      }
+    });
   }
 
   /** 降级期间能力判定（SRS-FAIL-001 服务端逐请求判定；能力类别由会话/网关传入） */
@@ -86,24 +97,26 @@ export class AccountAccessController {
     actor: ActorContext,
     input: AccessCheckInput,
   ): Promise<AccountAccessControllerResult<AccessCheckResponse>> {
-    try {
-      const access = await this.getAccountAccess.execute({
-        subjectId: actor.subjectId,
-        now: actor.now,
-        category: input.category as DegradationCommandCategory | 'PROTECTED_BUSINESS',
-        sessionAuthenticatedBeforeFailure: input.sessionAuthenticatedBeforeFailure,
-      });
-      return {
-        ok: true,
-        value: {
-          allowed: access.whitelistAllowed,
-          degraded: access.degraded,
-          reason: access.reason,
-        },
-      };
-    } catch (error) {
-      return toApiError(error);
-    }
+    return this.run(actor, async () => {
+      try {
+        const access = await this.getAccountAccess.execute({
+          subjectId: actor.subjectId,
+          now: actor.now,
+          category: input.category as DegradationCommandCategory | 'PROTECTED_BUSINESS',
+          sessionAuthenticatedBeforeFailure: input.sessionAuthenticatedBeforeFailure,
+        });
+        return {
+          ok: true,
+          value: {
+            allowed: access.whitelistAllowed,
+            degraded: access.degraded,
+            reason: access.reason,
+          },
+        };
+      } catch (error) {
+        return toApiError(error);
+      }
+    });
   }
 }
 

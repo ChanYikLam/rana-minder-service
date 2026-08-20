@@ -24,7 +24,7 @@ import type { ProfileSyncIntentRepository } from '../ports/profile-sync-intent-r
 import type { MailVerificationPort } from '../ports/mail-verification.port';
 import type { ProfileSyncTaskPort } from '../ports/profile-sync-task.port';
 import type { IdentityAuditPort } from '../ports/identity-audit.port';
-import { identityErrors } from '../errors';
+import { identityErrors, IdentityCommandError, IdentityErrorCode } from '../errors';
 
 const RESEND_COOLDOWN_MS = 60 * 1000;
 
@@ -38,15 +38,14 @@ export interface SendVerificationEmailInput {
 }
 
 export interface SendVerificationEmailResult {
-  /** 验证请求稳定标识（接口层用于拼装验证码，不对外泄露语义） */
+  /** 验证请求稳定标识（仅用于关联请求，不含密钥） */
   readonly verificationId: string;
-  /** 发送给用户的完整验证码：`<verificationId>:<secret>`；库存只存 secret 哈希 */
-  readonly code: string;
 }
 
 export interface ConsumeVerificationTokenInput {
   readonly verificationId: string;
   readonly token: string;
+  readonly subjectId: string;
   readonly now: Date;
   readonly actor: string;
   readonly traceId: string | null;
@@ -138,7 +137,7 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
       },
     });
 
-    return { verificationId: id, code: `${id}:${token}` };
+    return { verificationId: id };
   }
 
   async consumeVerificationToken(
@@ -147,6 +146,10 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
     const verificationSnapshot = await this.verificationRepository.load(input.verificationId);
     if (!verificationSnapshot) {
       throw identityErrors.notFound('验证请求');
+    }
+    // 归属校验（AUT）：验证令牌只对其签发主体的会话有效，禁止跨主体消费他人令牌。
+    if (verificationSnapshot.subjectId !== input.subjectId) {
+      throw new IdentityCommandError(IdentityErrorCode.FORBIDDEN, '验证链接不属于当前会话主体');
     }
     const profileSnapshot = await this.profileRepository.load(verificationSnapshot.subjectId);
     if (!profileSnapshot) {

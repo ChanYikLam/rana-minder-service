@@ -30,6 +30,8 @@ import { parseRequestEnvelope } from '../http/envelope';
 import { toApiError, toVerifyEmailError } from '../http/error-http';
 import type { ApiErrorResult } from '../http/error-http';
 import { generateTraceId } from '../../../../platform/observability/domain/services/trace-id.generator';
+import type { IdentityUnitOfWork } from '../../infrastructure/unit-of-work';
+import type { RlsScope } from '../../../../shared/db-adapter';
 
 export interface ActorContext {
   readonly subjectId: string;
@@ -63,19 +65,28 @@ export class ProfilesController {
     private readonly emailVerification: EmailVerificationUseCase,
     private readonly resolveSyncConflictUseCase: ResolveSyncConflictUseCase,
     private readonly getMyProfileQuery: GetMyProfileQuery,
+    private readonly uow: IdentityUnitOfWork,
   ) {}
+
+  /** 单主体 RLS 事务边界：全部请求在事务内执行（HTTP 写命令缺事务会运行时失败） */
+  private run<T>(actor: ActorContext, fn: () => Promise<T>): Promise<T> {
+    const scope: RlsScope = { kind: 'single', subjectId: actor.subjectId };
+    return this.uow.run(scope, fn);
+  }
 
   /** GET /api/auth/profile */
   async getMyProfile(actor: ActorContext): Promise<ProfilesControllerResult<MyProfileResponse>> {
-    try {
-      const profile = await this.getMyProfileQuery.execute({
-        subjectId: actor.subjectId,
-        now: actor.now,
-      });
-      return { ok: true, value: toMyProfileResponse(profile) };
-    } catch (error) {
-      return toApiError(error);
-    }
+    return this.run(actor, async () => {
+      try {
+        const profile = await this.getMyProfileQuery.execute({
+          subjectId: actor.subjectId,
+          now: actor.now,
+        });
+        return { ok: true, value: toMyProfileResponse(profile) };
+      } catch (error) {
+        return toApiError(error);
+      }
+    });
   }
 
   /** PUT /api/auth/profile（信封：expectedVersion + input 字段） */
@@ -83,46 +94,48 @@ export class ProfilesController {
     actor: ActorContext,
     body: unknown,
   ): Promise<ProfilesControllerResult<MyProfileResponse>> {
-    try {
-      const envelope = parseRequestEnvelope(body);
-      if (envelope.input === undefined || Object.keys(envelope.input).length === 0) {
-        throw new IdentityCommandError(
-          IdentityErrorCode.VALIDATION_FAILED,
-          '缺少需要保存的资料字段',
-          { fieldErrors: { input: ['至少提供一个可编辑字段'] } },
-        );
-      }
-      const fields = parseEditableFields(envelope.input);
-      if (envelope.expectedVersion === undefined) {
-        throw new IdentityCommandError(
-          IdentityErrorCode.VALIDATION_FAILED,
-          '缺少 expectedVersion（乐观锁必填）',
-          { fieldErrors: { expectedVersion: ['必填'] } },
-        );
-      }
+    return this.run(actor, async () => {
+      try {
+        const envelope = parseRequestEnvelope(body);
+        if (envelope.input === undefined || Object.keys(envelope.input).length === 0) {
+          throw new IdentityCommandError(
+            IdentityErrorCode.VALIDATION_FAILED,
+            '缺少需要保存的资料字段',
+            { fieldErrors: { input: ['至少提供一个可编辑字段'] } },
+          );
+        }
+        const fields = parseEditableFields(envelope.input);
+        if (envelope.expectedVersion === undefined) {
+          throw new IdentityCommandError(
+            IdentityErrorCode.VALIDATION_FAILED,
+            '缺少 expectedVersion（乐观锁必填）',
+            { fieldErrors: { expectedVersion: ['必填'] } },
+          );
+        }
 
-      const result = await this.saveProfile.execute({
-        subjectId: actor.subjectId,
-        expectedVersion: envelope.expectedVersion,
-        fields,
-        now: actor.now,
-        actor: actor.subjectId,
-        traceId: actor.traceId,
-      });
-      const profile = await this.getMyProfileQuery.execute(
-        { subjectId: actor.subjectId, now: actor.now },
-        result.profile.toSnapshot(),
-      );
-      return { ok: true, value: toMyProfileResponse(profile) };
-    } catch (error) {
-      if (
-        error instanceof IdentityCommandError &&
-        error.code === IdentityErrorCode.VERSION_CONFLICT
-      ) {
-        return toVersionConflict(await this.currentDataOrNull(actor), error);
+        const result = await this.saveProfile.execute({
+          subjectId: actor.subjectId,
+          expectedVersion: envelope.expectedVersion,
+          fields,
+          now: actor.now,
+          actor: actor.subjectId,
+          traceId: actor.traceId,
+        });
+        const profile = await this.getMyProfileQuery.execute(
+          { subjectId: actor.subjectId, now: actor.now },
+          result.profile.toSnapshot(),
+        );
+        return { ok: true, value: toMyProfileResponse(profile) };
+      } catch (error) {
+        if (
+          error instanceof IdentityCommandError &&
+          error.code === IdentityErrorCode.VERSION_CONFLICT
+        ) {
+          return toVersionConflict(await this.currentDataOrNull(actor), error);
+        }
+        return toApiError(error);
       }
-      return toApiError(error);
-    }
+    });
   }
 
   /** POST /api/auth/profile/send-email-code */
@@ -130,30 +143,32 @@ export class ProfilesController {
     actor: ActorContext,
     body: unknown,
   ): Promise<ProfilesControllerResult<SendEmailCodeResponse>> {
-    try {
-      const envelope = parseRequestEnvelope(body);
-      const input = envelope.input ?? {};
-      const email = typeof input.email === 'string' ? input.email : null;
-      if (!email) {
-        throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少邮箱字段', {
-          fieldErrors: { email: ['必填'] },
+    return this.run(actor, async () => {
+      try {
+        const envelope = parseRequestEnvelope(body);
+        const input = envelope.input ?? {};
+        const email = typeof input.email === 'string' ? input.email : null;
+        if (!email) {
+          throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少邮箱字段', {
+            fieldErrors: { email: ['必填'] },
+          });
+        }
+        await this.emailVerification.sendVerificationEmail({
+          subjectId: actor.subjectId,
+          email,
+          now: actor.now,
+          mailCapable: actor.mailCapable ?? false,
+          actor: actor.subjectId,
+          traceId: actor.traceId,
         });
+        return {
+          ok: true,
+          value: { sent: true, expiresIn: Math.floor(EMAIL_VERIFICATION_TTL_MS / 1000) },
+        };
+      } catch (error) {
+        return toApiError(error);
       }
-      await this.emailVerification.sendVerificationEmail({
-        subjectId: actor.subjectId,
-        email,
-        now: actor.now,
-        mailCapable: actor.mailCapable ?? false,
-        actor: actor.subjectId,
-        traceId: actor.traceId,
-      });
-      return {
-        ok: true,
-        value: { sent: true, expiresIn: Math.floor(EMAIL_VERIFICATION_TTL_MS / 1000) },
-      };
-    } catch (error) {
-      return toApiError(error);
-    }
+    });
   }
 
   /** POST /api/auth/profile/verify-email（input.code = `<verificationId>:<secret>`） */
@@ -161,26 +176,29 @@ export class ProfilesController {
     actor: ActorContext,
     body: unknown,
   ): Promise<ProfilesControllerResult<{ readonly emailVerified: true }>> {
-    try {
-      const envelope = parseRequestEnvelope(body);
-      const code = typeof envelope.input?.code === 'string' ? envelope.input.code : null;
-      if (!code) {
-        throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少验证码字段', {
-          fieldErrors: { code: ['必填'] },
+    return this.run(actor, async () => {
+      try {
+        const envelope = parseRequestEnvelope(body);
+        const code = typeof envelope.input?.code === 'string' ? envelope.input.code : null;
+        if (!code) {
+          throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少验证码字段', {
+            fieldErrors: { code: ['必填'] },
+          });
+        }
+        const { verificationId, secret } = splitVerificationCode(code);
+        await this.emailVerification.consumeVerificationToken({
+          verificationId,
+          token: secret,
+          subjectId: actor.subjectId,
+          now: actor.now,
+          actor: actor.subjectId,
+          traceId: actor.traceId,
         });
+        return { ok: true, value: { emailVerified: true } };
+      } catch (error) {
+        return toVerifyEmailError(error);
       }
-      const { verificationId, secret } = splitVerificationCode(code);
-      await this.emailVerification.consumeVerificationToken({
-        verificationId,
-        token: secret,
-        now: actor.now,
-        actor: actor.subjectId,
-        traceId: actor.traceId,
-      });
-      return { ok: true, value: { emailVerified: true } };
-    } catch (error) {
-      return toVerifyEmailError(error);
-    }
+    });
   }
 
   /** POST /api/auth/profile/sync-conflict（input.field + input.chosenValue） */
@@ -188,39 +206,41 @@ export class ProfilesController {
     actor: ActorContext,
     body: unknown,
   ): Promise<ProfilesControllerResult<MyProfileResponse>> {
-    try {
-      const envelope = parseRequestEnvelope(body);
-      const field = typeof envelope.input?.field === 'string' ? envelope.input.field : null;
-      const chosenValue =
-        typeof envelope.input?.chosenValue === 'string' ? envelope.input.chosenValue : null;
-      if (!field || !isEditableFieldKey(field)) {
-        throw new IdentityCommandError(
-          IdentityErrorCode.PRECONDITION_FAILED,
-          '该字段不在同步冲突选择白名单',
-          { fieldErrors: { field: ['该字段不可选择'] } },
-        );
-      }
-      if (!chosenValue) {
-        throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少选择值', {
-          fieldErrors: { chosenValue: ['必填'] },
+    return this.run(actor, async () => {
+      try {
+        const envelope = parseRequestEnvelope(body);
+        const field = typeof envelope.input?.field === 'string' ? envelope.input.field : null;
+        const chosenValue =
+          typeof envelope.input?.chosenValue === 'string' ? envelope.input.chosenValue : null;
+        if (!field || !isEditableFieldKey(field)) {
+          throw new IdentityCommandError(
+            IdentityErrorCode.PRECONDITION_FAILED,
+            '该字段不在同步冲突选择白名单',
+            { fieldErrors: { field: ['该字段不可选择'] } },
+          );
+        }
+        if (!chosenValue) {
+          throw new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, '缺少选择值', {
+            fieldErrors: { chosenValue: ['必填'] },
+          });
+        }
+        await this.resolveSyncConflictUseCase.execute({
+          subjectId: actor.subjectId,
+          field,
+          chosenValue,
+          now: actor.now,
+          actor: actor.subjectId,
+          traceId: actor.traceId,
         });
+        const profile = await this.getMyProfileQuery.execute({
+          subjectId: actor.subjectId,
+          now: actor.now,
+        });
+        return { ok: true, value: toMyProfileResponse(profile) };
+      } catch (error) {
+        return toApiError(error);
       }
-      await this.resolveSyncConflictUseCase.execute({
-        subjectId: actor.subjectId,
-        field,
-        chosenValue,
-        now: actor.now,
-        actor: actor.subjectId,
-        traceId: actor.traceId,
-      });
-      const profile = await this.getMyProfileQuery.execute({
-        subjectId: actor.subjectId,
-        now: actor.now,
-      });
-      return { ok: true, value: toMyProfileResponse(profile) };
-    } catch (error) {
-      return toApiError(error);
-    }
+    });
   }
 
   private async currentDataOrNull(
