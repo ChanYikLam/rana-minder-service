@@ -67,7 +67,7 @@
         # 阶段 2：类型检查
         - name: 2-类型检查
           if: "[ -f package.json ]"
-          script: npx tsc --noEmit -p tsconfig.json
+          script: npm run typecheck
         # 阶段 3：Lint 与格式检查
         - name: 3-Lint与格式
           if: "[ -f package.json ]"
@@ -166,7 +166,7 @@
             corepack pnpm install --frozen-lockfile
         - name: 2-类型检查
           if: "[ -f package.json ]"
-          script: npx tsc --noEmit -p tsconfig.json
+          script: npm run typecheck
         - name: 3-Lint与格式
           if: "[ -f package.json ]"
           script: |
@@ -248,7 +248,7 @@
             corepack pnpm install --frozen-lockfile
         - name: 2-类型检查
           if: "[ -f package.json ]"
-          script: npx tsc --noEmit -p tsconfig.json
+          script: npm run typecheck
         - name: 3-Lint与格式
           if: "[ -f package.json ]"
           script: |
