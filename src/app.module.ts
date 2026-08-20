@@ -34,6 +34,7 @@ import { DatabaseModule } from './database/database.module';
 import { ObservabilityModule } from './platform/observability/module';
 import { ReadModelModule } from './platform/read-model/module';
 import { OrganizationModule } from './modules/organization/module';
+import { TasksModule } from './platform/tasks/module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { OrganizationModule } from './modules/organization/module';
     ObservabilityModule,
     ReadModelModule,
     OrganizationModule,
+    TasksModule,
   ],
   controllers: [],
   providers: [],
