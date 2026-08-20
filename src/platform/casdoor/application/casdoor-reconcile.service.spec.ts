@@ -57,7 +57,11 @@ describe('CasdoorReconcileService', () => {
         },
       }),
     }) as typeof store;
-    const uncertainService = new CasdoorReconcileService(uncertainRead, clock, new InMemoryMappingStore());
+    const uncertainService = new CasdoorReconcileService(
+      uncertainRead,
+      clock,
+      new InMemoryMappingStore(),
+    );
     const run = await uncertainService.runFullReconciliation({
       runId: 'run-2',
       scope: 'platform',

@@ -38,7 +38,11 @@ describe('CasdoorEventService', () => {
     const svc = new CasdoorEventService({ enabled: true, staticSecret: 'secret' });
     await svc.handleWebhook(makeInput());
     const later = await svc.handleWebhook(
-      makeInput({ receivedAt: new Date(Date.parse('2026-08-20T00:00:00.000Z') + CasdoorEventService.DEDUP_TTL_MS + 1).toISOString() }),
+      makeInput({
+        receivedAt: new Date(
+          Date.parse('2026-08-20T00:00:00.000Z') + CasdoorEventService.DEDUP_TTL_MS + 1,
+        ).toISOString(),
+      }),
     );
     assert.equal(later.accepted, true);
   });
@@ -62,7 +66,10 @@ describe('CasdoorEventService', () => {
     assert.equal(oldDigest.accepted, true);
     // 最新的仍被去重（digest-10009 是最新加入的）
     const latestDigest = await svc.handleWebhook(
-      makeInput({ receivedAt: new Date(base + CasdoorEventService.DEDUP_MAX_ENTRIES + 9).toISOString(), rawBodyDigest: `digest-${CasdoorEventService.DEDUP_MAX_ENTRIES + 9}` }),
+      makeInput({
+        receivedAt: new Date(base + CasdoorEventService.DEDUP_MAX_ENTRIES + 9).toISOString(),
+        rawBodyDigest: `digest-${CasdoorEventService.DEDUP_MAX_ENTRIES + 9}`,
+      }),
     );
     assert.equal(latestDigest.accepted, false);
   });

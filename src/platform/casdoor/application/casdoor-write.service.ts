@@ -364,9 +364,7 @@ export class CasdoorWriteService {
     );
   }
 
-  private combineTransportResults(
-    results: readonly ExternalResult<void>[],
-  ): ExternalResult<void> {
+  private combineTransportResults(results: readonly ExternalResult<void>[]): ExternalResult<void> {
     // 多个独立写操作中只要有一个依赖不可用，整体就不能进入读回分类，否则可能
     // 把“写未送达”误判为“读回仍为原值”。
     const unavailable = results.find((r) => r.status === 'DEPENDENCY_UNAVAILABLE');
