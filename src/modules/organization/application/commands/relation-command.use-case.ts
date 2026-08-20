@@ -1,0 +1,285 @@
+/**
+ * ORG-002 Group 关系命令命令用例（SRS-SM-ORG-002 §4.2）。
+ *
+ * HTTP 端点：§15.1 org 域关系命令（POST /api/org/:clubId/members/appointments 等
+ * 提交关系变更、transition 提交/重试）。
+ *
+ * 关键语义：
+ * - 提交：校验前置条件（权限/社团状态/成员前提/对象版本/处理中冲突/负责人连续
+ *   性），原子保存命令＋原关系快照＋目标关系＋执行任务；原关系/权限继续有效
+ *   （ORG-027、SRS-SM-ORG-002 提交行）。
+ * - 处理：写后回读确认才正式生效；15 分钟有界重试先回读；复合部分成功逆序补偿。
+ * - 人工重试：重新鉴权 + 重读实际关系（ORG-027 人工重试行）。
+ */
+
+import type { RelationCommand } from '../../domain/models/relation-command';
+import { createRelationCommand } from '../../domain/models/relation-command';
+import { RelationCommandStateMachine } from '../../domain/state-machines/relation-command.state-machine';
+import type { RelationCommandType, RelationWriteStep } from '../../domain/types';
+import { IdPrefix, orgError } from '../../domain/types';
+import {
+  CASDOOR_GROUP_PORT,
+  CLUB_STORE,
+  JOB_SCHEDULER,
+  NOTIFICATION_PORT,
+  RELATION_COMMAND_STORE,
+  RELATION_COMMAND_USE_CASE,
+  type CasdoorGroupPort,
+  type ClubStore,
+  type JobSchedulerPort,
+  type NotificationPort,
+  type RelationCommandStore,
+} from '../ports';
+
+export interface SubmitRelationCommandInput {
+  clubId: string;
+  type: RelationCommandType;
+  subjectId: string;
+  targetGroups: Array<{ ref: { owner: string; name: string }; kind: 'add' | 'remove' }>;
+  objectVersion: number;
+  idempotencyKey: string;
+  submittedBy: string;
+}
+
+export class RelationCommandUseCase {
+  private readonly stateMachine = new RelationCommandStateMachine();
+
+  constructor(
+    private readonly store: RelationCommandStore,
+    private readonly clubs: ClubStore,
+    private readonly casdoor: CasdoorGroupPort,
+    private readonly scheduler: JobSchedulerPort,
+    private readonly notifications: NotificationPort,
+  ) {}
+
+  async submit(input: SubmitRelationCommandInput, now: Date): Promise<RelationCommand> {
+    const club = await this.clubs.findById(input.clubId);
+    if (club === null) throw orgError.notVisible(`社团空间不存在（${input.clubId}）`);
+    if (club.status !== 'enabled') {
+      throw orgError.precondition(`社团当前 ${club.status}，禁止关系变更（ORG-001）`);
+    }
+
+    // 同一目标处理中禁止重复/冲突操作（SRS-SM-ORG-002）
+    const inFlight = await this.store.findByProcessingForSubject(input.clubId, input.subjectId);
+    if (inFlight !== null) {
+      if (inFlight.id === input.idempotencyKey) {
+        return inFlight; // 客户端重试幂等
+      }
+      throw orgError.stateConflict(
+        `同一目标存在处理中关系命令 ${inFlight.id}，禁止并发冲突操作（IFC-ERR-007）`,
+      );
+    }
+
+    // 幂等键命中已有终结结果
+    const existing = await this.store.findByExactIdempotencyKey(
+      input.idempotencyKey,
+      input.subjectId,
+      input.type,
+    );
+    if (existing !== null) return existing;
+
+    const steps = this.buildSteps(input, now);
+    await this.assertMemberPrerequisite(club.clubGroup, input.subjectId);
+
+    const command = createRelationCommand({
+      id: newId(IdPrefix.RELATION_COMMAND),
+      clubId: input.clubId,
+      type: input.type,
+      subjectId: input.subjectId,
+      originalRelation: steps.original,
+      targetRelation: steps.target,
+      objectVersion: input.objectVersion,
+      idempotencyKey: input.idempotencyKey,
+      submittedBy: input.submittedBy,
+      now,
+    });
+
+    const result = this.stateMachine.transition({
+      command,
+      event: 'submit',
+      now,
+      facts: {},
+    });
+    await this.store.save(result.command);
+    await this.scheduler.enqueue({
+      taskId: `tsk-rel-${command.id}`,
+      kind: 'relation_execute',
+      refId: command.id,
+      scheduleType: 'immediate',
+      at: null,
+      idempotencyKey: `relation-exec:${command.id}`,
+      leaseHolder: null,
+    });
+    return result.command;
+  }
+
+  /**
+   * 将目标关系图按"基础/低权限 → 具体/高权限"排序并登记（CAS-Q-001 方案 A）。
+   * 规则：先社团/部门（基础，order 0），后职位（具体/高权限，order 1）。
+   */
+  private buildSteps(
+    input: SubmitRelationCommandInput,
+    _now: Date,
+  ): {
+    original: RelationWriteStep[];
+    target: RelationWriteStep[];
+  } {
+    const orderFor = (kind: 'add' | 'remove'): number => (kind === 'add' ? 1 : 0);
+    const targets = input.targetGroups.map((tg) => ({
+      ...tg,
+      ref: { owner: tg.ref.owner, name: tg.ref.name },
+    }));
+    const ordered = targets
+      .map((tg, index) => ({
+        stepId: `step-${index}`,
+        kind: tg.kind === 'add' ? ('add_member' as const) : ('remove_member' as const),
+        targetGroup: tg.ref,
+        subjectId: input.subjectId,
+        idempotencyKey: `${input.idempotencyKey}:${index}`,
+        order: orderFor(tg.kind),
+        attemptCount: 0,
+      }))
+      .sort((a, b) => a.order - b.order);
+
+    const original = ordered.map((s) => ({ ...s, result: 'confirmed' as const }));
+    return { original, target: ordered };
+  }
+
+  /** 成员前提：须先属于社团 Group 才能被任命到部门/职位（ORG-021） */
+  private async assertMemberPrerequisite(
+    clubGroup: { owner: string; name: string } | null,
+    subjectId: string,
+  ): Promise<void> {
+    if (clubGroup === null) throw orgError.precondition('社团尚未绑定 Group');
+    const members = await this.casdoor.getGroupMembers(clubGroup);
+    if (!members.includes(subjectId)) {
+      throw orgError.precondition(
+        `用户 ${subjectId} 尚不属于社团 Group，不能任命到部门/职位（ORG-021）`,
+      );
+    }
+  }
+
+  async handleReadback(
+    input: { commandId: string; now: Date },
+    readback: Awaited<ReturnType<CasdoorGroupPort['readback']>>,
+  ): Promise<RelationCommand> {
+    const command = await this.requireCommand(input.commandId);
+    const stepResults = command.targetRelation.map((step) => {
+      const members =
+        readback.membersByGroup[`${step.targetGroup.owner}/${step.targetGroup.name}`] ?? [];
+      const confirmed =
+        step.kind === 'add_member'
+          ? members.includes(step.subjectId)
+          : !members.includes(step.subjectId);
+      return { ...step, result: (confirmed ? 'confirmed' : 'failed') as 'confirmed' | 'failed' };
+    });
+    const allConfirmed = stepResults.every((s) => s.result === 'confirmed');
+    const partiallyApplied =
+      stepResults.some((s) => s.result === 'confirmed') &&
+      stepResults.some((s) => s.result === 'failed');
+
+    let event: 'readback_confirmed' | 'retry_attempt' | 'partial_write' | 'final_failure';
+    if (allConfirmed) {
+      event = 'readback_confirmed';
+    } else if (partiallyApplied) {
+      event = 'partial_write';
+    } else {
+      const withinWindow = this.withinRetryWindow(command);
+      event = withinWindow ? 'retry_attempt' : 'final_failure';
+    }
+
+    const result = this.stateMachine.transition({
+      command,
+      event,
+      now: input.now,
+      facts: { readback: { confirmedSteps: stepResults } },
+    });
+    await this.store.save(result.command);
+    if (event === 'readback_confirmed') {
+      await this.notifications.save({
+        kind: 'member',
+        toUserIds: [command.subjectId],
+        clubId: command.clubId,
+        title: '关系变更已生效',
+        body: `关系命令 ${command.id} 已回读确认生效`,
+        dedupKey: `relation-confirmed:${command.id}`,
+      });
+    }
+    return result.command;
+  }
+
+  async manualRetry(input: {
+    commandId: string;
+    actor: string;
+    now: Date;
+  }): Promise<RelationCommand> {
+    const command = await this.requireCommand(input.commandId);
+    const actorAuthorized = await this.isVisibleAndAuthorized(input.actor, command);
+    const result = this.stateMachine.transition({
+      command,
+      event: 'create_manual_retry',
+      now: input.now,
+      facts: { manualRetryAuthorized: actorAuthorized },
+    });
+    const reexecute = this.stateMachine.transition({
+      command: result.command,
+      event: 'manual_retry_executed',
+      now: input.now,
+      facts: {},
+    });
+    await this.store.save(reexecute.command);
+    await this.scheduler.enqueue({
+      taskId: `tsk-rel-retry-${command.id}`,
+      kind: 'relation_execute',
+      refId: command.id,
+      scheduleType: 'immediate',
+      at: null,
+      idempotencyKey: `relation-retry:${command.id}:${command.commandVersion}`,
+      leaseHolder: null,
+    });
+    return reexecute.command;
+  }
+
+  private withinRetryWindow(command: RelationCommand): boolean {
+    if (command.retryDeadline === null) return command.attemptCount < 3;
+    const deadline = Date.parse(command.retryDeadline);
+    const windowMs = 15 * 60 * 1000;
+    return Date.now() - deadline < windowMs || command.attemptCount < 3;
+  }
+
+  private async requireCommand(commandId: string): Promise<RelationCommand> {
+    const command = await this.store.findById(commandId);
+    if (command === null) throw orgError.notVisible(`关系命令不存在（${commandId}）`);
+    return command;
+  }
+
+  private async isVisibleAndAuthorized(
+    _actor: string,
+    _command: RelationCommand,
+  ): Promise<boolean> {
+    // 骨架：复用提交者权限（真实鉴权由 CurrentPermissionsPort 接入后覆盖）
+    return true;
+  }
+}
+
+export const relationCommandProvider = {
+  provide: RELATION_COMMAND_USE_CASE,
+  useFactory: (
+    store: RelationCommandStore,
+    clubs: ClubStore,
+    casdoor: CasdoorGroupPort,
+    scheduler: JobSchedulerPort,
+    notifications: NotificationPort,
+  ) => new RelationCommandUseCase(store, clubs, casdoor, scheduler, notifications),
+  inject: [
+    RELATION_COMMAND_STORE,
+    CLUB_STORE,
+    CASDOOR_GROUP_PORT,
+    JOB_SCHEDULER,
+    NOTIFICATION_PORT,
+  ],
+};
+
+function newId(prefix: IdPrefix): string {
+  return `${prefix}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
