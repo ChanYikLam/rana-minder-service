@@ -191,7 +191,9 @@ export class CasdoorReconcileService {
     }
     for (const [externalUserId, keys] of externalByUser) {
       const mapping = localByExternal.get(externalUserId);
-      const localKeys = mapping ? localBySubject.get(mapping.localSubjectId) ?? new Set() : new Set();
+      const localKeys = mapping
+        ? (localBySubject.get(mapping.localSubjectId) ?? new Set())
+        : new Set();
       for (const key of keys) {
         if (!localKeys.has(key)) {
           differences.push({
