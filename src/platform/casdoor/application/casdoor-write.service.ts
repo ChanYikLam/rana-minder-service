@@ -352,10 +352,7 @@ export class CasdoorWriteService {
               trackingId: input.idempotencyKey,
             });
             const verifiedMembers = verify.status === 'TRUSTED_CURRENT' ? verify.value : null;
-            if (
-              verifiedMembers === null ||
-              removeIds.some((id) => verifiedMembers.includes(id))
-            ) {
+            if (verifiedMembers === null || removeIds.some((id) => verifiedMembers.includes(id))) {
               compensationConfirmed = false;
             }
           }
