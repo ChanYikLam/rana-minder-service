@@ -9,6 +9,8 @@
  * 只建立"接入时已存在"当前关系，未知日期不得伪造（ORG-016）。
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type { ClubSpace } from '../../domain/models/club-space';
 import { createClubSpace } from '../../domain/models/club-space';
 import { ClubOnboardingStateMachine } from '../../domain/state-machines/club-onboarding.state-machine';
@@ -99,6 +101,8 @@ export class OnboardingUseCase {
       actor: input.actor,
       now,
     });
+    // 持久化已校验的负责人组选择，避免后续步骤丢失（ORG-024 负责人连续性依赖它）
+    club.leaderGroup = leaderRef;
     const draft = this.stateMachine.transition({
       club,
       event: 'wizard_save_step',
@@ -257,7 +261,7 @@ function toStableRef(ownerOrName: string, other: string): GroupStableRef {
 }
 
 function newId(prefix: IdPrefix): string {
-  return `${prefix}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+  return `${prefix}-${randomUUID()}`;
 }
 
 export const onboardingProvider = {

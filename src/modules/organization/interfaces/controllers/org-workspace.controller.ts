@@ -13,8 +13,12 @@ import type { RelationCommandUseCase } from '../../application/commands/relation
 import type { AppointmentCommandUseCase } from '../../application/commands/appointment-command.use-case';
 import {
   APPOINTMENT_COMMAND_USE_CASE,
+  CLUB_STORE,
+  CURRENT_PERMISSIONS_PORT,
   ORG_CONTEXT_QUERY,
   RELATION_COMMAND_USE_CASE,
+  type ClubStore,
+  type CurrentPermissionsPort,
 } from '../../application/ports';
 import { orgError } from '../../domain/types';
 import {
@@ -30,6 +34,8 @@ export class OrgWorkspaceController {
     @Inject(ORG_CONTEXT_QUERY) private readonly contextQuery: OrgContextQuery,
     @Inject(RELATION_COMMAND_USE_CASE) private readonly relationCommands: RelationCommandUseCase,
     @Inject(APPOINTMENT_COMMAND_USE_CASE) private readonly appointments: AppointmentCommandUseCase,
+    @Inject(CLUB_STORE) private readonly clubs: ClubStore,
+    @Inject(CURRENT_PERMISSIONS_PORT) private readonly permissions: CurrentPermissionsPort,
   ) {}
 
   @Get(':clubId/context')
@@ -88,7 +94,13 @@ export class OrgWorkspaceController {
 
   @Get(':clubId/members/appointments')
   async listAppointments(@Actor() actor: RequestActor, @Param('clubId') clubId: string) {
-    void actor;
+    const club = await this.clubs.findById(clubId);
+    if (club === null) throw orgError.notVisible(`社团空间不存在（${clubId}）`);
+    // 逐请求重算权限：无当前有效权限不得枚举预约（ORG-038/023）
+    const perms = await this.permissions.effectiveForClub(actor.userId, clubId);
+    if (perms.length === 0) {
+      throw orgError.forbidden(`用户 ${actor.userId} 无权查看社团「${club.name}」预约（ORG-038）`);
+    }
     const items = await this.appointments['listForClub'](clubId);
     return { items };
   }

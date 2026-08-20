@@ -12,6 +12,8 @@
  * - 人工重试：重新鉴权 + 重读实际关系（ORG-027 人工重试行）。
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type { RelationCommand } from '../../domain/models/relation-command';
 import { createRelationCommand } from '../../domain/models/relation-command';
 import { RelationCommandStateMachine } from '../../domain/state-machines/relation-command.state-machine';
@@ -179,12 +181,12 @@ export class RelationCommandUseCase {
       stepResults.some((s) => s.result === 'failed');
 
     let event: 'readback_confirmed' | 'retry_attempt' | 'partial_write' | 'final_failure';
+    const withinWindow = this.withinRetryWindow(command, input.now);
     if (allConfirmed) {
       event = 'readback_confirmed';
     } else if (partiallyApplied) {
       event = 'partial_write';
     } else {
-      const withinWindow = this.withinRetryWindow(command);
       event = withinWindow ? 'retry_attempt' : 'final_failure';
     }
 
@@ -192,7 +194,11 @@ export class RelationCommandUseCase {
       command,
       event,
       now: input.now,
-      facts: { readback: { confirmedSteps: stepResults } },
+      facts: {
+        readback: { confirmedSteps: stepResults },
+        retryable: !partiallyApplied && !allConfirmed && withinWindow,
+        withinRetryWindow: withinWindow,
+      },
     });
     await this.store.save(result.command);
     if (event === 'readback_confirmed') {
@@ -240,11 +246,14 @@ export class RelationCommandUseCase {
     return reexecute.command;
   }
 
-  private withinRetryWindow(command: RelationCommand): boolean {
-    if (command.retryDeadline === null) return command.attemptCount < 3;
+  private withinRetryWindow(command: RelationCommand, now: Date): boolean {
+    // 15 分钟有界自动重试窗口：deadline 起算，仅在 [deadline, deadline+15min] 内可重试（ORG-027）
+    if (command.retryDeadline === null) return false;
     const deadline = Date.parse(command.retryDeadline);
+    if (Number.isNaN(deadline)) return false;
     const windowMs = 15 * 60 * 1000;
-    return Date.now() - deadline < windowMs || command.attemptCount < 3;
+    const current = now.getTime();
+    return current >= deadline && current < deadline + windowMs;
   }
 
   private async requireCommand(commandId: string): Promise<RelationCommand> {
@@ -281,5 +290,5 @@ export const relationCommandProvider = {
 };
 
 function newId(prefix: IdPrefix): string {
-  return `${prefix}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+  return `${prefix}-${randomUUID()}`;
 }

@@ -12,6 +12,8 @@
  *   （ORG-039）。
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type { AppointmentCommand } from '../../domain/models/appointment-command';
 import { createAppointmentCommand } from '../../domain/models/appointment-command';
 import { AppointmentCommandStateMachine } from '../../domain/state-machines/appointment-command.state-machine';
@@ -21,12 +23,14 @@ import { type RelationCommandUseCase } from './relation-command.use-case';
 import {
   APPOINTMENT_COMMAND_STORE,
   APPOINTMENT_COMMAND_USE_CASE,
+  CASDOOR_GROUP_PORT,
   CLUB_STORE,
   CURRENT_PERMISSIONS_PORT,
   JOB_SCHEDULER,
   NOTIFICATION_PORT,
   RELATION_COMMAND_USE_CASE,
   type AppointmentCommandStore,
+  type CasdoorGroupPort,
   type ClubStore,
   type CurrentPermissionsPort,
   type JobSchedulerPort,
@@ -50,6 +54,7 @@ export class AppointmentCommandUseCase {
     private readonly relationCommands: RelationCommandUseCase,
     private readonly scheduler: JobSchedulerPort,
     private readonly notifications: NotificationPort,
+    private readonly casdoor: CasdoorGroupPort,
   ) {}
 
   async create(input: {
@@ -224,7 +229,27 @@ export class AppointmentCommandUseCase {
     now: Date;
   }): Promise<AppointmentCommand> {
     const command = await this.requireCommand(input.commandId);
+    // 人工重试同样遵循单执行租约（ORG-039）：已取得租约则禁止并发重执行
+    const leased = await this.scheduler.acquireLease(
+      `tsk-appt-${command.id}`,
+      input.actor,
+      input.now,
+    );
+    if (!leased) {
+      throw orgError.stateConflict('调度器已取得执行租约，禁止重复执行（单执行租约，ORG-039）');
+    }
     const actorAuthorized = await this.isAuthorizedForCommand(input.actor, command);
+    if (!actorAuthorized) {
+      throw orgError.forbidden('人工重试前须重新鉴权（ORG-039）');
+    }
+    // 重试前重验业务前置条件：条件未恢复不得自动重试（ORG-039）
+    const preconditions = await this.evaluatePreconditions(command);
+    if (!preconditions.every((p) => p.ok)) {
+      throw orgError.precondition(
+        '重试前置条件未满足，请先恢复条件再重试（ORG-039）',
+        JSON.stringify(preconditions),
+      );
+    }
     const result = this.stateMachine.transition({
       command,
       event: 'retry_execute',
@@ -295,13 +320,21 @@ export class AppointmentCommandUseCase {
   ): Promise<Array<{ name: string; ok: boolean }>> {
     const club = await this.clubs.findById(command.clubId);
     const content = command.content as unknown as AppointmentContent;
+    // 目标主体必须是社团 Group 成员才能被任命/免职/调岗（ORG-039）
+    let subjectIsMember = false;
+    if (content.subjectId && club?.clubGroup) {
+      try {
+        const members = await this.casdoor.getGroupMembers(club.clubGroup);
+        subjectIsMember = members.includes(content.subjectId);
+      } catch {
+        subjectIsMember = false; // 目标 Group 不可读按不满足处理，不得放行
+      }
+    }
     return [
       { name: 'club_enabled', ok: club !== null && club.status === 'enabled' },
-      {
-        name: 'subject_member',
-        ok: !content.subjectId || !!content.subjectId,
-      },
-      { name: 'command_version', ok: command.scheduleVersion >= 0 },
+      { name: 'subject_member', ok: subjectIsMember },
+      // 命令版本须已进入有效调度周期（至少完成一次编排）才能执行（ORG-039）
+      { name: 'command_version', ok: command.scheduleVersion >= command.createdVersion },
     ];
   }
 }
@@ -315,6 +348,7 @@ export const appointmentCommandProvider = {
     relationCommands: RelationCommandUseCase,
     scheduler: JobSchedulerPort,
     notifications: NotificationPort,
+    casdoor: CasdoorGroupPort,
   ) =>
     new AppointmentCommandUseCase(
       store,
@@ -323,6 +357,7 @@ export const appointmentCommandProvider = {
       relationCommands,
       scheduler,
       notifications,
+      casdoor,
     ),
   inject: [
     APPOINTMENT_COMMAND_STORE,
@@ -331,9 +366,10 @@ export const appointmentCommandProvider = {
     RELATION_COMMAND_USE_CASE,
     JOB_SCHEDULER,
     NOTIFICATION_PORT,
+    CASDOOR_GROUP_PORT,
   ],
 };
 
 function newId(prefix: IdPrefix): string {
-  return `${prefix}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+  return `${prefix}-${randomUUID()}`;
 }

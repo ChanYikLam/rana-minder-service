@@ -63,6 +63,7 @@ function buildHarness() {
     relations,
     scheduler,
     notifications,
+    casdoor,
   );
 
   const club = createClubSpace({
@@ -162,6 +163,26 @@ describe('AppointmentCommandUseCase', () => {
     });
     assert.equal(effective.status, 'effective');
     assert.equal(effective.actualEffectiveAt, '2026-08-10T00:01:00.000Z');
+  });
+
+  it('scheduleExecute：目标主体非社团成员 → 前置条件失效暂停待处置（ORG-039）', async () => {
+    const cmd = await h.useCase.create({
+      ...baseCreate,
+      content: { subjectId: 'not_a_member', positionGroup: { owner: 'club-acm', name: '宣传部' } },
+    });
+    const paused = await h.useCase.scheduleExecute({
+      commandId: cmd.id,
+      actor: 'system',
+      now: new Date('2026-08-10T00:00:20.000Z'),
+    });
+    assert.equal(paused.status, 'precondition_invalid_pending_resolution');
+    assert.ok(
+      paused.preconditionSnapshot?.some((p) => p.name === 'subject_member' && p.ok === false),
+    );
+    assert.equal(
+      await h.relationStore.findByProcessingForSubject(cmd.clubId, 'not_a_member'),
+      null,
+    );
   });
 
   it('scheduleExecute：发起人已失权 → 暂停待重新确认（不得自动执行）', async () => {

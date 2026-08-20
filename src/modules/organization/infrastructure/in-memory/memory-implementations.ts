@@ -466,13 +466,15 @@ export class MemoryCurrentPermissionsPort implements CurrentPermissionsPort {
 
   async effectiveForClub(userId: string, clubId: string): Promise<string[]> {
     const direct = this.config.clubPermissions.get(clubId) ?? [];
-    const byPosition = this.positionPermissions(userId)
-      .filter((p) => p.clubId === clubId)
-      .map((p) => p.permission);
-    const merged = new Set<string>([...direct, ...byPosition]);
-    // 平台超管不得混入社团工作空间权限（ORG-023 跨社团隔离）
-    if (userId === this.config.userId) return [...merged];
-    return [...merged];
+    // 平台超管不得混入社团工作空间权限（ORG-023 跨社团隔离）：
+    // 超管仅保留直接授予的社团权限，不因超管身份获得任何职位/空间派生权限
+    const isSuperAdmin = this.config.superAdminUsers.includes(userId);
+    const byPosition = isSuperAdmin
+      ? []
+      : this.positionPermissions(userId)
+          .filter((p) => p.clubId === clubId)
+          .map((p) => p.permission);
+    return [...new Set<string>([...direct, ...byPosition])];
   }
 
   async isPlatformSuperAdmin(userId: string): Promise<boolean> {
