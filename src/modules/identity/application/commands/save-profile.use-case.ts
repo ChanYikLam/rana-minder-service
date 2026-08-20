@@ -111,7 +111,7 @@ export class DefaultSaveProfileUseCase implements SaveProfileUseCase {
       );
     }
 
-    await this.profileRepository.save(profile.toSnapshot(), profile.events);
+    await this.profileRepository.save(profile.toSnapshot(), profile.events, snapshot.version);
 
     await this.audit.record({
       type: 'PROFILE_SAVED',

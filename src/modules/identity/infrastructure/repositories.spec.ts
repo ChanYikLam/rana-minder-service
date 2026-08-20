@@ -60,7 +60,7 @@ describe('PostgresProfileRepository', () => {
     assert.equal(missing, null);
   });
 
-  it('save：upsert 参数 + 领域事件序列化入审计表', async () => {
+  it('save：upsert 参数 + 乐观锁守卫参数；无内嵌审计（审计归应用层 record）', async () => {
     const db = new FakeDbAdapter();
     const uow = new IdentityUnitOfWork(db);
     const repo = new PostgresProfileRepository(db, uow);
@@ -80,18 +80,54 @@ describe('PostgresProfileRepository', () => {
       payload: { subjectId: 'user-1', version: 5, changedFields: ['phone'] },
     };
 
-    await inTx(uow, () => repo.save(snapshot, [event]));
+    await inTx(uow, () => repo.save(snapshot, [event], 4));
 
+    assert.equal(db.queries.length, 1);
     const upsert = db.queries[0];
     assert.match(upsert.sql, /ON CONFLICT \(subject_id\) DO UPDATE/);
+    assert.match(upsert.sql, /WHERE identity_profiles\.version = \$9/);
     assert.equal(upsert.params[0], 'user-1');
     assert.deepEqual(JSON.parse(upsert.params[1] as string), { phone: '13900000000' });
     assert.equal(upsert.params[5], 5);
-    const audit = db.queries[1];
-    assert.match(audit.sql, /identity_audit/);
-    const summary = JSON.parse(audit.params[2] as string);
-    assert.equal(summary[0].type, 'PROFILE_SAVED');
-    assert.equal(summary[0].payload.version, 5);
+    assert.equal(upsert.params[8], 4);
+    assert.doesNotMatch(upsert.sql, /identity_audit/);
+  });
+
+  it('save：SQL 层版本守卫——预期版本不匹配 → 0 行更新 → IFC-ERR-008', async () => {
+    const db = new FakeDbAdapter();
+    db.seed('identity_profiles', [
+      {
+        subject_id: 'user-1',
+        fields: '{}',
+        email_verified: false,
+        verified_email: null,
+        pending_email: null,
+        version: 5,
+        gate_state: ProfileWriteGateState.WRITABLE,
+        restrictions: '[]',
+      },
+    ]);
+    const uow = new IdentityUnitOfWork(db);
+    const repo = new PostgresProfileRepository(db, uow);
+    const snapshot: ProfileSnapshot = {
+      subjectId: 'user-1',
+      fields: { phone: '13900000000' },
+      emailVerified: true,
+      verifiedEmail: null,
+      pendingEmail: null,
+      version: 6,
+      gateState: ProfileWriteGateState.WRITABLE,
+      restrictions: [],
+    };
+
+    await assert.rejects(
+      inTx(uow, () => repo.save(snapshot, [], 4)),
+      (error: Error & { code?: string }) =>
+        error.name === 'IdentityCommandError' && error.code === 'IFC-ERR-008',
+    );
+
+    const matchingVersion = await inTx(uow, () => repo.save(snapshot, [], 5));
+    assert.equal(matchingVersion, undefined);
   });
 
   it('无活动事务读写 → 失败关闭', async () => {
@@ -188,12 +224,12 @@ describe('PostgresProfileSyncIntentRepository', () => {
       payload: { subjectId: 'user-1', field: 'phone', targetVersion: 4, fromState: 'PENDING_SYNC', toState: 'RETRYING' },
     };
     await inTx(uow, () => repo.save(upserted, [event]));
+    assert.equal(db.queries.length, 3);
     const upsert = db.queries[2];
     assert.match(upsert.sql, /ON CONFLICT \(subject_id, field\) DO UPDATE/);
     assert.equal(upsert.params[7], ProfileSyncState.RETRYING);
     assert.equal(upsert.params[9], 1);
-    const audit = db.queries[3];
-    assert.equal((JSON.parse(audit.params[2] as string) as { type: string }[])[0].type, 'SYNC_STATE_TRANSITIONED');
+    assert.doesNotMatch(upsert.sql, /identity_audit/);
   });
 });
 

@@ -105,7 +105,7 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
       await this.verificationRepository.save(latest);
     }
     await this.verificationRepository.save(verification.toSnapshot());
-    await this.profileRepository.save(profile.toSnapshot(), profile.events);
+    await this.profileRepository.save(profile.toSnapshot(), profile.events, snapshot.version);
 
     await this.mailPort.sendVerificationEmail({
       subjectId: input.subjectId,
@@ -182,7 +182,7 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
 
     await this.verificationRepository.save(verification.toSnapshot());
     await this.syncIntentRepository.save(intentSnapshot, intent.events);
-    await this.profileRepository.save(profile.toSnapshot(), profile.events);
+    await this.profileRepository.save(profile.toSnapshot(), profile.events, profileSnapshot.version);
     await this.taskPort.scheduleProfileSync(
       profile.subjectId,
       EditableProfileField.EMAIL,

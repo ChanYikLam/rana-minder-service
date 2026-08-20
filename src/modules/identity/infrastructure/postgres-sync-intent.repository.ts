@@ -103,14 +103,7 @@ export class PostgresProfileSyncIntentRepository implements ProfileSyncIntentRep
         snapshot.createdAt,
       ],
     );
-    if (events.length > 0) {
-      await this.db.query(
-        tx,
-        `INSERT INTO identity_audit (id, type, subject_id, occurred_at, actor, summary, trace_id)
-         VALUES ($1, 'PROFILE_SYNC_OUTCOME', $2, NOW(), 'system', $3::jsonb, $4)`,
-        [snapshot.id, snapshot.subjectId, JSON.stringify(serializeIntentEvents(events)), null],
-      );
-    }
+    void events; // 审计由应用层经 IdentityAuditPort 同事务记录，仓储不再内嵌写入
   }
 }
 
@@ -131,12 +124,4 @@ function rowToSnapshot(row: Row): ProfileSyncIntentSnapshot {
     resolvedAt: row.resolved_at,
     createdAt: row.created_at,
   };
-}
-
-function serializeIntentEvents(events: readonly ProfileSyncDomainEvent[]): unknown {
-  return events.map((event) => ({
-    type: event.type,
-    occurredAt: event.occurredAt.toISOString(),
-    payload: event.payload,
-  }));
 }

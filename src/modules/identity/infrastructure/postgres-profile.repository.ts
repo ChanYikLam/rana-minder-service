@@ -11,7 +11,11 @@
  *   gate_state text
  *   restrictions jsonb（[{scopeKey,reason,since}]）
  *
- * 约束：只保存快照与领域事件；业务事实与同步意图/审计同事务提交（IFC-TX-001/003）。
+ * 约束：
+ * - 只保存快照与领域事件；业务事实与同步意图/审计同事务提交（IFC-TX-001/003）。
+ * - 乐观锁在 SQL 层落地：DO UPDATE 带 WHERE identity_profiles.version = expectedVersion，
+ *   0 行更新 → IFC-ERR-008（内存校验只是快速失败，并发丢失更新由本守卫收口）。
+ * - 审计由应用层经 IdentityAuditPort.record() 记录（与业务同事务），本仓储不再内嵌写入。
  */
 
 import type { DbAdapter } from '../../../shared/db-adapter';
@@ -23,6 +27,7 @@ import type {
   ProfileFields,
 } from '../domain/models/profile';
 import type { ProfileRepository } from '../application/ports/profile-repository.port';
+import { identityErrors } from '../application/errors';
 
 interface ProfileRow {
   subject_id: string;
@@ -56,9 +61,13 @@ export class PostgresProfileRepository implements ProfileRepository {
     return rowToSnapshot(row);
   }
 
-  async save(snapshot: ProfileSnapshot, events: readonly ProfileDomainEvent[]): Promise<void> {
+  async save(
+    snapshot: ProfileSnapshot,
+    events: readonly ProfileDomainEvent[],
+    expectedVersion: number,
+  ): Promise<void> {
     const tx: TransactionContext = this.uow.active;
-    await this.db.query(
+    const rows = await this.db.query<{ subject_id: string }>(
       tx,
       `INSERT INTO identity_profiles
          (subject_id, fields, email_verified, verified_email, pending_email, version, gate_state, restrictions)
@@ -70,7 +79,9 @@ export class PostgresProfileRepository implements ProfileRepository {
          pending_email = EXCLUDED.pending_email,
          version = EXCLUDED.version,
          gate_state = EXCLUDED.gate_state,
-         restrictions = EXCLUDED.restrictions`,
+         restrictions = EXCLUDED.restrictions
+       WHERE identity_profiles.version = $9
+       RETURNING subject_id`,
       [
         snapshot.subjectId,
         JSON.stringify(snapshot.fields),
@@ -80,16 +91,13 @@ export class PostgresProfileRepository implements ProfileRepository {
         snapshot.version,
         snapshot.gateState,
         JSON.stringify(snapshot.restrictions),
+        expectedVersion,
       ],
     );
-    if (events.length > 0) {
-      await this.db.query(
-        tx,
-        `INSERT INTO identity_audit (id, type, subject_id, occurred_at, actor, summary, trace_id)
-         VALUES ($1, 'PROFILE_SAVED', $2, NOW(), 'system', $3::jsonb, $4)`,
-        [snapshot.subjectId, snapshot.subjectId, JSON.stringify(serializeProfileEvents(events)), null],
-      );
+    if (rows.length === 0) {
+      throw identityErrors.versionConflict();
     }
+    void events;
   }
 }
 
@@ -104,12 +112,4 @@ function rowToSnapshot(row: ProfileRow): ProfileSnapshot {
     gateState: row.gate_state as ProfileSnapshot['gateState'],
     restrictions: JSON.parse(row.restrictions) as ProfileSnapshot['restrictions'],
   };
-}
-
-function serializeProfileEvents(events: readonly ProfileDomainEvent[]): unknown {
-  return events.map((event) => ({
-    type: event.type,
-    occurredAt: event.occurredAt.toISOString(),
-    payload: event.payload,
-  }));
 }

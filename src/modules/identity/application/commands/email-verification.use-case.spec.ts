@@ -52,7 +52,7 @@ function inMemoryProfileRepository(): ProfileRepository & {
     async load(subjectId) {
       return store.get(subjectId) ?? null;
     },
-    async save(snapshot) {
+    async save(snapshot, _events, _expectedVersion) {
       store.set(snapshot.subjectId, snapshot);
       this.saved.push(snapshot);
     },

@@ -10,6 +10,14 @@ import type { ProfileSnapshot, ProfileDomainEvent } from '../../domain/models/pr
 export interface ProfileRepository {
   /** 载入本人平台公共资料（不存在返回 null） */
   load(subjectId: string): Promise<ProfileSnapshot | null>;
-  /** 原子保存：新快照 + 本次变更领域事件 */
-  save(snapshot: ProfileSnapshot, events: readonly ProfileDomainEvent[]): Promise<void>;
+  /**
+   * 原子保存：新快照 + 本次变更领域事件 + 期望版本（乐观锁）。
+   * expectedVersion 为本次读取到的版本；SQL 层 WHERE version = expectedVersion
+   * 守卫并发丢失更新（0 行更新 → IFC-ERR-008，由应用层转为 409）。
+   */
+  save(
+    snapshot: ProfileSnapshot,
+    events: readonly ProfileDomainEvent[],
+    expectedVersion: number,
+  ): Promise<void>;
 }

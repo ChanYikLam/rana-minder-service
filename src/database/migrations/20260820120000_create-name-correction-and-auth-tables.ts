@@ -17,8 +17,8 @@ import type { MigrationQueryRunner } from './20260820100000_create-identity-tabl
 export async function up(runner: MigrationQueryRunner): Promise<void> {
   await runner.query(`
     CREATE TABLE IF NOT EXISTS public.name_correction_requests (
-      id                uuid        PRIMARY KEY DEFAULT uuidv7(),
-      subject_id        uuid        NOT NULL REFERENCES public.users (subject_id),
+      id                text        PRIMARY KEY,
+      subject_id        text        NOT NULL REFERENCES public.users (subject_id),
       old_name          text        NOT NULL,
       requested_name    text        NOT NULL,
       proof_reference   text        NULL,
@@ -45,7 +45,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
 
   await runner.query(`
     CREATE TABLE IF NOT EXISTS public.auth_reauth_evidence (
-      subject_id      uuid        PRIMARY KEY REFERENCES public.users (subject_id),
+      subject_id      text        PRIMARY KEY REFERENCES public.users (subject_id),
       reauth_at       timestamptz NOT NULL,
       created_at      timestamptz NOT NULL DEFAULT now()
     )
@@ -54,7 +54,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
   await runner.query(`
     CREATE TABLE IF NOT EXISTS public.auth_sessions (
       session_id      text        PRIMARY KEY,
-      subject_id      uuid        NOT NULL REFERENCES public.users (subject_id),
+      subject_id      text        NOT NULL REFERENCES public.users (subject_id),
       revoke_version  bigint      NOT NULL DEFAULT 0,
       revoked_at      timestamptz NULL,
       created_at      timestamptz NOT NULL DEFAULT now()

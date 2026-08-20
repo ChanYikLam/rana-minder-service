@@ -309,7 +309,7 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
         async load(_subjectId: string) {
           return profileSnapshot(5); // 本地版本已更新到 5
         },
-        async save() {},
+async save(_snapshot, _events, _expectedVersion) {},
       },
       audit: {
         async record() {

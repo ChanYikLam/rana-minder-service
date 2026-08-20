@@ -72,14 +72,7 @@ export class PostgresAccountAccessRepository implements AccountAccessRepository 
         snapshot.sessionRevokeVersion,
       ],
     );
-    if (events.length > 0) {
-      await this.db.query(
-        tx,
-        `INSERT INTO identity_audit (id, type, subject_id, occurred_at, actor, summary, trace_id)
-         VALUES ($1, 'ACCOUNT_ACCESS_CHANGED', $2, NOW(), 'system', $3::jsonb, $4)`,
-        [snapshot.subjectId, snapshot.subjectId, JSON.stringify(serializeAccountEvents(events)), null],
-      );
-    }
+    void events; // 审计由应用层经 IdentityAuditPort 同事务记录，仓储不再内嵌写入
   }
 }
 
@@ -92,12 +85,4 @@ function rowToSnapshot(row: Row): AccountAccessSnapshot {
     lastTrustedObservationAt: row.last_trusted_observation_at,
     sessionRevokeVersion: row.session_revoke_version,
   };
-}
-
-function serializeAccountEvents(events: readonly AccountAccessDomainEvent[]): unknown {
-  return events.map((event) => ({
-    type: event.type,
-    occurredAt: event.occurredAt.toISOString(),
-    payload: event.payload,
-  }));
 }

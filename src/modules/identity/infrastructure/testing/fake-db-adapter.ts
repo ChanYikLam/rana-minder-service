@@ -3,6 +3,9 @@
  *
  * 记录事务生命周期（begin/commit/rollback/RLS 上下文）与全部查询，
  * 可按表提供行数据（load）或注入失败（failQuery/failCommit）。
+ *
+ * INSERT … ON CONFLICT … WHERE version = $N … RETURNING：按 PG 语义模拟——
+ * 键列已存在且版本守卫不匹配 → 返回空集（0 行更新）；否则视为写入成功返回返回列。
  */
 
 import type { DbAdapter, RlsScope, TransactionContext } from '../../../../shared/db-adapter';
@@ -53,6 +56,10 @@ export class FakeDbAdapter implements DbAdapter {
     if (this.queryError) {
       throw this.queryError;
     }
+    const insert = matchInsert(sql);
+    if (insert) {
+      return handleUpsert(this.tables, insert, sql, params) as unknown as T[];
+    }
     const table = matchTable(sql);
     if (!table) {
       return [];
@@ -65,6 +72,57 @@ export class FakeDbAdapter implements DbAdapter {
     }
     return rows as unknown as T[];
   }
+}
+
+interface InsertShape {
+  table: string;
+  columns: string[];
+}
+
+function matchInsert(sql: string): InsertShape | null {
+  const match = /INSERT INTO\s+([a-z_]+)\s*\(([^)]+)\)/i.exec(sql);
+  if (!match) {
+    return null;
+  }
+  return {
+    table: match[1],
+    columns: match[2].split(',').map((column) => column.trim().toLowerCase()),
+  };
+}
+
+function handleUpsert(
+  tables: Map<string, FakeRow[]>,
+  insert: InsertShape,
+  sql: string,
+  params: readonly unknown[],
+): FakeRow[] {
+  const returning = /RETURNING\s+([a-z_]+)/i.exec(sql);
+  if (!returning) {
+    return [];
+  }
+  const conflictKey = /ON CONFLICT\s*\(([a-z_,\s]+)\)/i.exec(sql)?.[1].replace(/\s+/g, '').toLowerCase();
+  const guard = matchVersionGuard(sql);
+  const existingRows = tables.get(insert.table) ?? [];
+  if (conflictKey) {
+    const keyIndex = insert.columns.indexOf(conflictKey);
+    const keyValue = params[keyIndex];
+    const existing = existingRows.find((row) => row[conflictKey] === keyValue);
+    if (existing && guard) {
+      const current = existing[guard.column];
+      if (current !== params[guard.paramIndex]) {
+        return [];
+      }
+    }
+  }
+  return [{ [returning[1]]: params[0] }];
+}
+
+function matchVersionGuard(sql: string): { column: string; paramIndex: number } | null {
+  const where = /WHERE\s+([a-z_]+(?:\.[a-z_]+)?)\s*=\s*\$(\d+)/i.exec(sql);
+  if (!where) {
+    return null;
+  }
+  return { column: where[1].split('.').pop() as string, paramIndex: Number(where[2]) - 1 };
 }
 
 function matchTable(sql: string): string | null {

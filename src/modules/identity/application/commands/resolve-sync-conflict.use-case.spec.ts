@@ -86,7 +86,7 @@ function createUseCase() {
     async load(subjectId) {
       return fakes.profiles.get(subjectId) ?? null;
     },
-    async save(snapshot) {
+    async save(snapshot, _events, _expectedVersion) {
       fakes.saved.profiles.push(snapshot);
       fakes.profiles.set(snapshot.subjectId, snapshot);
     },
