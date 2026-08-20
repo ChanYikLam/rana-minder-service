@@ -76,6 +76,30 @@ describe('Casdoor 写后读回分类', () => {
     );
   });
 
+  it('撤权完成但增权未完成（读回为空集合）→ PARTIAL，不误判为 THIRD', () => {
+    assert.equal(
+      classifyMembershipReadback({
+        originalMemberIds: ['a'],
+        expectedMemberIds: ['a', 'b'],
+        readbackMemberIds: [],
+        readbackStatus: 'TRUSTED_CURRENT',
+      }),
+      'PARTIAL',
+    );
+  });
+
+  it('读回含第三方未知成员 → 仍为 THIRD（不破坏第三方冲突语义）', () => {
+    assert.equal(
+      classifyMembershipReadback({
+        originalMemberIds: ['a', 'b', 'c'],
+        expectedMemberIds: ['x'],
+        readbackMemberIds: ['d'],
+        readbackStatus: 'TRUSTED_CURRENT',
+      }),
+      'THIRD',
+    );
+  });
+
   it('撤权完成且目标成员齐全 → TARGET', () => {
     assert.equal(
       classifyMembershipReadback({

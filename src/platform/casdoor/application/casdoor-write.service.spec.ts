@@ -118,6 +118,28 @@ describe('CasdoorWriteService', () => {
     assert.equal(conclusion.kind, 'DEPENDENCY_UNAVAILABLE');
   });
 
+  it('非法 deadline 回退到默认 15 分钟窗口，不因 Invalid Date 使超时守卫失效（CAS-WR-011）', async () => {
+    const store = makeStore();
+    const service = makeService(store);
+    // 传入无法解析的 deadline，仍应正常执行并收口成功
+    const conclusion = await service.writeGroupMembership({
+      commandId: 'cmd-invalid-deadline',
+      idempotencyKey: 'idem-invalid',
+      groupRef: group.ref,
+      originalMemberIds: ['a'],
+      targetMemberIds: ['a', 'b'],
+      requestedAt: fixedNow.toISOString(),
+      deadline: 'not-a-valid-date',
+    });
+    assert.equal(conclusion.kind, 'CONFIRMED');
+    const readback = await store.readbackGroupMembers({
+      ref: group.ref,
+      requestId: 'check',
+      trackingId: 't',
+    });
+    assert.deepEqual(readback.value, ['a', 'b']);
+  });
+
   it('同时增删时 add 与 remove 都执行并达成目标关系（不互斥）', async () => {
     const store = makeStore();
     const recording = new RecordingWritePort(store);

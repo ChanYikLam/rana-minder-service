@@ -57,8 +57,13 @@ export class CasdoorWriteService {
 
   async writeGroupMembership(input: GroupMembershipWriteInput): Promise<WriteConclusion> {
     const startedAt = this.clock.now();
+    // CAS-WR-011：deadline 必须解析为合法时间，否则回退到默认 15 分钟窗口，
+    // 避免 Invalid Date（getTime() 为 NaN）使超时守卫恒为假而失效。
+    const parsedDeadline = input.deadline ? Date.parse(input.deadline) : NaN;
     const deadline = new Date(
-      input.deadline ? Date.parse(input.deadline) : startedAt.getTime() + DEFAULT_GROUP_RETRY_MS,
+      Number.isFinite(parsedDeadline)
+        ? parsedDeadline
+        : startedAt.getTime() + DEFAULT_GROUP_RETRY_MS,
     );
     const attempts: string[] = [];
     const evidence: EvidenceRef[] = [];

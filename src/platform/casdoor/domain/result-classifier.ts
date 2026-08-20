@@ -49,7 +49,9 @@ export function classifyMembershipReadback(input: {
   if (hasThirdValue) return 'THIRD';
   if (staleRemovedPresent) return 'PARTIAL';
   if (hitExpected > 0) return 'TARGET';
-  return 'THIRD';
+  // 期望成员一个都没到位且无第三方值：撤权可能已完成、增权未完成（如读回为空集合），
+  // 属于明确的部分成功，而不是“第三方值冲突”。不应误判为 THIRD（CAS-WR-010）。
+  return 'PARTIAL';
 }
 
 export function classifyProfileReadback(input: {
