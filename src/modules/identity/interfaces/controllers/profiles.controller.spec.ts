@@ -44,12 +44,24 @@ function myProfile(overrides?: Partial<GetMyProfileResult>): GetMyProfileResult 
   };
 }
 
-function saveResult(): SaveProfileResult {
+function saveResult(overrides?: Partial<SaveProfileResult>): SaveProfileResult {
   return {
-    profile: {} as SaveProfileResult['profile'],
-    changedFields: [],
+    profile: {
+      toSnapshot: () => ({
+        subjectId: 'user-1',
+        fields: { phone: '13900000000' },
+        emailVerified: true,
+        verifiedEmail: 'a@example.com',
+        pendingEmail: null,
+        version: 5,
+        gateState: 'WRITABLE',
+        restrictions: [],
+      }),
+    } as unknown as SaveProfileResult['profile'],
+    changedFields: ['phone'],
     pendingSyncFields: [],
     syncIntentIds: [],
+    ...overrides,
   };
 }
 
@@ -93,10 +105,10 @@ function createController(overrides?: {
   queryError?: unknown;
 }) {
   const fakeQuery: GetMyProfileQuery = {
-    async execute(input) {
+    async execute(input, knownSnapshot) {
       const calls = (fakeQuery as { calls?: unknown[] }).calls ?? [];
       (fakeQuery as { calls?: unknown[] }).calls = calls;
-      calls.push(input);
+      calls.push({ input, knownSnapshot });
       if (overrides?.queryError !== undefined) {
         throw overrides.queryError;
       }
@@ -161,9 +173,9 @@ describe('ProfilesController.getMyProfile（GET /api/auth/profile）', () => {
     const { controller, fakeQuery } = createController();
     await controller.getMyProfile(actor({ subjectId: 'user-session' }));
 
-    const calls = (fakeQuery as { calls?: { subjectId: string }[] }).calls ?? [];
+    const calls = (fakeQuery as { calls?: { input: { subjectId: string } }[] }).calls ?? [];
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].subjectId, 'user-session');
+    assert.equal(calls[0].input.subjectId, 'user-session');
   });
 
   it('AUT：越权错误按 403 透传（IFC-ERR-003）', async () => {
@@ -182,7 +194,7 @@ describe('ProfilesController.getMyProfile（GET /api/auth/profile）', () => {
 describe('ProfilesController.saveMyProfile（PUT /api/auth/profile）', () => {
   it('NOM：信封+expectedVersion 保存并返回最新本人资料', async () => {
     fakeSave.error = null;
-    const { controller } = createController();
+    const { controller, fakeQuery } = createController();
     const result = await controller.saveMyProfile(
       actor(),
       { expectedVersion: 4, input: { phone: '13800000000' } },
@@ -193,6 +205,9 @@ describe('ProfilesController.saveMyProfile（PUT /api/auth/profile）', () => {
     assert.equal(result.value.phone, '13800000000');
     assert.equal(fakeSave.lastInput?.expectedVersion, 4);
     assert.equal(fakeSave.lastInput?.fields.phone, '13800000000');
+    const queryCall = (fakeQuery as unknown as { calls: { input: { subjectId: string }; knownSnapshot: unknown }[] }).calls.at(-1);
+    assert.equal(queryCall?.input.subjectId, 'user-1');
+    assert.ok(queryCall?.knownSnapshot); // 复用 save 返回值，不再整份重新回源
   });
 
   it('AUT：保存强制使用会话 subjectId，信封 targetId 不被采纳', async () => {

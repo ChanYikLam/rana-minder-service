@@ -8,6 +8,7 @@
  */
 
 import { EditableProfileField } from '../../domain/models/profile-field';
+import type { ProfileSnapshot } from '../../domain/models/profile';
 import type { ProfileRepository } from '../ports/profile-repository.port';
 import type { ProfileSyncIntentRepository } from '../ports/profile-sync-intent-repository.port';
 import type { DegradationPolicy } from '../../domain/services/degradation.policy';
@@ -46,7 +47,11 @@ export interface GetMyProfileResult {
 }
 
 export interface GetMyProfileQuery {
-  execute(input: GetMyProfileInput): Promise<GetMyProfileResult>;
+  /**
+   * knownSnapshot：可选已加载快照（save 链路传入刚保存的聚合快照，
+   * 避免高频写后读重复回源；账号/同步意图仍实时读取）。
+   */
+  execute(input: GetMyProfileInput, knownSnapshot?: ProfileSnapshot): Promise<GetMyProfileResult>;
 }
 
 export class DefaultGetMyProfileQuery implements GetMyProfileQuery {
@@ -57,8 +62,8 @@ export class DefaultGetMyProfileQuery implements GetMyProfileQuery {
     private readonly degradation: DegradationPolicy,
   ) {}
 
-  async execute(input: GetMyProfileInput): Promise<GetMyProfileResult> {
-    const snapshot = await this.profileRepository.load(input.subjectId);
+  async execute(input: GetMyProfileInput, knownSnapshot?: ProfileSnapshot): Promise<GetMyProfileResult> {
+    const snapshot = knownSnapshot ?? (await this.profileRepository.load(input.subjectId));
     if (!snapshot) {
       throw identityErrors.notFound('资料');
     }
@@ -66,8 +71,13 @@ export class DefaultGetMyProfileQuery implements GetMyProfileQuery {
     const account = await this.accountRepository.load(input.subjectId);
 
     const syncStatus: Record<string, SyncStatusEntry> = {};
+    const intents = await this.syncIntentRepository.loadMany(
+      input.subjectId,
+      Object.values(EditableProfileField),
+    );
+    const byField = new Map(intents.map((intent) => [intent.field, intent]));
     for (const field of Object.values(EditableProfileField)) {
-      const intent = await this.syncIntentRepository.load(input.subjectId, field);
+      const intent = byField.get(field) ?? null;
       syncStatus[field] = intent
         ? {
             field,

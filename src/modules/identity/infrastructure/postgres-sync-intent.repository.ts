@@ -62,6 +62,24 @@ export class PostgresProfileSyncIntentRepository implements ProfileSyncIntentRep
     return rows[0] ? rowToSnapshot(rows[0]) : null;
   }
 
+  async loadMany(
+    subjectId: string,
+    fields: readonly EditableProfileField[],
+  ): Promise<ProfileSyncIntentSnapshot[]> {
+    if (fields.length === 0) {
+      return [];
+    }
+    const rows = await this.db.query<Row>(
+      this.uow.active,
+      `SELECT subject_id, field, id, target_version, prior_value, target_value, readback_value,
+              state, conflict_version, attempts, retry_at, failed_since, resolved_at, created_at
+         FROM profile_sync_intents
+        WHERE subject_id = $1 AND field = ANY($2::text[])`,
+      [subjectId, fields],
+    );
+    return rows.map(rowToSnapshot);
+  }
+
   async save(
     snapshot: ProfileSyncIntentSnapshot,
     events: readonly ProfileSyncDomainEvent[],

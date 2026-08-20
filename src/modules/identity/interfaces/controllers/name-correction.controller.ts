@@ -14,7 +14,8 @@
  */
 
 import type { SubmitNameCorrectionUseCase } from '../../application/commands/submit-name-correction.use-case';
-import type { ReviewNameCorrectionUseCase, NameCorrectionDecision } from '../../application/commands/review-name-correction.use-case';
+import type { ReviewNameCorrectionUseCase } from '../../application/commands/review-name-correction.use-case';
+import { NameCorrectionDecision } from '../../application/commands/review-name-correction.use-case';
 import type { ActorContext } from './profiles.controller';
 import { parseRequestEnvelope } from '../http/envelope';
 import { toApiError } from '../http/error-http';
@@ -95,10 +96,17 @@ export class NameCorrectionController {
           { fieldErrors: { requestId: [requestId ? '' : '必填'], decision: [decision ? '' : '必填'], reason: [reason ? '' : '必填'] } },
         );
       }
+      if (decision !== NameCorrectionDecision.APPROVE && decision !== NameCorrectionDecision.REJECT) {
+        throw new IdentityCommandError(
+          IdentityErrorCode.VALIDATION_FAILED,
+          '裁决只能为 APPROVE 或 REJECT',
+          { fieldErrors: { decision: ['必须为 APPROVE 或 REJECT'] } },
+        );
+      }
 
       const result = await this.reviewUseCase.execute({
         requestId,
-        decision: decision as NameCorrectionDecision,
+        decision,
         reason,
         reviewerId: actor.subjectId,
         now: actor.now,

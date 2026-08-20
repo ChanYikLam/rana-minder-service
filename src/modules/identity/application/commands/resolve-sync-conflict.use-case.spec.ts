@@ -95,6 +95,11 @@ function createUseCase() {
     async load(subjectId, field) {
       return fakes.intents.get(`${subjectId}:${field}`) ?? null;
     },
+    async loadMany(subjectId, fields) {
+      return fields
+        .map((field) => fakes.intents.get(`${subjectId}:${field}`))
+        .filter((snapshot) => snapshot !== undefined);
+    },
     async save(snapshot) {
       fakes.saved.intents.push(snapshot);
       fakes.intents.set(`${snapshot.subjectId}:${snapshot.field}`, snapshot);

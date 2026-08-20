@@ -103,8 +103,10 @@ export class ProfilesController {
         actor: actor.subjectId,
         traceId: actor.traceId,
       });
-      void result;
-      const profile = await this.getMyProfileQuery.execute({ subjectId: actor.subjectId, now: actor.now });
+      const profile = await this.getMyProfileQuery.execute(
+        { subjectId: actor.subjectId, now: actor.now },
+        result.profile.toSnapshot(),
+      );
       return { ok: true, value: toMyProfileResponse(profile) };
     } catch (error) {
       if (error instanceof IdentityCommandError && error.code === IdentityErrorCode.VERSION_CONFLICT) {

@@ -14,6 +14,14 @@ import type { EditableProfileField } from '../../domain/models/profile-field';
 export interface ProfileSyncIntentRepository {
   /** 载入指定字段的当前同步意图（不存在返回 null） */
   load(subjectId: string, field: EditableProfileField): Promise<ProfileSyncIntentSnapshot | null>;
+  /**
+   * 批量载入多个字段的当前同步意图（高频读路径 getMyProfile/getSession 防 N+1；
+   * 未找到的字段不在结果中出现）。
+   */
+  loadMany(
+    subjectId: string,
+    fields: readonly EditableProfileField[],
+  ): Promise<ProfileSyncIntentSnapshot[]>;
   /** 原子保存：新快照 + 本次变更领域事件 */
   save(snapshot: ProfileSyncIntentSnapshot, events: readonly ProfileSyncDomainEvent[]): Promise<void>;
 }

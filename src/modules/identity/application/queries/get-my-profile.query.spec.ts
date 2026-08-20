@@ -84,6 +84,9 @@ function createQuery(overrides?: {
       async load(_subjectId, field) {
         return field === 'phone' ? intentSnapshot() : null;
       },
+      async loadMany(_subjectId, fields) {
+        return fields.includes('phone') ? [intentSnapshot()] : [];
+      },
       async save() {},
     },
     overrides?.accountRepository ?? {
@@ -127,6 +130,28 @@ describe('GetMyProfileQuery（IFC-QRY-003）', () => {
     const result = await query.execute({ subjectId: 'user-1', now });
 
     assert.equal(result.profileComplete, false);
+  });
+
+  it('save 链路复用已知快照：不再整份重新回源（IFC-QRY 高频写后读）', async () => {
+    let loadCalls = 0;
+    const query = createQuery({
+      profileRepository: {
+        async load() {
+          loadCalls += 1;
+          return profileSnapshot({ version: 99 });
+        },
+        async save() {},
+      },
+    });
+
+    const result = await query.execute(
+      { subjectId: 'user-1', now },
+      profileSnapshot({ version: 5, fields: { phone: '13900000000' } }),
+    );
+
+    assert.equal(loadCalls, 0);
+    assert.equal(result.version, 5);
+    assert.equal(result.fields.phone, '13900000000');
   });
 
   it('IDN-009：降级中返回降级起点与剩余窗口', async () => {

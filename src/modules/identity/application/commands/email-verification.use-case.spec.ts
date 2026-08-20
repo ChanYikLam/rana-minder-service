@@ -94,6 +94,9 @@ function inMemorySyncIntentRepository(): ProfileSyncIntentRepository & { saved: 
     async load() {
       return null;
     },
+    async loadMany() {
+      return [];
+    },
     async save(snapshot) {
       store.set(`${snapshot.subjectId}:${snapshot.field}`, snapshot);
       this.saved.push(snapshot);
