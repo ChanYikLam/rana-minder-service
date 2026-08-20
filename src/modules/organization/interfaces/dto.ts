@@ -57,6 +57,10 @@ export class RebindDto {
   @IsBoolean() confirmed!: boolean;
 }
 
+export class ConfirmedActionDto {
+  @IsBoolean() @IsOptional() confirmed!: boolean;
+}
+
 // --------------------------------------------------------------------------
 // 权限模板（§15.3）
 // --------------------------------------------------------------------------

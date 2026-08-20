@@ -73,7 +73,7 @@ export class RelationCommandUseCase {
     // 同一目标处理中禁止重复/冲突操作（SRS-SM-ORG-002）
     const inFlight = await this.store.findByProcessingForSubject(input.clubId, input.subjectId);
     if (inFlight !== null) {
-      if (inFlight.id === input.idempotencyKey) {
+      if (inFlight.idempotencyKey === input.idempotencyKey) {
         return inFlight; // 客户端重试幂等
       }
       throw orgError.stateConflict(

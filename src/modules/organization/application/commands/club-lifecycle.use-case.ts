@@ -175,12 +175,15 @@ export class ClubLifecycleUseCase {
     if (original === null) throw orgError.precondition('无原映射，无法修复');
     const info = await this.casdoor.getGroupByRef(original);
     const groupReadable = info !== null && !info.deleted && info.readable;
+    // 负责人连续性：负责人 Group 须至少一名有效成员（ORG-024），与 recover/complete 一致
+    const leaderGroup = club.leaderGroup;
+    const leaders = leaderGroup === null ? [] : await this.casdoor.getGroupMembers(leaderGroup);
     const result = this.stateMachine.transition({
       club,
       event: 'repair',
       actor: input.actor,
       now: input.now,
-      facts: { groupReadable, leaderContinuityOk: groupReadable },
+      facts: { groupReadable, leaderContinuityOk: leaders.length > 0 },
     });
     await this.clubs.save(result.club);
     return result.club;
@@ -194,12 +197,18 @@ export class ClubLifecycleUseCase {
     now: Date;
   }): Promise<ClubSpace> {
     const club = await this.requireClub(input.clubId);
+    // 负责人连续性：负责人 Group 须至少一名有效成员（ORG-024），与 recover/complete 一致
+    const leaderGroup = club.leaderGroup;
+    const leaders = leaderGroup === null ? [] : await this.casdoor.getGroupMembers(leaderGroup);
     const result = this.stateMachine.transition({
       club,
       event: 'rebind',
       actor: input.actor,
       now: input.now,
-      facts: { confirmed: input.confirmed, leaderContinuityOk: true },
+      facts: {
+        confirmed: input.confirmed,
+        leaderContinuityOk: leaders.length > 0,
+      },
     });
     await this.clubs.save(result.club);
     return result.club;
@@ -232,12 +241,18 @@ export class ClubLifecycleUseCase {
     now: Date;
   }): Promise<ClubSpace> {
     const club = await this.requireClub(input.clubId);
+    // 负责人连续性：负责人 Group 须至少一名有效成员（ORG-024），与 recover/complete 一致
+    const leaderGroup = club.leaderGroup;
+    const leaders = leaderGroup === null ? [] : await this.casdoor.getGroupMembers(leaderGroup);
     const result = this.stateMachine.transition({
       club,
       event: 'reaccess',
       actor: input.actor,
       now: input.now,
-      facts: { confirmed: input.confirmed, leaderContinuityOk: true },
+      facts: {
+        confirmed: input.confirmed,
+        leaderContinuityOk: leaders.length > 0,
+      },
     });
     await this.clubs.save(result.club);
     return result.club;

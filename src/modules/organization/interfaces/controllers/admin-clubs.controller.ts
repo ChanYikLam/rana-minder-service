@@ -24,6 +24,7 @@ import {
 } from '../../application/ports';
 import { orgError } from '../../domain/types';
 import {
+  ConfirmedActionDto,
   ImportMembersDto,
   RebindDto,
   SuspensionDto,
@@ -204,24 +205,32 @@ export class AdminClubsController {
 
   @Post('clubs/:clubId/disconnect')
   @HttpCode(200)
-  async disconnect(@Actor() actor: RequestActor, @Param('clubId') clubId: string) {
+  async disconnect(
+    @Actor() actor: RequestActor,
+    @Param('clubId') clubId: string,
+    @Body() dto: ConfirmedActionDto,
+  ) {
     await this.assertPlatformClubManage(actor);
     return this.lifecycle.disconnect({
       clubId,
       actor: actor.userId,
-      confirmed: true,
+      confirmed: dto.confirmed ?? false,
       now: new Date(),
     });
   }
 
   @Post('clubs/:clubId/reaccess')
   @HttpCode(200)
-  async reaccess(@Actor() actor: RequestActor, @Param('clubId') clubId: string) {
+  async reaccess(
+    @Actor() actor: RequestActor,
+    @Param('clubId') clubId: string,
+    @Body() dto: ConfirmedActionDto,
+  ) {
     await this.assertPlatformClubManage(actor);
     return this.lifecycle.reaccess({
       clubId,
       actor: actor.userId,
-      confirmed: true,
+      confirmed: dto.confirmed ?? false,
       now: new Date(),
     });
   }
