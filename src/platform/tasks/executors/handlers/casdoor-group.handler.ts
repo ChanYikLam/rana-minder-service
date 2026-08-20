@@ -21,6 +21,9 @@ function failureKindForConclusion(kind: WriteConclusionKind): TaskFailure['kind'
     case 'UNCERTAIN':
     case 'OLD_VALUE_STILL_PRESENT':
     case 'PARTIAL_SUCCESS':
+    case 'DEPENDENCY_UNAVAILABLE':
+      // 依赖不可用属可重试的外部故障（外部状态不确定），归类为 EXTERNAL_UNCERTAIN
+      // 而非确定性的 EXTERNAL_FAILED，与结论的 retryable=true 语义一致。
       return 'EXTERNAL_UNCERTAIN';
     default:
       return 'EXTERNAL_FAILED';

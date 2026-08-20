@@ -85,7 +85,7 @@ describe('CasdoorGroupHandler', () => {
     const handler = new CasdoorGroupHandler(new CasdoorWriteService(store, clock));
     await assert.rejects(
       handler.handle(makeTask(TaskType.CASDOOR_GROUP_WRITE, groupPayload)),
-      (err: unknown) => assertTaskExecutionError(err, true, 'EXTERNAL_FAILED'),
+      (err: unknown) => assertTaskExecutionError(err, true, 'EXTERNAL_UNCERTAIN'),
     );
   });
 

@@ -70,6 +70,13 @@ export class CasdoorWriteService {
     let attempt = 0;
     const maxAttemptsPerInvocation = 3;
 
+    // original/target 在重试循环内恒定，add/remove 差异仅依赖两者，提前一次算好，
+    // 避免每次尝试反复重算（CAS-WR-012）。
+    const original = new Set(input.originalMemberIds);
+    const target = new Set(input.targetMemberIds);
+    const addIds = [...target].filter((id) => !original.has(id));
+    const removeIds = [...original].filter((id) => !target.has(id));
+
     while (true) {
       attempt += 1;
       const attemptId = `${input.commandId}:${attempt}`;
@@ -86,11 +93,6 @@ export class CasdoorWriteService {
           now,
         );
       }
-
-      const original = new Set(input.originalMemberIds);
-      const target = new Set(input.targetMemberIds);
-      const addIds = [...target].filter((id) => !original.has(id));
-      const removeIds = [...original].filter((id) => !target.has(id));
 
       const transportResults: ExternalResult<void>[] = [];
       if (addIds.length > 0) {
@@ -207,7 +209,8 @@ export class CasdoorWriteService {
           now,
         );
       }
-      // 指数退避后再重试，避免瞬时抖动时连续空转（200ms → 400ms → 800ms）。
+      // 指数退避后再重试，避免瞬时抖动时连续空转。maxAttemptsPerInvocation=3 意味着
+      // 循环内实际只在 attempt=1、2 时退避，即 200ms → 400ms（不会到达 800ms）。
       await this.backoff(attempt);
     }
   }
