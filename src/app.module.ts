@@ -8,11 +8,14 @@
  * - CommonModule（公共组件：错误定义、枚举常量、校验原语，无外部依赖）
  * - DatabaseModule（数据持久化：连接池初始化、实体注册，首版桩）
  * - ReadModelModule（平台支撑：派生入口与读模型，ADR-002 §2.2）
+ * - ObservabilityModule（平台支撑：运维与可观测性，ADR-002 §2.2 + ADR-011；
+ *   当前仅注册脱敏/保留期/追踪编号三个纯规则，后续 logging/tracing/status-page
+ *   子模块按 PR #32 §2.2 B 子任务次序接入）
  *
- * 后续接入顺序（不在本次提交范围）：
+ * 后续接入顺序（不在本 MR 范围）：
  *
- * 1. 平台支撑：observability 适配层（LogWriterAdapter、TraceContextAdapter）→
- *    job（持久任务与租约，依赖 1.3 通用任务信封）
+ * 1. 平台支撑：observability 子模块 logging → tracing → audit-link → status-page →
+ *    health-summary → backup-report；job（持久任务与租约，依赖 1.3 通用任务信封）
  * 2. 通用：shared（跨模块通用能力）
  * 3. 领域：identity → organization → recruitment → joint → invitation →
  *    membership → form → file → notification → audit → stat-export →
@@ -28,10 +31,17 @@ import { Module } from '@nestjs/common';
 import { CommonModule } from './common/common.module';
 import { ConfigurationModule } from './config';
 import { DatabaseModule } from './database/database.module';
+import { ObservabilityModule } from './platform/observability/module';
 import { ReadModelModule } from './platform/read-model/module';
 
 @Module({
-  imports: [ConfigurationModule.forRoot(), CommonModule, DatabaseModule, ReadModelModule],
+  imports: [
+    ConfigurationModule.forRoot(),
+    CommonModule,
+    DatabaseModule,
+    ObservabilityModule,
+    ReadModelModule,
+  ],
   controllers: [],
   providers: [],
 })

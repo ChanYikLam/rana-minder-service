@@ -10,7 +10,8 @@
  * 不做：HTTP 请求上下文传递、AsyncLocalStorage 适配、worker 任务上下文串接
  * ——这些由 infrastructure/TraceContextAdapter 承接。
  *
- * 路径迁移：见 src/modules/ops/domain/services/ 同目录其他文件头注释。
+ * 路径：src/platform/observability/domain/services/（PR #32 §2.2 B；2026-08-18 由
+ * src/modules/ops/domain/services/ 整体迁移）。
  */
 
 import { randomUUID } from 'node:crypto';

@@ -1,6 +1,7 @@
 # 平台支撑 · 运维与可观测性
 
 > 模块定位：平台支撑模块之一（ADR-002 §2.2，按 ADR-011 收窄）
+> 路径：`src/platform/observability/`（PR #32 §2.2 B；2026-08-18 由 `src/modules/ops/` 整体迁移）
 > 职责：脱敏运行日志、追踪关联、内置只读状态摘要、备份/恢复最近结果展示
 > 上游权威：[系统架构总览 v1.0](../../../docs/architecture/系统架构总览-v1.0.md)、[ADR-002](../../../docs/architecture/ADR-002-逻辑模块与状态机唯一责任基线.md)、[ADR-011](../../../docs/architecture/ADR-011-内置最小观测边界.md)、[SRS v1.0 §11.2](../../../docs/specification/SRS-v1.0.md)
 

@@ -8,8 +8,8 @@
  * 不管辖：业务审计（AUD-*）——业务审计独立长期保留，与本规则分离
  * （XCC-GEN-007）。本规则只管"运行日志"。
  *
- * 路径迁移：见 src/modules/ops/domain/services/ 同目录其他文件头注释；
- * PR #32 落地时整体迁移。
+ * 路径：src/platform/observability/domain/services/（PR #32 §2.2 B；2026-08-18 由
+ * src/modules/ops/domain/services/ 整体迁移）。
  */
 
 export type LogTier = 'normal' | 'network' | 'security';
