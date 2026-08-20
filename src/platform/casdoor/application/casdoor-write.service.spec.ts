@@ -220,6 +220,78 @@ describe('CasdoorWriteService', () => {
     assert.ok(failing.calls.some((c) => c.startsWith('remove:')));
   });
 
+  it('补偿移除未确认时如实说明可能残留关系，不声称已完全回滚', async () => {
+    const store = makeStore();
+
+    const addLow: GroupStableRef = { owner: 'o', name: 'low' };
+    store.groups.set(groupRefKey(addLow), {
+      ref: addLow,
+      displayName: 'low',
+      parentRef: null,
+      memberIds: [],
+      state: 'ACTIVE',
+    });
+
+    const uncertain = (requestId: string): ExternalResult<void> => ({
+      status: 'UNCERTAIN',
+      value: null,
+      evidence: { observedAt: fixedNow.toISOString(), attemptId: requestId },
+      error: {
+        kind: 'UNCERTAIN',
+        code: 'CAS-ERR-UNCERTAIN',
+        message: 'uncertain',
+        retryable: true,
+        trackingId: 't',
+      },
+    });
+
+    // 步骤写入不确定触发补偿，且补偿移除本身也不确定
+    const failing = new (class extends RecordingWritePort {
+      override async addGroupMembers(request: {
+        ref: GroupStableRef;
+        userIds: readonly string[];
+        requestId: string;
+        trackingId: string;
+      }): Promise<ExternalResult<void>> {
+        if (request.requestId.includes('low')) return uncertain(request.requestId);
+        return super.addGroupMembers(request);
+      }
+
+      override async removeGroupMembers(request: {
+        ref: GroupStableRef;
+        userIds: readonly string[];
+        requestId: string;
+        trackingId: string;
+      }): Promise<ExternalResult<void>> {
+        if (request.requestId.includes('comp')) return uncertain(request.requestId);
+        return super.removeGroupMembers(request);
+      }
+    })(store);
+    const service = new CasdoorWriteService(failing, clock);
+
+    const conclusion = await service.executeCompositePlan(
+      {
+        planId: 'plan-3',
+        commandId: 'cmd-comp3',
+        steps: [
+          {
+            stepId: 'low',
+            groupRef: addLow,
+            action: 'ADD',
+            privilegeRank: 1,
+            originalMemberIds: [],
+            expectedMemberIds: ['u1'],
+          },
+        ],
+        deadline: new Date(fixedNow.getTime() + 15 * 60 * 1000).toISOString(),
+      },
+      { commandId: 'cmd-comp3', idempotencyKey: 'idem-comp3' },
+    );
+
+    assert.equal(conclusion.kind, 'MANUAL_INTERVENTION_REQUIRED');
+    assert.match(conclusion.reason, /补偿移除未完全确认/);
+  });
+
   it('复合写入当前失败 ADD step 的部分写入也会被回滚（CAS-WR-010）', async () => {
     const store = makeStore();
 

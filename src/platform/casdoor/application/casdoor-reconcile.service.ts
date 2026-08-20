@@ -30,6 +30,8 @@ import {
 
 type AccountRelationItem = { externalUserId: string; groups: readonly GroupStableRef[] };
 
+const MAX_PAGES_PER_KIND = 1000;
+
 @Injectable()
 export class CasdoorReconcileService {
   constructor(
@@ -70,12 +72,16 @@ export class CasdoorReconcileService {
     evidence.push(...relation.evidence);
     if (relation.status !== 'COMPLETE_SUCCESS') status = this.worst(status, relation.status);
 
-    const differences = await this.collectDifferences(
-      input.runId,
-      account.items,
-      group.items,
-      relation.items,
-    );
+    // 仅在全部扫描完整时进行差异比对，避免基于不完整数据得出误导性结论（CAS-REC-006）。
+    let differences: ReconcileCandidateDifference[] = [];
+    if (status === 'COMPLETE_SUCCESS') {
+      differences = await this.collectDifferences(
+        input.runId,
+        account.items,
+        group.items,
+        relation.items,
+      );
+    }
     const differenceSummary = this.summarize(differences);
     // CAS-REC-006/007：扫描完整但存在候选差异 → 部分成功，差异进入定向读回处置。
     if (status === 'COMPLETE_SUCCESS' && differences.length > 0) {
@@ -259,6 +265,11 @@ export class CasdoorReconcileService {
       const page = await this.enumeratePage(objectKind, request);
       attemptCount += 1;
       if (page.status === 'TRUSTED_CURRENT' && page.value !== null) {
+        // 前置守卫：已达分页上限且仍有下一页时不再消费，避免超限页进入比对。
+        if (page.value.nextCursor !== null && pageCount >= MAX_PAGES_PER_KIND) {
+          status = 'UNCERTAIN';
+          break;
+        }
         pageCount += 1;
         evidence.push(page.value.evidence);
         items.push(...(page.value.items as readonly T[]));
@@ -267,10 +278,6 @@ export class CasdoorReconcileService {
           break;
         }
         cursor = next;
-        if (pageCount > 1000) {
-          status = 'UNCERTAIN';
-          break;
-        }
       } else {
         status = page.status === 'DEPENDENCY_UNAVAILABLE' ? 'FAILED' : 'UNCERTAIN';
         break;

@@ -26,7 +26,12 @@ import { SystemClock } from './infrastructure/system-clock';
 import { CasdoorReadService } from './application/casdoor-read.service';
 import { CasdoorWriteService } from './application/casdoor-write.service';
 import { CasdoorReconcileService } from './application/casdoor-reconcile.service';
-import { CasdoorEventService } from './application/casdoor-event.service';
+import {
+  CasdoorEventService,
+  CASDOOR_WEBHOOK_ENABLED,
+  CASDOOR_WEBHOOK_STATIC_SECRET,
+  CASDOOR_WEBHOOK_MAX_SEEN_ENTRIES,
+} from './application/casdoor-event.service';
 
 @Module({
   providers: [
@@ -40,6 +45,10 @@ import { CasdoorEventService } from './application/casdoor-event.service';
       useExisting: CASDOOR_READ_PORT,
     },
     { provide: CASDOOR_MAPPING_STORE, useClass: InMemoryMappingStore },
+    // Webhook 默认关闭（CAS-EVT-001）；启用前需外部配置提供静态秘密与限流。
+    { provide: CASDOOR_WEBHOOK_ENABLED, useValue: false },
+    { provide: CASDOOR_WEBHOOK_STATIC_SECRET, useValue: null },
+    { provide: CASDOOR_WEBHOOK_MAX_SEEN_ENTRIES, useValue: 10_000 },
     FreshnessRegistry,
     CasdoorReadService,
     CasdoorWriteService,

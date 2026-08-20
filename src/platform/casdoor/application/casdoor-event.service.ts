@@ -4,7 +4,7 @@
  * 默认关闭；启用时仅作为非权威刷新提示，不直接改变业务状态/关系/权限。
  */
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { timingSafeEqual } from 'node:crypto';
 
 import {
@@ -19,6 +19,10 @@ export interface WebhookHandleResult {
   readonly envelope: WebhookEnvelope | null;
 }
 
+export const CASDOOR_WEBHOOK_ENABLED = Symbol('CASDOOR_WEBHOOK_ENABLED');
+export const CASDOOR_WEBHOOK_STATIC_SECRET = Symbol('CASDOOR_WEBHOOK_STATIC_SECRET');
+export const CASDOOR_WEBHOOK_MAX_SEEN_ENTRIES = Symbol('CASDOOR_WEBHOOK_MAX_SEEN_ENTRIES');
+
 const DEFAULT_MAX_SEEN_ENTRIES = 10_000;
 
 @Injectable()
@@ -30,11 +34,19 @@ export class CasdoorEventService {
   private readonly staticSecret: string | null;
 
   constructor(
-    options: { enabled?: boolean; staticSecret?: string | null; maxSeenEntries?: number } = {},
+    @Optional()
+    @Inject(CASDOOR_WEBHOOK_ENABLED)
+    enabled?: boolean,
+    @Optional()
+    @Inject(CASDOOR_WEBHOOK_STATIC_SECRET)
+    staticSecret?: string | null,
+    @Optional()
+    @Inject(CASDOOR_WEBHOOK_MAX_SEEN_ENTRIES)
+    maxSeenEntries?: number,
   ) {
-    this.enabled = options.enabled ?? WEBHOOK_DEFAULT_ENABLED;
-    this.staticSecret = options.staticSecret ?? null;
-    this.maxSeenEntries = options.maxSeenEntries ?? DEFAULT_MAX_SEEN_ENTRIES;
+    this.enabled = enabled ?? WEBHOOK_DEFAULT_ENABLED;
+    this.staticSecret = staticSecret ?? null;
+    this.maxSeenEntries = maxSeenEntries ?? DEFAULT_MAX_SEEN_ENTRIES;
   }
 
   /** 有界去重：容量超限时淘汰最早记录，防止长期运行内存无界增长。 */

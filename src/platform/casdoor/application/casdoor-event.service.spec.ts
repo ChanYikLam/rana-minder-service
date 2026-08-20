@@ -8,11 +8,11 @@ const receivedAt = '2026-08-20T00:00:00.000Z';
 function makeService(
   overrides: { enabled?: boolean; staticSecret?: string | null; maxSeenEntries?: number } = {},
 ) {
-  return new CasdoorEventService({
-    enabled: true,
-    staticSecret: 'secret',
-    ...overrides,
-  });
+  return new CasdoorEventService(
+    overrides.enabled ?? true,
+    overrides.staticSecret ?? 'secret',
+    overrides.maxSeenEntries,
+  );
 }
 
 function handle(service: CasdoorEventService, digest: string, localEventId: string) {

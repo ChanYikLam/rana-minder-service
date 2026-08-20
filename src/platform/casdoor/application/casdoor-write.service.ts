@@ -327,19 +327,36 @@ export class CasdoorWriteService {
         // 与已确认的 ADD step 一并逆序回滚，确保不残留任何新增的部分权限。
         const toRollback = [...executedAdds];
         if (step.action === 'ADD') toRollback.push(step);
+        let compensationConfirmed = true;
         if (toRollback.length > 0) {
-          // 逆序移除本命令已新增关系；移除动作本身不再做读回收口，按补偿/异常进入人工核验。
+          // 逆序移除本命令已新增关系，并对每个补偿移除做读回确认；
+          // 任一移除未确认时不得声称已完全回滚，保留人工核验。
           for (const added of [...toRollback].reverse()) {
             const removeIds = added.expectedMemberIds.filter(
               (id) => !added.originalMemberIds.includes(id),
             );
-            if (removeIds.length > 0) {
-              await this.write.removeGroupMembers({
-                ref: added.groupRef,
-                userIds: removeIds,
-                requestId: `${plan.commandId}:comp:${added.stepId}`,
-                trackingId: input.idempotencyKey,
-              });
+            if (removeIds.length === 0) continue;
+            const removeResult = await this.write.removeGroupMembers({
+              ref: added.groupRef,
+              userIds: removeIds,
+              requestId: `${plan.commandId}:comp:${added.stepId}`,
+              trackingId: input.idempotencyKey,
+            });
+            if (removeResult.status !== 'TRUSTED_CURRENT') {
+              compensationConfirmed = false;
+              continue;
+            }
+            const verify = await this.write.readbackGroupMembers({
+              ref: added.groupRef,
+              requestId: `${plan.commandId}:comp-verify:${added.stepId}`,
+              trackingId: input.idempotencyKey,
+            });
+            const verifiedMembers = verify.status === 'TRUSTED_CURRENT' ? verify.value : null;
+            if (
+              verifiedMembers === null ||
+              removeIds.some((id) => verifiedMembers.includes(id))
+            ) {
+              compensationConfirmed = false;
             }
           }
         }
@@ -350,7 +367,9 @@ export class CasdoorWriteService {
           plan.commandId,
           attempts,
           evidence,
-          '复合 Group 写入未全部确认，已回滚本命令新增/可能部分写入的关系，不授予部分新权限',
+          compensationConfirmed
+            ? '复合 Group 写入未全部确认，已回滚本命令新增/可能部分写入的关系并读回确认，不授予部分新权限'
+            : '复合 Group 写入未全部确认，且补偿移除未完全确认，可能残留新增关系，需人工核验',
           result.retryable,
           now,
         );

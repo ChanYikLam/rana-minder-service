@@ -157,5 +157,7 @@ describe('CasdoorReconcileService', () => {
       limit: 10,
     });
     assert.equal(run.status, 'UNCERTAIN');
+    // 扫描不完整时跳过差异比对，不产出可能误导的差异摘要（CAS-REC-006）
+    assert.deepEqual(run.differenceSummary, {});
   });
 });
