@@ -68,12 +68,14 @@
         - name: 2-类型检查
           if: "[ -f package.json ]"
           script: npx tsc --noEmit -p tsconfig.json
-        # 阶段 3：Lint 与格式检查
-        - name: 3-Lint与格式
+        # 阶段 3：Lint（独立阶段，便于 CI 日志定位 lint 问题）
+        - name: 3-Lint
           if: "[ -f package.json ]"
-          script: |
-            npm run lint
-            npm run format:check
+          script: npm run lint
+        # 阶段 3b：格式检查（独立阶段，prettier 失败信息不再被 eslint 输出淹没）
+        - name: 3-格式
+          if: "[ -f package.json ]"
+          script: npm run format:check
         # 阶段 4：单元测试 L1（领域规则，覆盖率新增代码须有对应用例）
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
@@ -167,11 +169,12 @@
         - name: 2-类型检查
           if: "[ -f package.json ]"
           script: npx tsc --noEmit -p tsconfig.json
-        - name: 3-Lint与格式
+        - name: 3-Lint
           if: "[ -f package.json ]"
-          script: |
-            npm run lint
-            npm run format:check
+          script: npm run lint
+        - name: 3-格式
+          if: "[ -f package.json ]"
+          script: npm run format:check
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
@@ -220,7 +223,7 @@
             bash scripts/ci/check-license-registry.sh
 
 # ------------------------------------------------------------
-# 发布 Tag（v*）：全量阶段 + 发布门证据（CI-002 规则 3、CI-004）
+# 发布 Tag（v*）：tag_push 为仓库级事件置于兜底分支，经 v* 守卫仅对版本标签生效
 # ------------------------------------------------------------
 "$":
   tag_push:
@@ -251,11 +254,12 @@
         - name: 2-类型检查
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npx tsc --noEmit -p tsconfig.json
-        - name: 3-Lint与格式
+        - name: 3-Lint
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
-          script: |
-            npm run lint
-            npm run format:check
+          script: npm run lint
+        - name: 3-格式
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run format:check
         - name: 4-单元测试L1
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run test:unit
