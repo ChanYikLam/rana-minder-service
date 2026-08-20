@@ -117,6 +117,7 @@ function createUseCase(overrides?: {
     overrides?.taskPort ?? {
       async scheduleProfileSync() {},
       async scheduleProfileReadback() {},
+      async scheduleNameCorrectionWrite() {},
     },
     overrides?.audit ?? { async record() {} },
     new DefaultProfileWriteGateStateMachine(),
@@ -259,6 +260,7 @@ describe('EmailVerificationUseCase R005 验证链接成功', () => {
           scheduled += 1;
         },
         async scheduleProfileReadback() {},
+        async scheduleNameCorrectionWrite() {},
       },
     });
 
@@ -311,6 +313,36 @@ describe('EmailVerificationUseCase R005 验证链接成功', () => {
     );
     assert.equal(repository.saved.length, 0);
     assert.equal(verificationRepository.saved.length, 0); // 验证请求未被改写
+  });
+
+  it('REV：待验证邮箱已变化（旧链接目标 ≠ 当前 pending）→ 拒绝，不回改 verifiedEmail', async () => {
+    const repository = inMemoryProfileRepository();
+    repository.seed(pendingEmailProfile()); // pendingEmail = new@example.com
+    const verificationRepository = inMemoryVerificationRepository();
+    // 旧链接：签发给另一个目标邮箱（例如更早一次请求的 another@example.com）
+    const { verification, token } = EmailVerification.issue(
+      'v-1',
+      'user-1',
+      'another@example.com',
+      1,
+      new Date(now.getTime() - 60_000),
+    );
+    verificationRepository.seed(verification.toSnapshot());
+    const useCase = createUseCase({ repository, verificationRepository });
+
+    await assert.rejects(
+      () =>
+        useCase.consumeVerificationToken({
+          verificationId: 'v-1',
+          token,
+          now,
+          actor: 'user-1',
+          traceId: null,
+        }),
+      (err: any) => err.code === IdentityErrorCode.PRECONDITION_FAILED,
+    );
+    assert.equal(repository.saved.length, 0); // 资料未变，verifiedEmail 不回改
+    assert.equal(verificationRepository.saved.length, 0); // 验证请求未被消费改写
   });
 
   it('REV：链接过期（超过 24 小时）→ 拒绝，保持待验证', async () => {

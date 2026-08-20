@@ -93,7 +93,7 @@ export class CasdoorUserAdapter implements CasdoorUserPort {
 
   async writeProfileField(
     subjectId: string,
-    field: EditableProfileField,
+    field: ProfileField,
     value: string,
   ): Promise<ExternalResult<CasdoorProfileFieldObservation>> {
     const written = await this.casdoor.updateUser(subjectId, { [field]: value });

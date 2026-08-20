@@ -72,4 +72,15 @@ describe('parseRequestEnvelope（API-GEN-003）', () => {
         error instanceof IdentityCommandError && error.code === IdentityErrorCode.VALIDATION_FAILED,
     );
   });
+
+  it('API-GEN-003：expectedVersion 非正整数（0/负数）→ 422 IFC-ERR-005', () => {
+    for (const bad of [0, -1, -100]) {
+      assert.throws(
+        () => parseRequestEnvelope({ expectedVersion: bad }),
+        (error: unknown) =>
+          error instanceof IdentityCommandError && error.code === IdentityErrorCode.VALIDATION_FAILED,
+        `expectedVersion=${bad} 应拒绝`,
+      );
+    }
+  });
 });

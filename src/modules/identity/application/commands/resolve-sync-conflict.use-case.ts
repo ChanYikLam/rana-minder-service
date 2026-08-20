@@ -101,7 +101,7 @@ export class DefaultResolveSyncConflictUseCase implements ResolveSyncConflictUse
     profileSnapshot: ProfileSnapshot,
     input: ResolveSyncConflictInput,
   ): Promise<ConflictResolution> {
-    if (!intent.keepLocal(this.machine, true)) {
+    if (!intent.keepLocal(this.machine, true, input.now)) {
       throw identityErrors.preconditionFailed('冲突选择无法落位，请刷新后重试');
     }
     await this.syncIntentRepository.save(intent.toSnapshot(), intent.events);

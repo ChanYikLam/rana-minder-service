@@ -102,7 +102,7 @@ export class DefaultApplyProfileSyncStepUseCase implements ApplyProfileSyncStepU
     input: ApplyProfileSyncStepInput,
   ): Promise<SyncStepOutcome> {
     if (intent.state === 'PENDING_SYNC') {
-      if (!intent.startWrite(this.machine, true)) {
+      if (!intent.startWrite(this.machine, true, input.now)) {
         throw identityErrors.preconditionFailed('同步意图状态不允许启动写入');
       }
       await this.syncIntentRepository.save(intent.toSnapshot(), intent.events);
@@ -219,7 +219,7 @@ export class DefaultApplyProfileSyncStepUseCase implements ApplyProfileSyncStepU
     const failedSince = snapshot.failedSince ?? input.now;
 
     if (this.policy.isBeyond24Hours(failedSince, input.now)) {
-      if (!intent.freezeAfter24Hours(this.machine, true)) {
+      if (!intent.freezeAfter24Hours(this.machine, true, input.now)) {
         throw identityErrors.preconditionFailed('同步意图状态不允许冻结盲写重试');
       }
       await this.syncIntentRepository.save(intent.toSnapshot(), intent.events);

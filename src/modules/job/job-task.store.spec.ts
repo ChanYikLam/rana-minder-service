@@ -46,6 +46,7 @@ function task(overrides?: Partial<TaskRow>): TaskRow {
 class FakeJobTaskDb implements DbAdapter {
   rows = new Map<string, TaskRow>();
   readonly events: string[] = [];
+  readonly queries: { sql: string; params: readonly unknown[] }[] = [];
   private txCounter = 0;
 
   seed(...rows: TaskRow[]): void {
@@ -78,6 +79,7 @@ class FakeJobTaskDb implements DbAdapter {
 
   async query<T>(tx: TransactionContext, sql: string, params: readonly unknown[]): Promise<T[]> {
     this.events.push(`query:${tx.id}`);
+    this.queries.push({ sql, params });
     if (sql.includes('RETURNING t.id, t.type')) {
       return this.doClaim(sql, params) as unknown as T[];
     }
@@ -144,6 +146,33 @@ class FakeJobTaskDb implements DbAdapter {
 }
 
 describe('PostgresJobTaskStore（ADR-004 租约领取/结算）', () => {
+  it('SQL 占位符全部有对应参数（真实 PostgreSQL 占位符序须与参数数组一致）', async () => {
+    const db = new FakeJobTaskDb();
+    db.seed(task({ id: 't-1' }));
+    const store = new PostgresJobTaskStore(db);
+
+    await store.claim(10, now, minute);
+    await store.complete('t-1', now);
+    db.seed(task({ id: 't-2' }));
+    await store.claim(10, now, minute);
+    await store.retry('t-2', new Date(now.getTime() + 5_000), now);
+    db.seed(task({ id: 't-3' }));
+    await store.claim(10, now, minute);
+    await store.fail('t-3', 'boom', now);
+
+    assert.ok(db.queries.length > 0);
+    for (const { sql, params } of db.queries) {
+      const maxIndex = [...sql.matchAll(/\$(\d+)/g)].reduce(
+        (max, match) => Math.max(max, Number(match[1])),
+        0,
+      );
+      assert.ok(
+        maxIndex <= params.length,
+        `SQL 引用 $${maxIndex} 但参数仅 ${params.length} 个：${sql}`,
+      );
+    }
+  });
+
   it('claim：只领取到期 pending 任务，尝试次数 +1，返回载荷', async () => {
     const db = new FakeJobTaskDb();
     db.seed(

@@ -129,6 +129,7 @@ function createUseCase() {
       fakes.saved.tasks.push({ subjectId, field, targetVersion, intentId });
     },
     async scheduleProfileReadback() {},
+    async scheduleNameCorrectionWrite() {},
   };
   const audit: IdentityAuditPort = {
     async record(fact) {

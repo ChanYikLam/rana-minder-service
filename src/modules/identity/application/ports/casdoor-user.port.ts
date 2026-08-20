@@ -42,10 +42,11 @@ export interface CasdoorUserPort {
     subjectId: string,
     field: ProfileField,
   ): Promise<ExternalResult<CasdoorProfileFieldObservation>>;
-  /** 白名单字段写回（CAS-WR-*：先本地原子事实，写后定向读回收口） */
+  /** 白名单字段写回（CAS-WR-*：先本地原子事实，写后定向读回收口）；
+   * 姓名更正经超管批准后以本操作写回只读权威字段 name（IDN-016） */
   writeProfileField(
     subjectId: string,
-    field: EditableProfileField,
+    field: ProfileField,
     value: string,
   ): Promise<ExternalResult<CasdoorProfileFieldObservation>>;
 }

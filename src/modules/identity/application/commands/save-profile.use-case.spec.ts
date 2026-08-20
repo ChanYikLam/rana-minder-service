@@ -86,6 +86,7 @@ function noopTaskPort(): ProfileSyncTaskPort {
   return {
     async scheduleProfileSync() {},
     async scheduleProfileReadback() {},
+    async scheduleNameCorrectionWrite() {},
   };
 }
 
@@ -144,6 +145,7 @@ describe('SaveProfileUseCase（IFC-SM-002 R001）', () => {
         scheduled += 1;
       },
       async scheduleProfileReadback() {},
+      async scheduleNameCorrectionWrite() {},
     };
     let audited = 0;
     const audit: IdentityAuditPort = {

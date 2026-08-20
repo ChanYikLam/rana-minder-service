@@ -12,7 +12,7 @@
  *   profileComplete, syncStatus }；
  * - PUT /api/auth/profile（信封 expectedVersion + input.fields）→ 同 GET；
  *   版本冲突 → 409 IFC-ERR-008 且 body 携带 currentData 供刷新；
- * - POST send-email-code → { sent: true, expiresIn: 300 }；
+ * - POST send-email-code → { sent: true, expiresIn: 86400 }（24 小时 TTL）；
  * - POST verify-email（input.code）→ { emailVerified: true }；验证码错误/过期 →
  *   422 IFC-ERR-007 + fieldErrors；
  * - POST sync-conflict（input.field + input.chosenValue）→ 最新资料快照；
@@ -22,6 +22,7 @@
 import { EditableProfileField } from '../../domain/models/profile-field';
 import type { SaveProfileUseCase } from '../../application/commands/save-profile.use-case';
 import type { EmailVerificationUseCase } from '../../application/commands/email-verification.use-case';
+import { EMAIL_VERIFICATION_TTL_MS } from '../../domain/models/email-verification';
 import type { ResolveSyncConflictUseCase } from '../../application/commands/resolve-sync-conflict.use-case';
 import type { GetMyProfileQuery } from '../../application/queries/get-my-profile.query';
 import { IdentityCommandError, IdentityErrorCode } from '../../application/errors';
@@ -134,7 +135,7 @@ export class ProfilesController {
         actor: actor.subjectId,
         traceId: actor.traceId,
       });
-      return { ok: true, value: { sent: true, expiresIn: 300 } };
+      return { ok: true, value: { sent: true, expiresIn: Math.floor(EMAIL_VERIFICATION_TTL_MS / 1000) } };
     } catch (error) {
       return toApiError(error);
     }

@@ -91,7 +91,7 @@ export class PostgresJobTaskStore implements JobTaskStore {
       const rows = await session.query<JobTaskRow>(
         `UPDATE job_tasks t
             SET status = 'running',
-                leased_until = $3,
+                leased_until = $2,
                 claimed_at = NOW(),
                 attempts = t.attempts + 1,
                 last_attempt_at = NOW()
@@ -99,7 +99,7 @@ export class PostgresJobTaskStore implements JobTaskStore {
                   SELECT id
                     FROM job_tasks
                    WHERE (status = 'pending' AND (next_run_at IS NULL OR next_run_at <= NOW()))
-                      OR (status = 'running' AND leased_until < $4)
+                      OR (status = 'running' AND leased_until < $3)
                    ORDER BY created_at, id
                    LIMIT $1
                 ) c

@@ -18,7 +18,10 @@ import { IdentityModule } from '../identity/identity.module';
 import { PostgresJobTaskStore, type JobTaskStore } from './job-task.store';
 import { JobTaskRunner, type JobTaskHandlerRegistry } from './job-task-runner';
 import { ProfileSyncTaskHandler } from './profile-sync-task.handler';
+import { ProfileNameWriteTaskHandler } from './profile-name-write-task.handler';
 import { JOB_TASK_STORE, JOB_TASK_HANDLERS } from './tokens';
+import { APPLY_PROFILE_SYNC_STEP_USE_CASE, APPLY_NAME_CORRECTION_WRITE_USE_CASE } from '../identity/tokens';
+import { IdentityUnitOfWork } from '../identity/infrastructure/unit-of-work';
 
 @Module({
   imports: [AdaptersModule, IdentityModule],
@@ -28,14 +31,24 @@ import { JOB_TASK_STORE, JOB_TASK_HANDLERS } from './tokens';
       useFactory: (db) => new PostgresJobTaskStore(db),
       inject: [DB_ADAPTER],
     },
-    ProfileSyncTaskHandler,
+    {
+      provide: ProfileSyncTaskHandler,
+      useFactory: (applyStep, uow) => new ProfileSyncTaskHandler(applyStep, uow),
+      inject: [APPLY_PROFILE_SYNC_STEP_USE_CASE, IdentityUnitOfWork],
+    },
     {
       provide: JOB_TASK_HANDLERS,
-      useFactory: (syncHandler) => ({
+      useFactory: (syncHandler, nameWriteHandler) => ({
         profile_sync: syncHandler,
         profile_readback: syncHandler,
+        profile_name_write: nameWriteHandler,
       }),
-      inject: [ProfileSyncTaskHandler],
+      inject: [ProfileSyncTaskHandler, ProfileNameWriteTaskHandler],
+    },
+    {
+      provide: ProfileNameWriteTaskHandler,
+      useFactory: (applyNameWrite, uow) => new ProfileNameWriteTaskHandler(applyNameWrite, uow),
+      inject: [APPLY_NAME_CORRECTION_WRITE_USE_CASE, IdentityUnitOfWork],
     },
     {
       provide: JobTaskRunner,

@@ -38,6 +38,13 @@ export function parseRequestEnvelope(body: unknown): ApiRequestEnvelope<Record<s
       { fieldErrors: { expectedVersion: ['必须是整数'] } },
     );
   }
+  if (record.expectedVersion !== undefined && Number(record.expectedVersion) <= 0) {
+    throw new IdentityCommandError(
+      IdentityErrorCode.VALIDATION_FAILED,
+      'expectedVersion 必须是正整数',
+      { fieldErrors: { expectedVersion: ['必须是正整数'] } },
+    );
+  }
   if (record.input !== undefined && (record.input === null || typeof record.input !== 'object' || Array.isArray(record.input))) {
     throw new IdentityCommandError(
       IdentityErrorCode.VALIDATION_FAILED,

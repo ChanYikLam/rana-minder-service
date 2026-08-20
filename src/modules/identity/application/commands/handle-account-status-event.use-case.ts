@@ -18,6 +18,7 @@ import { AccountAccessState } from '../../domain/state-machines/account-access.s
 import type { AccountAccessStateMachine } from '../../domain/state-machines/account-access.state-machine';
 import type { AccountAccessRepository } from '../ports/account-access-repository.port';
 import type { IdentityAuditPort } from '../ports/identity-audit.port';
+import type { SessionRevocationPort } from '../ports/session-revocation.port';
 import { identityErrors } from '../errors';
 
 export type AccountStatusEvent =
@@ -52,6 +53,7 @@ export class DefaultHandleAccountStatusEventUseCase implements HandleAccountStat
     private readonly accountRepository: AccountAccessRepository,
     private readonly machine: AccountAccessStateMachine,
     private readonly audit: IdentityAuditPort,
+    private readonly sessionRevocation: SessionRevocationPort,
   ) {}
 
   async execute(input: HandleAccountStatusEventInput): Promise<HandleAccountStatusEventResult> {
@@ -80,6 +82,11 @@ export class DefaultHandleAccountStatusEventUseCase implements HandleAccountStat
     }
 
     await this.accountRepository.save(account.toSnapshot(), account.events);
+    const sessionRevoke = account.lastTransitionResult?.sessionRevoke ?? false;
+    if (sessionRevoke) {
+      // IDN-008：禁用/删除可信确认 → 立即终止该主体全部会话并撤销当前权限（同事务）
+      await this.sessionRevocation.invalidateSessions(input.subjectId, nextSnapshot.sessionRevokeVersion);
+    }
     await this.audit.record({
       type: 'ACCOUNT_ACCESS_CHANGED',
       subjectId: input.subjectId,
@@ -91,7 +98,7 @@ export class DefaultHandleAccountStatusEventUseCase implements HandleAccountStat
         source: input.source,
         toState: account.toSnapshot().state,
         stateVersion: account.toSnapshot().stateVersion,
-        sessionRevoke: account.lastTransitionResult?.sessionRevoke ?? false,
+        sessionRevoke,
         reason: input.reason,
       },
     });

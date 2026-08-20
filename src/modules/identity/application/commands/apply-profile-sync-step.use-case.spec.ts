@@ -103,6 +103,7 @@ function createUseCase(overrides?: {
     overrides?.taskPort ?? {
       async scheduleProfileSync() {},
       async scheduleProfileReadback() {},
+      async scheduleNameCorrectionWrite() {},
     },
     overrides?.audit ?? { async record() {} },
     new DefaultProfileSyncStateMachine(),
@@ -241,6 +242,7 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
         rescheduled += 1;
       },
       async scheduleProfileReadback() {},
+      async scheduleNameCorrectionWrite() {},
     };
     const useCase = createUseCase({ intentRepository, casdoor, taskPort });
 
@@ -285,6 +287,7 @@ describe('ApplyProfileSyncStepUseCase（IFC-SM-003）', () => {
       async scheduleProfileReadback() {
         readbackScheduled += 1;
       },
+      async scheduleNameCorrectionWrite() {},
     };
     const useCase = createUseCase({ intentRepository, casdoor, taskPort });
 

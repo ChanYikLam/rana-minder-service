@@ -258,7 +258,7 @@ describe('ProfilesController.saveMyProfile（PUT /api/auth/profile）', () => {
 });
 
 describe('ProfilesController.sendEmailCode（POST send-email-code）', () => {
-  it('NOM：返回 { sent:true, expiresIn:300 }', async () => {
+  it('NOM：返回 { sent:true, expiresIn:86400 }（与 24 小时 TTL 一致）', async () => {
     fakeEmail.sendError = null;
     const { controller } = createController();
     const result = await controller.sendEmailCode(actor(), { input: { email: 'new@example.com' } });
@@ -266,7 +266,7 @@ describe('ProfilesController.sendEmailCode（POST send-email-code）', () => {
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.value.sent, true);
-    assert.equal(result.value.expiresIn, 300);
+    assert.equal(result.value.expiresIn, 86400);
     assert.equal(fakeEmail.sendInput?.subjectId, 'user-1');
     assert.equal(fakeEmail.sendInput?.email, 'new@example.com');
   });

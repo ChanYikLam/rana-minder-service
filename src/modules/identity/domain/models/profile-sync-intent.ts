@@ -105,21 +105,29 @@ export class ProfileSyncIntent {
   }
 
   /** R002 启动写入：记录尝试；不得覆盖更晚本地版本 */
-  startWrite(machine: ProfileSyncStateMachine, isCurrentVersion: boolean): boolean {
-    return this.advance(machine, {
-      event: ProfileSyncEvent.START_WRITE,
-      currentState: this.snapshot.state,
-      isCurrentVersion,
-    });
+  startWrite(machine: ProfileSyncStateMachine, isCurrentVersion: boolean, now: Date): boolean {
+    return this.advance(
+      machine,
+      {
+        event: ProfileSyncEvent.START_WRITE,
+        currentState: this.snapshot.state,
+        isCurrentVersion,
+      },
+      now,
+    );
   }
 
   /** R003 写入并回读确认目标值 */
   confirmTarget(machine: ProfileSyncStateMachine, isCurrentVersion: boolean, now: Date): boolean {
-    const ok = this.advance(machine, {
-      event: ProfileSyncEvent.WRITE_CONFIRMED,
-      currentState: this.snapshot.state,
-      isCurrentVersion,
-    });
+    const ok = this.advance(
+      machine,
+      {
+        event: ProfileSyncEvent.WRITE_CONFIRMED,
+        currentState: this.snapshot.state,
+        isCurrentVersion,
+      },
+      now,
+    );
     if (ok) {
       this.snapshot = { ...this.snapshot, resolvedAt: now, failedSince: null };
     }
@@ -133,11 +141,15 @@ export class ProfileSyncIntent {
     isCurrentVersion: boolean,
     now: Date,
   ): boolean {
-    const ok = this.advance(machine, {
-      event: ProfileSyncEvent.TRANSIENT_FAILURE,
-      currentState: this.snapshot.state,
-      isCurrentVersion,
-    });
+    const ok = this.advance(
+      machine,
+      {
+        event: ProfileSyncEvent.TRANSIENT_FAILURE,
+        currentState: this.snapshot.state,
+        isCurrentVersion,
+      },
+      now,
+    );
     if (ok) {
       const attempts = this.snapshot.attempts + 1;
       this.snapshot = {
@@ -151,12 +163,20 @@ export class ProfileSyncIntent {
   }
 
   /** R005 连续 24 小时仍失败：冻结盲目写重试并进入强制读回 */
-  freezeAfter24Hours(machine: ProfileSyncStateMachine, isCurrentVersion: boolean): boolean {
-    return this.advance(machine, {
-      event: ProfileSyncEvent.TWENTY_FOUR_HOUR_FAILURE,
-      currentState: this.snapshot.state,
-      isCurrentVersion,
-    });
+  freezeAfter24Hours(
+    machine: ProfileSyncStateMachine,
+    isCurrentVersion: boolean,
+    now: Date,
+  ): boolean {
+    return this.advance(
+      machine,
+      {
+        event: ProfileSyncEvent.TWENTY_FOUR_HOUR_FAILURE,
+        currentState: this.snapshot.state,
+        isCurrentVersion,
+      },
+      now,
+    );
   }
 
   /** R006/R007/R008/R011 读回收口（决策来自 ProfileSyncPolicy.decideReadback） */
@@ -177,13 +197,17 @@ export class ProfileSyncIntent {
     if (!event) {
       return false; // READBACK_UNTRUSTWORTHY：保持待读回核验，不推进
     }
-    const ok = this.advance(machine, {
-      event,
-      currentState: this.snapshot.state,
-      isCurrentVersion,
-      editableField: decision === 'CONFLICT',
-      conflictVersionMatches: true,
-    });
+    const ok = this.advance(
+      machine,
+      {
+        event,
+        currentState: this.snapshot.state,
+        isCurrentVersion,
+        editableField: decision === 'CONFLICT',
+        conflictVersionMatches: true,
+      },
+      now,
+    );
     if (ok) {
       this.snapshot = {
         ...this.snapshot,
@@ -197,23 +221,31 @@ export class ProfileSyncIntent {
   }
 
   /** R009 本人选择保留本地目标值：创建新同步意图由应用层完成，此处关闭旧冲突窗口 */
-  keepLocal(machine: ProfileSyncStateMachine, snapshotStillMatches: boolean): boolean {
-    return this.advance(machine, {
-      event: ProfileSyncEvent.USER_CHOICE_KEEP_LOCAL,
-      currentState: this.snapshot.state,
-      conflictVersionMatches: true,
-      readbackStillMatchesSnapshot: snapshotStillMatches,
-    });
+  keepLocal(machine: ProfileSyncStateMachine, snapshotStillMatches: boolean, now: Date): boolean {
+    return this.advance(
+      machine,
+      {
+        event: ProfileSyncEvent.USER_CHOICE_KEEP_LOCAL,
+        currentState: this.snapshot.state,
+        conflictVersionMatches: true,
+        readbackStillMatchesSnapshot: snapshotStillMatches,
+      },
+      now,
+    );
   }
 
   /** R010 本人选择接受 Casdoor 当前值 */
   acceptCasdoor(machine: ProfileSyncStateMachine, snapshotStillMatches: boolean, now: Date): boolean {
-    const ok = this.advance(machine, {
-      event: ProfileSyncEvent.USER_CHOICE_ACCEPT_CASDOOR,
-      currentState: this.snapshot.state,
-      conflictVersionMatches: true,
-      readbackStillMatchesSnapshot: snapshotStillMatches,
-    });
+    const ok = this.advance(
+      machine,
+      {
+        event: ProfileSyncEvent.USER_CHOICE_ACCEPT_CASDOOR,
+        currentState: this.snapshot.state,
+        conflictVersionMatches: true,
+        readbackStillMatchesSnapshot: snapshotStillMatches,
+      },
+      now,
+    );
     if (ok) {
       this.snapshot = { ...this.snapshot, resolvedAt: now, failedSince: null };
     }
@@ -224,17 +256,23 @@ export class ProfileSyncIntent {
   manualRetry(
     machine: ProfileSyncStateMachine,
     target: Extract<ProfileSyncState, 'PENDING_SYNC' | 'MANUAL_INTERVENTION'>,
+    now: Date,
   ): boolean {
-    return this.advance(machine, {
-      event: ProfileSyncEvent.MANUAL_RETRY,
-      currentState: this.snapshot.state,
-      retryTarget: target,
-    });
+    return this.advance(
+      machine,
+      {
+        event: ProfileSyncEvent.MANUAL_RETRY,
+        currentState: this.snapshot.state,
+        retryTarget: target,
+      },
+      now,
+    );
   }
 
   private advance(
     machine: ProfileSyncStateMachine,
     input: ProfileSyncTransitionInput,
+    now: Date,
   ): boolean {
     const result = machine.transition(input);
     if (!result.allowed) {
@@ -249,7 +287,7 @@ export class ProfileSyncIntent {
           : result.nextState === ProfileSyncState.ROLLED_BACK
             ? 'SYNC_ROLLED_BACK'
             : 'SYNC_STATE_TRANSITIONED',
-      occurredAt: new Date(),
+      occurredAt: now,
       payload: {
         subjectId: this.snapshot.subjectId,
         field: this.snapshot.field,

@@ -11,10 +11,20 @@ import { HttpException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import { IdentityModule } from './identity.module';
-import { AUTH_SESSION_PROVIDER, APPLY_PROFILE_SYNC_STEP_USE_CASE, GET_MY_PROFILE_QUERY, PROFILES_CONTROLLER } from './tokens';
+import {
+  AUTH_SESSION_PROVIDER,
+  APPLY_PROFILE_SYNC_STEP_USE_CASE,
+  GET_MY_PROFILE_QUERY,
+  PROFILES_CONTROLLER,
+  SUBMIT_NAME_CORRECTION_USE_CASE,
+  REVIEW_NAME_CORRECTION_USE_CASE,
+  APPLY_NAME_CORRECTION_WRITE_USE_CASE,
+  NAME_CORRECTION_CONTROLLER,
+} from './tokens';
 import { AuthGuard } from './interfaces/nest/auth.guard';
 import { ProfilesNestController } from './interfaces/nest/profiles.nest.controller';
 import { AccountAccessNestController } from './interfaces/nest/account-access.nest.controller';
+import { NameCorrectionNestController } from './interfaces/nest/name-correction.nest.controller';
 import { IdentityUnitOfWork } from './infrastructure/unit-of-work';
 import type { AuthSessionProvider } from './interfaces/nest/auth-session';
 import { DbUnavailableError } from '../../adapters/db/not-wired-db.adapter';
@@ -28,6 +38,11 @@ describe('IdentityModule 装配（DI 图 + 失败关闭）', () => {
     assert.ok(module.get(AuthGuard));
     assert.ok(module.get(ProfilesNestController));
     assert.ok(module.get(AccountAccessNestController));
+    assert.ok(module.get(NameCorrectionNestController));
+    assert.ok(module.get(SUBMIT_NAME_CORRECTION_USE_CASE));
+    assert.ok(module.get(REVIEW_NAME_CORRECTION_USE_CASE));
+    assert.ok(module.get(APPLY_NAME_CORRECTION_WRITE_USE_CASE));
+    assert.ok(module.get(NAME_CORRECTION_CONTROLLER));
   });
 
   it('会话认证链路接入前：受保护端点统一 401（RejectAll 失败关闭）', async () => {

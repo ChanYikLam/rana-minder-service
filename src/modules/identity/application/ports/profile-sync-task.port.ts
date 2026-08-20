@@ -22,4 +22,11 @@ export interface ProfileSyncTaskPort {
     targetVersion: number,
     intentId: string,
   ): Promise<void>;
+  /** 登记姓名更正写回任务（IDN-016：批准后 Casdoor 姓名写回，写后定向读回收口） */
+  scheduleNameCorrectionWrite(
+    requestId: string,
+    subjectId: string,
+    newName: string,
+    now: Date,
+  ): Promise<void>;
 }

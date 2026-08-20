@@ -12,6 +12,7 @@ import { AccountAccessState } from '../../domain/state-machines/account-access.s
 import type { AccountAccessSnapshot } from '../../domain/models/account-access';
 import type { AccountAccessRepository } from '../ports/account-access-repository.port';
 import type { IdentityAuditPort } from '../ports/identity-audit.port';
+import type { SessionRevocationPort } from '../ports/session-revocation.port';
 import {
   DefaultHandleAccountStatusEventUseCase,
   type HandleAccountStatusEventInput,
@@ -51,14 +52,25 @@ function inMemoryAccountRepository(): AccountAccessRepository & {
   };
 }
 
+function inMemorySessionRevocation(): SessionRevocationPort & { invalidated: { subjectId: string; version: number }[] } {
+  return {
+    invalidated: [],
+    async invalidateSessions(subjectId, version) {
+      this.invalidated.push({ subjectId, version });
+    },
+  };
+}
+
 function createUseCase(overrides?: {
   repository?: AccountAccessRepository;
   audit?: IdentityAuditPort;
+  sessionRevocation?: SessionRevocationPort;
 }) {
   return new DefaultHandleAccountStatusEventUseCase(
     overrides?.repository ?? inMemoryAccountRepository(),
     new DefaultAccountAccessStateMachine(),
     overrides?.audit ?? { async record() {} },
+    overrides?.sessionRevocation ?? inMemorySessionRevocation(),
   );
 }
 
@@ -87,7 +99,8 @@ describe('HandleAccountStatusEventUseCase（IFC-SM-001）', () => {
         auditSubject = fact.subjectId;
       },
     };
-    const useCase = createUseCase({ repository, audit });
+    const sessionRevocation = inMemorySessionRevocation();
+    const useCase = createUseCase({ repository, audit, sessionRevocation });
 
     const result = await useCase.execute(inputFor());
 
@@ -98,6 +111,10 @@ describe('HandleAccountStatusEventUseCase（IFC-SM-001）', () => {
     assert.equal(repository.saved[0].state, AccountAccessState.DISABLED);
     assert.equal(audited, 1);
     assert.equal(auditSubject, 'user-1');
+    // IDN-008：禁用可信确认 → 同事务立即失效全部会话
+    assert.deepEqual(sessionRevocation.invalidated, [
+      { subjectId: 'user-1', version: 1 },
+    ]);
   });
 
   it('幂等：重复禁用 → 仅返回既有结果（不产生新状态变化）', async () => {
@@ -116,12 +133,14 @@ describe('HandleAccountStatusEventUseCase（IFC-SM-001）', () => {
   it('NOM：有效 → 删除（事件/对账确认）→ 会话撤销', async () => {
     const repository = inMemoryAccountRepository();
     repository.seed(activeSnapshot());
-    const useCase = createUseCase({ repository });
+    const sessionRevocation = inMemorySessionRevocation();
+    const useCase = createUseCase({ repository, sessionRevocation });
 
     const result = await useCase.execute(inputFor({ event: { type: 'DELETED' } }));
 
     assert.equal(result.transition.sessionRevoke, true);
     assert.equal(repository.saved[0].state, AccountAccessState.DELETED);
+    assert.equal(sessionRevocation.invalidated.length, 1);
   });
 
   it('NOM：有效 → 暂不可确认（故障判定）→ 记录降级起点', async () => {

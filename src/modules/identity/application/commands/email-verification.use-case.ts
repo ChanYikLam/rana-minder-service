@@ -142,6 +142,12 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
     }
 
     const verification = EmailVerification.fromSnapshot(verificationSnapshot);
+    // R005 前置：链接只对其签发时的目标邮箱有效（对象绑定在签发时固定）。
+    // 待验证邮箱已变化（新请求已取代旧目标）→ 旧链接拒绝，防止把 verifiedEmail
+    // 回改/改写为与当前待验证不一致的邮箱。
+    if (profileSnapshot.pendingEmail !== verificationSnapshot.email) {
+      throw identityErrors.preconditionFailed('验证链接与当前待验证邮箱不一致，请使用最新链接');
+    }
     const consumed = verification.consume(input.token, input.now);
     if (!consumed.ok) {
       const reason =

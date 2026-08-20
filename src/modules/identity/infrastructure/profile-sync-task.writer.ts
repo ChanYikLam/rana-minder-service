@@ -35,6 +35,27 @@ export class ProfileSyncTaskWriter implements ProfileSyncTaskPort {
     await this.insertTask(subjectId, field, targetVersion, intentId, 'profile_readback');
   }
 
+  async scheduleNameCorrectionWrite(
+    requestId: string,
+    subjectId: string,
+    newName: string,
+    now: Date,
+  ): Promise<void> {
+    await this.db.query(
+      this.uow.active,
+      `INSERT INTO job_tasks (id, type, subject_id, payload, status, attempts, next_run_at, created_at)
+       VALUES ($1, $2, $3, $4::jsonb, 'pending', 0, $5, $5)
+       ON CONFLICT DO NOTHING`,
+      [
+        `name-correction:${subjectId}:${requestId}`,
+        'profile_name_write',
+        subjectId,
+        JSON.stringify({ requestId, subjectId, newName }),
+        now,
+      ],
+    );
+  }
+
   private async insertTask(
     subjectId: string,
     field: EditableProfileField,
