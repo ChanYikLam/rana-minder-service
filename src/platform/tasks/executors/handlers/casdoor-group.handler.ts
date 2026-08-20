@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { TaskHandler, TaskRecord } from '../../contracts';
-import { TaskType } from '../../contracts';
+import type { TaskFailure, TaskHandler, TaskRecord } from '../../contracts';
+import { TaskExecutionError, TaskType } from '../../contracts';
 import { CasdoorWriteService } from '../../../casdoor/application/casdoor-write.service';
+import type { WriteConclusionKind } from '../../../casdoor/contracts/types';
 
 interface CasdoorGroupPayload {
   readonly commandId?: string;
@@ -10,6 +11,20 @@ interface CasdoorGroupPayload {
   readonly originalMemberIds?: readonly string[];
   readonly targetMemberIds?: readonly string[];
   readonly requestedAt?: string;
+}
+
+function failureKindForConclusion(kind: WriteConclusionKind): TaskFailure['kind'] {
+  switch (kind) {
+    case 'THIRD_VALUE':
+    case 'MANUAL_INTERVENTION_REQUIRED':
+      return 'MANUAL_INTERVENTION_REQUIRED';
+    case 'UNCERTAIN':
+    case 'OLD_VALUE_STILL_PRESENT':
+    case 'PARTIAL_SUCCESS':
+      return 'EXTERNAL_UNCERTAIN';
+    default:
+      return 'EXTERNAL_FAILED';
+  }
 }
 
 @Injectable()
@@ -31,10 +46,12 @@ export class CasdoorGroupHandler implements TaskHandler {
       !payload.originalMemberIds ||
       !payload.targetMemberIds
     ) {
-      this.logger.log(
-        `CasdoorGroupHandler 已接入统一适配写服务，等待 organization/invitation/membership 应用命令：taskId=${task.taskId}`,
+      // payload 不完整属上层意图缺陷，重试无法修复：直接人工处置，避免静默标记成功。
+      throw new TaskExecutionError(
+        `CasdoorGroupHandler payload 不完整，需人工核验：taskId=${task.taskId}`,
+        false,
+        'MANUAL_INTERVENTION_REQUIRED',
       );
-      return;
     }
     const conclusion = await this.casdoorWrite.writeGroupMembership({
       commandId: payload.commandId,
@@ -44,6 +61,16 @@ export class CasdoorGroupHandler implements TaskHandler {
       targetMemberIds: payload.targetMemberIds,
       requestedAt: payload.requestedAt ?? new Date().toISOString(),
     });
-    this.logger.log(`CasdoorGroupHandler 写入结论：taskId=${task.taskId}, kind=${conclusion.kind}`);
+    if (conclusion.kind !== 'CONFIRMED') {
+      // 非 CONFIRMED 结论（重试型 OLD_VALUE_STILL_PRESENT/PARTIAL_SUCCESS/UNCERTAIN/
+      // DEPENDENCY_UNAVAILABLE 或人工核验型 THIRD_VALUE/MANUAL_INTERVENTION_REQUIRED）
+      // 必须透传给任务层，按结论 retryable 决定重试或人工介入。
+      throw new TaskExecutionError(
+        `CasdoorGroupHandler 写入未确认：taskId=${task.taskId}, kind=${conclusion.kind}（${conclusion.reason}）`,
+        conclusion.retryable,
+        failureKindForConclusion(conclusion.kind),
+      );
+    }
+    this.logger.log(`CasdoorGroupHandler 写入已确认：taskId=${task.taskId}, kind=${conclusion.kind}`);
   }
 }

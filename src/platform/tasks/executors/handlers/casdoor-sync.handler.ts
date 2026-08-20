@@ -1,15 +1,15 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { TaskHandler, TaskRecord } from '../../contracts';
-import { TaskType } from '../../contracts';
+import { TaskExecutionError, TaskType } from '../../contracts';
 import { CasdoorReadService } from '../../../casdoor/application/casdoor-read.service';
 import {
   FreshnessRegistry,
+  FreshnessLevel,
   OPERATION_PERMISSION_SENSITIVE_READ,
 } from '../../../casdoor/domain/freshness-registry';
 
 interface CasdoorSyncPayload {
   readonly externalUserId?: string;
-  readonly localSubjectId?: string;
   readonly trackingId?: string;
 }
 
@@ -28,20 +28,32 @@ export class CasdoorSyncHandler implements TaskHandler {
   async handle(task: TaskRecord): Promise<void> {
     const payload = (task.payload ?? {}) as CasdoorSyncPayload;
     if (!payload.externalUserId || !payload.trackingId) {
-      this.logger.log(
-        `CasdoorSyncHandler 已接入统一适配读服务，等待 identity 应用命令：taskId=${task.taskId}, intentId=${task.intentId}`,
+      throw new TaskExecutionError(
+        `CasdoorSyncHandler payload 不完整，需人工核验：taskId=${task.taskId}`,
+        false,
+        'MANUAL_INTERVENTION_REQUIRED',
       );
-      return;
     }
-    // 由登记式新鲜度目录决定同步任务的读回新鲜度（CAS-Q-002），不再硬编码。
-    const freshness =
-      this.freshness.resolve(OPERATION_PERMISSION_SENSITIVE_READ)?.level ?? 'REAL_TIME';
+    // 复用登记式新鲜度目录的失败关闭语义（CAS-Q-002）：未知操作按实时读回，
+    // 避免 ?? 'REAL_TIME' 形成第二套策略逻辑。
+    const requireRealTime = this.freshness.requireRealTime(OPERATION_PERMISSION_SENSITIVE_READ);
+    const freshness = requireRealTime ? FreshnessLevel.REAL_TIME : FreshnessLevel.OBSERVATION;
     const result = await this.casdoorRead.readAccountState({
       externalUserId: payload.externalUserId,
       reason: 'CASDOOR_SYNC_TASK',
       freshness,
       trackingId: payload.trackingId,
     });
+    if (result.status !== 'TRUSTED_CURRENT') {
+      // 读回未确认：依赖不可用/不确定可重试，账号不存在等稳定结论交给人工核验。
+      const retryable =
+        result.status === 'DEPENDENCY_UNAVAILABLE' || result.status === 'UNCERTAIN';
+      throw new TaskExecutionError(
+        `CasdoorSyncHandler 读取账号状态未确认：taskId=${task.taskId}, status=${result.status}`,
+        retryable,
+        retryable ? 'EXTERNAL_UNCERTAIN' : 'EXTERNAL_FAILED',
+      );
+    }
     this.logger.log(
       `CasdoorSyncHandler 读取账号状态完成：taskId=${task.taskId}, status=${result.status}, trackingId=${payload.trackingId}`,
     );
