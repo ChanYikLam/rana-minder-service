@@ -67,7 +67,7 @@
         # 阶段 2：类型检查
         - name: 2-类型检查
           if: "[ -f package.json ]"
-          script: npx tsc --noEmit -p tsconfig.json
+          script: npm run typecheck
         # 阶段 3：Lint（独立阶段，便于 CI 日志定位 lint 问题）
         - name: 3-Lint
           if: "[ -f package.json ]"
@@ -168,7 +168,7 @@
             corepack pnpm install --frozen-lockfile
         - name: 2-类型检查
           if: "[ -f package.json ]"
-          script: npx tsc --noEmit -p tsconfig.json
+          script: npm run typecheck
         - name: 3-Lint
           if: "[ -f package.json ]"
           script: npm run lint
@@ -253,7 +253,7 @@
             corepack pnpm install --frozen-lockfile
         - name: 2-类型检查
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
-          script: npx tsc --noEmit -p tsconfig.json
+          script: npm run typecheck
         - name: 3-Lint
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run lint
