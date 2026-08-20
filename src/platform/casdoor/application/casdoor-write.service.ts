@@ -85,22 +85,7 @@ export class CasdoorWriteService {
       const addIds = [...target].filter((id) => !original.has(id));
       const removeIds = [...original].filter((id) => !target.has(id));
 
-      let transportResult: ExternalResult<void>;
-      if (addIds.length > 0) {
-        transportResult = await this.write.addGroupMembers({
-          ref: input.groupRef,
-          userIds: addIds,
-          requestId: attemptId,
-          trackingId: input.idempotencyKey,
-        });
-      } else if (removeIds.length > 0) {
-        transportResult = await this.write.removeGroupMembers({
-          ref: input.groupRef,
-          userIds: removeIds,
-          requestId: attemptId,
-          trackingId: input.idempotencyKey,
-        });
-      } else {
+      if (addIds.length === 0 && removeIds.length === 0) {
         return this.conclusion(
           'CONFIRMED',
           input.commandId,
@@ -111,6 +96,31 @@ export class CasdoorWriteService {
           now,
         );
       }
+
+      // CAS-WR-002/003：新增与移除是相互独立的成员集合变更。当一次写入同时
+      // 需要两者时，必须分别执行，否则移除会被静默跳过，读回永远无法收敛到目标。
+      const transportResults: ExternalResult<void>[] = [];
+      if (addIds.length > 0) {
+        transportResults.push(
+          await this.write.addGroupMembers({
+            ref: input.groupRef,
+            userIds: addIds,
+            requestId: attemptId,
+            trackingId: input.idempotencyKey,
+          }),
+        );
+      }
+      if (removeIds.length > 0) {
+        transportResults.push(
+          await this.write.removeGroupMembers({
+            ref: input.groupRef,
+            userIds: removeIds,
+            requestId: attemptId,
+            trackingId: input.idempotencyKey,
+          }),
+        );
+      }
+      const transportResult = this.combineTransportResults(transportResults);
 
       const readback = await this.write.readbackGroupMembers({
         ref: input.groupRef,
@@ -352,6 +362,16 @@ export class CasdoorWriteService {
       false,
       now,
     );
+  }
+
+  private combineTransportResults(
+    results: readonly ExternalResult<void>[],
+  ): ExternalResult<void> {
+    // 多个独立写操作中只要有一个依赖不可用，整体就不能进入读回分类，否则可能
+    // 把“写未送达”误判为“读回仍为原值”。
+    const unavailable = results.find((r) => r.status === 'DEPENDENCY_UNAVAILABLE');
+    if (unavailable !== undefined) return unavailable;
+    return results[results.length - 1];
   }
 
   private conclusion(

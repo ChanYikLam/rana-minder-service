@@ -20,7 +20,12 @@ export interface WebhookHandleResult {
 
 @Injectable()
 export class CasdoorEventService {
-  private readonly seen = new Set<string>();
+  /** 去重窗口：超过该时长的摘要不再视为重复。 */
+  static readonly DEDUP_TTL_MS = 5 * 60 * 1000;
+  /** 去重集合上限：防止 Webhook 洪泛导致内存无限增长。 */
+  static readonly DEDUP_MAX_ENTRIES = 10_000;
+
+  private readonly seen = new Map<string, number>();
   private readonly enabled: boolean;
   private readonly staticSecret: string | null;
 
@@ -38,6 +43,9 @@ export class CasdoorEventService {
     readonly secretHeader?: string;
     readonly rateLimitAvailable: boolean;
   }): Promise<WebhookHandleResult> {
+    const receivedMs = Date.parse(input.receivedAt);
+    this.prune(receivedMs);
+
     const decision = decideWebhookHandling({
       enabled: this.enabled,
       staticSecretConfigured: this.staticSecret !== null,
@@ -55,7 +63,20 @@ export class CasdoorEventService {
       return { accepted: false, reason: decision.reason, envelope: null };
     }
 
-    this.seen.add(input.rawBodyDigest);
+    this.seen.set(input.rawBodyDigest, receivedMs);
     return { accepted: true, reason: decision.reason, envelope: decision.envelope };
+  }
+
+  /** 清理过期摘要；若仍超过上限则淘汰最旧条目，保证内存有界。 */
+  private prune(nowMs: number): void {
+    const ttlMs = CasdoorEventService.DEDUP_TTL_MS;
+    for (const [digest, at] of this.seen) {
+      if (nowMs - at > ttlMs) this.seen.delete(digest);
+    }
+    if (this.seen.size > CasdoorEventService.DEDUP_MAX_ENTRIES) {
+      const overflow = this.seen.size - CasdoorEventService.DEDUP_MAX_ENTRIES;
+      const sorted = [...this.seen.entries()].sort((a, b) => a[1] - b[1]);
+      for (let i = 0; i < overflow; i++) this.seen.delete(sorted[i][0]);
+    }
   }
 }
