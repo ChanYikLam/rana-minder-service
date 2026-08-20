@@ -23,8 +23,8 @@
     "format": "prettier --write \"{src,test,apps,packages}/**/*.{ts,json,md}\"",
     "format:check": "prettier --check \"{src,test,apps,packages}/**/*.{ts,json,md}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test -r ts-node/register \"src/platform/**/**/*.spec.ts\"",
-    "test:unit": "node --test -r ts-node/register \"src/platform/**/**/*.spec.ts\"",
+    "test": "node --test -r ts-node/register \"src/**/*.spec.ts\"",
+    "test:unit": "node --test -r ts-node/register \"src/**/*.spec.ts\"",
     "test:integration": "node --test -r ts-node/register \"test/integration/**/*.spec.ts\"",
     "test:contract": "node --test -r ts-node/register \"test/contract/**/*.spec.ts\""
   },
