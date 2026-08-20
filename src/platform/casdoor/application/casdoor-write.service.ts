@@ -124,6 +124,20 @@ export class CasdoorWriteService {
         version: readback.evidence.version,
       });
 
+      // CAS-WR-008：传输层不可用优先于读回分类判定。写请求未送达时读回往往仍
+      // 显示原值，若按分类走会误判为 OLD_VALUE_STILL_PRESENT，掩盖真实故障。
+      if (transportResult.status === 'DEPENDENCY_UNAVAILABLE') {
+        return this.conclusion(
+          'DEPENDENCY_UNAVAILABLE',
+          input.commandId,
+          attempts,
+          evidence,
+          '依赖不可用，需按故障规则降级',
+          true,
+          now,
+        );
+      }
+
       const classification = classifyMembershipReadback({
         originalMemberIds: input.originalMemberIds,
         expectedMemberIds: input.targetMemberIds,
@@ -167,17 +181,6 @@ export class CasdoorWriteService {
           now,
         );
       }
-      if (classification === 'UNKNOWN' && transportResult.status === 'DEPENDENCY_UNAVAILABLE') {
-        return this.conclusion(
-          'DEPENDENCY_UNAVAILABLE',
-          input.commandId,
-          attempts,
-          evidence,
-          '依赖不可用，需按故障规则降级',
-          true,
-          now,
-        );
-      }
       // ORIGINAL / UNKNOWN：本调用内做有界重试；仍不确定交给任务调度继续。
       if (attempt >= maxAttemptsPerInvocation) {
         const kind = classification === 'ORIGINAL' ? 'OLD_VALUE_STILL_PRESENT' : 'UNCERTAIN';
@@ -215,6 +218,19 @@ export class CasdoorWriteService {
       readbackValue: readback.status === 'TRUSTED_CURRENT' ? readback.value : null,
       readbackStatus: readback.status,
     });
+    // CAS-WR-009：传输层不可用优先于读回分类判定，避免把写未送达误报为
+    // OLD_VALUE_STILL_PRESENT / UNCERTAIN，掩盖真实故障。
+    if (transport.status === 'DEPENDENCY_UNAVAILABLE') {
+      return this.conclusion(
+        'DEPENDENCY_UNAVAILABLE',
+        input.commandId,
+        [attemptId],
+        evidence,
+        '依赖不可用',
+        true,
+        now,
+      );
+    }
     if (classification === 'TARGET') {
       return this.conclusion(
         'CONFIRMED',
@@ -245,17 +261,6 @@ export class CasdoorWriteService {
         evidence,
         '资料第三值冲突，需本人选择',
         false,
-        now,
-      );
-    }
-    if (transport.status === 'DEPENDENCY_UNAVAILABLE') {
-      return this.conclusion(
-        'DEPENDENCY_UNAVAILABLE',
-        input.commandId,
-        [attemptId],
-        evidence,
-        '依赖不可用',
-        true,
         now,
       );
     }
@@ -303,9 +308,13 @@ export class CasdoorWriteService {
       attempts.push(...result.attemptIds);
       evidence.push(...result.evidence);
       if (result.kind !== 'CONFIRMED') {
-        if (step.action === 'ADD' && executedAdds.length > 0) {
+        // CAS-WR-010 补偿：当前失败的 ADD step 可能已部分写入（如 PARTIAL_SUCCESS），
+        // 与已确认的 ADD step 一并逆序回滚，确保不残留任何新增的部分权限。
+        const toRollback = [...executedAdds];
+        if (step.action === 'ADD') toRollback.push(step);
+        if (toRollback.length > 0) {
           // 逆序移除本命令已新增关系；移除动作本身不再做读回收口，按补偿/异常进入人工核验。
-          for (const added of [...executedAdds].reverse()) {
+          for (const added of [...toRollback].reverse()) {
             const removeIds = added.expectedMemberIds.filter(
               (id) => !added.originalMemberIds.includes(id),
             );
@@ -326,7 +335,7 @@ export class CasdoorWriteService {
           plan.commandId,
           attempts,
           evidence,
-          '复合 Group 写入未全部确认，按补偿或异常处理，不授予部分新权限',
+          '复合 Group 写入未全部确认，已回滚本命令新增/可能部分写入的关系，不授予部分新权限',
           result.retryable,
           now,
         );

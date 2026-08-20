@@ -22,8 +22,6 @@ import type {
 
 export const CASDOOR_READ_PORT = Symbol('CASDOOR_READ_PORT');
 export const CASDOOR_WRITE_PORT = Symbol('CASDOOR_WRITE_PORT');
-export const CASDOOR_RECONCILE_PORT = Symbol('CASDOOR_RECONCILE_PORT');
-export const CASDOOR_EVENT_PORT = Symbol('CASDOOR_EVENT_PORT');
 export const CASDOOR_MAPPING_STORE = Symbol('CASDOOR_MAPPING_STORE');
 export const CASDOOR_CLOCK = Symbol('CASDOOR_CLOCK');
 

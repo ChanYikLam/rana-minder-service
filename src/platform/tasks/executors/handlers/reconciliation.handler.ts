@@ -22,11 +22,14 @@ export class ReconciliationHandler implements TaskHandler {
 
   async handle(task: TaskRecord): Promise<void> {
     const payload = (task.payload ?? {}) as ReconciliationPayload;
+    // 钳制分页大小到 [1, 1000]，避免负数/极大 limit 引发非法分页或单页过量扫描。
+    const rawLimit = payload.limit ?? 100;
+    const limit = Math.max(1, Math.min(Number.isFinite(rawLimit) ? rawLimit : 100, 1000));
     const run = await this.reconcile.runFullReconciliation({
       runId: payload.runId ?? `task:${task.taskId}`,
       scope: payload.scope ?? 'platform',
       watermark: payload.watermark ?? task.updatedAt,
-      limit: payload.limit ?? 100,
+      limit,
     });
     this.logger.log(
       `ReconciliationHandler 完成对账：taskId=${task.taskId}, runId=${run.runId}, status=${run.status}, pages=${run.pageCount}`,

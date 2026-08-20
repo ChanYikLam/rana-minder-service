@@ -77,4 +77,34 @@ describe('CasdoorReadService', () => {
     assert.equal(result.status, 'NOT_FOUND');
     assert.match(result.error?.message ?? '', /过期/);
   });
+
+  it('重新认证证据时间戳来自未来 → 拒绝（CAS-READ-006）', () => {
+    const { service } = makeService();
+    const result = service.verifyReauthentication({
+      // 超过 5 分钟时钟偏移容忍上限，视为伪造/时钟偏移
+      authTime: new Date(fixedNow.getTime() + 10 * 60 * 1000).toISOString(),
+      requiredFreshnessMs: 10 * 60 * 1000,
+      mfaRequired: false,
+      mfaVerified: false,
+      subjectId: 'u1',
+      bindingSubjectId: 'u1',
+      trackingId: 'tr-4',
+    });
+    assert.equal(result.status, 'NOT_FOUND');
+    assert.match(result.error?.code ?? '', /REAUTH_FUTURE/);
+  });
+
+  it('重新认证证据在容忍窗口内的未来偏移 → 通过', () => {
+    const { service } = makeService();
+    const result = service.verifyReauthentication({
+      authTime: new Date(fixedNow.getTime() + 60 * 1000).toISOString(),
+      requiredFreshnessMs: 10 * 60 * 1000,
+      mfaRequired: false,
+      mfaVerified: false,
+      subjectId: 'u1',
+      bindingSubjectId: 'u1',
+      trackingId: 'tr-5',
+    });
+    assert.equal(result.status, 'TRUSTED_CURRENT');
+  });
 });

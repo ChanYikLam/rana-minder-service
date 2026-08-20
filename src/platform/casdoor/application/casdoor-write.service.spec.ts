@@ -196,4 +196,83 @@ describe('CasdoorWriteService', () => {
     // 补偿时至少对 low 发出 remove（不授予部分新权限）
     assert.ok(failing.calls.some((c) => c.startsWith('remove:')));
   });
+
+  it('复合写入当前失败 ADD step 的部分写入也会被回滚（CAS-WR-010）', async () => {
+    const store = makeStore();
+
+    const addLow: GroupStableRef = { owner: 'o', name: 'low' };
+    const addHigh: GroupStableRef = { owner: 'o', name: 'high' };
+    store.groups.set(groupRefKey(addLow), {
+      ref: addLow,
+      displayName: 'low',
+      parentRef: null,
+      memberIds: [],
+      state: 'ACTIVE',
+    });
+    store.groups.set(groupRefKey(addHigh), {
+      ref: addHigh,
+      displayName: 'high',
+      parentRef: null,
+      memberIds: [],
+      state: 'ACTIVE',
+    });
+
+    // 让 high 的读回只反映部分成员，从而当前失败 step 触发 PARTIAL_SUCCESS（部分写入）。
+    const partial = new (class extends RecordingWritePort {
+      override async readbackGroupMembers(request: {
+        ref: GroupStableRef;
+        requestId: string;
+        trackingId: string;
+      }): Promise<ExternalResult<readonly string[]>> {
+        if (request.requestId.includes('high')) {
+          return {
+            status: 'TRUSTED_CURRENT',
+            value: ['u1'], // 仅部分目标成员被写回，模拟部分成功
+            evidence: { observedAt: fixedNow.toISOString(), attemptId: request.requestId },
+            error: null,
+          };
+        }
+        return super.readbackGroupMembers(request);
+      }
+    })(store);
+    const service = new CasdoorWriteService(partial, clock);
+
+    const conclusion = await service.executeCompositePlan(
+      {
+        planId: 'plan-2',
+        commandId: 'cmd-comp2',
+        steps: [
+          {
+            stepId: 'low',
+            groupRef: addLow,
+            action: 'ADD',
+            privilegeRank: 1,
+            originalMemberIds: [],
+            expectedMemberIds: ['u1', 'u2'],
+          },
+          {
+            stepId: 'high',
+            groupRef: addHigh,
+            action: 'ADD',
+            privilegeRank: 2,
+            originalMemberIds: [],
+            expectedMemberIds: ['u1', 'u2'],
+          },
+        ],
+        deadline: new Date(fixedNow.getTime() + 15 * 60 * 1000).toISOString(),
+      },
+      { commandId: 'cmd-comp2', idempotencyKey: 'idem-comp2' },
+    );
+
+    // high 读回部分成功 → PARTIAL_SUCCESS，不授予部分新权限
+    assert.equal(conclusion.kind, 'MANUAL_INTERVENTION_REQUIRED');
+    // 补偿应对当前失败的 high 与已确认的 low 都发出 remove
+    assert.ok(partial.calls.some((c) => c.startsWith('remove:') && c.includes('low')));
+    assert.ok(partial.calls.some((c) => c.startsWith('remove:') && c.includes('high')));
+    // 校验残留：low 与 high 都不应残留新增成员（全部回滚）
+    const lowGroup = store.groups.get(groupRefKey(addLow));
+    const highGroup = store.groups.get(groupRefKey(addHigh));
+    assert.deepEqual(lowGroup?.memberIds ?? [], []);
+    assert.deepEqual(highGroup?.memberIds ?? [], []);
+  });
 });

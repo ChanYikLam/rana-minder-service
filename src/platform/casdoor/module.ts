@@ -19,6 +19,7 @@ import {
   CASDOOR_MAPPING_STORE,
   type ClockPort,
 } from './contracts/ports';
+import { FreshnessRegistry } from './domain/freshness-registry';
 import { InMemoryCasdoorStore } from './infrastructure/in-memory-casdoor-store';
 import { InMemoryMappingStore } from './infrastructure/in-memory-mapping-store';
 import { SystemClock } from './infrastructure/system-clock';
@@ -39,6 +40,7 @@ import { CasdoorEventService } from './application/casdoor-event.service';
       useExisting: CASDOOR_READ_PORT,
     },
     { provide: CASDOOR_MAPPING_STORE, useClass: InMemoryMappingStore },
+    FreshnessRegistry,
     CasdoorReadService,
     CasdoorWriteService,
     CasdoorReconcileService,
@@ -49,6 +51,7 @@ import { CasdoorEventService } from './application/casdoor-event.service';
     CASDOOR_READ_PORT,
     CASDOOR_WRITE_PORT,
     CASDOOR_MAPPING_STORE,
+    FreshnessRegistry,
     CasdoorReadService,
     CasdoorWriteService,
     CasdoorReconcileService,

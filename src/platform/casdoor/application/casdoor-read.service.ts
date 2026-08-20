@@ -202,6 +202,21 @@ export class CasdoorReadService {
         },
       );
     }
+    // CAS-READ-006：拒绝来自未来的 auth_time（时钟偏移或伪造），避免被误判为“新鲜”
+    // 而通过。容忍 5 分钟时钟偏移，避免正常分布式时钟抖动被误拒。
+    const FUTURE_SKEW_TOLERANCE_MS = 5 * 60 * 1000;
+    if (authAt - this.clock.now().getTime() > FUTURE_SKEW_TOLERANCE_MS) {
+      return notFound(
+        { observedAt: this.clock.now().toISOString(), attemptId: input.trackingId },
+        {
+          kind: 'NOT_FOUND',
+          code: 'CAS-ERR_REAUTH_FUTURE',
+          message: '重新认证证据时间戳来自未来，拒绝',
+          retryable: false,
+          trackingId: input.trackingId,
+        },
+      );
+    }
     if (input.mfaRequired && !input.mfaVerified) {
       return notFound(
         { observedAt: this.clock.now().toISOString(), attemptId: input.trackingId },
