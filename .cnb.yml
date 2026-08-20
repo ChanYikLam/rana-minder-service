@@ -10,7 +10,7 @@
 #   (main|dev).pull_request / push：
 #     - docs-check：任何变更都执行（秘密扫描 + 文档链接一致性）
 #     - code-check：仅代码相关变更执行（CI-001 阶段 1~8、10；代码未开工时自动跳过）
-#   v*.tag_push：
+#   "$".tag_push（tag_push 为仓库级事件置于兜底分支，经 v* 守卫仅对版本标签生效）：
 #     - release-check：全量阶段 + 发布门证据摘要（CI-002 规则 3、CI-004）
 #
 # 代码阶段保护：代码阶段以 package.json 存在为前提（阶段 8 另需 Dockerfile），
@@ -68,12 +68,14 @@
         - name: 2-类型检查
           if: "[ -f package.json ]"
           script: npm run typecheck
-        # 阶段 3：Lint 与格式检查
-        - name: 3-Lint与格式
+        # 阶段 3：Lint（独立阶段，便于 CI 日志定位 lint 问题）
+        - name: 3-Lint
           if: "[ -f package.json ]"
-          script: |
-            npm run lint
-            npm run format:check
+          script: npm run lint
+        # 阶段 3b：格式检查（独立阶段，prettier 失败信息不再被 eslint 输出淹没）
+        - name: 3-格式
+          if: "[ -f package.json ]"
+          script: npm run format:check
         # 阶段 4：单元测试 L1（领域规则，覆盖率新增代码须有对应用例）
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
@@ -167,11 +169,12 @@
         - name: 2-类型检查
           if: "[ -f package.json ]"
           script: npm run typecheck
-        - name: 3-Lint与格式
+        - name: 3-Lint
           if: "[ -f package.json ]"
-          script: |
-            npm run lint
-            npm run format:check
+          script: npm run lint
+        - name: 3-格式
+          if: "[ -f package.json ]"
+          script: npm run format:check
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
@@ -220,9 +223,9 @@
             bash scripts/ci/check-license-registry.sh
 
 # ------------------------------------------------------------
-# 发布 Tag（v*）：全量阶段 + 发布门证据（CI-002 规则 3、CI-004）
+# 发布 Tag（v*）：tag_push 为仓库级事件置于兜底分支，经 v* 守卫仅对版本标签生效
 # ------------------------------------------------------------
-"v*":
+"$":
   tag_push:
     - name: release-check
       docker:
@@ -231,6 +234,7 @@
         - docker
       stages:
         - name: 9-秘密扫描
+          if: '[[ "$CNB_BRANCH" == v* ]]'
           script: |
             set -e
             if ! command -v gitleaks >/dev/null 2>&1; then
@@ -239,26 +243,28 @@
             fi
             gitleaks detect --source . --no-banner --redact
         - name: 11-文档链接一致性
+          if: '[[ "$CNB_BRANCH" == v* ]]'
           script: |
             bash scripts/ci/check-docs-links.sh
         - name: 1-安装
-          if: "[ -f package.json ]"
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |
             # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本
             corepack pnpm install --frozen-lockfile
         - name: 2-类型检查
-          if: "[ -f package.json ]"
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run typecheck
-        - name: 3-Lint与格式
-          if: "[ -f package.json ]"
-          script: |
-            npm run lint
-            npm run format:check
+        - name: 3-Lint
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run lint
+        - name: 3-格式
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run format:check
         - name: 4-单元测试L1
-          if: "[ -f package.json ]"
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run test:unit
         - name: 5-集成测试L2
-          if: "[ -f package.json ]"
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |
             set -e
             docker run -d --name pg18-ci \
@@ -283,21 +289,21 @@
             export CI=true
             npm run test:integration
         - name: 6-契约测试L3
-          if: "[ -f package.json ]"
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run test:contract
         - name: 7-构建
-          if: "[ -f package.json ]"
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |
             npm run build
             npm run build:worker
         # 阶段 8：镜像构建并推送（Tag 即版本号，非 latest）
         - name: 8-镜像构建推送
-          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} .
             docker push ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
         - name: 10-依赖审计与许可证登记
-          if: "[ -f pnpm-lock.yaml ]"
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f pnpm-lock.yaml ]'
           script: |
             # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本（同阶段 1）
             corepack pnpm audit --audit-level=high
@@ -305,6 +311,7 @@
       endStages:
         # 发布门证据摘要（CI-004）：人工门由治理流程控制，CI 只输出证据供归档
         - name: 发布门证据摘要
+          if: '[[ "$CNB_BRANCH" == v* ]]'
           script: |
             echo "=== 发布门证据（CI-004）==="
             echo "1) 首批技术验证清单 38 项（TVER-*）：人工门，见 docs/engineering/首批技术验证清单-v1.0.md"

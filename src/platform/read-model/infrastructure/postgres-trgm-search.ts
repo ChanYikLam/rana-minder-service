@@ -96,7 +96,7 @@ ORDER BY normalized_name, object_id
 LIMIT $2;
 `;
 
-  async search(query: SearchIndexQuery): Promise<readonly SearchHit[]> {
+  async search(_query: SearchIndexQuery): Promise<readonly SearchHit[]> {
     // 基础设施任务：注入数据源后执行对应 SQL 模板。
     // 未接入时明确不可用，不伪造结果（IFC-QRY-009.8）。
     throw new Error('IFC-ERR-UNAVAILABLE: PostgreSQL 检索索引未接入');
