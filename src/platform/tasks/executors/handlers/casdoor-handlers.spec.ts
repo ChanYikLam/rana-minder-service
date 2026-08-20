@@ -211,4 +211,38 @@ describe('ReconciliationHandler', () => {
     const handler = makeHandler(store, mappings);
     await handler.handle(makeTask(TaskType.RECONCILIATION, {}));
   });
+
+  it('缺省水位使用稳定 createdAt 而非随重试前移的 updatedAt', async () => {
+    // createdAt 为首次调度时间，updatedAt 会在每次重试时被管道前移；
+    // 缺省水位必须取 createdAt，避免漏扫两次运行之间的真实外部变更。
+    const store = new InMemoryCasdoorStore({ users: [] });
+    let receivedWatermark: string | undefined;
+    const capturingStore = Object.assign(Object.create(store), {
+      enumerateAccounts: async (input: { watermark: string }) => {
+        receivedWatermark = input.watermark;
+        return {
+          status: 'TRUSTED_CURRENT' as const,
+          value: {
+            items: [],
+            nextCursor: null,
+            hasMore: false,
+            evidence: { observedAt: fixedNow.toISOString() },
+          },
+          evidence: { observedAt: fixedNow.toISOString() },
+        };
+      },
+    }) as InMemoryCasdoorStore;
+    const reconcile = new CasdoorReconcileService(
+      capturingStore,
+      new InMemoryMappingStore(),
+      clock,
+    );
+    const handler = new ReconciliationHandler(reconcile);
+    const task = makeTask(TaskType.RECONCILIATION, {});
+    // 模拟一次重试：updatedAt 已前移，createdAt 保持不变
+    const advancedTask = { ...task, updatedAt: new Date(Date.now() + 60_000).toISOString() };
+    await handler.handle(advancedTask);
+    assert.equal(receivedWatermark, advancedTask.createdAt);
+    assert.notEqual(receivedWatermark, advancedTask.updatedAt);
+  });
 });
