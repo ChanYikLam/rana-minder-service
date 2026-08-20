@@ -14,7 +14,7 @@ import type {
   CasdoorAccountStatusObservation,
   CasdoorProfileFieldObservation,
 } from '../application/ports/casdoor-user.port';
-import type { EditableProfileField, ProfileField } from '../domain/models/profile-field';
+import type { ProfileField } from '../domain/models/profile-field';
 import {
   externalSuccess,
   externalFailure,

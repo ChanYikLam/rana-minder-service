@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ProjectionScope, RecomputeIntent } from '../contracts';
+import type { RecomputeIntent } from '../contracts';
 import { ProjectionType } from '../contracts';
 import { ProjectionRegistry } from '../projection/projection-registry';
 import { PROJECTION_STORE } from '../projection/projection-store';
