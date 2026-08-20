@@ -6,10 +6,7 @@ import type { GroupMapping, SubjectMapping } from '../contracts/types';
 
 const now = '2026-08-20T00:00:00.000Z';
 
-function subjectMapping(
-  localSubjectId: string,
-  externalSubjectId: string,
-): SubjectMapping {
+function subjectMapping(localSubjectId: string, externalSubjectId: string): SubjectMapping {
   return {
     localSubjectId,
     externalSubjectId,

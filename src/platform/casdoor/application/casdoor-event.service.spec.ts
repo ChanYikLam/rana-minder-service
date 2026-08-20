@@ -5,7 +5,9 @@ import { CasdoorEventService } from './casdoor-event.service';
 
 const receivedAt = '2026-08-20T00:00:00.000Z';
 
-function makeService(overrides: { enabled?: boolean; staticSecret?: string | null; maxSeenEntries?: number } = {}) {
+function makeService(
+  overrides: { enabled?: boolean; staticSecret?: string | null; maxSeenEntries?: number } = {},
+) {
   return new CasdoorEventService({
     enabled: true,
     staticSecret: 'secret',
