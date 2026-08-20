@@ -247,12 +247,13 @@ describe('ClubOnboardingStateMachine', () => {
       event: 'rebind',
       actor: 'u_root',
       now: new Date('2026-08-01T06:00:00.000Z'),
-      facts: { confirmed: true, leaderContinuityOk: true },
+      facts: { confirmed: true, leaderContinuityOk: true, newGroupRef: { owner: 'club-acm', name: '新社团组' } },
     });
     assert.equal(r.club.status, 'suspended');
     assert.equal(r.club.leaderGroup, null);
     assert.deepEqual(r.club.departmentGroups, []);
     assert.deepEqual(r.club.positionGroups, []);
+    assert.deepEqual(r.club.clubGroup, { owner: 'club-acm', name: '新社团组' });
   });
 
   it('disconnect：有历史 → 待重新接入；无历史 → 关停向导', () => {

@@ -56,6 +56,8 @@ export interface ClubTransitionInput {
     freezeDurationMs?: number;
     /** wizard_complete 时最终确认的负责人职位 Group（ORG-024） */
     leaderCandidate?: { owner: string; name: string };
+    /** 重绑/重新接入时的新 Group 稳定映射（ORG-009/010） */
+    newGroupRef?: { owner: string; name: string };
   };
 }
 
@@ -280,6 +282,7 @@ export class ClubOnboardingStateMachine {
         updated.status = 'suspended';
         updated.readonly = true;
         updated.forcedSuspension = false;
+        updated.freezeStart = stamp; // 重置受阻起点，避免重复结算（ORG-028）
         events.push({
           id: `gev-repair-${updated.version}`,
           kind: 'repair',
@@ -307,9 +310,14 @@ export class ClubOnboardingStateMachine {
         if (facts.leaderContinuityOk !== true) {
           throw orgError.precondition('重绑后负责人连续性校验失败（ORG-024）');
         }
+        if (facts.newGroupRef === undefined) {
+          throw orgError.precondition('重新绑定必须指定新 Group（ORG-009）');
+        }
         updated.status = 'suspended';
         updated.readonly = true;
         updated.forcedSuspension = false;
+        updated.clubGroup = facts.newGroupRef;
+        updated.freezeStart = stamp; // 重置受阻起点，避免重复结算（ORG-028）
         // 新组绑定后职位/部门需重新配置，避免静默扩大权限（GOV-007）
         updated.leaderGroup = null;
         updated.leaderRoleGroup = null;
@@ -325,8 +333,8 @@ export class ClubOnboardingStateMachine {
         appendStatus('suspended', '重新绑定完成 → 已停用（未恢复访问）', 'rebind');
         mappingHistory.push({
           mappingVersion: updated.mappingVersion + 1,
-          previous: updated.clubGroup,
-          next: null,
+          previous: club.clubGroup,
+          next: facts.newGroupRef,
           kind: 'rebind',
           at: stamp,
           actor,
@@ -348,10 +356,14 @@ export class ClubOnboardingStateMachine {
         if (facts.leaderContinuityOk !== true) {
           throw orgError.precondition('重新接入后负责人连续性校验失败（ORG-024）');
         }
+        if (facts.newGroupRef === undefined) {
+          throw orgError.precondition('重新接入必须指定新 Group（ORG-009）');
+        }
         updated.status = 'suspended';
         updated.readonly = true;
         updated.forcedSuspension = false;
-        updated.clubGroup = updated.wizardCandidate ?? updated.clubGroup;
+        updated.clubGroup = facts.newGroupRef;
+        updated.freezeStart = stamp; // 重置受阻起点，避免重复结算（ORG-028）
         events.push({
           id: `gev-reaccess-${updated.version}`,
           kind: 'reaccess',
@@ -362,8 +374,8 @@ export class ClubOnboardingStateMachine {
         appendStatus('suspended', '重新接入完成 → 已停用（未恢复访问）', 'reaccess');
         mappingHistory.push({
           mappingVersion: updated.mappingVersion + 1,
-          previous: updated.clubGroup,
-          next: updated.clubGroup,
+          previous: club.clubGroup,
+          next: facts.newGroupRef,
           kind: 'reaccess',
           at: stamp,
           actor,

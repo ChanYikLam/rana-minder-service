@@ -60,16 +60,17 @@ export class InMemoryClubStore implements ClubStore {
   }
 
   async findById(id: string): Promise<ClubSpace | null> {
-    return this.byId.get(id) ?? null;
+    const club = this.byId.get(id);
+    return club === undefined ? null : structuredClone(club);
   }
 
   async list(): Promise<ClubSpace[]> {
-    return [...this.byId.values()];
+    return [...this.byId.values()].map((c) => structuredClone(c));
   }
 
   async findByGroupRef(ref: GroupStableRef): Promise<ClubSpace | null> {
     for (const club of this.byId.values()) {
-      if (club.clubGroup?.owner === ref.owner && club.clubGroup.name === ref.name) return club;
+      if (club.clubGroup?.owner === ref.owner && club.clubGroup.name === ref.name) return structuredClone(club);
     }
     return null;
   }

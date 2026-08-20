@@ -57,6 +57,11 @@ export class RebindDto {
   @IsBoolean() confirmed!: boolean;
 }
 
+export class ReaccessDto {
+  @IsString() @IsNotEmpty() groupId!: string;
+  @IsBoolean() confirmed!: boolean;
+}
+
 export class ConfirmedActionDto {
   @IsBoolean() @IsOptional() confirmed!: boolean;
 }

@@ -26,6 +26,7 @@ import { orgError } from '../../domain/types';
 import {
   ConfirmedActionDto,
   ImportMembersDto,
+  ReaccessDto,
   RebindDto,
   SuspensionDto,
   WizardCompleteDto,
@@ -224,13 +225,14 @@ export class AdminClubsController {
   async reaccess(
     @Actor() actor: RequestActor,
     @Param('clubId') clubId: string,
-    @Body() dto: ConfirmedActionDto,
+    @Body() dto: ReaccessDto,
   ) {
     await this.assertPlatformClubManage(actor);
     return this.lifecycle.reaccess({
       clubId,
+      groupId: dto.groupId,
       actor: actor.userId,
-      confirmed: dto.confirmed ?? false,
+      confirmed: dto.confirmed,
       now: new Date(),
     });
   }

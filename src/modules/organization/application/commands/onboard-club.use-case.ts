@@ -69,19 +69,34 @@ export class OnboardingUseCase {
   /** 部门/职位 Group 必须是社团 Group 后代（ORG-012/018） */
   private async assertDescendant(
     descendant: GroupStableRef,
-    _ancestor: GroupStableRef,
+    ancestor: GroupStableRef,
   ): Promise<void> {
-    const info = await this.casdoor.getGroupByRef(descendant);
-    if (info === null)
-      throw orgError.notVisible(`Group 不存在（${descendant.owner}/${descendant.name}）`);
-    if (info.deleted || !info.readable) {
-      throw orgError.notVisible(`Group 不可读（${descendant.owner}/${descendant.name}）`);
+    const visited = new Set<string>();
+    let current: GroupStableRef | null = descendant;
+    while (current !== null) {
+      const key = `${current.owner}/${current.name}`;
+      if (visited.has(key)) {
+        throw orgError.precondition(
+          `Group 层级存在循环引用（${descendant.owner}/${descendant.name}）`,
+        );
+      }
+      visited.add(key);
+      // 当前节点即为祖先（直属）或已匹配
+      if (current.owner === ancestor.owner && current.name === ancestor.name) {
+        return;
+      }
+      const info = await this.casdoor.getGroupByRef(current);
+      if (info === null) {
+        throw orgError.notVisible(`Group 不存在（${current.owner}/${current.name}）`);
+      }
+      if (info.deleted || !info.readable) {
+        throw orgError.notVisible(`Group 不可读（${current.owner}/${current.name}）`);
+      }
+      current = info.parentRef;
     }
-    if (info.parentRef === null) {
-      throw orgError.precondition(
-        `职位/部门 Group 必须是社团 Group 的后代或直属（ORG-012/018）：${descendant.owner}/${descendant.name}`,
-      );
-    }
+    throw orgError.precondition(
+      `职位/部门 Group 必须是社团 Group 的后代或直属（ORG-012/018）：${descendant.owner}/${descendant.name}`,
+    );
   }
 
   async createWizard(input: WizardCreateInput, now: Date): Promise<ClubSpace> {
