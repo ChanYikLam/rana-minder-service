@@ -15,7 +15,7 @@ import {
 import type { CurrentPermissionsPort } from '../ports';
 
 class MutablePermissions implements CurrentPermissionsPort {
-  perms: string[] = ['club:appointment:manage'];
+  perms: string[] = ['club:appointment:manage', 'club:member:manage'];
 
   async effectiveForClub(): Promise<string[]> {
     return [...this.perms];
@@ -55,6 +55,7 @@ function buildHarness() {
     casdoor,
     scheduler,
     notifications,
+    permissions,
   );
   const useCase = new AppointmentCommandUseCase(
     apptStore,

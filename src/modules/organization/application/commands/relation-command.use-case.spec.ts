@@ -10,6 +10,19 @@ import {
   InMemoryNotificationPort,
   InMemoryRelationCommandStore,
 } from '../../infrastructure/in-memory/memory-implementations';
+import type { CurrentPermissionsPort } from '../ports';
+
+class MutablePermissions implements CurrentPermissionsPort {
+  perms = new Map<string, string[]>([['club-acm-1', ['club:member:manage']]]);
+
+  async effectiveForClub(userId: string, clubId: string): Promise<string[]> {
+    return this.perms.get(clubId) ?? [];
+  }
+
+  async isPlatformSuperAdmin(): Promise<boolean> {
+    return false;
+  }
+}
 
 function buildHarness() {
   const casdoor = new InMemoryCasdoorPort({
@@ -32,12 +45,14 @@ function buildHarness() {
   const relationStore = new InMemoryRelationCommandStore();
   const scheduler = new InMemoryJobScheduler();
   const notifications = new InMemoryNotificationPort();
+  const permissions = new MutablePermissions();
   const useCase = new RelationCommandUseCase(
     relationStore,
     clubs,
     casdoor,
     scheduler,
     notifications,
+    permissions,
   );
 
   const club = createClubSpace({
@@ -52,7 +67,7 @@ function buildHarness() {
   club.readonly = false;
   club.clubGroup = { owner: 'club-acm', name: 'ACM社团' };
 
-  return { casdoor, clubs, relationStore, scheduler, useCase, club };
+  return { casdoor, clubs, relationStore, scheduler, useCase, club, permissions };
 }
 
 describe('RelationCommandUseCase', () => {
@@ -142,5 +157,42 @@ describe('RelationCommandUseCase', () => {
     );
     assert.equal(after.status, 'readback_confirmed');
     assert.ok(after.confirmedAt);
+  });
+
+  it('submit：提交者无成员管理权限 → 拒绝（ORG-027）', async () => {
+    h.permissions.perms.set('club-acm-1', []);
+    await assert.rejects(
+      () => h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z')),
+      (e: Error) => e.message.includes('无成员关系管理权限'),
+    );
+  });
+
+  it('manualRetry：重试者无成员管理权限 → 拒绝（ORG-027 人工重试行）', async () => {
+    const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
+    // 进入可人工重试的失败状态（failed_original_preserved）
+    const failed = { ...cmd, status: 'failed_original_preserved' as const };
+    await h.relationStore.save(failed);
+    // 撤销权限后再人工重试
+    h.permissions.perms.set('club-acm-1', []);
+    await assert.rejects(
+      () =>
+        h.useCase.manualRetry({
+          commandId: cmd.id,
+          actor: 'u_b',
+          now: new Date('2026-08-01T00:01:00.000Z'),
+        }),
+      (e: Error) => e.message.includes('人工重试前须重新鉴权'),
+    );
+  });
+
+  it('内存桩：旧版本（attemptCount 回退）写入被乐观锁拒绝', async () => {
+    const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
+    const newer = { ...cmd, attemptCount: cmd.attemptCount + 5 };
+    await h.relationStore.save(newer);
+    // 用更低的 attemptCount 覆盖已存在的更高版本 → 拒绝
+    await assert.rejects(
+      () => h.relationStore.save({ ...cmd, status: 'processing' as const }),
+      (e: Error) => e.message.includes('乐观锁'),
+    );
   });
 });

@@ -16,6 +16,7 @@ import type {
   PositionTemplateBinding,
 } from '../../domain/models/permission-template';
 import type { GroupStableRef } from '../../domain/types';
+import { orgError } from '../../domain/types';
 import type {
   CasdoorGroupInfo,
   CasdoorGroupPort,
@@ -82,6 +83,13 @@ export class InMemoryRelationCommandStore implements RelationCommandStore {
   private readonly byId = new Map<string, RelationCommand>();
 
   async save(command: RelationCommand): Promise<void> {
+    const existing = this.byId.get(command.id);
+    if (existing && command.attemptCount < existing.attemptCount) {
+      // 乐观锁：禁止旧版本覆盖新版本（SRS-SM-ORG-002 对象/关系版本必须匹配）
+      throw orgError.stateConflict(
+        `检测到旧版本写入，拒绝回退覆盖（乐观锁，IFC-ERR-007）${command.id}`,
+      );
+    }
     this.byId.set(command.id, structuredClone(command));
   }
 
@@ -129,6 +137,13 @@ export class InMemoryAppointmentCommandStore implements AppointmentCommandStore 
   private readonly byClub = new Map<string, AppointmentCommand[]>();
 
   async save(command: AppointmentCommand): Promise<void> {
+    const existing = this.byId.get(command.id);
+    if (existing && command.scheduleVersion < existing.scheduleVersion) {
+      // 乐观锁：禁止旧版本覆盖新版本（ORG-039 调度版本语义）
+      throw orgError.stateConflict(
+        `检测到旧版本写入，拒绝回退覆盖（乐观锁，IFC-ERR-007）${command.id}`,
+      );
+    }
     this.byId.set(command.id, structuredClone(command));
     const list = this.byClub.get(command.clubId) ?? [];
     const idx = list.findIndex((c) => c.id === command.id);

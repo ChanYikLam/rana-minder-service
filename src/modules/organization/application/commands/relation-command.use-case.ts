@@ -22,12 +22,14 @@ import { IdPrefix, orgError } from '../../domain/types';
 import {
   CASDOOR_GROUP_PORT,
   CLUB_STORE,
+  CURRENT_PERMISSIONS_PORT,
   JOB_SCHEDULER,
   NOTIFICATION_PORT,
   RELATION_COMMAND_STORE,
   RELATION_COMMAND_USE_CASE,
   type CasdoorGroupPort,
   type ClubStore,
+  type CurrentPermissionsPort,
   type JobSchedulerPort,
   type NotificationPort,
   type RelationCommandStore,
@@ -52,6 +54,7 @@ export class RelationCommandUseCase {
     private readonly casdoor: CasdoorGroupPort,
     private readonly scheduler: JobSchedulerPort,
     private readonly notifications: NotificationPort,
+    private readonly permissions: CurrentPermissionsPort,
   ) {}
 
   async submit(input: SubmitRelationCommandInput, now: Date): Promise<RelationCommand> {
@@ -59,6 +62,12 @@ export class RelationCommandUseCase {
     if (club === null) throw orgError.notVisible(`社团空间不存在（${input.clubId}）`);
     if (club.status !== 'enabled') {
       throw orgError.precondition(`社团当前 ${club.status}，禁止关系变更（ORG-001）`);
+    }
+
+    // 权限校验：提交者须有成员/关系管理权限（ORG-027 提交行）
+    const perms = await this.permissions.effectiveForClub(input.submittedBy, input.clubId);
+    if (!perms.includes('club:member:manage')) {
+      throw orgError.forbidden('提交者无成员关系管理权限（ORG-027）');
     }
 
     // 同一目标处理中禁止重复/冲突操作（SRS-SM-ORG-002）
@@ -262,12 +271,10 @@ export class RelationCommandUseCase {
     return command;
   }
 
-  private async isVisibleAndAuthorized(
-    _actor: string,
-    _command: RelationCommand,
-  ): Promise<boolean> {
-    // 骨架：复用提交者权限（真实鉴权由 CurrentPermissionsPort 接入后覆盖）
-    return true;
+  private async isVisibleAndAuthorized(actor: string, command: RelationCommand): Promise<boolean> {
+    // 关系变更属成员管理：重试者须在当前社团拥有成员管理权限（ORG-027 人工重试行）
+    const perms = await this.permissions.effectiveForClub(actor, command.clubId);
+    return perms.includes('club:member:manage');
   }
 }
 
@@ -279,13 +286,15 @@ export const relationCommandProvider = {
     casdoor: CasdoorGroupPort,
     scheduler: JobSchedulerPort,
     notifications: NotificationPort,
-  ) => new RelationCommandUseCase(store, clubs, casdoor, scheduler, notifications),
+    permissions: CurrentPermissionsPort,
+  ) => new RelationCommandUseCase(store, clubs, casdoor, scheduler, notifications, permissions),
   inject: [
     RELATION_COMMAND_STORE,
     CLUB_STORE,
     CASDOOR_GROUP_PORT,
     JOB_SCHEDULER,
     NOTIFICATION_PORT,
+    CURRENT_PERMISSIONS_PORT,
   ],
 };
 

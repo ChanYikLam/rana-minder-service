@@ -189,9 +189,6 @@ export class AppointmentCommandStateMachine {
       }
 
       case 'cancel': {
-        if (original.status === 'pending_execution' && facts.cancellerAuthorized !== true) {
-          throw orgError.forbidden('取消者无权取消该预约命令（ORG-039）');
-        }
         if (facts.cancellerAuthorized !== true) {
           throw orgError.forbidden('取消者无权取消该预约命令（ORG-039）');
         }
