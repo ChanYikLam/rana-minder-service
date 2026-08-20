@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { deriveTrackingNumber } from './contracts/task-intent';
-import { TaskStatus } from './contracts/task-status';
+import { TaskStatus, isTerminalTaskStatus } from './contracts/task-status';
 import type { TaskIntent } from './contracts/task-intent';
 import type { TaskRecord, TaskRecordPatch } from './contracts/task-record';
 import type { TaskBacklogSummary, TaskClaimResult, TaskRepository } from './contracts/task-ports';
@@ -95,6 +95,11 @@ export class InMemoryTaskRepository implements TaskRepository {
   ): Promise<TaskRecord | null> {
     const current = this.tasks.get(taskId);
     if (current === undefined) return null;
+    // 终态写保护：已完成等终态任务不允许再被改写，避免并发/过期执行器覆盖业务结果
+    if (isTerminalTaskStatus(current.status)) {
+      this.logger.warn(`终态任务拒绝改写：taskId=${taskId}, status=${current.status}`);
+      return null;
+    }
     if (current.lease !== null && current.lease.leaseVersion !== expectedLeaseVersion) {
       return null;
     }

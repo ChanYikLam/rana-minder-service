@@ -9,7 +9,7 @@ export class BatchExecutionHandler implements TaskHandler {
 
   constructor(private readonly orchestrator: BatchOrchestrator) {}
 
-  async handle(task: TaskRecord): Promise<void> {
-    await this.orchestrator.executeFrozenBatch(task);
+  async handle(task: TaskRecord, now?: Date): Promise<void> {
+    await this.orchestrator.executeFrozenBatch(task, now ?? new Date());
   }
 }

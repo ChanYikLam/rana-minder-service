@@ -27,8 +27,8 @@ export class LeaseManager {
     return this.repository.listExpiredLeaseTaskIds(now, limit);
   }
 
-  async release(task: TaskRecord, patch: TaskRecordPatch): Promise<TaskRecord | null> {
-    if (isLeaseValid(task.lease, new Date()) === false) {
+  async release(task: TaskRecord, patch: TaskRecordPatch, now: Date): Promise<TaskRecord | null> {
+    if (isLeaseValid(task.lease, now) === false) {
       this.logger.warn(`租约已过期，释放被忽略：taskId=${task.taskId}`);
       return task;
     }

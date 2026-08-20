@@ -90,7 +90,7 @@ export class BatchOrchestrator {
     return frozen;
   }
 
-  async executeFrozenBatch(task: TaskRecord): Promise<BatchRecord> {
+  async executeFrozenBatch(task: TaskRecord, now: Date): Promise<BatchRecord> {
     const payload = task.payload as { batchId: string; operatorId: string };
     const batch = await this.requireBatch(payload.batchId);
     if (batch.status !== BatchStatus.EXECUTING && batch.status !== BatchStatus.RETRYING_FAILED) {
@@ -143,7 +143,7 @@ export class BatchOrchestrator {
       ...batch,
       status: summary.status,
       itemResults: results,
-      completedAt: done ? new Date().toISOString() : undefined,
+      completedAt: done ? now.toISOString() : undefined,
     };
     await this.store.save(completed);
     return completed;

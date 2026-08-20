@@ -66,7 +66,7 @@ export interface TaskBacklogSummary {
 
 export interface TaskHandler<T = unknown> {
   readonly taskType: TaskType;
-  handle(task: TaskRecord<T>): Promise<void>;
+  handle(task: TaskRecord<T>, now?: Date): Promise<void>;
 }
 
 export interface TaskProcessorRegistry {

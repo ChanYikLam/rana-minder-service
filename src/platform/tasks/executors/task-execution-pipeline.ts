@@ -69,7 +69,7 @@ export class TaskExecutionPipeline {
     }
 
     try {
-      await handler.handle(leased);
+      await handler.handle(leased, now);
       const resultRef = `task:${leased.taskId}:completed:${now.toISOString()}`;
       await this.convergence.convergeAfterSuccess(leased, resultRef);
       await this.releaseWithPatch(leased, now, {
@@ -121,7 +121,11 @@ export class TaskExecutionPipeline {
     now: Date,
     patch: Parameters<LeaseManager['release']>[1],
   ): Promise<void> {
-    const updated = await this.leases.release(task, { ...patch, updatedAt: now.toISOString() });
+    const updated = await this.leases.release(
+      task,
+      { ...patch, updatedAt: now.toISOString() },
+      now,
+    );
     if (updated === null) {
       this.logger.warn(
         `任务状态更新未生效（租约版本冲突）：taskId=${task.taskId}, expectedLeaseVersion=${task.lease?.leaseVersion ?? 0}`,
