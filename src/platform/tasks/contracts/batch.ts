@@ -51,6 +51,7 @@ export interface BatchRecord {
   readonly batchId: string;
   readonly parentBatchId?: string;
   readonly previewVersion: number;
+  readonly version: number;
   readonly scope: TaskScope;
   readonly operationType: string;
   readonly businessType: string;

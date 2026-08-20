@@ -60,6 +60,7 @@ export class InMemoryTaskRepository implements TaskRepository {
     workerId: string,
     leaseUntil: string,
     leaseVersion: number,
+    now: Date,
   ): Promise<TaskClaimResult> {
     const current = this.tasks.get(taskId);
     if (current === undefined) return { claimed: false, task: null, reason: 'NOT_FOUND' };
@@ -69,7 +70,7 @@ export class InMemoryTaskRepository implements TaskRepository {
     ) {
       return { claimed: false, task: current, reason: 'TERMINAL' };
     }
-    if (current.lease !== null && new Date(current.lease.leaseUntil).getTime() > Date.now()) {
+    if (current.lease !== null && new Date(current.lease.leaseUntil).getTime() > now.getTime()) {
       return { claimed: false, task: current, reason: 'LEASE_BUSY' };
     }
 
@@ -80,9 +81,9 @@ export class InMemoryTaskRepository implements TaskRepository {
         workerId,
         leaseVersion,
         leaseUntil,
-        leasedAt: new Date().toISOString(),
+        leasedAt: now.toISOString(),
       },
-      updatedAt: new Date().toISOString(),
+      updatedAt: now.toISOString(),
     };
     this.tasks.set(taskId, claimed);
     return { claimed: true, task: claimed };

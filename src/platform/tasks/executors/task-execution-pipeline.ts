@@ -34,9 +34,9 @@ export class TaskExecutionPipeline {
     const leased = claim.task;
     const attempt = leased.attempts + 1;
 
-    const convergence = await this.convergence.convergeBeforeExecution(leased);
+    const convergence = await this.convergence.convergeBeforeExecution(leased, now);
     if (convergence.allowed === false) {
-      await this.finishAfterConvergence(leased, now, convergence.resultRef);
+      await this.finishAfterConvergence(leased, now, attempt, convergence.resultRef);
       return;
     }
 
@@ -106,14 +106,27 @@ export class TaskExecutionPipeline {
   private async finishAfterConvergence(
     task: TaskRecord,
     now: Date,
+    attempt: number,
     resultRef?: string,
   ): Promise<void> {
     if (resultRef !== undefined) {
+      // 通过幂等记录收敛为已完成：与正常成功路径保持一致，累加尝试次数
       await this.releaseWithPatch(task, now, {
         status: TaskStatus.COMPLETED,
+        attempts: attempt,
         resultRef,
       });
+      return;
     }
+    // 幂等记录为执行中但本次领取租约后仍未过期（另一 worker 正在执行）：
+    // 主动释放本次租约并回写 PENDING，避免任务卡在 LEASED 等待自然过期，形成重复执行窗口。
+    this.logger.warn(
+      `幂等收敛未放行（执行中且租约有效），释放租约回写 PENDING：taskId=${task.taskId}, idempotencyKey=${task.idempotencyKey}`,
+    );
+    await this.releaseWithPatch(task, now, {
+      status: TaskStatus.PENDING,
+      attempts: task.attempts,
+    });
   }
 
   private async releaseWithPatch(

@@ -14,6 +14,7 @@ export class RecoveryReplayConvergence {
 
   async convergeBeforeExecution(
     task: TaskRecord,
+    now: Date,
   ): Promise<{ allowed: boolean; resultRef?: string }> {
     const record = await this.idempotency.find(task.idempotencyKey);
     if (record === null) {
@@ -28,7 +29,7 @@ export class RecoveryReplayConvergence {
       const leaseExpired =
         fresh === null ||
         fresh.lease === null ||
-        new Date(fresh.lease.leaseUntil).getTime() <= Date.now();
+        new Date(fresh.lease.leaseUntil).getTime() <= now.getTime();
       if (leaseExpired === false) return { allowed: false };
       this.logger.warn(
         `恢复重放：执行中幂等记录对应任务租约已过期：idempotencyKey=${task.idempotencyKey}`,

@@ -42,6 +42,7 @@ export interface TaskRepository {
     workerId: string,
     leaseUntil: string,
     leaseVersion: number,
+    now: Date,
   ): Promise<TaskClaimResult>;
   updateAfterExecution(
     taskId: string,

@@ -20,7 +20,7 @@ export class LeaseManager {
     if (decision === 'BUSY') return { claimed: false, task, reason: 'LEASE_BUSY' };
     const leaseUntil = computeLeaseUntil(now, leaseMs);
     const leaseVersion = (task.lease?.leaseVersion ?? 0) + 1;
-    return this.repository.tryClaim(taskId, workerId, leaseUntil, leaseVersion);
+    return this.repository.tryClaim(taskId, workerId, leaseUntil, leaseVersion, now);
   }
 
   async listExpiredLeaseTaskIds(now: string, limit: number): Promise<readonly string[]> {

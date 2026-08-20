@@ -44,6 +44,7 @@ export class BatchOrchestrator {
     const batch: BatchRecord = {
       batchId,
       previewVersion,
+      version: 1,
       scope,
       operationType,
       businessType,
@@ -93,13 +94,12 @@ export class BatchOrchestrator {
   async executeFrozenBatch(task: TaskRecord, now: Date): Promise<BatchRecord> {
     const payload = task.payload as { batchId: string; operatorId: string };
     const batch = await this.requireBatch(payload.batchId);
-    if (batch.status !== BatchStatus.EXECUTING && batch.status !== BatchStatus.RETRYING_FAILED) {
-      throw new Error(`批次状态不可执行：${batch.status}`);
-    }
+    this.assertExecutable(batch);
 
-    const results = [...batch.itemResults];
+    // 逐项执行，仅累加本次执行产生的本地结果（不直接覆盖整批，避免并发丢失更新）
+    const localResults: BatchItemResult[] = [];
     for (const item of batch.frozenItems) {
-      const existing = results.find((r) => r.itemId === item.itemId);
+      const existing = batch.itemResults.find((r) => r.itemId === item.itemId);
       if (existing !== undefined && existing.status === BatchItemStatus.SUCCEEDED) {
         continue;
       }
@@ -111,7 +111,7 @@ export class BatchOrchestrator {
         item,
       );
       if (auth.ok === false) {
-        this.upsertResult(results, {
+        this.upsertResult(localResults, {
           itemId: item.itemId,
           status: BatchItemStatus.REJECTED,
           reason: auth.reason ?? '批量逐项鉴权拒绝',
@@ -127,9 +127,9 @@ export class BatchOrchestrator {
           batch.scope,
           item,
         );
-        this.upsertResult(results, result);
+        this.upsertResult(localResults, result);
       } catch (err) {
-        this.upsertResult(results, {
+        this.upsertResult(localResults, {
           itemId: item.itemId,
           status: BatchItemStatus.FAILED,
           reason: err instanceof Error ? err.message : String(err),
@@ -137,16 +137,25 @@ export class BatchOrchestrator {
       }
     }
 
-    const summary = summarizeBatch({ ...batch, itemResults: results });
-    const done = summary.status !== BatchStatus.EXECUTING;
-    const completed: BatchRecord = {
-      ...batch,
-      status: summary.status,
-      itemResults: results,
-      completedAt: done ? now.toISOString() : undefined,
-    };
-    await this.store.save(completed);
-    return completed;
+    // 乐观写：基于最新批次快照合并本地结果后 CAS 落盘；版本冲突则重读合并重试
+    for (let guard = 0; guard < 3; guard += 1) {
+      const latest = await this.requireBatch(payload.batchId);
+      this.assertExecutable(latest);
+      const merged = this.mergeResults(latest.itemResults, localResults);
+      const summary = summarizeBatch({ ...latest, itemResults: merged });
+      const done = summary.status !== BatchStatus.EXECUTING;
+      const candidate: BatchRecord = {
+        ...latest,
+        status: summary.status,
+        itemResults: merged,
+        completedAt: done ? now.toISOString() : undefined,
+      };
+      if (await this.store.saveIfVersion(candidate, latest.version)) {
+        return candidate;
+      }
+      this.logger.warn(`批次并发写入冲突，重读合并重试：batchId=${payload.batchId}`);
+    }
+    throw new Error(`批次并发写入冲突，重试后仍失败：batchId=${payload.batchId}`);
   }
 
   async retryFailedItems(
@@ -174,6 +183,7 @@ export class BatchOrchestrator {
       batchId: retryBatchId,
       parentBatchId: original.batchId,
       previewVersion: 1,
+      version: 1,
       scope: original.scope,
       operationType: original.operationType,
       businessType: original.businessType,
@@ -192,6 +202,23 @@ export class BatchOrchestrator {
     const batch = await this.store.findById(batchId);
     if (batch === null) throw new Error(`批次不存在：${batchId}`);
     return batch;
+  }
+
+  private assertExecutable(batch: BatchRecord): void {
+    if (batch.status !== BatchStatus.EXECUTING && batch.status !== BatchStatus.RETRYING_FAILED) {
+      throw new Error(`批次状态不可执行：${batch.status}`);
+    }
+  }
+
+  private mergeResults(
+    base: readonly BatchItemResult[],
+    local: readonly BatchItemResult[],
+  ): BatchItemResult[] {
+    const merged = [...base];
+    for (const result of local) {
+      this.upsertResult(merged, result);
+    }
+    return merged;
   }
 
   private assertPreviewInputs(
