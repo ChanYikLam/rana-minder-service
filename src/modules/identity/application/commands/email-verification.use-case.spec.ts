@@ -194,6 +194,36 @@ describe('EmailVerificationUseCase R003 发送/重发验证邮件', () => {
     );
   });
 
+  it('IDN-011/R004：重发使旧请求失效（supersede 落库，旧链接不再可消费）', async () => {
+    const repository = inMemoryProfileRepository();
+    repository.seed(pendingEmailProfile());
+    const verificationRepository = inMemoryVerificationRepository();
+    const earlier = new Date(now.getTime() - 10 * 60 * 1000);
+    const { verification: oldRequest } = EmailVerification.issue(
+      'v-1',
+      'user-1',
+      'new@example.com',
+      1,
+      earlier,
+    );
+    verificationRepository.seed(oldRequest.toSnapshot());
+    const useCase = createUseCase({ repository, verificationRepository });
+
+    await useCase.sendVerificationEmail({
+      subjectId: 'user-1',
+      email: 'new@example.com',
+      now,
+      mailCapable: true,
+      actor: 'user-1',
+      traceId: null,
+    });
+
+    const stored = await verificationRepository.load('v-1');
+    assert.ok(stored);
+    assert.equal(stored.consumedAt?.getTime(), now.getTime());
+    assert.equal(oldRequest.toSnapshot().consumedAt, null); // 原快照对象未被旁路改动
+  });
+
   it('REV：平台发信能力不可用 → 拒绝（运维故障，不绕过验证）', async () => {
     const repository = inMemoryProfileRepository();
     repository.seed(pendingEmailProfile());

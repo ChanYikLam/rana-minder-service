@@ -101,8 +101,9 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
     const { verification, token } = EmailVerification.issue(id, input.subjectId, normalized, requestVersion, input.now);
 
     if (latest) {
-      EmailVerification.fromSnapshot(latest).supersede(input.now);
-      await this.verificationRepository.save(latest);
+      const prev = EmailVerification.fromSnapshot(latest);
+      prev.supersede(input.now);
+      await this.verificationRepository.save(prev.toSnapshot());
     }
     await this.verificationRepository.save(verification.toSnapshot());
     await this.profileRepository.save(profile.toSnapshot(), profile.events, snapshot.version);
