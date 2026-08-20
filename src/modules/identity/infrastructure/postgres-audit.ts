@@ -13,6 +13,8 @@
  * 审计保存失败时原命令回滚（IdentityUnitOfWork 事务边界保证）。
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type { DbAdapter } from '../../../shared/db-adapter';
 import type { IdentityUnitOfWork } from './unit-of-work';
 import type {
@@ -32,7 +34,7 @@ export class PostgresIdentityAudit implements IdentityAuditPort {
       `INSERT INTO identity_audit (id, type, subject_id, occurred_at, actor, summary, trace_id)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
       [
-        `${fact.type}:${fact.subjectId}:${fact.occurredAt.getTime()}`,
+        randomUUID(),
         fact.type,
         fact.subjectId,
         fact.occurredAt,

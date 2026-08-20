@@ -19,7 +19,7 @@ export function allowTransition<TState extends string>(
 }
 
 export function rejectTransition<TState extends string>(
-  expected: TState,
+  _expected: TState,
   reason: string,
 ): StateTransitionResult<TState> {
   return { allowed: false, reason };

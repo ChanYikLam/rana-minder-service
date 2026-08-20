@@ -59,7 +59,8 @@ export class PostgresEmailVerificationRepository implements EmailVerificationRep
          expires_at = EXCLUDED.expires_at,
          consumed_at = EXCLUDED.consumed_at,
          request_version = EXCLUDED.request_version,
-         created_at = EXCLUDED.created_at`,
+         created_at = EXCLUDED.created_at
+       WHERE email_verification_requests.consumed_at IS NULL`,
       [
         snapshot.id,
         snapshot.subjectId,
