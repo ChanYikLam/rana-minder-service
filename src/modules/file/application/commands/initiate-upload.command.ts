@@ -13,6 +13,8 @@ import { UploadPolicy } from '../../domain/services/upload-policy';
 import { randomObjectKey } from '../../domain/services/object-location';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
+import { DEFAULT_SESSION_TTL_MINUTES, MAX_SESSION_TTL_MINUTES } from './session-ttl';
+export { MAX_SESSION_TTL_MINUTES };
 
 /** 上传初始化输入（IFC-FIL-001） */
 export interface InitiateUploadInput {
@@ -40,9 +42,6 @@ export class InitiateUploadError extends Error {
     this.name = 'InitiateUploadError';
   }
 }
-
-/** 上传会话有效期上限（分钟；限时会话设计，调用方不得传极大值使之近乎无限期） */
-export const MAX_SESSION_TTL_MINUTES = 120;
 
 /**
  * 初始化上传（IFC-FIL-001，SRS-SM-FILE-001：新建→临时上传）。
@@ -82,7 +81,7 @@ export class InitiateUploadCommand {
       sha256: '',
       storageToken: randomUUID(),
     };
-    const ttlMinutes = input.sessionTtlMinutes ?? 30;
+    const ttlMinutes = input.sessionTtlMinutes ?? DEFAULT_SESSION_TTL_MINUTES;
     if (ttlMinutes <= 0 || ttlMinutes > MAX_SESSION_TTL_MINUTES) {
       throw new InitiateUploadError(
         `上传会话有效期需在 1~${MAX_SESSION_TTL_MINUTES} 分钟内（当前 ${ttlMinutes}）`,

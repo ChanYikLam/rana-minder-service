@@ -13,6 +13,7 @@ import { UploadPolicy } from '../../domain/services/upload-policy';
 import { locationKeyOf, randomObjectKey } from '../../domain/services/object-location';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
+import { DEFAULT_SESSION_TTL_MINUTES } from './session-ttl';
 
 /** 替换草稿文件输入（IFC-FIL-006） */
 export interface ReplaceDraftFileInput {
@@ -23,8 +24,6 @@ export interface ReplaceDraftFileInput {
   readonly declaredSizeBytes: number;
   /** 新版本声明类型 */
   readonly declaredType?: string;
-  /** 字段附件数量上限（不得突破平台硬上限） */
-  readonly configuredPerField?: number;
 }
 
 /** 替换前置失败（IFC-ERR-006：已提交锁定只能走事实纠错；隔离文件重新上传必须新建文件） */
@@ -66,11 +65,8 @@ export class ReplaceDraftFileCommand {
         `当前状态 ${file.state} 不可替换（隔离/失败/已提交需新建文件或走纠错）`,
       );
     }
-    // 平台硬上限（新版本声明大小与字段数量）
+    // 平台硬上限（新版本声明大小；字段附件数量上限仅对新建生效，替换不新增文件故不在此校验）
     this.policy.assertDeclaredSizeWithinLimit(file.category, input.declaredSizeBytes);
-    if (input.configuredPerField !== undefined) {
-      this.policy.assertCountWithinLimit(input.configuredPerField);
-    }
 
     const now = new Date().toISOString();
     const nextVersionNo = await this.repo.nextVersionNo(file.fileId);
@@ -96,7 +92,7 @@ export class ReplaceDraftFileCommand {
       isolationLocation: quarantine,
       allowedCategory: file.category,
       maxSizeBytes: this.policy.maxSizeFor(file.category),
-      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + DEFAULT_SESSION_TTL_MINUTES * 60_000).toISOString(),
       status: 'ACTIVE',
     };
     const newVersion: FileVersion = {

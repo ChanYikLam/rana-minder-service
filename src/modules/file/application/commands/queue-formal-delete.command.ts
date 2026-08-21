@@ -85,12 +85,18 @@ export class QueueFormalDeleteCommand {
     // 若遗漏会与清单重复枚举同一对象且元数据残留 PENDING）。按 location 去重。
     // 派生物/导出由审计模块按 AUD-008 传播范围补充（本模块模型未持有派生物定位时留空）。
     const manifestItems = new Map<string, DeleteManifestItem>();
+    // bucket 角色 → 清单项类别映射（精确区分 OBJECT/QUARANTINE/DERIVED，不把派生区误标为隔离）
+    const KIND_BY_BUCKET: Record<BucketRole, DeleteManifestItem['kind']> = {
+      [BucketRole.OBJECT]: 'OBJECT',
+      [BucketRole.QUARANTINE]: 'QUARANTINE',
+      [BucketRole.DERIVED]: 'DERIVED',
+    };
     const addItem = (loc: ObjectLocation): void => {
       const key = locationKeyOf(loc);
       if (!manifestItems.has(key)) {
         manifestItems.set(key, {
           location: loc,
-          kind: loc.bucketRole === BucketRole.OBJECT ? 'OBJECT' : 'QUARANTINE',
+          kind: KIND_BY_BUCKET[loc.bucketRole],
           status: 'PENDING' as const,
         });
       }
