@@ -38,6 +38,8 @@ export interface ObjectStorePort {
 /**
  * 进程内对象存储占位（开发期；生产替换为 S3 兼容适配器）。
  * 保留只写一次语义（重复 put 同键失败）。
+ * 注意：内存实现常驻整包字节（视频类别单文件上限可达 200MB），
+ * 仅限开发/单测；生产替换前须评估并发内存占用并改为流式/磁盘或对象存储。
  */
 @Injectable()
 export class InMemoryObjectStore implements ObjectStorePort {

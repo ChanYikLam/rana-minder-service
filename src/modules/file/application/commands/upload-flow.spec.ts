@@ -48,6 +48,14 @@ const baseInput = {
   configuredPerField: 3,
 };
 
+/** 完成上传标准输入（主上传者 u1） */
+const completeInput = (file: FileRecord, bytes: Uint8Array, principalId = 'u1') => ({
+  fileId: file.fileId,
+  sessionId: file.uploadSession!.sessionId,
+  principalId,
+  bytes,
+});
+
 describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
   it('初始化上传：创建文件 + 隔离区限时会话；客户端不得决定对象键', async () => {
     const flow = makeFlow();
@@ -62,13 +70,7 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
   it('完成上传：隔离区只写一次 + 真实类型初检 → 检查中', async () => {
     const flow = makeFlow();
     const file = await flow.initiate.execute(baseInput);
-    const sessionId = file.uploadSession!.sessionId;
-    const completed = await flow.complete.execute({
-      fileId: file.fileId,
-      sessionId,
-      bytes: pngBytes(),
-      actualSize: pngBytes().length,
-    });
+    const completed = await flow.complete.execute(completeInput(file, pngBytes()));
     assert.equal(completed.state, FileState.CHECKING);
     assert.equal(completed.checkRecord?.status, 'RUNNING');
     // 隔离区对象存在（只写一次）
@@ -76,12 +78,7 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     assert.ok(stored !== null);
     // 重放同一会话 → 拒绝（状态已离开临时上传，拦截更早）
     await assert.rejects(
-      flow.complete.execute({
-        fileId: file.fileId,
-        sessionId,
-        bytes: pngBytes(),
-        actualSize: pngBytes().length,
-      }),
+      flow.complete.execute(completeInput(file, pngBytes())),
       /不在临时上传状态/,
     );
   });
@@ -93,12 +90,7 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
       declaredType: 'image/png',
       declaredSizeBytes: exeBytes().length,
     });
-    const completed = await flow.complete.execute({
-      fileId: file.fileId,
-      sessionId: file.uploadSession!.sessionId,
-      bytes: exeBytes(),
-      actualSize: exeBytes().length,
-    });
+    const completed = await flow.complete.execute(completeInput(file, exeBytes()));
     assert.equal(completed.state, FileState.QUARANTINED_FAILED);
     const view = await flow.status.getStatus(file.fileId, 'u1');
     assert.equal(view.accessible, false);
@@ -107,14 +99,14 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
   it('检查通过收口：晋升到权威原件区 → 可用（可访问）', async () => {
     const flow = makeFlow();
     const file = await flow.initiate.execute(baseInput);
-    await flow.complete.execute({
+    await flow.complete.execute(completeInput(file, pngBytes()));
+    await flow.ask.execute({
       fileId: file.fileId,
-      sessionId: file.uploadSession!.sessionId,
+      principalId: 'u1',
       bytes: pngBytes(),
-      actualSize: pngBytes().length,
+      declaredType: 'image/png',
     });
-    await flow.ask.execute({ fileId: file.fileId, bytes: pngBytes(), declaredType: 'image/png' });
-    const promoted = await flow.promote.execute({ fileId: file.fileId });
+    const promoted = await flow.promote.execute({ fileId: file.fileId, principalId: 'u1' });
     assert.equal(promoted.state, FileState.AVAILABLE);
     assert.equal(promoted.versions[0].objectLocation.bucketRole, 'OBJECT');
     const view = await flow.status.getStatus(file.fileId, 'u1');
@@ -127,12 +119,7 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     // 未知类型字节（octet-stream）→ 初检 FAILED → 隔离失败（声明大小与实际一致）
     const bad = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
     const file = await flow.initiate.execute({ ...baseInput, declaredSizeBytes: bad.length });
-    const completed = await flow.complete.execute({
-      fileId: file.fileId,
-      sessionId: file.uploadSession!.sessionId,
-      bytes: bad,
-      actualSize: bad.length,
-    });
+    const completed = await flow.complete.execute(completeInput(file, bad));
     assert.equal(completed.state, FileState.QUARANTINED_FAILED);
     // 隔离原因不把危险内容写入日志（脱敏）
     assert.ok(!completed.checkRecord!.sanitizedResult.includes('danger'));
@@ -146,17 +133,46 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     await assert.rejects(flow.status.getStatus(file.fileId, 'u2'), /IFC-ERR-003/);
   });
 
+  it('命令层鉴权：非上传者不得完成上传/请求检查/收口晋升（与状态查询一致）', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    // 他者完成上传 → 拒绝
+    await assert.rejects(flow.complete.execute(completeInput(file, pngBytes(), 'u2')), /无权完成/);
+    // 上传者正常完成进入检查中
+    await flow.complete.execute(completeInput(file, pngBytes()));
+    // 他者请求检查 → 拒绝
+    await assert.rejects(
+      flow.ask.execute({
+        fileId: file.fileId,
+        principalId: 'u2',
+        bytes: pngBytes(),
+        declaredType: 'image/png',
+      }),
+      /无权请求/,
+    );
+    await flow.ask.execute({
+      fileId: file.fileId,
+      principalId: 'u1',
+      bytes: pngBytes(),
+      declaredType: 'image/png',
+    });
+    // 他者收口晋升 → 拒绝
+    await assert.rejects(
+      flow.promote.execute({ fileId: file.fileId, principalId: 'u2' }),
+      /无权收口/,
+    );
+    const promoted = await flow.promote.execute({ fileId: file.fileId, principalId: 'u1' });
+    assert.equal(promoted.state, FileState.AVAILABLE);
+  });
+
   it('完成上传：真实 bytes.length 与声明大小不一致时拒绝（防绕过类别硬上限）', async () => {
     const flow = makeFlow();
     const file = await flow.initiate.execute(baseInput);
-    // actualSize 谎报为声明大小，但真实字节更长 → 必须拒绝
+    // 声明大小与实际真实字节不一致 → 必须拒绝（服务端只信真实字节，不接收客户端自报大小）
     await assert.rejects(
-      flow.complete.execute({
-        fileId: file.fileId,
-        sessionId: file.uploadSession!.sessionId,
-        bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0x00]),
-        actualSize: baseInput.declaredSizeBytes,
-      }),
+      flow.complete.execute(
+        completeInput(file, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0x00])),
+      ),
       /实际大小与声明大小不一致/,
     );
   });
@@ -176,20 +192,20 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
   it('晋升失败：保持检查中(UNAVAILABLE)，清除 finishedAt，不开放访问', async () => {
     const flow = makeFlow();
     const file = await flow.initiate.execute(baseInput);
-    await flow.complete.execute({
+    await flow.complete.execute(completeInput(file, pngBytes()));
+    await flow.ask.execute({
       fileId: file.fileId,
-      sessionId: file.uploadSession!.sessionId,
+      principalId: 'u1',
       bytes: pngBytes(),
-      actualSize: pngBytes().length,
+      declaredType: 'image/png',
     });
-    await flow.ask.execute({ fileId: file.fileId, bytes: pngBytes(), declaredType: 'image/png' });
     // 预占权威原件区目标键（与隔离区同 randomKey，但 objectKind=OBJECT），令晋升 create-only 失败
     const quarantine = file.versions[0].objectLocation;
     await flow.store.putQuarantine(
       { ...quarantine, bucketRole: 'OBJECT', objectKind: 'OBJECT' },
       new Uint8Array([9, 9, 9]),
     );
-    const after = await flow.promote.execute({ fileId: file.fileId });
+    const after = await flow.promote.execute({ fileId: file.fileId, principalId: 'u1' });
     assert.equal(after.state, FileState.CHECKING);
     assert.equal(after.checkRecord?.status, 'UNAVAILABLE');
     assert.equal(after.checkRecord?.retryable, true);
@@ -202,12 +218,7 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
   it('检查服务不可用：保持检查中，可重试，不得自动放行（GOV-008）', async () => {
     const flow = makeFlow();
     const file = await flow.initiate.execute(baseInput);
-    const completed = await flow.complete.execute({
-      fileId: file.fileId,
-      sessionId: file.uploadSession!.sessionId,
-      bytes: pngBytes(),
-      actualSize: pngBytes().length,
-    });
+    const completed = await flow.complete.execute(completeInput(file, pngBytes()));
     // 直接置 UNAVAILABLE 检查记录（模拟外部检查服务不可用）
     const unavailable: FileRecord = {
       ...completed,
@@ -222,7 +233,7 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     };
     flow.repo.save(unavailable);
     // 收口仍保持检查中（不跳转，不写库，不得放行）
-    const after = await flow.promote.execute({ fileId: file.fileId });
+    const after = await flow.promote.execute({ fileId: file.fileId, principalId: 'u1' });
     assert.equal(after.state, FileState.CHECKING);
     assert.equal(after.checkRecord?.status, 'UNAVAILABLE');
     const view = await flow.status.getStatus(file.fileId, 'u1');
@@ -235,14 +246,6 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     // 将会话置为已过期
     const expiredSession = { ...file.uploadSession!, expiresAt: '2000-01-01T00:00:00.000Z' };
     flow.repo.save({ ...file, uploadSession: expiredSession });
-    await assert.rejects(
-      flow.complete.execute({
-        fileId: file.fileId,
-        sessionId: file.uploadSession!.sessionId,
-        bytes: pngBytes(),
-        actualSize: pngBytes().length,
-      }),
-      /上传会话已过期/,
-    );
+    await assert.rejects(flow.complete.execute(completeInput(file, pngBytes())), /上传会话已过期/);
   });
 });

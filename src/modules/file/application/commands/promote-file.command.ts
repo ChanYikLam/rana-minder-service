@@ -10,6 +10,8 @@ import type { ObjectStorePort } from '../../infrastructure/object-store-port';
 /** 检查收口输入（PromoteFileCommand；服务端/后台任务调用，客户端不得自行宣布检查通过） */
 export interface PromoteFileInput {
   readonly fileId: string;
+  /** 操作主体（归属/权限鉴权；IFC-FIL-003 一致：仅上传者或有权角色） */
+  readonly principalId: string;
 }
 
 /** 晋升失败（IFC-ERR-012 依赖不可用/IFC-ERR-006 前置失败） */
@@ -40,6 +42,9 @@ export class PromoteFileCommand {
     const file = await this.repo.load(input.fileId);
     if (file === null) {
       throw new PromoteFileError('文件不存在');
+    }
+    if (file.uploaderId !== input.principalId) {
+      throw new PromoteFileError('当前无权收口该文件检查');
     }
     if (file.state !== FileState.CHECKING) {
       throw new PromoteFileError(`文件不在检查中状态（当前 ${file.state}）`);

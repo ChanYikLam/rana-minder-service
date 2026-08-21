@@ -7,14 +7,15 @@ import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 import { OBJECT_STORE_PORT } from '../../infrastructure/object-store-port';
 import type { ObjectStorePort } from '../../infrastructure/object-store-port';
+import { ApplicationFileCheck } from '../../infrastructure/file-check-port';
 
 /** 完成字节接收输入（IFC-FIL-002） */
 export interface CompleteUploadInput {
   readonly fileId: string;
+  /** 操作主体（归属/权限鉴权；IFC-FIL-003 一致：仅上传者或有权角色） */
+  readonly principalId: string;
   readonly sessionId: string;
   readonly bytes: Uint8Array;
-  /** 实际大小（字节；与声明大小一致性核验） */
-  readonly actualSize: number;
 }
 
 /** 上传完成前置失败（IFC-ERR-006/IFC-ERR-012） */
@@ -48,6 +49,9 @@ export class CompleteUploadCommand {
     if (file === null) {
       throw new CompleteUploadError('文件不存在');
     }
+    if (file.uploaderId !== input.principalId) {
+      throw new CompleteUploadError('当前无权完成该文件上传');
+    }
     if (file.state !== FileState.TEMPORARY_UPLOAD) {
       throw new CompleteUploadError(`文件不在临时上传状态（当前 ${file.state}）`);
     }
@@ -65,8 +69,8 @@ export class CompleteUploadCommand {
     if (currentVersion.versionNo !== session.fileVersionNo) {
       throw new CompleteUploadError('上传会话与文件版本不匹配');
     }
-    // 实际字节可读且大小一致：用真实 bytes.length 复核，不信任客户端 actualSize
-    // （actualSize/declaredSize 均为客户端传入，只校验它们无法防绕过类别硬上限）
+    // 实际字节可读且大小一致：用真实 bytes.length 复核，不信任客户端传入的声明大小
+    // （仅校验客户端自报大小无法防绕过类别硬上限，须以真实字节为准）
     if (input.bytes.length <= 0 || input.bytes.length !== currentVersion.declaredSize) {
       throw new CompleteUploadError('实际大小与声明大小不一致');
     }
@@ -106,7 +110,7 @@ export class CompleteUploadCommand {
       uploadSession: { ...session, status: 'SEALED' },
       checkRecord: {
         fileVersionNo: updatedVersion.versionNo,
-        engineVersion: 'app-initial-v1',
+        engineVersion: ApplicationFileCheck.ENGINE_VERSION,
         status: initialCheck === 'PASSED' ? 'RUNNING' : initialCheck,
         retryable: false,
         sanitizedResult: sniff.matchesDeclaration

@@ -17,6 +17,8 @@ export class AskFileCheckError extends Error {
 /** 请求检查输入（AskFileCheckCommand；job 模块编排，稳定回调/轮询收口） */
 export interface AskFileCheckInput {
   readonly fileId: string;
+  /** 操作主体（归属/权限鉴权；IFC-FIL-003 一致：仅上传者或有权角色） */
+  readonly principalId: string;
   /** 检查用字节（隔离区回读；不信任客户端提交） */
   readonly bytes: Uint8Array;
   /** 声明类型（初检登记；检查按真实类型执行） */
@@ -44,6 +46,9 @@ export class AskFileCheckCommand {
     const file = await this.repo.load(input.fileId);
     if (file === null) {
       throw new AskFileCheckError('文件不存在');
+    }
+    if (file.uploaderId !== input.principalId) {
+      throw new AskFileCheckError('当前无权请求该文件检查');
     }
     if (file.state !== FileState.CHECKING) {
       throw new AskFileCheckError(`文件不在检查中状态（当前 ${file.state}）`);
