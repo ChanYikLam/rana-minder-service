@@ -45,6 +45,12 @@ export interface SubmitRelationCommandInput {
   objectVersion: number;
   idempotencyKey: string;
   submittedBy: string;
+  /**
+   * 仅用于预约命令到期调度执行的内链路：预约命令创建时已校验
+   * CLUB_APPOINTMENT_MANAGE，实际 Group 关系变更是系统按已批准的预约内容执行，
+   * 不再要求提交者同时拥有 CLUB_MEMBER_MANAGE（ORG-027、ORG-039）。
+   */
+  skipMemberManageCheck?: boolean;
 }
 
 export class RelationCommandUseCase {
@@ -73,10 +79,13 @@ export class RelationCommandUseCase {
       throw orgError.precondition(`社团当前 ${club.status}，禁止关系变更（ORG-001）`);
     }
 
-    // 权限校验：提交者须有成员/关系管理权限（ORG-027 提交行）
-    const perms = await this.permissions.effectiveForClub(input.submittedBy, input.clubId);
-    if (!perms.includes(PermissionCatalog.CLUB_MEMBER_MANAGE)) {
-      throw orgError.forbidden('提交者无成员关系管理权限（ORG-027）');
+    // 权限校验：直接提交须有成员/关系管理权限；预约命令调度执行内链路已在前置
+    // 预约创建时校验 CLUB_APPOINTMENT_MANAGE，此处跳过二次成员权限要求（ORG-027/039）
+    if (input.skipMemberManageCheck !== true) {
+      const perms = await this.permissions.effectiveForClub(input.submittedBy, input.clubId);
+      if (!perms.includes(PermissionCatalog.CLUB_MEMBER_MANAGE)) {
+        throw orgError.forbidden('提交者无成员关系管理权限（ORG-027）');
+      }
     }
 
     // 同一目标处理中禁止重复/冲突操作（SRS-SM-ORG-002）
@@ -289,12 +298,26 @@ export class RelationCommandUseCase {
     clubId: string;
     now: Date;
   }): Promise<RelationCommand> {
-    const command = await this.requireCommand(input.commandId);
+    let command = await this.requireCommand(input.commandId);
     if (input.clubId !== command.clubId) {
       throw orgError.scopeMismatch(
         `URL 社团作用域 ${input.clubId} 与关系命令实际社团 ${command.clubId} 不一致（IFC-ERR-004）`,
       );
     }
+
+    // 若尚未进入写入中，先触发 write_started 以记录 attemptCount 与 retryDeadline，
+    // 否则 15 分钟有界自动重试窗口永远不会起算（ORG-027）。
+    if (command.status === 'pending_execution') {
+      const started = this.stateMachine.transition({
+        command,
+        event: 'write_started',
+        now: input.now,
+        facts: {},
+      });
+      command = started.command;
+      await this.store.save(command);
+    }
+
     const refs = command.targetRelation.map((s) => s.targetGroup);
     const readback = await this.casdoor.readback(refs);
     return this.handleReadback({ commandId: command.id, now: input.now }, readback);

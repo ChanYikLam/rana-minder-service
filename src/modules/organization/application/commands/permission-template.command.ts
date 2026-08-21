@@ -69,8 +69,9 @@ export class PermissionTemplateCommand {
     const template = await requireTemplate(this.store, input.templateId);
     if (template.draft === null) throw orgError.precondition('仅草稿可发布');
     if (input.reason.trim() === '') throw orgError.validation('必须填写发布原因');
-    // 预检版本号竞争（IFC-ERR-008）
-    if (input.previewVersion !== (template.draft.version ?? 0) + 1) {
+    // 预检版本号竞争（IFC-ERR-008）：previewVersion 必须等于待发布草稿版本，
+    // 发布后 published.version 即为此版本，避免调用方因 +1 偏移而混淆。
+    if (input.previewVersion !== (template.draft.version ?? 0)) {
       throw orgError.versionConflict('previewVersion 与当前草稿版本不符（IFC-ERR-008）');
     }
     const published: PermissionTemplate = {

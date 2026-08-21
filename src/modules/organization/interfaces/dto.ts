@@ -50,7 +50,7 @@ export class WizardCompleteDto {
 }
 
 export class ImportMembersDto {
-  @IsArray() @IsString({ each: true }) memberIds!: string[];
+  @IsArray() @ArrayMinSize(1) @IsString({ each: true }) memberIds!: string[];
 }
 
 export class SuspensionDto {

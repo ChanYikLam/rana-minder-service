@@ -85,8 +85,8 @@ export class RelationCommandStateMachine {
         if (original.status !== 'pending_execution') {
           throw orgError.stateConflict('命令已提交，不得重复提交（IFC-ERR-007）');
         }
-        command.status = 'processing';
-        command.attemptCount += 1;
+        // 提交后仍停留在 pending_execution，真正的写入尝试在 write_started 中计数并
+        // 启动 15 分钟重试窗口（ORG-027）。
         command.casdoorRequestId = null;
         sideEffects = ['save_command_audit', 'keep_original_relation', 'enqueue_execution_task'];
         break;

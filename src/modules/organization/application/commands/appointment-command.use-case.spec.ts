@@ -287,6 +287,22 @@ describe('AppointmentCommandUseCase', () => {
     assert.ok(settled?.actualEffectiveAt);
   });
 
+  it('scheduleExecute：发起人仅具预约管理权限也能驱动关系命令执行（ORG-039 内链路）', async () => {
+    // 移除成员管理权限，仅保留预约管理权限：预约执行以内链路提交关系命令，不应被
+    // CLUB_MEMBER_MANAGE 权限拒绝。
+    h.permissions.perms = [PermissionCatalog.CLUB_APPOINTMENT_MANAGE];
+    const cmd = await h.useCase.create({ ...baseCreate, initiator: 'u_personnel' });
+    const executing = await h.useCase.scheduleExecute({
+      commandId: cmd.id,
+      clubId: cmd.clubId,
+      actor: 'system',
+      now: new Date('2026-08-10T00:00:20.000Z'),
+    });
+    assert.equal(executing.status, 'executing');
+    const rel = await h.relationStore.findByProcessingForSubject(cmd.clubId, 'u_d');
+    assert.ok(rel);
+  });
+
   it('scheduleExecute 暂停后释放租约：reconfirm 后仍可重新执行（ORG-039 不阻塞）', async () => {
     const cmd = await h.useCase.create(baseCreate);
     h.permissions.perms = [];
@@ -333,9 +349,15 @@ describe('AppointmentCommandUseCase', () => {
     const rel = await h.relationStore.findByProcessingForSubject(cmd.clubId, 'u_d');
     assert.ok(rel);
 
-    // 回读空集合（未写入）→ final_failure → 预约命令收口为待重试
+    // 模拟写入已启动且 15 分钟窗口已过，直接调用 handleReadback 触发 final_failure，
+    // 进而驱动预约命令收口为待重试。
+    await h.relationStore.save({
+      ...rel,
+      status: 'processing',
+      retryDeadline: '2026-08-10T00:00:10.000Z',
+    });
     await h.relations.handleReadback(
-      { commandId: rel.id, now: new Date('2026-08-10T00:01:00.000Z') },
+      { commandId: rel.id, now: new Date('2026-08-10T00:30:00.000Z') },
       { membersByGroup: {} },
     );
     const settled = await h.apptStore.findById(cmd.id);
@@ -346,7 +368,7 @@ describe('AppointmentCommandUseCase', () => {
       commandId: cmd.id,
       clubId: cmd.clubId,
       actor: 'u_b',
-      now: new Date('2026-08-10T00:02:00.000Z'),
+      now: new Date('2026-08-10T00:32:00.000Z'),
     });
     assert.equal(retried.status, 'executing');
   });

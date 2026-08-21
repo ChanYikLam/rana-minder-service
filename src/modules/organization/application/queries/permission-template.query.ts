@@ -66,7 +66,7 @@ export class PermissionTemplateQuery {
       removed: diff.removed,
       affectedGroups,
       affectedMembers: 0,
-      previewVersion: (template.draft?.version ?? 0) + 1,
+      previewVersion: template.draft?.version ?? 0,
     };
   }
 

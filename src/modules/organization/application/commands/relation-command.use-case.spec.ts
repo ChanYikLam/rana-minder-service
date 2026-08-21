@@ -93,9 +93,9 @@ describe('RelationCommandUseCase', () => {
     submittedBy: 'u_b',
   };
 
-  it('submit：成员前提满足 → 待执行进入处理中并登记执行任务', async () => {
+  it('submit：成员前提满足 → 待执行并登记执行任务', async () => {
     const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
-    assert.equal(cmd.status, 'processing');
+    assert.equal(cmd.status, 'pending_execution');
     const tasks = await h.scheduler.listDue(new Date('2026-08-01T00:00:00.000Z'));
     assert.ok(tasks.some((t) => t.refId === cmd.id));
   });
@@ -128,6 +128,18 @@ describe('RelationCommandUseCase', () => {
     assert.equal(after.status, 'processing');
   });
 
+  it('systemConfirmReadback：写入未确认且在窗口内 → 触发 write_started 后进入 retry_attempt', async () => {
+    const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
+    const after = await h.useCase.systemConfirmReadback({
+      commandId: cmd.id,
+      clubId: cmd.clubId,
+      now: new Date('2026-08-01T00:05:00.000Z'),
+    });
+    assert.equal(after.status, 'processing');
+    assert.equal(after.attemptCount, 2);
+    assert.ok(after.retryDeadline);
+  });
+
   it('handleReadback：超出 15 分钟窗口 → final_failure 保持原关系有效', async () => {
     const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
     const processing = {
@@ -147,7 +159,7 @@ describe('RelationCommandUseCase', () => {
     assert.ok(after.failureReason?.includes('原关系保持有效'));
   });
 
-  it('handleReadback：全部目标回读确认 → 正式生效并通知', async () => {
+  it('systemConfirmReadback：写入后回读确认 → 触发 write_started 并正式生效', async () => {
     const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
     // 目标成员已写入宣传部
     await h.casdoor.writeMembership({
@@ -156,12 +168,15 @@ describe('RelationCommandUseCase', () => {
       action: 'add',
       requestId: 'req-confirm',
     });
-    const after = await h.useCase.handleReadback(
-      { commandId: cmd.id, now: new Date('2026-08-01T00:00:05.000Z') },
-      await h.casdoor.readback([{ owner: 'club-acm', name: '宣传部' }]),
-    );
+    const after = await h.useCase.systemConfirmReadback({
+      commandId: cmd.id,
+      clubId: cmd.clubId,
+      now: new Date('2026-08-01T00:00:05.000Z'),
+    });
     assert.equal(after.status, 'readback_confirmed');
     assert.ok(after.confirmedAt);
+    assert.equal(after.attemptCount, 1);
+    assert.ok(after.retryDeadline);
   });
 
   it('submit：提交者无成员管理权限 → 拒绝（ORG-027）', async () => {

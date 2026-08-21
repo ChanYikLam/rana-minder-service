@@ -48,10 +48,10 @@ function run(
 }
 
 describe('RelationCommandStateMachine', () => {
-  it('submit：待执行 → 处理中，登记执行任务副作用', () => {
+  it('submit：待执行 → 停留待执行并登记执行任务', () => {
     const r = run(makeCommand(), 'submit', {});
-    assert.equal(r.command.status, 'processing');
-    assert.equal(r.command.attemptCount, 1);
+    assert.equal(r.command.status, 'pending_execution');
+    assert.equal(r.command.attemptCount, 0);
     assert.ok(r.requiredSideEffects.includes('enqueue_execution_task'));
   });
 

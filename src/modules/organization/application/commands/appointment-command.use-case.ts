@@ -354,6 +354,7 @@ export class AppointmentCommandUseCase {
         objectVersion: club.version,
         idempotencyKey: `appointment:${command.id}:v${command.scheduleVersion}`,
         submittedBy: command.initiator,
+        skipMemberManageCheck: true,
       },
       now,
     );
