@@ -74,6 +74,10 @@ export class ReplaceDraftFileCommand {
     const now = new Date().toISOString();
     const nextVersionNo = await this.repo.nextVersionNo(file.fileId);
     const oldVersion = file.versions[file.versions.length - 1];
+    // 防御：可用文件必存在至少一个版本（替换产生的新版本追加于其后，旧原件入受控清理）
+    if (oldVersion === undefined) {
+      throw new ReplaceDraftFileError('文件无版本对象，无法替换');
+    }
 
     // 新版本：新隔离区对象 + 新上传会话（旧原件不覆盖）
     const quarantine: ObjectLocation = {

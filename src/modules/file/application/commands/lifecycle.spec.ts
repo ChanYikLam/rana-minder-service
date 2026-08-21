@@ -190,4 +190,29 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     const done = await rig.repo.load(file.fileId);
     assert.equal(done!.state, FileState.FORMALLY_DELETED);
   });
+
+  it('正式删除接管已在待清理状态的文件：不抛非法转换，生成清单并执行（IFC-FIL-008）', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    // 先经草稿移除进入 PENDING_CLEANUP（无删除清单）
+    await rig.remove.execute({ fileId: file.fileId, removable: true });
+    const pending = await rig.repo.load(file.fileId);
+    assert.equal(pending!.state, FileState.PENDING_CLEANUP);
+    assert.equal(pending!.deletionManifest, null);
+    // 超管随后发起正式删除：不得因 PENDING_CLEANUP 自转换而抛错，应生成清单并接管
+    const manifest = await rig.queueFormalDelete.execute({
+      fileId: file.fileId,
+      initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
+      reason: '数据违规，二次确认接管',
+    });
+    assert.ok(manifest.items.length >= 1);
+    const after = await rig.repo.load(file.fileId);
+    assert.equal(after!.state, FileState.PENDING_CLEANUP);
+    assert.equal(after!.deletionManifest!.accessRevoked, true);
+    // 清单接管后执行仍可收口到正式删除终态
+    const result = await rig.deleteManifest.execute(file.fileId);
+    assert.equal(result.completed, true);
+    const done = await rig.repo.load(file.fileId);
+    assert.equal(done!.state, FileState.FORMALLY_DELETED);
+  });
 });

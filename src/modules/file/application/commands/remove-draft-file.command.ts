@@ -59,15 +59,15 @@ export class RemoveDraftFileCommand {
     // 立即不可见：可用/隔离/临时上传 → 待清理（状态机校验）
     const state = this.stateMachine.transition(file.state, FileState.PENDING_CLEANUP);
 
-    // 全部版本对象进入受控清理（对用户不可见后由系统稍后物理清理）
-    const newQueue: readonly CleanupQueueItem[] = file.versions
-      .filter((v) => v.objectLocation.bucketRole !== 'QUARANTINE' || file.versions.length === 1)
-      .map((v) => ({
-        location: v.objectLocation,
-        reason: 'REMOVED' as const,
-        queuedAt: now,
-        status: 'PENDING' as const,
-      }));
+    // 全部版本对象进入受控清理（对用户不可见后由系统稍后物理清理）；
+    // 含隔离区版本：替换后新版本尚未晋升即被移除时，其隔离字节同样失去引用，
+    // 若排除将造成隔离区对象泄漏（不得跳过，FORM-009）。
+    const newQueue: readonly CleanupQueueItem[] = file.versions.map((v) => ({
+      location: v.objectLocation,
+      reason: 'REMOVED' as const,
+      queuedAt: now,
+      status: 'PENDING' as const,
+    }));
 
     const updated: FileRecord = {
       ...file,
