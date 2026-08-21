@@ -45,7 +45,8 @@ export class DefaultRecipientSnapshotResolver implements RecipientResolver {
         recipientId: input.targetStudentId,
         reason: '本人',
         scope: input.scope,
-        dedupKey: buildDedupKey(input.sourceObjectId, input.eventType, input.targetStudentId),
+        // 由命令层以 逻辑事件＋收件人 重建去重键（NTF-003、DATA-NTF-001）
+        dedupKey: '',
       });
     }
 
@@ -62,8 +63,4 @@ export class DefaultRecipientSnapshotResolver implements RecipientResolver {
       resolutionRationale: `事件类型=${input.eventType}, 目标学生=${input.targetStudentId ?? '无'}, 操作者=${input.operatorId}`,
     };
   }
-}
-
-function buildDedupKey(sourceObjectId: string, eventType: string, recipientId: string): string {
-  return `${sourceObjectId}\u0000${eventType}\u0000${recipientId}`;
 }

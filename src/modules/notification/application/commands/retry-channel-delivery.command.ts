@@ -2,18 +2,23 @@
  * 渠道投递重试命令（NTF-001、NTF-007、IFC-TX-005）。
  *
  * 持续重试失败投递；重试只重发通知，不重执行原业务。
+ * 按尝试标识直接定位待重试尝试（不依赖队首顺序），
+ * 只有处于失败重试状态的尝试才允许重试。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ChannelDeliveryAttemptRepository, EmailAdapter } from '../../infrastructure';
 import { shouldStopEmailRetry } from '../../domain';
+import { CHANNEL_DELIVERY_ATTEMPT_REPOSITORY, EMAIL_ADAPTER } from '../../tokens';
 
 @Injectable()
 export class RetryChannelDeliveryCommand {
   private readonly logger = new Logger(RetryChannelDeliveryCommand.name);
 
   constructor(
+    @Inject(CHANNEL_DELIVERY_ATTEMPT_REPOSITORY)
     private readonly attemptRepository: ChannelDeliveryAttemptRepository,
+    @Inject(EMAIL_ADAPTER)
     private readonly emailAdapter: EmailAdapter,
   ) {}
 
@@ -21,12 +26,17 @@ export class RetryChannelDeliveryCommand {
    * 重试失败的渠道投递。
    * 明确退信或连续失败 24 小时后停止重试（NTF-007）。
    * 重试不重执行原业务（NTF-001）。
+   *
+   * @param attemptId 待重试的渠道投递尝试标识
    */
   async execute(attemptId: string): Promise<void> {
-    const attempts = await this.attemptRepository.findRetryableAttempts(1);
-    const attempt = attempts.find((a) => a.attemptId === attemptId);
+    const attempt = await this.attemptRepository.findAttemptById(attemptId);
     if (!attempt) {
-      this.logger.warn(`无可重试的投递尝试: ${attemptId}`);
+      this.logger.warn(`投递尝试不存在: ${attemptId}`);
+      return;
+    }
+    if (attempt.status !== 'FAILED_RETRY') {
+      this.logger.warn(`投递尝试不在可重试状态: attemptId=${attemptId}, status=${attempt.status}`);
       return;
     }
 

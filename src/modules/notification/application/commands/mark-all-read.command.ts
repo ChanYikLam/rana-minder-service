@@ -5,8 +5,9 @@
  * 不影响已处理/已隐藏通知。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { InboxAdapter } from '../../infrastructure';
+import { INBOX_ADAPTER } from '../../tokens';
 
 export interface MarkAllReadResult {
   readonly updatedCount: number;
@@ -16,7 +17,10 @@ export interface MarkAllReadResult {
 export class MarkAllReadCommand {
   private readonly logger = new Logger(MarkAllReadCommand.name);
 
-  constructor(private readonly inboxAdapter: InboxAdapter) {}
+  constructor(
+    @Inject(INBOX_ADAPTER)
+    private readonly inboxAdapter: InboxAdapter,
+  ) {}
 
   async execute(recipientId: string): Promise<MarkAllReadResult> {
     const updatedCount = await this.inboxAdapter.markAllRead(recipientId);

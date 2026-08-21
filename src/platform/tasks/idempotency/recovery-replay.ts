@@ -1,14 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { TaskRecord, TaskRepository } from '../contracts';
+import { TASK_REPOSITORY } from '../contracts';
 import { IdempotencyRecordStatus } from './idempotency-record';
 import type { IdempotencyStore } from './idempotency-store';
+import { IDEMPOTENCY_STORE } from './idempotency-store';
 
 @Injectable()
 export class RecoveryReplayConvergence {
   private readonly logger = new Logger(RecoveryReplayConvergence.name);
 
   constructor(
+    @Inject(TASK_REPOSITORY)
     private readonly repository: TaskRepository,
+    @Inject(IDEMPOTENCY_STORE)
     private readonly idempotency: IdempotencyStore,
   ) {}
 

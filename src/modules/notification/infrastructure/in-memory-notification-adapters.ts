@@ -312,6 +312,10 @@ export class InMemoryChannelDeliveryAttemptRepository implements ChannelDelivery
       .filter((a) => a.status === 'FAILED_RETRY')
       .slice(0, limit);
   }
+
+  async findAttemptById(attemptId: string): Promise<ChannelDeliveryAttemptModel | null> {
+    return this.attemptStore.get(attemptId) ?? null;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -199,6 +199,11 @@ export interface ChannelDeliveryAttemptRepository {
    * 查询失败重试中的尝试。
    */
   findRetryableAttempts(limit: number): Promise<readonly ChannelDeliveryAttemptModel[]>;
+
+  /**
+   * 按尝试标识查询（重试时直接定位指定尝试，不依赖队首顺序）。
+   */
+  findAttemptById(attemptId: string): Promise<ChannelDeliveryAttemptModel | null>;
 }
 
 /**

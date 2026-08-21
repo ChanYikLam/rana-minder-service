@@ -7,7 +7,7 @@
  * 明确退信或连续失败 24 小时后停止重试。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   ChannelDeliveryAttemptRepository,
   EmailAdapter,
@@ -19,6 +19,12 @@ import {
   evaluateEmailEligibility,
   NotificationStateMachine,
 } from '../../domain';
+import {
+  CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
+  EMAIL_ADAPTER,
+  NOTIFICATION_REPOSITORY,
+  TEMPLATE_SNAPSHOT_SERVICE,
+} from '../../tokens';
 
 @Injectable()
 export class CreateEmailAttemptCommand {
@@ -26,9 +32,13 @@ export class CreateEmailAttemptCommand {
   private readonly stateMachine = new NotificationStateMachine();
 
   constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
     private readonly repository: NotificationRepository,
+    @Inject(CHANNEL_DELIVERY_ATTEMPT_REPOSITORY)
     private readonly attemptRepository: ChannelDeliveryAttemptRepository,
+    @Inject(EMAIL_ADAPTER)
     private readonly emailAdapter: EmailAdapter,
+    @Inject(TEMPLATE_SNAPSHOT_SERVICE)
     private readonly templateService: TemplateSnapshotService,
   ) {}
 

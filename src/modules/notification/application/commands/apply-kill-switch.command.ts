@@ -9,7 +9,7 @@
  * - 超管鉴权由接口层守卫执行，本命令只负责业务与审计事实。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   KillSwitchRepository,
   NotificationRepository,
@@ -17,6 +17,11 @@ import type {
 } from '../../infrastructure';
 import type { KillSwitchCommandInput, KillSwitchStateModel } from '../../domain';
 import { NotificationStateMachine, validateKillSwitchCommandInput } from '../../domain';
+import {
+  KILL_SWITCH_REPOSITORY,
+  NOTIFICATION_REPOSITORY,
+  PRIVILEGED_AUDIT_WRITER,
+} from '../../tokens';
 
 export interface ApplyKillSwitchResult {
   readonly state: KillSwitchStateModel;
@@ -32,8 +37,11 @@ export class ApplyKillSwitchCommand {
   private readonly stateMachine = new NotificationStateMachine();
 
   constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
     private readonly repository: NotificationRepository,
+    @Inject(KILL_SWITCH_REPOSITORY)
     private readonly killSwitches: KillSwitchRepository,
+    @Inject(PRIVILEGED_AUDIT_WRITER)
     private readonly audit: PrivilegedAuditWriter,
   ) {}
 

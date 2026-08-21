@@ -7,9 +7,10 @@
  * 已处理/已撤回为终态不被时间覆盖，其余在超过期限后显示已过期。
  */
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { InboxAdapter, InboxListFilter } from '../../infrastructure';
 import { resolveEffectiveDeadlineStatus } from '../../domain';
+import { INBOX_ADAPTER } from '../../tokens';
 import type {
   NotificationDeadlineStatus,
   NotificationItem,
@@ -44,7 +45,10 @@ const DEADLINE_STATUS_MAP: Record<string, NotificationDeadlineStatus> = {
 
 @Injectable()
 export class NotificationQueryService {
-  constructor(private readonly inboxAdapter: InboxAdapter) {}
+  constructor(
+    @Inject(INBOX_ADAPTER)
+    private readonly inboxAdapter: InboxAdapter,
+  ) {}
 
   /**
    * 查询本人通知列表。

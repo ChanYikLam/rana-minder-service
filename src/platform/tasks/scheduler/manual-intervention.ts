@@ -1,12 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { TaskStatus } from '../contracts';
 import type { TaskRecord, TaskRepository } from '../contracts';
+import { TASK_REPOSITORY } from '../contracts';
 
 @Injectable()
 export class ManualInterventionService {
   private readonly logger = new Logger(ManualInterventionService.name);
 
-  constructor(private readonly repository: TaskRepository) {}
+  constructor(
+    @Inject(TASK_REPOSITORY)
+    private readonly repository: TaskRepository,
+  ) {}
 
   async markManualIntervention(
     taskId: string,

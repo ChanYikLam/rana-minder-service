@@ -5,7 +5,7 @@
  * 新建关联原通知事实的邮件尝试，旧投递记录保留。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   ChannelDeliveryAttemptRepository,
   EmailAdapter,
@@ -14,6 +14,12 @@ import type {
 } from '../../infrastructure';
 import type { ChannelDeliveryAttemptModel } from '../../domain';
 import { NotificationStateMachine } from '../../domain';
+import {
+  CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
+  EMAIL_ADAPTER,
+  NOTIFICATION_REPOSITORY,
+  TEMPLATE_SNAPSHOT_SERVICE,
+} from '../../tokens';
 
 @Injectable()
 export class ManualResendCommand {
@@ -21,9 +27,13 @@ export class ManualResendCommand {
   private readonly stateMachine = new NotificationStateMachine();
 
   constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
     private readonly repository: NotificationRepository,
+    @Inject(CHANNEL_DELIVERY_ATTEMPT_REPOSITORY)
     private readonly attemptRepository: ChannelDeliveryAttemptRepository,
+    @Inject(EMAIL_ADAPTER)
     private readonly emailAdapter: EmailAdapter,
+    @Inject(TEMPLATE_SNAPSHOT_SERVICE)
     private readonly templateService: TemplateSnapshotService,
   ) {}
 

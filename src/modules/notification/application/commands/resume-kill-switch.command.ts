@@ -10,7 +10,7 @@
  * - 恢复同样写入特权审计，并保留关闭历史（active=false）。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   InboxAdapter,
   KillSwitchRepository,
@@ -19,6 +19,12 @@ import type {
 } from '../../infrastructure';
 import type { KillSwitchScope, KillSwitchStateModel } from '../../domain';
 import { NotificationStateMachine } from '../../domain';
+import {
+  INBOX_ADAPTER,
+  KILL_SWITCH_REPOSITORY,
+  NOTIFICATION_REPOSITORY,
+  PRIVILEGED_AUDIT_WRITER,
+} from '../../tokens';
 
 export interface ResumeKillSwitchInput {
   readonly scope: KillSwitchScope;
@@ -41,9 +47,13 @@ export class ResumeKillSwitchCommand {
   private readonly stateMachine = new NotificationStateMachine();
 
   constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
     private readonly repository: NotificationRepository,
+    @Inject(KILL_SWITCH_REPOSITORY)
     private readonly killSwitches: KillSwitchRepository,
+    @Inject(INBOX_ADAPTER)
     private readonly inboxAdapter: InboxAdapter,
+    @Inject(PRIVILEGED_AUDIT_WRITER)
     private readonly audit: PrivilegedAuditWriter,
   ) {}
 

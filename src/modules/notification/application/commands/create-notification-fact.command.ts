@@ -4,25 +4,36 @@
  * 由各领域命令在同事务内调用。通知事实、收件人快照与权益业务结果
  * 在同一数据库事务原子保存；保存失败则原业务整体回滚。
  *
+ * 去重（NTF-003）：同一逻辑事件＋收件人唯一，去重键统一由
+ * `buildDedupKey(logicalEventId, recipientId)` 生成（DATA-NTF-001）；
+ * 已存在的逻辑事件＋收件人跳过，不重复创建通知事实。
+ *
  * 站内信紧急关闭期间（SRS-FAIL-009）：通知事实与收件人快照仍保存，
  * 新事实标记为暂停投递；权益业务可继续。
  *
  * 此命令是"供各领域命令同事务调用的事务能力"，不是独立公开命令。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   CreateNotificationFactInput,
   NotificationFactStatus,
   RecipientSnapshot,
 } from '../../domain';
-import { NotificationStateMachine, validateNotificationFactInput } from '../../domain';
+import {
+  NotificationStateMachine,
+  buildDedupKey,
+  validateNotificationFactInput,
+} from '../../domain';
 import type { KillSwitchRepository, NotificationRepository } from '../../infrastructure';
 import type { RecipientResolver } from '../../domain';
+import { KILL_SWITCH_REPOSITORY, NOTIFICATION_REPOSITORY, RECIPIENT_RESOLVER } from '../../tokens';
 
 export interface CreateNotificationFactResult {
   readonly factId: string;
   readonly snapshotCount: number;
+  /** 是否因逻辑事件＋收件人去重而跳过创建（NTF-003） */
+  readonly deduplicated: boolean;
 }
 
 @Injectable()
@@ -31,8 +42,11 @@ export class CreateNotificationFactCommand {
   private readonly stateMachine = new NotificationStateMachine();
 
   constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
     private readonly repository: NotificationRepository,
+    @Inject(RECIPIENT_RESOLVER)
     private readonly resolver: RecipientResolver,
+    @Inject(KILL_SWITCH_REPOSITORY)
     private readonly killSwitches: KillSwitchRepository,
   ) {}
 
@@ -51,8 +65,7 @@ export class CreateNotificationFactCommand {
       throw new Error(`通知事实输入校验失败: ${validationError}`);
     }
 
-    // 去重检查：同一逻辑事件＋收件人已存在则跳过（NTF-003）
-    // 注意：去重依赖收件人解析结果，此处先解析收件人再检查
+    // 解析收件人（NTF-002：收件人名单在业务事件发生时形成快照）
     const resolveResult = this.resolver.resolve({
       eventType: input.eventType,
       sourceObjectId: input.sourceObjectId,
@@ -61,19 +74,36 @@ export class CreateNotificationFactCommand {
       targetStudentId: input.sourceObjectId,
     });
 
-    // 构建收件人快照
+    // 构建收件人快照；去重键统一为 逻辑事件＋收件人（DATA-NTF-001、NTF-003）
     const snapshots: RecipientSnapshot[] = resolveResult.recipients.map((r) => ({
       snapshotId: '', // 由仓储生成
       factId: '', // 由仓储生成
       recipientId: r.recipientId,
       reason: r.reason,
       scope: r.scope,
-      dedupKey: r.dedupKey,
+      dedupKey: buildDedupKey(input.logicalEventId, r.recipientId),
       createdAt: '', // 由仓储生成
     }));
 
     if (snapshots.length === 0) {
       this.logger.warn(`通知事实 ${input.logicalEventId} 解析出的收件人列表为空`);
+    }
+
+    // 去重检查（NTF-003）：同一逻辑事件＋收件人已存在则跳过该收件人
+    const uniqueSnapshots: RecipientSnapshot[] = [];
+    for (const snapshot of snapshots) {
+      const existing = await this.repository.findFactByDedupKey(snapshot.dedupKey);
+      if (existing) {
+        this.logger.log(
+          `逻辑事件＋收件人已存在，跳过: dedupKey=${snapshot.dedupKey}, factId=${existing.factId}`,
+        );
+        continue;
+      }
+      uniqueSnapshots.push(snapshot);
+    }
+    if (snapshots.length > 0 && uniqueSnapshots.length === 0) {
+      this.logger.log(`通知事实去重跳过: logicalEventId=${input.logicalEventId}`);
+      return { factId: '', snapshotCount: 0, deduplicated: true };
     }
 
     // 站内信紧急关闭期间：新事实标记为暂停投递，事实与快照仍保存（SRS-FAIL-009）
@@ -83,7 +113,7 @@ export class CreateNotificationFactCommand {
     // 保存失败则抛出异常，由调用方事务整体回滚
     const result = await this.repository.saveFactWithSnapshots(
       { ...input, initialStatus },
-      snapshots,
+      uniqueSnapshots,
     );
 
     this.logger.log(
@@ -95,6 +125,7 @@ export class CreateNotificationFactCommand {
     return {
       factId: result.fact.factId,
       snapshotCount: result.snapshots.length,
+      deduplicated: false,
     };
   }
 

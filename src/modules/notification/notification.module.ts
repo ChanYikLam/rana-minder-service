@@ -22,6 +22,8 @@
 
 import { Module } from '@nestjs/common';
 import { NotificationController } from './interfaces';
+import { NotificationAuthGuard } from './interfaces/notification-auth.guard';
+import { RejectAllNotificationAuthSessionProvider } from './interfaces/notification-auth-session';
 import {
   CreateNotificationFactCommand,
   DeliverInboxCommand,
@@ -47,6 +49,17 @@ import {
   InMemoryKillSwitchRepository,
   InMemoryPrivilegedAuditWriter,
 } from './infrastructure';
+import {
+  CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
+  EMAIL_ADAPTER,
+  INBOX_ADAPTER,
+  KILL_SWITCH_REPOSITORY,
+  NOTIFICATION_AUTH_SESSION_PROVIDER,
+  NOTIFICATION_REPOSITORY,
+  PRIVILEGED_AUDIT_WRITER,
+  RECIPIENT_RESOLVER,
+  TEMPLATE_SNAPSHOT_SERVICE,
+} from './tokens';
 
 @Module({
   controllers: [NotificationController],
@@ -66,42 +79,54 @@ import {
     ResumeKillSwitchCommand,
     // 查询服务
     NotificationQueryService,
-    // 领域服务
-    DefaultRecipientSnapshotResolver,
+    // 接口守卫
+    NotificationAuthGuard,
     // 基础设施（内存桩，生产替换为 PostgreSQL）
     {
-      provide: 'NotificationRepository',
+      provide: NOTIFICATION_REPOSITORY,
       useClass: InMemoryNotificationRepository,
     },
     {
-      provide: 'InboxAdapter',
+      provide: INBOX_ADAPTER,
       useClass: InMemoryInboxAdapter,
     },
     {
-      provide: 'EmailAdapter',
+      provide: EMAIL_ADAPTER,
       useClass: InMemoryEmailAdapter,
     },
     {
-      provide: 'ChannelDeliveryAttemptRepository',
+      provide: CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
       useClass: InMemoryChannelDeliveryAttemptRepository,
     },
     {
-      provide: 'TemplateSnapshotService',
+      provide: TEMPLATE_SNAPSHOT_SERVICE,
       useClass: InMemoryTemplateSnapshotService,
     },
     {
-      provide: 'KillSwitchRepository',
+      provide: KILL_SWITCH_REPOSITORY,
       useClass: InMemoryKillSwitchRepository,
     },
     {
-      provide: 'PrivilegedAuditWriter',
+      provide: PRIVILEGED_AUDIT_WRITER,
       useClass: InMemoryPrivilegedAuditWriter,
+    },
+    // 领域服务（端口以字符串 Token 注册，接口在运行时被擦除不能作 DI Token）
+    {
+      provide: RECIPIENT_RESOLVER,
+      useClass: DefaultRecipientSnapshotResolver,
+    },
+    // 认证会话（fail-closed：Casdoor 会话接入前一律拒绝；开发可临时绑定
+    // HeaderNotificationAuthSessionProvider，仅限可信边界内使用）
+    {
+      provide: NOTIFICATION_AUTH_SESSION_PROVIDER,
+      useClass: RejectAllNotificationAuthSessionProvider,
     },
   ],
   exports: [
     CreateNotificationFactCommand,
     DeliverInboxCommand,
     CreateEmailAttemptCommand,
+    RetryChannelDeliveryCommand,
     MarkPresentationStatusCommand,
     MarkAllReadCommand,
     ApplyKillSwitchCommand,

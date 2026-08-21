@@ -1,12 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { TaskClaimResult, TaskRecord, TaskRecordPatch, TaskRepository } from '../contracts';
+import { TASK_REPOSITORY } from '../contracts';
 import { computeLeaseUntil, decideLease, isLeaseValid } from './lease';
 
 @Injectable()
 export class LeaseManager {
   private readonly logger = new Logger(LeaseManager.name);
 
-  constructor(private readonly repository: TaskRepository) {}
+  constructor(
+    @Inject(TASK_REPOSITORY)
+    private readonly repository: TaskRepository,
+  ) {}
 
   async tryClaim(
     taskId: string,

@@ -7,13 +7,14 @@
  * - 仅收件人本人可操作（非本人按不存在处理，不泄露他人通知）。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { InboxAdapter, NotificationRepository } from '../../infrastructure';
 import {
   InboxPresentationStatus,
   NotificationStateMachine,
   validatePresentationStatusTransition,
 } from '../../domain';
+import { INBOX_ADAPTER, NOTIFICATION_REPOSITORY } from '../../tokens';
 
 export type PresentationTargetStatus = Extract<
   InboxPresentationStatus,
@@ -31,7 +32,9 @@ export class MarkPresentationStatusCommand {
   private readonly stateMachine = new NotificationStateMachine();
 
   constructor(
+    @Inject(INBOX_ADAPTER)
     private readonly inboxAdapter: InboxAdapter,
+    @Inject(NOTIFICATION_REPOSITORY)
     private readonly repository: NotificationRepository,
   ) {}
 

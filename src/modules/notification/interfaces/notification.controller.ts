@@ -1,6 +1,10 @@
 /**
  * 通知 HTTP 控制器（IFC-SM-027、接口清单 §7/§14.4/§15.9）。
  *
+ * 鉴权：本人通知与紧急关闭端点一律经过 NotificationAuthGuard，
+ * 身份只来自服务端会话（NotificationAuthSession），忽略客户端传入的
+ * userId/operatorId，杜绝越权读取/标记他人通知（IDOR）。
+ *
  * 路由命名空间：
  * - GET  /api/notifications          本人通知列表/类型筛选/未读筛选/隐藏列表
  * - GET  /api/notifications/unread-count 未读数
@@ -23,11 +27,15 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   NotFoundException,
   Param,
   Post,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import type {
   NotificationListResult,
   NotificationUnreadCount,
@@ -50,8 +58,10 @@ import {
   MarkPresentationStatusCommand,
   ResumeKillSwitchCommand,
 } from '../application/commands';
-import { KillSwitchRepository } from '../infrastructure';
+import type { KillSwitchRepository } from '../infrastructure';
 import type { KillSwitchScope, KillSwitchStateModel } from '../domain';
+import { KILL_SWITCH_REPOSITORY } from '../tokens';
+import { NotificationAuthGuard, notificationSessionFromRequest } from './notification-auth.guard';
 
 const NOTIFICATION_KINDS = [
   'application',
@@ -64,6 +74,7 @@ const NOTIFICATION_KINDS = [
   'correction',
 ];
 
+@UseGuards(NotificationAuthGuard)
 @Controller()
 export class NotificationController {
   constructor(
@@ -72,6 +83,7 @@ export class NotificationController {
     private readonly markAllRead: MarkAllReadCommand,
     private readonly applyKillSwitch: ApplyKillSwitchCommand,
     private readonly resumeKillSwitch: ResumeKillSwitchCommand,
+    @Inject(KILL_SWITCH_REPOSITORY)
     private readonly killSwitches: KillSwitchRepository,
   ) {}
 
@@ -79,16 +91,17 @@ export class NotificationController {
   // 本人通知（NTF-003：已读/未读/已处理/隐藏、类型筛选、跳转业务页）
   // -------------------------------------------------------------------------
 
-  /** GET /api/notifications */
+  /** GET /api/notifications（本人列表；userId 取自会话，不信任客户端参数） */
   @Get('/api/notifications')
   async listNotifications(
-    @Query('userId') userId: string,
+    @Req() request: Request,
     @Query('cursor') cursor: string | null,
     @Query('limit') limit: string = '20',
     @Query('kind') kind: string | null,
     @Query('unreadOnly') unreadOnly: string | null,
     @Query('includeHidden') includeHidden: string | null,
   ): Promise<NotificationListResult> {
+    const { userId } = notificationSessionFromRequest(request);
     const query: NotificationListQuery = {
       kind:
         kind && NOTIFICATION_KINDS.includes(kind) ? (kind as NotificationListQuery['kind']) : null,
@@ -98,30 +111,28 @@ export class NotificationController {
     return this.queryService.listForUser(userId, query, cursor ?? null, parseInt(limit, 10) || 20);
   }
 
-  /** GET /api/notifications/unread-count */
+  /** GET /api/notifications/unread-count（本人未读数） */
   @Get('/api/notifications/unread-count')
-  async unreadCount(@Query('userId') userId: string): Promise<NotificationUnreadCount> {
+  async unreadCount(@Req() request: Request): Promise<NotificationUnreadCount> {
+    const { userId } = notificationSessionFromRequest(request);
     const result = await this.queryService.unreadCount(userId);
     return { count: result.count };
   }
 
-  /** POST /api/notifications/read-all */
+  /** POST /api/notifications/read-all（本人全部标记已读） */
   @Post('/api/notifications/read-all')
   @HttpCode(HttpStatus.OK)
-  async readAll(
-    @Body('userId') userId: string,
-  ): Promise<{ success: boolean; updatedCount: number }> {
+  async readAll(@Req() request: Request): Promise<{ success: boolean; updatedCount: number }> {
+    const { userId } = notificationSessionFromRequest(request);
     const result = await this.markAllRead.execute(userId);
     return { success: true, updatedCount: result.updatedCount };
   }
 
-  /** POST /api/notifications/:id/read */
+  /** POST /api/notifications/:id/read（本人标记已读） */
   @Post('/api/notifications/:id/read')
   @HttpCode(HttpStatus.OK)
-  async markRead(
-    @Param('id') id: string,
-    @Body('userId') userId: string,
-  ): Promise<{ success: boolean }> {
+  async markRead(@Req() request: Request, @Param('id') id: string): Promise<{ success: boolean }> {
+    const { userId } = notificationSessionFromRequest(request);
     await this.runMark(id, userId, 'READ');
     return { success: true };
   }
@@ -129,21 +140,20 @@ export class NotificationController {
   /** POST /api/notifications/:id/hide（权益通知不可物理删除，归入隐藏列表） */
   @Post('/api/notifications/:id/hide')
   @HttpCode(HttpStatus.OK)
-  async hide(
-    @Param('id') id: string,
-    @Body('userId') userId: string,
-  ): Promise<{ success: boolean }> {
+  async hide(@Req() request: Request, @Param('id') id: string): Promise<{ success: boolean }> {
+    const { userId } = notificationSessionFromRequest(request);
     await this.runMark(id, userId, 'HIDDEN');
     return { success: true };
   }
 
-  /** POST /api/notifications/:id/process */
+  /** POST /api/notifications/:id/process（本人标记已处理） */
   @Post('/api/notifications/:id/process')
   @HttpCode(HttpStatus.OK)
   async markProcessed(
+    @Req() request: Request,
     @Param('id') id: string,
-    @Body('userId') userId: string,
   ): Promise<{ success: boolean }> {
+    const { userId } = notificationSessionFromRequest(request);
     await this.runMark(id, userId, 'PROCESSED');
     return { success: true };
   }
@@ -163,12 +173,12 @@ export class NotificationController {
   }
 
   // -------------------------------------------------------------------------
-  // 通知偏好
+  // 通知偏好（本人，userId 取自会话）
   // -------------------------------------------------------------------------
 
   /** GET /api/me/notifications/preferences */
   @Get('/api/me/notifications/preferences')
-  async myPreferences(@Query('userId') _userId: string): Promise<MeNotificationPreferencesResult> {
+  async myPreferences(@Req() _request: Request): Promise<MeNotificationPreferencesResult> {
     const preferences: NotificationPreferences = {
       application: true,
       interview: true,
@@ -185,7 +195,7 @@ export class NotificationController {
   /** POST /api/me/notifications/preferences */
   @Post('/api/me/notifications/preferences')
   async updateMyPreferences(
-    @Body('userId') userId: string,
+    @Req() _request: Request,
     @Body('preferences') preferences: Partial<NotificationPreferences>,
   ): Promise<MeNotificationPreferencesSaved> {
     const full: NotificationPreferences = {
@@ -205,14 +215,16 @@ export class NotificationController {
   // 紧急关闭站内信（NTF-001、SRS-FAIL-009、IFC-NTF-001、XCC-FAIL-009）
   // -------------------------------------------------------------------------
 
-  /** POST /api/org/:clubId/notifications/kill-switch（社团级） */
+  /** POST /api/org/:clubId/notifications/kill-switch（社团级；操作者取自会话） */
   @Post('/api/org/:clubId/notifications/kill-switch')
   @HttpCode(HttpStatus.OK)
   async clubKillSwitch(
+    @Req() request: Request,
     @Param('clubId') clubId: string,
-    @Body() input: NotificationKillSwitchInput & { operatorId?: string },
+    @Body() input: NotificationKillSwitchInput,
   ): Promise<NotificationKillSwitchState> {
-    return this.toggleKillSwitch('CLUB', clubId, input, input.operatorId ?? 'unknown-operator');
+    const session = notificationSessionFromRequest(request);
+    return this.toggleKillSwitch('CLUB', clubId, input, session.userId, session.displayName);
   }
 
   /** GET /api/org/:clubId/notifications/kill-switch（社团级状态） */
@@ -225,9 +237,11 @@ export class NotificationController {
   @Post('/api/admin/notifications/kill-switch')
   @HttpCode(HttpStatus.OK)
   async platformKillSwitch(
-    @Body() input: NotificationKillSwitchInput & { operatorId?: string },
+    @Req() request: Request,
+    @Body() input: NotificationKillSwitchInput,
   ): Promise<NotificationKillSwitchState> {
-    return this.toggleKillSwitch('PLATFORM', null, input, input.operatorId ?? 'unknown-operator');
+    const session = notificationSessionFromRequest(request);
+    return this.toggleKillSwitch('PLATFORM', null, input, session.userId, session.displayName);
   }
 
   /** GET /api/admin/notifications/kill-switch（平台级状态） */
@@ -243,8 +257,9 @@ export class NotificationController {
   private async toggleKillSwitch(
     scope: KillSwitchScope,
     clubId: string | null,
-    input: NotificationKillSwitchInput & { operatorId?: string },
+    input: NotificationKillSwitchInput,
     operatorId: string,
+    operatorName: string,
   ): Promise<NotificationKillSwitchState> {
     try {
       if (input.active) {
@@ -255,7 +270,7 @@ export class NotificationController {
           expectedRecoveryAt: input.expectedRecoveryAt ?? null,
           confirmed: input.confirmed ?? false,
           operatorId,
-          operatorName: input.operatorName ?? operatorId,
+          operatorName,
         });
         return this.toState(result.state);
       }
@@ -263,7 +278,7 @@ export class NotificationController {
         scope,
         clubId,
         operatorId,
-        operatorName: input.operatorName ?? operatorId,
+        operatorName,
       });
       return this.toState(result.state);
     } catch (error) {
