@@ -119,7 +119,8 @@ export class FileAccessQuery {
     // 避免出现“加了水印却不审计”的缺口。
     if (
       effectiveAction === FileAccessAction.DOWNLOAD ||
-      (effectiveAction === FileAccessAction.PREVIEW && (input.request.sensitive || watermark.required))
+      (effectiveAction === FileAccessAction.PREVIEW &&
+        (input.request.sensitive || watermark.required))
     ) {
       await this.audit.report({
         action: effectiveAction,
