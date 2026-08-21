@@ -78,8 +78,12 @@ describe('DeliverInboxCommand (站内信投递与失败重试)', () => {
     };
 
     const command = new DeliverInboxCommand(repository, inboxAdapter, attemptRepository);
-    const result = await command.execute(factId, 1);
-    assert.equal(result.presentationCount, 0);
+    // 失败必须向上抛出（交由任务管道重试），不得静默吞掉（评审 #4：IFC-ERR-008）
+    await assert.rejects(
+      () => command.execute(factId, 1),
+      /inbox store unavailable/,
+      '适配器错误应向上抛出而非静默吞掉',
+    );
 
     // 已写入失败重试尝试，可被重试队列拉取
     const retryable = await attemptRepository.findRetryableAttempts(10);

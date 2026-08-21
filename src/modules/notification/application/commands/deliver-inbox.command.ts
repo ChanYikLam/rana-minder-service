@@ -85,7 +85,11 @@ export class DeliverInboxCommand {
         await this.recordInboxFailure(factId, snapshot, (error as Error).message, now);
       }
       this.logger.error(`站内信投递临时失败: factId=${factId}, error=${(error as Error).message}`);
-      return { presentationCount: 0 };
+      // 失败必须向上抛出，由任务管道进入失败重试，不得静默吞掉
+      // （含乐观锁版本冲突、适配器错误，IFC-ERR-008 语义）。
+      // 已先记录 FAILED_RETRY 尝试作为投递证据，但任务仍按失败处理，
+      // 由管道依据重试策略重试（或耗尽后转人工介入），避免投递丢失。
+      throw error;
     }
   }
 
