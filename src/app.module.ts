@@ -47,6 +47,10 @@ import { AdaptersModule } from './adapters/adapters.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
 import { NotificationModule } from './modules/notification';
+import { STATUS_PAGE_AUTHORIZER } from './platform/observability/status-page/tokens';
+import { IdentityStatusPageAuthorizer } from './platform/observability/status-page/status-page-authorizer';
+import { SUPER_ADMIN_VERIFIER } from './modules/identity/tokens';
+import type { SuperAdminVerifierPort } from './modules/identity/application/ports/super-admin-verifier.port';
 
 @Module({
   imports: [
@@ -65,6 +69,14 @@ import { NotificationModule } from './modules/notification';
     NotificationModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    {
+      // T5：状态页限定为当前有效超管。委托 identity/authorization 的超管核验器
+      // （fail-closed：无法核验一律拒绝）。
+      provide: STATUS_PAGE_AUTHORIZER,
+      useFactory: (verifier: SuperAdminVerifierPort) => new IdentityStatusPageAuthorizer(verifier),
+      inject: [SUPER_ADMIN_VERIFIER],
+    },
+  ],
 })
 export class AppModule {}
