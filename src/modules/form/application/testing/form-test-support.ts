@@ -21,6 +21,13 @@ import type {
   FormProfileFieldDirectoryPort,
   ProfileFieldDirectoryEntry,
 } from '../ports/form-profile-field-directory.port';
+import type { FormSubmissionSnapshot } from '../../domain/models/form-submission';
+import type { FormSubmissionRepository } from '../ports/form-submission-repository.port';
+import type {
+  FormFillPermissionInput,
+  FormFillPermissionResult,
+  FormFillPermissionPort,
+} from '../ports/form-fill-permission.port';
 
 export class InMemoryFormDefinitionRepository implements FormDefinitionRepository {
   roots: FormDefinitionSnapshot[] = [];
@@ -230,5 +237,62 @@ export class StubProfileFieldDirectory implements FormProfileFieldDirectoryPort 
 
   async listApproved(): Promise<readonly ProfileFieldDirectoryEntry[]> {
     return this.entries;
+  }
+}
+
+export class InMemoryFormSubmissionRepository implements FormSubmissionRepository {
+  submissions: FormSubmissionSnapshot[] = [];
+
+  async load(id: string): Promise<FormSubmissionSnapshot | null> {
+    return this.submissions.find((submission) => submission.id === id) ?? null;
+  }
+
+  async loadBySubmitter(
+    formId: string,
+    versionNumber: number,
+    submittedBy: string,
+  ): Promise<FormSubmissionSnapshot | null> {
+    return (
+      this.submissions.find(
+        (submission) =>
+          submission.formId === formId &&
+          submission.versionNumber === versionNumber &&
+          submission.submittedBy === submittedBy,
+      ) ?? null
+    );
+  }
+
+  async listByScope(scope: FormScope): Promise<FormSubmissionSnapshot[]> {
+    return this.submissions.filter(
+      (submission) =>
+        submission.scope.kind === scope.kind && submission.scope.ownerId === scope.ownerId,
+    );
+  }
+
+  async listByForm(formId: string): Promise<FormSubmissionSnapshot[]> {
+    return this.submissions.filter((submission) => submission.formId === formId);
+  }
+
+  async insert(snapshot: FormSubmissionSnapshot): Promise<void> {
+    if (this.submissions.some((submission) => submission.id === snapshot.id)) {
+      throw new Error('FormSubmissionRepository.insert: 提交 id 冲突');
+    }
+    this.submissions.push(snapshot);
+  }
+
+  async save(snapshot: FormSubmissionSnapshot, expectedRevision: number): Promise<void> {
+    const index = this.submissions.findIndex((submission) => submission.id === snapshot.id);
+    if (index < 0 || this.submissions[index].revisionNumber !== expectedRevision) {
+      throw new Error('FormSubmissionRepository.save: 修订号守卫未命中');
+    }
+    this.submissions[index] = snapshot;
+  }
+}
+
+export class StubFormFillPermission implements FormFillPermissionPort {
+  allowed = false;
+
+  async canFill(_input: FormFillPermissionInput): Promise<FormFillPermissionResult> {
+    return { allowed: this.allowed };
   }
 }

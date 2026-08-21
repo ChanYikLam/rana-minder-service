@@ -40,8 +40,11 @@ export class FormCommandError extends Error {
 }
 
 export const formErrors = {
-  versionConflict(): FormCommandError {
-    return new FormCommandError(FormErrorCode.VERSION_CONFLICT, '表单版本已变化，请刷新后重试');
+  versionConflict(message?: string): FormCommandError {
+    return new FormCommandError(
+      FormErrorCode.VERSION_CONFLICT,
+      message ?? '表单版本已变化，请刷新后重试',
+    );
   },
   resourceContention(message: string): FormCommandError {
     return new FormCommandError(FormErrorCode.RESOURCE_CONTENTION, message);
