@@ -5,7 +5,6 @@ import { OBJECT_AUTHORIZATION_PORT } from '../contracts/authorization-port';
 import type { AuthorizationAction, ObjectAuthorizationPort } from '../contracts/authorization-port';
 import { QueryEntryRegistry } from './entry-registry';
 import type { QueryAuthContext } from './query-context';
-import { QuerySource } from './query-result';
 import type { ReadModelQueryResult } from './query-result';
 import { ReadModelQueryService } from './query-service';
 import type { WorkbenchItem } from '../projection/club-workbench.projection';

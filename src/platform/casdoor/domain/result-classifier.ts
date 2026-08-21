@@ -40,13 +40,18 @@ export function classifyMembershipReadback(input: {
   }
   const missingExpected = [...expected].some((id) => !actual.has(id));
   const hasThirdValue = [...actual].some((id) => !expected.has(id) && !original.has(id));
+  // 撤权校验：应被移除的原成员仍残留在读回中，说明撤权未完成（CAS-WR-009）。
+  const staleRemovedPresent = [...original].some((id) => !expected.has(id) && actual.has(id));
 
   if (hitExpected > 0 && missingExpected) {
     return hasThirdValue ? 'THIRD' : 'PARTIAL';
   }
   if (hasThirdValue) return 'THIRD';
+  if (staleRemovedPresent) return 'PARTIAL';
   if (hitExpected > 0) return 'TARGET';
-  return 'THIRD';
+  // 期望成员一个都没到位且无第三方值：撤权可能已完成、增权未完成（如读回为空集合），
+  // 属于明确的部分成功，而不是“第三方值冲突”。不应误判为 THIRD（CAS-WR-010）。
+  return 'PARTIAL';
 }
 
 export function classifyProfileReadback(input: {

@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { TaskHandler, TaskRecord } from '../../contracts';
-import { TaskType } from '../../contracts';
+import { TaskExecutionError, TaskType } from '../../contracts';
 import { CasdoorReconcileService } from '../../../casdoor/application/casdoor-reconcile.service';
 
 interface ReconciliationPayload {
@@ -25,12 +25,25 @@ export class ReconciliationHandler implements TaskHandler {
     // 钳制分页大小到 [1, 1000]，避免负数/极大 limit 引发非法分页或单页过量扫描。
     const rawLimit = payload.limit ?? 100;
     const limit = Math.max(1, Math.min(Number.isFinite(rawLimit) ? rawLimit : 100, 1000));
+    // 水位语义：代表外部数据的新鲜度/游标起点，而非任务自身被触摸的时间。
+    // 缺省回退到任务首次调度时间 createdAt（稳定不变），避免在重试时回退到
+    // 会不断前移的 updatedAt，导致漏扫两次运行之间真实发生的外部变更。
     const run = await this.reconcile.runFullReconciliation({
       runId: payload.runId ?? `task:${task.taskId}`,
       scope: payload.scope ?? 'platform',
-      watermark: payload.watermark ?? task.updatedAt,
+      watermark: payload.watermark ?? task.createdAt,
       limit,
     });
+    if (run.status !== 'COMPLETE_SUCCESS') {
+      // FAILED/UNCERTAIN 可重试；PARTIAL_SUCCESS 表示发现差异候选，需人工核验处置，
+      // 不得静默标记任务成功。
+      const retryable = run.status === 'FAILED' || run.status === 'UNCERTAIN';
+      throw new TaskExecutionError(
+        `ReconciliationHandler 对账未完整成功：taskId=${task.taskId}, runId=${run.runId}, status=${run.status}`,
+        retryable,
+        retryable ? 'EXTERNAL_UNCERTAIN' : 'MANUAL_INTERVENTION_REQUIRED',
+      );
+    }
     this.logger.log(
       `ReconciliationHandler 完成对账：taskId=${task.taskId}, runId=${run.runId}, status=${run.status}, pages=${run.pageCount}`,
     );

@@ -43,6 +43,8 @@ export interface ProfileWriteInput {
 }
 
 const DEFAULT_GROUP_RETRY_MS = 15 * 60 * 1000;
+const RETRY_BASE_DELAY_MS = 200;
+const RETRY_MAX_DELAY_MS = 2_000;
 
 @Injectable()
 export class CasdoorWriteService {
@@ -55,13 +57,25 @@ export class CasdoorWriteService {
 
   async writeGroupMembership(input: GroupMembershipWriteInput): Promise<WriteConclusion> {
     const startedAt = this.clock.now();
+    // CAS-WR-011：deadline 必须解析为合法时间，否则回退到默认 15 分钟窗口，
+    // 避免 Invalid Date（getTime() 为 NaN）使超时守卫恒为假而失效。
+    const parsedDeadline = input.deadline ? Date.parse(input.deadline) : NaN;
     const deadline = new Date(
-      input.deadline ? Date.parse(input.deadline) : startedAt.getTime() + DEFAULT_GROUP_RETRY_MS,
+      Number.isFinite(parsedDeadline)
+        ? parsedDeadline
+        : startedAt.getTime() + DEFAULT_GROUP_RETRY_MS,
     );
     const attempts: string[] = [];
     const evidence: EvidenceRef[] = [];
     let attempt = 0;
     const maxAttemptsPerInvocation = 3;
+
+    // original/target 在重试循环内恒定，add/remove 差异仅依赖两者，提前一次算好，
+    // 避免每次尝试反复重算（CAS-WR-012）。
+    const original = new Set(input.originalMemberIds);
+    const target = new Set(input.targetMemberIds);
+    const addIds = [...target].filter((id) => !original.has(id));
+    const removeIds = [...original].filter((id) => !target.has(id));
 
     while (true) {
       attempt += 1;
@@ -80,25 +94,6 @@ export class CasdoorWriteService {
         );
       }
 
-      const original = new Set(input.originalMemberIds);
-      const target = new Set(input.targetMemberIds);
-      const addIds = [...target].filter((id) => !original.has(id));
-      const removeIds = [...original].filter((id) => !target.has(id));
-
-      if (addIds.length === 0 && removeIds.length === 0) {
-        return this.conclusion(
-          'CONFIRMED',
-          input.commandId,
-          attempts,
-          evidence,
-          '目标与原值一致，无需外部写入',
-          false,
-          now,
-        );
-      }
-
-      // CAS-WR-002/003：新增与移除是相互独立的成员集合变更。当一次写入同时
-      // 需要两者时，必须分别执行，否则移除会被静默跳过，读回永远无法收敛到目标。
       const transportResults: ExternalResult<void>[] = [];
       if (addIds.length > 0) {
         transportResults.push(
@@ -120,7 +115,17 @@ export class CasdoorWriteService {
           }),
         );
       }
-      const transportResult = this.combineTransportResults(transportResults);
+      if (transportResults.length === 0) {
+        return this.conclusion(
+          'CONFIRMED',
+          input.commandId,
+          attempts,
+          evidence,
+          '目标与原值一致，无需外部写入',
+          false,
+          now,
+        );
+      }
 
       const readback = await this.write.readbackGroupMembers({
         ref: input.groupRef,
@@ -136,7 +141,7 @@ export class CasdoorWriteService {
 
       // CAS-WR-008：传输层不可用优先于读回分类判定。写请求未送达时读回往往仍
       // 显示原值，若按分类走会误判为 OLD_VALUE_STILL_PRESENT，掩盖真实故障。
-      if (transportResult.status === 'DEPENDENCY_UNAVAILABLE') {
+      if (transportResults.some((r) => r.status === 'DEPENDENCY_UNAVAILABLE')) {
         return this.conclusion(
           'DEPENDENCY_UNAVAILABLE',
           input.commandId,
@@ -204,106 +209,93 @@ export class CasdoorWriteService {
           now,
         );
       }
+      // 指数退避后再重试，避免瞬时抖动时连续空转。maxAttemptsPerInvocation=3 意味着
+      // 循环内实际只在 attempt=1、2 时退避，即 200ms → 400ms（不会到达 800ms）。
+      await this.backoff(attempt);
     }
   }
 
+  private async backoff(attempt: number): Promise<void> {
+    const delay = Math.min(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), RETRY_MAX_DELAY_MS);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+
   async updateUserProfile(input: ProfileWriteInput): Promise<WriteConclusion> {
-    const startedAt = this.clock.now();
-    const deadline = new Date(
-      input.deadline ? Date.parse(input.deadline) : startedAt.getTime() + DEFAULT_GROUP_RETRY_MS,
-    );
-    const attempts: string[] = [];
-    const evidence: EvidenceRef[] = [];
-    let attempt = 0;
-    const maxAttempts = 3;
-
-    while (true) {
-      attempt += 1;
-      const attemptId = `${input.commandId}:${attempt}`;
-      attempts.push(attemptId);
-      const now = this.clock.now();
-      if (now.getTime() > deadline.getTime()) {
-        return this.conclusion(
-          'MANUAL_INTERVENTION_REQUIRED',
-          input.commandId,
-          attempts,
-          evidence,
-          '15 分钟自动重试上限已到，需人工核验',
-          false,
-          now,
-        );
-      }
-
-      const transport = await this.write.updateUser({
-        externalUserId: input.externalUserId,
-        patch: input.patch,
-        requestId: attemptId,
-        trackingId: input.idempotencyKey,
-      });
-      const readback = await this.write.readbackUser({
-        externalUserId: input.externalUserId,
-        requestId: attemptId,
-        trackingId: input.idempotencyKey,
-      });
-      evidence.push(readback.evidence);
-
-      // CAS-WR-009：传输层不可用优先于读回分类判定，避免把写未送达误报为
-      // OLD_VALUE_STILL_PRESENT / UNCERTAIN，掩盖真实故障。
-      if (transport.status === 'DEPENDENCY_UNAVAILABLE') {
-        return this.conclusion(
-          'DEPENDENCY_UNAVAILABLE',
-          input.commandId,
-          attempts,
-          evidence,
-          '依赖不可用',
-          true,
-          now,
-        );
-      }
-
-      const classification = classifyProfileReadback({
-        originalValue: input.originalUser,
-        expectedValue: { ...(input.originalUser as object), ...input.patch },
-        readbackValue: readback.status === 'TRUSTED_CURRENT' ? readback.value : null,
-        readbackStatus: readback.status,
-      });
-
-      if (classification === 'TARGET') {
-        return this.conclusion(
-          'CONFIRMED',
-          input.commandId,
-          attempts,
-          evidence,
-          '资料写后定向读回确认',
-          false,
-          now,
-        );
-      }
-      if (classification === 'THIRD') {
-        return this.conclusion(
-          'THIRD_VALUE',
-          input.commandId,
-          attempts,
-          evidence,
-          '资料第三值冲突，需本人选择',
-          false,
-          now,
-        );
-      }
-      // ORIGINAL / UNKNOWN：本调用内做有界重试；仍不确定交给任务调度继续。
-      if (attempt >= maxAttempts) {
-        const kind = classification === 'ORIGINAL' ? 'OLD_VALUE_STILL_PRESENT' : 'UNCERTAIN';
-        return this.conclusion(
-          kind,
-          input.commandId,
-          attempts,
-          evidence,
-          kind === 'OLD_VALUE_STILL_PRESENT' ? '多次读回仍为原值' : '多次读回仍不确定',
-          true,
-          now,
-        );
-      }
+    const now = this.clock.now();
+    const attemptId = `${input.commandId}:1`;
+    const transport = await this.write.updateUser({
+      externalUserId: input.externalUserId,
+      patch: input.patch,
+      requestId: attemptId,
+      trackingId: input.idempotencyKey,
+    });
+    const readback = await this.write.readbackUser({
+      externalUserId: input.externalUserId,
+      requestId: attemptId,
+      trackingId: input.idempotencyKey,
+    });
+    const evidence: EvidenceRef[] = [readback.evidence];
+    const classification = classifyProfileReadback({
+      originalValue: input.originalUser,
+      expectedValue: { ...(input.originalUser as object), ...input.patch },
+      readbackValue: readback.status === 'TRUSTED_CURRENT' ? readback.value : null,
+      readbackStatus: readback.status,
+    });
+    // CAS-WR-009：传输层不可用优先于读回分类判定，避免把写未送达误报为
+    // OLD_VALUE_STILL_PRESENT / UNCERTAIN，掩盖真实故障。
+    if (transport.status === 'DEPENDENCY_UNAVAILABLE') {
+      return this.conclusion(
+        'DEPENDENCY_UNAVAILABLE',
+        input.commandId,
+        [attemptId],
+        evidence,
+        '依赖不可用',
+        true,
+        now,
+      );
     }
+    if (classification === 'TARGET') {
+      return this.conclusion(
+        'CONFIRMED',
+        input.commandId,
+        [attemptId],
+        evidence,
+        '资料写后定向读回确认',
+        false,
+        now,
+      );
+    }
+    if (classification === 'ORIGINAL') {
+      return this.conclusion(
+        'OLD_VALUE_STILL_PRESENT',
+        input.commandId,
+        [attemptId],
+        evidence,
+        '读回仍为原值，等待同步',
+        true,
+        now,
+      );
+    }
+    if (classification === 'THIRD') {
+      return this.conclusion(
+        'THIRD_VALUE',
+        input.commandId,
+        [attemptId],
+        evidence,
+        '资料第三值冲突，需本人选择',
+        false,
+        now,
+      );
+    }
+    return this.conclusion(
+      'UNCERTAIN',
+      input.commandId,
+      [attemptId],
+      evidence,
+      '响应不确定，需定向读回',
+      true,
+      now,
+    );
   }
 
   async executeCompositePlan(
@@ -343,19 +335,33 @@ export class CasdoorWriteService {
         // 与已确认的 ADD step 一并逆序回滚，确保不残留任何新增的部分权限。
         const toRollback = [...executedAdds];
         if (step.action === 'ADD') toRollback.push(step);
+        let compensationConfirmed = true;
         if (toRollback.length > 0) {
-          // 逆序移除本命令已新增关系；移除动作本身不再做读回收口，按补偿/异常进入人工核验。
+          // 逆序移除本命令已新增关系，并对每个补偿移除做读回确认；
+          // 任一移除未确认时不得声称已完全回滚，保留人工核验。
           for (const added of [...toRollback].reverse()) {
             const removeIds = added.expectedMemberIds.filter(
               (id) => !added.originalMemberIds.includes(id),
             );
-            if (removeIds.length > 0) {
-              await this.write.removeGroupMembers({
-                ref: added.groupRef,
-                userIds: removeIds,
-                requestId: `${plan.commandId}:comp:${added.stepId}`,
-                trackingId: input.idempotencyKey,
-              });
+            if (removeIds.length === 0) continue;
+            const removeResult = await this.write.removeGroupMembers({
+              ref: added.groupRef,
+              userIds: removeIds,
+              requestId: `${plan.commandId}:comp:${added.stepId}`,
+              trackingId: input.idempotencyKey,
+            });
+            if (removeResult.status !== 'TRUSTED_CURRENT') {
+              compensationConfirmed = false;
+              continue;
+            }
+            const verify = await this.write.readbackGroupMembers({
+              ref: added.groupRef,
+              requestId: `${plan.commandId}:comp-verify:${added.stepId}`,
+              trackingId: input.idempotencyKey,
+            });
+            const verifiedMembers = verify.status === 'TRUSTED_CURRENT' ? verify.value : null;
+            if (verifiedMembers === null || removeIds.some((id) => verifiedMembers.includes(id))) {
+              compensationConfirmed = false;
             }
           }
         }
@@ -366,7 +372,9 @@ export class CasdoorWriteService {
           plan.commandId,
           attempts,
           evidence,
-          '复合 Group 写入未全部确认，已回滚本命令新增/可能部分写入的关系，不授予部分新权限',
+          compensationConfirmed
+            ? '复合 Group 写入未全部确认，已回滚本命令新增/可能部分写入的关系并读回确认，不授予部分新权限'
+            : '复合 Group 写入未全部确认，且补偿移除未完全确认，可能残留新增关系，需人工核验',
           result.retryable,
           now,
         );
@@ -383,14 +391,6 @@ export class CasdoorWriteService {
       false,
       now,
     );
-  }
-
-  private combineTransportResults(results: readonly ExternalResult<void>[]): ExternalResult<void> {
-    // 多个独立写操作中只要有一个依赖不可用，整体就不能进入读回分类，否则可能
-    // 把“写未送达”误判为“读回仍为原值”。
-    const unavailable = results.find((r) => r.status === 'DEPENDENCY_UNAVAILABLE');
-    if (unavailable !== undefined) return unavailable;
-    return results[results.length - 1];
   }
 
   private conclusion(

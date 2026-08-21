@@ -3,74 +3,60 @@ import assert from 'node:assert/strict';
 
 import { CasdoorEventService } from './casdoor-event.service';
 
-function makeInput(overrides: Record<string, unknown> = {}) {
-  return {
-    receivedAt: '2026-08-20T00:00:00.000Z',
-    localEventId: 'evt-1',
-    objectType: 'GROUP' as const,
-    objectRef: 'o/g',
-    rawBodyDigest: 'digest-1',
+const receivedAt = '2026-08-20T00:00:00.000Z';
+
+function makeService(
+  overrides: { enabled?: boolean; staticSecret?: string | null; maxSeenEntries?: number } = {},
+) {
+  return new CasdoorEventService(
+    overrides.enabled ?? true,
+    overrides.staticSecret ?? 'secret',
+    overrides.maxSeenEntries,
+  );
+}
+
+function handle(service: CasdoorEventService, digest: string, localEventId: string) {
+  return service.handleWebhook({
+    receivedAt,
+    localEventId,
+    objectType: 'USER',
+    objectRef: 'u1',
+    rawBodyDigest: digest,
     secretHeader: 'secret',
     rateLimitAvailable: true,
-    ...overrides,
-  };
+  });
 }
 
 describe('CasdoorEventService', () => {
-  it('默认关闭时拒绝 Webhook', async () => {
-    const svc = new CasdoorEventService();
-    const result = await svc.handleWebhook(makeInput());
+  it('默认关闭时拒绝且不记录去重', async () => {
+    const service = new CasdoorEventService();
+    const result = await handle(service, 'd1', 'e1');
     assert.equal(result.accepted, false);
-    assert.equal(result.envelope, null);
+    // 同一事件在启用前不产生去重副作用
+    const again = await handle(service, 'd1', 'e2');
+    assert.equal(again.accepted, false);
   });
 
-  it('启用且保护齐全时接受并加入去重', async () => {
-    const svc = new CasdoorEventService({ enabled: true, staticSecret: 'secret' });
-    const first = await svc.handleWebhook(makeInput());
+  it('重复事件被本地去重拒绝（CAS-EVT-004）', async () => {
+    const service = makeService();
+    const first = await handle(service, 'd1', 'e1');
     assert.equal(first.accepted, true);
-
-    // 相同 digest 再次到达 → 被去重拒绝
-    const second = await svc.handleWebhook(makeInput());
-    assert.equal(second.accepted, false);
+    const duplicate = await handle(service, 'd1', 'e2');
+    assert.equal(duplicate.accepted, false);
+    assert.match(duplicate.reason, /去重/);
   });
 
-  it('去重窗口过后相同 digest 可再次接受', async () => {
-    const svc = new CasdoorEventService({ enabled: true, staticSecret: 'secret' });
-    await svc.handleWebhook(makeInput());
-    const later = await svc.handleWebhook(
-      makeInput({
-        receivedAt: new Date(
-          Date.parse('2026-08-20T00:00:00.000Z') + CasdoorEventService.DEDUP_TTL_MS + 1,
-        ).toISOString(),
-      }),
-    );
-    assert.equal(later.accepted, true);
-  });
-
-  it('去重集合超过上限时淘汰最旧条目', async () => {
-    const svc = new CasdoorEventService({ enabled: true, staticSecret: 'secret' });
-    const base = Date.parse('2026-08-20T00:00:00.000Z');
-    // 填充超过上限
-    for (let i = 0; i < CasdoorEventService.DEDUP_MAX_ENTRIES + 10; i++) {
-      await svc.handleWebhook(
-        makeInput({
-          receivedAt: new Date(base + i).toISOString(),
-          rawBodyDigest: `digest-${i}`,
-        }),
-      );
+  it('去重集合有界：超容量后淘汰最早记录，不再无界增长', async () => {
+    const service = makeService({ maxSeenEntries: 3 });
+    for (let i = 1; i <= 4; i += 1) {
+      const result = await handle(service, `d${i}`, `e${i}`);
+      assert.equal(result.accepted, true);
     }
-    // 最旧的 digest 已被淘汰，可再次接受
-    const oldDigest = await svc.handleWebhook(
-      makeInput({ receivedAt: new Date(base).toISOString(), rawBodyDigest: 'digest-0' }),
-    );
-    assert.equal(oldDigest.accepted, true);
-    // 最新的仍被去重（digest-10009 是最新加入的）
-    const latestDigest = await svc.handleWebhook(
-      makeInput({
-        receivedAt: new Date(base + CasdoorEventService.DEDUP_MAX_ENTRIES + 9).toISOString(),
-        rawBodyDigest: `digest-${CasdoorEventService.DEDUP_MAX_ENTRIES + 9}`,
-      }),
-    );
-    assert.equal(latestDigest.accepted, false);
+    // 最早的 d1 已被淘汰，重发会再次被接受（不再命中去重）
+    const oldestAgain = await handle(service, 'd1', 'e5');
+    assert.equal(oldestAgain.accepted, true);
+    // 仍在集合内的 d4 重发仍被去重
+    const recentAgain = await handle(service, 'd4', 'e6');
+    assert.equal(recentAgain.accepted, false);
   });
 });
