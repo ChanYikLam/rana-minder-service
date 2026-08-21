@@ -222,13 +222,13 @@ export class PostgresTaskRepository implements TaskRepository {
                 lease_worker_id = $3,
                 lease_until = $4,
                 lease_version = COALESCE(lease_version, 0) + 1,
-                leased_at = $6,
-                updated_at = $6
+                leased_at = $5,
+                updated_at = $5
           WHERE task_id = $1
             AND status <> '${TaskStatus.COMPLETED}'
             AND status <> '${TaskStatus.MANUAL_INTERVENTION}'
-            AND not_before <= $6
-            AND (lease_until IS NULL OR lease_until <= $6)
+            AND not_before <= $5
+            AND (lease_until IS NULL OR lease_until <= $5)
           RETURNING task_id, task_type, status, intent_id, idempotency_key, scope, source,
                 payload, lease_worker_id, lease_version, lease_until, leased_at,
                 attempts, max_attempts, not_before, failure, result_ref, created_at, updated_at`,
