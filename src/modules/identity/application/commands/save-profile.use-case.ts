@@ -12,7 +12,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { EditableProfileField } from '../../domain/models/profile-field';
-import { Profile } from '../../domain/models/profile';
+import { Profile, IdentityFieldFormatError } from '../../domain/models/profile';
 import { ProfileSyncIntent } from '../../domain/models/profile-sync-intent';
 import type { ProfileWriteGateStateMachine } from '../../domain/state-machines/profile-write-gate.state-machine';
 import type { ProfileGatePolicy } from '../../domain/services/profile-gate.policy';
@@ -61,11 +61,22 @@ export class DefaultSaveProfileUseCase implements SaveProfileUseCase {
     }
     const profile = Profile.fromSnapshot(snapshot);
 
-    const saved = profile.saveEditableFields({
-      fields: input.fields,
-      expectedVersion: input.expectedVersion,
-      now: input.now,
-    });
+    let saved: boolean;
+    try {
+      saved = profile.saveEditableFields({
+        fields: input.fields,
+        expectedVersion: input.expectedVersion,
+        now: input.now,
+      });
+    } catch (error) {
+      if (error instanceof IdentityFieldFormatError) {
+        throw identityErrors.validationFailed(
+          `字段 ${error.field} 超出最大长度 ${error.maxLength}`,
+          { fieldErrors: { [error.field]: [`最长 ${error.maxLength} 个字符`] } },
+        );
+      }
+      throw error;
+    }
     if (!saved) {
       if (input.expectedVersion !== snapshot.version) {
         throw identityErrors.versionConflict();

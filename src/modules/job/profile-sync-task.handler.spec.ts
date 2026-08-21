@@ -87,4 +87,26 @@ describe('ProfileSyncTaskHandler（服务账号执行单元）', () => {
       /任务载荷格式不正确/,
     );
   });
+
+  it('载荷为 null 或非对象 → 拒绝而非 TypeError（与 ProfileNameWriteTaskHandler 守卫一致）', async () => {
+    const useCase: ApplyProfileSyncStepUseCase = {
+      async execute() {
+        throw new Error('不应被调用');
+      },
+    };
+    const handler = new ProfileSyncTaskHandler(
+      useCase,
+      new IdentityUnitOfWork(new FakeDbAdapter()),
+    );
+
+    // 未显式提供 payload 时默认值为 null，即 DB 中 JSON null 的场景
+    await assert.rejects(
+      handler.execute(claimedTask({ payload: null as never })),
+      /任务载荷格式不正确/,
+    );
+    await assert.rejects(
+      handler.execute(claimedTask({ payload: 'junk' as never })),
+      /任务载荷格式不正确/,
+    );
+  });
 });

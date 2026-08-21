@@ -34,15 +34,7 @@ export class ProfileSyncTaskHandler {
   ) {}
 
   async execute(task: ClaimedJobTask): Promise<void> {
-    const payload = task.payload as unknown as ProfileSyncTaskPayload;
-    if (
-      typeof payload.subjectId !== 'string' ||
-      typeof payload.field !== 'string' ||
-      typeof payload.targetVersion !== 'number' ||
-      typeof payload.intentId !== 'string'
-    ) {
-      throw new Error('任务载荷格式不正确（缺少 subjectId/field/targetVersion/intentId）');
-    }
+    const payload = validatePayload(task.payload);
     await this.uow.run({ kind: 'single', subjectId: payload.subjectId }, async () => {
       await this.applyStep.execute({
         subjectId: payload.subjectId,
@@ -55,4 +47,25 @@ export class ProfileSyncTaskHandler {
       });
     });
   }
+}
+
+function validatePayload(payload: unknown): ProfileSyncTaskPayload {
+  if (payload === null || typeof payload !== 'object') {
+    throw new Error('任务载荷格式不正确（缺少 subjectId/field/targetVersion/intentId）');
+  }
+  const record = payload as Record<string, unknown>;
+  if (
+    typeof record.subjectId !== 'string' ||
+    typeof record.field !== 'string' ||
+    typeof record.targetVersion !== 'number' ||
+    typeof record.intentId !== 'string'
+  ) {
+    throw new Error('任务载荷格式不正确（缺少 subjectId/field/targetVersion/intentId）');
+  }
+  return {
+    subjectId: record.subjectId,
+    field: record.field as EditableProfileField,
+    targetVersion: record.targetVersion,
+    intentId: record.intentId,
+  };
 }

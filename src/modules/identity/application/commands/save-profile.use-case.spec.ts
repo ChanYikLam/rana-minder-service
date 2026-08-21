@@ -252,6 +252,32 @@ describe('SaveProfileUseCase（IFC-SM-002 R001）', () => {
     );
     assert.equal(intentRepository.saved.length, 0);
   });
+
+  it('REV：非邮箱可编辑字段超长 → IFC-ERR-005，不创建任何事实（IDN-013）', async () => {
+    const repository = inMemoryProfileRepository();
+    repository.seed(baseProfileSnapshot());
+    const intentRepository = inMemorySyncIntentRepository();
+    const useCase = createUseCase({ repository, intentRepository });
+
+    await assert.rejects(
+      () => useCase.execute(inputFor({ fields: { college: 'x'.repeat(200) } })),
+      (err: any) =>
+        err.code === IdentityErrorCode.VALIDATION_FAILED &&
+        Array.isArray(err.details?.fieldErrors?.college),
+    );
+    assert.equal(intentRepository.saved.length, 0);
+    assert.equal(repository.saved.length, 0);
+  });
+
+  it('NOM：非邮箱字段前后空白被 trim（IDN-013）', async () => {
+    const repository = inMemoryProfileRepository();
+    repository.seed(baseProfileSnapshot());
+    const intentRepository = inMemorySyncIntentRepository();
+    const useCase = createUseCase({ repository, intentRepository });
+
+    await useCase.execute(inputFor({ fields: { phone: '  13900000000  ' } }));
+    assert.equal(repository.saved[0].fields.phone, '13900000000');
+  });
 });
 
 describe('SaveProfileUseCase（IFC-SM-002 R002 补齐必填）', () => {

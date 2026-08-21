@@ -62,6 +62,14 @@ export interface SaveEditableFieldsInput {
   readonly now: Date;
 }
 
+/** 非邮箱可编辑字段的长度上限（防止 jsonb 存储膨胀与下游同步载荷异常，IDN-013） */
+export const EDITABLE_FIELD_MAX_LENGTH: Readonly<Record<EditableFieldName, number>> = {
+  [EditableProfileField.EMAIL]: 254, // 由 Email.of 校验（RFC 上限）
+  [EditableProfileField.PHONE]: 32,
+  [EditableProfileField.COLLEGE]: 120,
+  [EditableProfileField.GRADE]: 32,
+};
+
 export class Profile {
   private readonly events_: ProfileDomainEvent[] = [];
 
@@ -132,7 +140,15 @@ export class Profile {
           pendingEmail: Email.of(next as string).toString(),
         };
       } else {
-        this.snapshot = { ...this.snapshot, fields: { ...this.snapshot.fields, [key]: next } };
+        // 非邮箱可编辑字段：长度上限校验（防 jsonb 存储膨胀与下游同步载荷异常）
+        const normalized = (next as string).trim();
+        if (normalized.length > EDITABLE_FIELD_MAX_LENGTH[key]) {
+          throw new IdentityFieldFormatError(key, EDITABLE_FIELD_MAX_LENGTH[key]);
+        }
+        this.snapshot = {
+          ...this.snapshot,
+          fields: { ...this.snapshot.fields, [key]: normalized },
+        };
       }
       changed.push(key);
     }
@@ -408,5 +424,16 @@ export class Profile {
         toGate,
       },
     });
+  }
+}
+
+/** 非邮箱可编辑字段值非法（超长）时的领域错误（IDN-013） */
+export class IdentityFieldFormatError extends Error {
+  constructor(
+    readonly field: EditableFieldName,
+    readonly maxLength: number,
+  ) {
+    super(`字段 ${field} 超出最大长度 ${maxLength}`);
+    this.name = 'IdentityFieldFormatError';
   }
 }

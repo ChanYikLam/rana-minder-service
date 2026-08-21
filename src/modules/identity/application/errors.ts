@@ -47,6 +47,9 @@ export const identityErrors = {
   preconditionFailed(message: string): IdentityCommandError {
     return new IdentityCommandError(IdentityErrorCode.PRECONDITION_FAILED, message);
   },
+  validationFailed(message: string, details?: Record<string, unknown>): IdentityCommandError {
+    return new IdentityCommandError(IdentityErrorCode.VALIDATION_FAILED, message, details);
+  },
   notFound(resource: string): IdentityCommandError {
     return new IdentityCommandError(IdentityErrorCode.NOT_FOUND, `${resource}不存在或不可见`);
   },
