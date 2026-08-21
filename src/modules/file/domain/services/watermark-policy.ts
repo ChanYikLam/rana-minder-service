@@ -19,9 +19,14 @@ export interface WatermarkDecision {
  */
 const SENSITIVE_CATEGORIES = new Set<FileCategory>(['PHOTO']);
 
-/** 敏感字段键前缀（小写匹配；招新报名/面试材料等字段） */
-const SENSITIVE_FIELD_PREFIXES = ['resume', 'interview', 'material', 'photo', 'idphoto'];
-
+/** 敏感字段键集合（等值匹配，字段键统一小写归一后比对；避免前缀误匹配如 photo→photocopier） */
+const SENSITIVE_FIELD_KEYS = new Set([
+  'resume',
+  'interviewmaterial',
+  'material',
+  'photo',
+  'idphoto',
+]);
 /**
  * 水印策略（纯规则）。
  */
@@ -43,9 +48,7 @@ export class WatermarkPolicy {
     occurredAt: string,
   ): WatermarkDecision {
     const sensitiveByCategory = SENSITIVE_CATEGORIES.has(category);
-    const sensitiveByField = SENSITIVE_FIELD_PREFIXES.some((p) =>
-      fieldKey.toLowerCase().startsWith(p),
-    );
+    const sensitiveByField = SENSITIVE_FIELD_KEYS.has(fieldKey.toLowerCase());
     if (!sensitive && !sensitiveByCategory && !sensitiveByField) {
       return { required: false, content: '' };
     }

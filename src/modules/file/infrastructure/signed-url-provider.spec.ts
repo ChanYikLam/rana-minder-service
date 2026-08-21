@@ -46,4 +46,22 @@ describe('DefaultSignedUrlProvider（IFC-FIL-005 短时地址：到期 + 一次�
     assert.equal(result.valid, false);
     assert.equal(result.reason, 'EXPIRED');
   });
+
+  it('issue 时清理已过期但从未被 verify 的残留令牌，避免内存不可收敛增长', async () => {
+    // 制造一个过期但从未被 verify 的令牌（模拟用户拿到短时地址但未点击）
+    const stale = await provider.issue('f1', FileAccessAction.DOWNLOAD, { ttlMs: 0 });
+    const store = (
+      provider as unknown as {
+        store: Map<string, { expiresAt: number; consumed: boolean; access: unknown }>;
+      }
+    ).store;
+    // 手动将其置为已过期，且未消费
+    const state = store.get(stale.token)!;
+    store.set(stale.token, { ...state, expiresAt: Date.now() - 1000 });
+    assert.ok(store.has(stale.token));
+
+    // 再次签发新令牌，应顺带清理过期的残留令牌
+    await provider.issue('f1', FileAccessAction.DOWNLOAD);
+    assert.equal(store.has(stale.token), false, '过期且未被 verify 的残留令牌应在 issue 时被清理');
+  });
 });

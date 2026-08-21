@@ -67,6 +67,8 @@ export class DefaultSignedUrlProvider implements SignedUrlProvider {
     action: FileAccessAction,
     opts?: { ttlMs?: number; watermarkContent?: string },
   ): Promise<ShortLivedAccess> {
+    // 每次签发顺带清理已过期但从未被 verify 的残留令牌，防止内存不可收敛地增长（评审发现）
+    this.pruneExpired();
     // TTL 做上限约束：默认 5 分钟，超过最大有效期则截断为最大有效期
     const requested = opts?.ttlMs ?? DefaultSignedUrlProvider.DEFAULT_TTL_MS;
     const ttl = Math.min(Math.max(0, requested), DefaultSignedUrlProvider.MAX_TTL_MS);
@@ -102,5 +104,18 @@ export class DefaultSignedUrlProvider implements SignedUrlProvider {
     // 一次性语义：消费后作废
     state.consumed = true;
     return { valid: true, access: state.access };
+  }
+
+  /**
+   * 清理已过期且未被消费的令牌状态，避免过期但从未被 verify 的短时地址永久滞留内存。
+   * 在每次 `issue` 签发时顺带执行，开销为一次 O(n) 遍历，令牌总量有 TTL 上限兜底。
+   */
+  private pruneExpired(): void {
+    const now = Date.now();
+    for (const [token, state] of this.store) {
+      if (!state.consumed && now > state.expiresAt) {
+        this.store.delete(token);
+      }
+    }
   }
 }

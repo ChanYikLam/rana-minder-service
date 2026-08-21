@@ -30,6 +30,11 @@ describe('WatermarkPolicy（GOV-008/AUD-004：敏感附件默认加查看者与�
     assert.equal(policy.decide('VIDEO', 'activityVideo', false, 'u1', 'x').required, false);
   });
 
+  it('字段键等值匹配：前缀相似的普通字段键（如 photocopier）不误触发水印', () => {
+    // 此前用 startsWith 前缀匹配，photo 会误匹配 photocopier；改为等值匹配后不再误伤
+    assert.equal(policy.decide('GENERIC', 'photocopier', false, 'u1', 'x').required, false);
+  });
+
   it('照片类别默认敏感（水印）', () => {
     assert.equal(policy.decide('PHOTO', 'other', false, 'u1', 'x').required, true);
   });
