@@ -117,10 +117,24 @@ export class AppointmentCommandUseCase {
 
   async scheduleExecute(input: {
     commandId: string;
+    clubId: string;
     actor: string;
     now: Date;
   }): Promise<AppointmentCommand> {
     const command = await this.requireCommand(input.commandId);
+    if (input.clubId !== command.clubId) {
+      throw orgError.scopeMismatch(
+        `URL 社团作用域 ${input.clubId} 与预约命令实际社团 ${command.clubId} 不一致（IFC-ERR-004）`,
+      );
+    }
+    // 显式到期判断：未到达执行时间给出正确前置条件错误，而非误导性的租约冲突 409
+    const execTime =
+      command.status === 'reconfirmed_pending_execution'
+        ? (command.newExecTime ?? command.plannedAt)
+        : command.plannedAt;
+    if (Date.parse(execTime) > input.now.getTime()) {
+      throw orgError.precondition('尚未到达执行时间（ORG-039）');
+    }
     const taskId = `tsk-appt-${command.id}`;
     const leased = await this.scheduler.acquireLease(taskId, input.actor, input.now);
     if (!leased) {
@@ -244,10 +258,16 @@ export class AppointmentCommandUseCase {
 
   async retryExecute(input: {
     commandId: string;
+    clubId: string;
     actor: string;
     now: Date;
   }): Promise<AppointmentCommand> {
     const command = await this.requireCommand(input.commandId);
+    if (input.clubId !== command.clubId) {
+      throw orgError.scopeMismatch(
+        `URL 社团作用域 ${input.clubId} 与预约命令实际社团 ${command.clubId} 不一致（IFC-ERR-004）`,
+      );
+    }
     // 人工重试同样遵循单执行租约（ORG-039）：已取得租约则禁止并发重执行
     const taskId = `tsk-appt-${command.id}`;
     const leased = await this.scheduler.acquireLease(taskId, input.actor, input.now);

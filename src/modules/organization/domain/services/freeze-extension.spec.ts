@@ -39,4 +39,17 @@ describe('computeFrozenSpan', () => {
     // 并集 07-30 → 08-01 = 172800000，不重复累计
     assert.equal(r.durationMs, 172800000);
   });
+
+  it('区间间空窗不计入（仅累加实际受阻时长，ORG-028）', () => {
+    const r = computeFrozenSpan(
+      [
+        { startAt: '2026-07-30T00:00:00.000Z', endAt: '2026-07-31T00:00:00.000Z' },
+        { startAt: '2026-08-02T00:00:00.000Z', endAt: '2026-08-03T00:00:00.000Z' },
+      ],
+      new Date('2026-08-05T00:00:00.000Z'),
+    );
+    // 07-30→07-31（1 天）+ 08-02→08-03（1 天）= 2 天；中间 08-01 空窗不计
+    assert.equal(r.durationMs, 172800000);
+    assert.equal(r.residualStartAt, null);
+  });
 });

@@ -412,13 +412,14 @@ export class ClubOnboardingStateMachine {
         });
         appendStatus(updated.status, statusText(updated.status), 'disconnect');
         mappingHistory.push({
-          mappingVersion: updated.mappingVersion,
+          mappingVersion: updated.mappingVersion + 1,
           previous: club.clubGroup,
           next: null,
           kind: 'disconnect',
           at: stamp,
           actor,
         });
+        updated.mappingVersion += 1; // 映射置空也推进版本链，与 bind/rebind/reaccess 一致
         sideEffects = ['revoke_mapping', 'preserve_history', 'notify_admin', 'status_audit'];
         break;
       }

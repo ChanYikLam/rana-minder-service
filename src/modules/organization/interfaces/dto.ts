@@ -44,6 +44,8 @@ export class WizardSaveStepDto {
 export class WizardCompleteDto {
   @IsString() @IsNotEmpty() clubId!: string;
   @IsBoolean() confirmed!: boolean;
+  // 最终启用社团与创建向导同为高风控操作（IFC-ERR-002），须提供重认证凭证
+  @IsString() @IsOptional() reauthProof!: string;
 }
 
 export class ImportMembersDto {
@@ -106,7 +108,16 @@ export class TargetGroupDto {
 }
 
 export class SubmitRelationCommandDto {
-  @IsString() @IsNotEmpty() type!: string;
+  @IsIn([
+    'join_club',
+    'leave_club',
+    'join_department',
+    'leave_department',
+    'appoint_position',
+    'revoke_position',
+    'transfer_position',
+  ])
+  type!: string;
   @IsString() @IsNotEmpty() subjectId!: string;
   @IsArray()
   @ValidateNested({ each: true })

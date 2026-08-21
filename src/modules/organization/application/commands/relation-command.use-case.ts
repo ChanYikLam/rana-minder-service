@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import type { RelationCommand } from '../../domain/models/relation-command';
 import { createRelationCommand } from '../../domain/models/relation-command';
 import { PermissionCatalog } from '../../domain/models/permission-template';
+import { LastOwnerContinuityPolicy } from '../../domain/services/last-owner-continuity.policy';
 import { RelationCommandStateMachine } from '../../domain/state-machines/relation-command.state-machine';
 import type { RelationCommandType, RelationWriteStep } from '../../domain/types';
 import { IdPrefix, orgError } from '../../domain/types';
@@ -99,6 +100,8 @@ export class RelationCommandUseCase {
 
     const steps = this.buildSteps(input, now);
     await this.assertMemberPrerequisite(club.clubGroup, input.subjectId);
+    // 最后负责人连续性（ORG-024）：撤销最后一名负责人须有继任者，严禁零负责人窗口
+    await this.assertOwnerContinuity(input, club);
 
     const command = createRelationCommand({
       id: newId(IdPrefix.RELATION_COMMAND),
@@ -133,8 +136,12 @@ export class RelationCommandUseCase {
   }
 
   /**
-   * 将目标关系图按"基础/低权限 → 具体/高权限"排序并登记（CAS-Q-001 方案 A）。
-   * 规则：先社团/部门（基础，order 0），后职位（具体/高权限，order 1）。
+   * 登记目标关系图（CAS-Q-001 方案 A）。
+   *
+   * 骨架阶段排序现状：orderFor 只按 add=1 / remove=0 排序，即"先撤销后新增"，
+   * 尚未实现文档所述"基础/低权限 → 具体/高权限"的按 Group 用途排序——因为
+   * SubmitRelationCommandInput.targetGroups 不携带 purpose 信息，无法区分
+   * 社团/部门/职位层级。真实适配器须在提供 Group purpose 后落地该排序。
    */
   private buildSteps(
     input: SubmitRelationCommandInput,
@@ -160,6 +167,9 @@ export class RelationCommandUseCase {
       }))
       .sort((a, b) => a.order - b.order);
 
+    // 骨架限制：originalRelation 目前只是目标图的占位副本（标记 confirmed），
+    // 并未反映 Casdoor 实际既有关系。ORG-027「原关系/原权限继续有效」依赖真实原
+    // 关系快照，须由真实适配器在提交前回读 Casdoor 实况回填，否则补偿/回退语义不完整。
     const original = ordered.map((s) => ({ ...s, result: 'confirmed' as const }));
     return { original, target: ordered };
   }
@@ -176,6 +186,37 @@ export class RelationCommandUseCase {
         `用户 ${subjectId} 尚不属于社团 Group，不能任命到部门/职位（ORG-021）`,
       );
     }
+  }
+
+  /**
+   * 最后负责人连续性（ORG-024）：命令若撤销/退出会移除 subject 的负责人职位，
+   * 且 subject 是社团当前唯一负责人时拒绝，严禁零负责人窗口。
+   *
+   * 骨架限制：本模块关系命令为"单主体"命令，无法在同一命令内原子"撤销 A + 任命 B"；
+   * 因此继任者须先经独立命令任命到位，本策略只保证不会出现零负责人窗口。
+   */
+  private async assertOwnerContinuity(
+    input: SubmitRelationCommandInput,
+    club: { leaderGroup: { owner: string; name: string } | null },
+  ): Promise<void> {
+    const leaderGroup = club.leaderGroup;
+    if (leaderGroup === null) return; // 未配置负责人 Group（向导未完成/重绑后清空），无法判定
+    const touchesLeader =
+      input.type === 'leave_club' ||
+      input.targetGroups.some(
+        (tg) =>
+          tg.kind === 'remove' &&
+          tg.ref.owner === leaderGroup.owner &&
+          tg.ref.name === leaderGroup.name,
+      );
+    if (!touchesLeader) return;
+    const currentOwners = await this.casdoor.getGroupMembers(leaderGroup);
+    LastOwnerContinuityPolicy.assertNoZeroOwnerWindow({
+      currentOwners,
+      subjectId: input.subjectId,
+      // 单主体命令无法同命令指定继任者：继任者须先经独立任命命令落地
+      successors: [],
+    });
   }
 
   async handleReadback(
@@ -252,10 +293,16 @@ export class RelationCommandUseCase {
 
   async manualRetry(input: {
     commandId: string;
+    clubId: string;
     actor: string;
     now: Date;
   }): Promise<RelationCommand> {
     const command = await this.requireCommand(input.commandId);
+    if (input.clubId !== command.clubId) {
+      throw orgError.scopeMismatch(
+        `URL 社团作用域 ${input.clubId} 与关系命令实际社团 ${command.clubId} 不一致（IFC-ERR-004）`,
+      );
+    }
     const actorAuthorized = await this.isVisibleAndAuthorized(input.actor, command);
     const result = this.stateMachine.transition({
       command,

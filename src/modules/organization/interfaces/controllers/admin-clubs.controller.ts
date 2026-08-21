@@ -120,7 +120,12 @@ export class AdminClubsController {
   async completeWizard(@Actor() actor: RequestActor, @Body() dto: WizardCompleteDto) {
     await this.assertPlatformClubManage(actor);
     return this.onboarding.complete(
-      { clubId: dto.clubId, actor: actor.userId, confirmed: dto.confirmed },
+      {
+        clubId: dto.clubId,
+        actor: actor.userId,
+        confirmed: dto.confirmed,
+        reauthProof: dto.reauthProof,
+      },
       new Date(),
     );
   }

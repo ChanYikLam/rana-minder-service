@@ -167,6 +167,7 @@ describe('AppointmentCommandUseCase', () => {
     const cmd = await h.useCase.create(baseCreate);
     const executing = await h.useCase.scheduleExecute({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'system',
       now: new Date('2026-08-10T00:00:20.000Z'),
     });
@@ -185,6 +186,20 @@ describe('AppointmentCommandUseCase', () => {
     assert.equal(effective.actualEffectiveAt, '2026-08-10T00:01:00.000Z');
   });
 
+  it('scheduleExecute：未到达执行时间 → 前置条件拒绝（而非租约 409）', async () => {
+    const cmd = await h.useCase.create(baseCreate);
+    await assert.rejects(
+      () =>
+        h.useCase.scheduleExecute({
+          commandId: cmd.id,
+          clubId: cmd.clubId,
+          actor: 'system',
+          now: new Date('2026-08-01T00:00:00.000Z'),
+        }),
+      (e: Error) => e.message.includes('尚未到达执行时间'),
+    );
+  });
+
   it('scheduleExecute：目标主体非社团成员 → 前置条件失效暂停待处置（ORG-039）', async () => {
     const cmd = await h.useCase.create({
       ...baseCreate,
@@ -192,6 +207,7 @@ describe('AppointmentCommandUseCase', () => {
     });
     const paused = await h.useCase.scheduleExecute({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'system',
       now: new Date('2026-08-10T00:00:20.000Z'),
     });
@@ -210,6 +226,7 @@ describe('AppointmentCommandUseCase', () => {
     h.permissions.perms = [];
     const paused = await h.useCase.scheduleExecute({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'system',
       now: new Date('2026-08-10T00:00:20.000Z'),
     });
@@ -231,6 +248,7 @@ describe('AppointmentCommandUseCase', () => {
       () =>
         h.useCase.scheduleExecute({
           commandId: cmd.id,
+          clubId: cmd.clubId,
           actor: 'system',
           now: new Date('2026-08-10T00:00:20.000Z'),
         }),
@@ -242,6 +260,7 @@ describe('AppointmentCommandUseCase', () => {
     const cmd = await h.useCase.create(baseCreate);
     const executing = await h.useCase.scheduleExecute({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'system',
       now: new Date('2026-08-10T00:00:20.000Z'),
     });
@@ -271,6 +290,7 @@ describe('AppointmentCommandUseCase', () => {
     h.permissions.perms = [];
     const paused = await h.useCase.scheduleExecute({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'system',
       now: new Date('2026-08-10T00:00:20.000Z'),
     });
@@ -292,6 +312,7 @@ describe('AppointmentCommandUseCase', () => {
     // 租约已释放，重新执行不被永久阻塞
     const executing = await h.useCase.scheduleExecute({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'system',
       now: new Date('2026-08-11T00:00:20.000Z'),
     });
@@ -302,6 +323,7 @@ describe('AppointmentCommandUseCase', () => {
     const cmd = await h.useCase.create(baseCreate);
     await h.useCase.scheduleExecute({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'system',
       now: new Date('2026-08-10T00:00:20.000Z'),
     });
@@ -319,6 +341,7 @@ describe('AppointmentCommandUseCase', () => {
     // 失败收口已释放租约：人工重试可重新取得租约（不被 system 租约阻塞）
     const retried = await h.useCase.retryExecute({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'u_b',
       now: new Date('2026-08-10T00:02:00.000Z'),
     });

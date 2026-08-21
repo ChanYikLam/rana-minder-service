@@ -16,12 +16,12 @@ describe('OrgWorkspaceController 预约命令端点', () => {
   function setup(options: { superAdmin?: boolean }) {
     const calls: string[] = [];
     const appointments = {
-      scheduleExecute: async (input: { commandId: string; actor: string }) => {
-        calls.push(`schedule:${input.commandId}:${input.actor}`);
+      scheduleExecute: async (input: { commandId: string; clubId: string; actor: string }) => {
+        calls.push(`schedule:${input.commandId}:${input.clubId}:${input.actor}`);
         return { id: input.commandId, status: 'executing' };
       },
-      retryExecute: async (input: { commandId: string; actor: string }) => {
-        calls.push(`retry:${input.commandId}:${input.actor}`);
+      retryExecute: async (input: { commandId: string; clubId: string; actor: string }) => {
+        calls.push(`retry:${input.commandId}:${input.clubId}:${input.actor}`);
         return { id: input.commandId, status: 'executing' };
       },
     } as unknown as AppointmentCommandUseCase;
@@ -41,7 +41,7 @@ describe('OrgWorkspaceController 预约命令端点', () => {
   it('execute：平台超管（系统身份）可触发调度执行（scheduleExecute）', async () => {
     const { controller, calls } = setup({ superAdmin: true });
     const result = await controller.executeAppointment(actor, 'club-1', 'cmd-1');
-    assert.deepEqual(calls, ['schedule:cmd-1:u_operator']);
+    assert.deepEqual(calls, ['schedule:cmd-1:club-1:u_operator']);
     assert.equal(result.status, 'executing');
   });
 
@@ -57,7 +57,7 @@ describe('OrgWorkspaceController 预约命令端点', () => {
   it('retry：有权操作者可触发人工重试（retryExecute）', async () => {
     const { controller, calls } = setup({ superAdmin: false });
     const result = await controller.retryAppointment(actor, 'club-1', 'cmd-1');
-    assert.deepEqual(calls, ['retry:cmd-1:u_operator']);
+    assert.deepEqual(calls, ['retry:cmd-1:club-1:u_operator']);
     assert.equal(result.status, 'executing');
   });
 });

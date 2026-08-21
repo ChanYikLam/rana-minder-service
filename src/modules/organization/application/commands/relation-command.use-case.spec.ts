@@ -172,6 +172,34 @@ describe('RelationCommandUseCase', () => {
     );
   });
 
+  it('撤销最后一名负责人 → 拒绝（ORG-024 零负责人窗口）', async () => {
+    // 设负责人 Group 为宣传部，并将 u_b 移出使其仅剩 u_a 一名负责人
+    h.club.leaderGroup = { owner: 'club-acm', name: '宣传部' };
+    await h.clubs.save(h.club);
+    await h.casdoor.writeMembership({
+      ref: { owner: 'club-acm', name: '宣传部' },
+      subjectId: 'u_b',
+      action: 'remove',
+      requestId: 'req-rm-u_b',
+    });
+    await assert.rejects(
+      () =>
+        h.useCase.submit(
+          {
+            clubId: 'club-acm-1',
+            type: 'revoke_position',
+            subjectId: 'u_a',
+            targetGroups: [{ ref: { owner: 'club-acm', name: '宣传部' }, kind: 'remove' }],
+            objectVersion: 1,
+            idempotencyKey: 'revoke-last-leader',
+            submittedBy: 'u_b',
+          },
+          new Date('2026-08-01T00:00:00.000Z'),
+        ),
+      (e: Error) => e.message.includes('最后一名负责人'),
+    );
+  });
+
   it('manualRetry：重试者无成员管理权限 → 拒绝（ORG-027 人工重试行）', async () => {
     const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
     // 进入可人工重试的失败状态（failed_original_preserved）
@@ -183,6 +211,7 @@ describe('RelationCommandUseCase', () => {
       () =>
         h.useCase.manualRetry({
           commandId: cmd.id,
+          clubId: cmd.clubId,
           actor: 'u_b',
           now: new Date('2026-08-01T00:01:00.000Z'),
         }),

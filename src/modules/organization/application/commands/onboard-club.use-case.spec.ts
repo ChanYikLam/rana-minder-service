@@ -103,7 +103,7 @@ describe('OnboardingUseCase', () => {
     assert.equal(stepped.email, 'acm@ruc.example');
 
     const enabled = await h.useCase.complete(
-      { clubId: club.id, actor: 'u_root', confirmed: true },
+      { clubId: club.id, actor: 'u_root', confirmed: true, reauthProof: 'token' },
       new Date('2026-08-01T00:02:00.000Z'),
     );
     assert.equal(enabled.status, 'enabled');
@@ -132,8 +132,29 @@ describe('OnboardingUseCase', () => {
       new Date(),
     );
     await assert.rejects(
-      h.useCase.complete({ clubId: club.id, actor: 'u_root', confirmed: false }, new Date()),
+      h.useCase.complete(
+        { clubId: club.id, actor: 'u_root', confirmed: false, reauthProof: 'token' },
+        new Date(),
+      ),
       (e: Error) => e.message.includes('二次确认'),
+    );
+  });
+
+  it('complete：缺少重认证凭证 → 拒绝（高风控 IFC-ERR-002）', async () => {
+    const club = await h.useCase.createWizard(
+      {
+        groupId: 'club-web/Web社团',
+        name: 'Web社团',
+        description: '',
+        leaderGroupId: 'club-web/Web社团',
+        actor: 'u_root',
+        reauthProof: 'token',
+      },
+      new Date(),
+    );
+    await assert.rejects(
+      h.useCase.complete({ clubId: club.id, actor: 'u_root', confirmed: true }, new Date()),
+      (e: Error) => e.message.includes('需重新认证'),
     );
   });
 
@@ -151,7 +172,10 @@ describe('OnboardingUseCase', () => {
     );
     const club = (await h.clubs.list())[0];
     assert.ok(club);
-    await h.useCase.complete({ clubId: club.id, actor: 'u_root', confirmed: true }, new Date());
+    await h.useCase.complete(
+      { clubId: club.id, actor: 'u_root', confirmed: true, reauthProof: 't' },
+      new Date(),
+    );
     await assert.rejects(
       h.useCase.createWizard(
         {
@@ -180,7 +204,10 @@ describe('OnboardingUseCase', () => {
       },
       new Date(),
     );
-    await h.useCase.complete({ clubId: club.id, actor: 'u_root', confirmed: true }, new Date());
+    await h.useCase.complete(
+      { clubId: club.id, actor: 'u_root', confirmed: true, reauthProof: 't' },
+      new Date(),
+    );
     const imported = await h.useCase.importMembers({
       clubId: club.id,
       memberIds: ['u_a', 'u_b'],

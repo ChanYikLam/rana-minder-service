@@ -95,13 +95,14 @@ export class OrgWorkspaceController {
   @HttpCode(200)
   async retryRelation(
     @Actor() actor: RequestActor,
-    @Param('clubId') _clubId: string,
+    @Param('clubId') clubId: string,
     @Param('commandId') commandId: string,
   ) {
-    // 命令作用域由 URL 路径 :clubId/:commandId 承载（ORG-038），commandId 走路径参数，
-    // 与预约命令 retryAppointment 保持一致，避免 URL 作用域形同虚设。
+    // 命令作用域由 URL 路径 :clubId/:commandId 承载（ORG-038）；clubId 传入用例层
+    // 交叉校验（IFC-ERR-004），避免 URL 作用域与命令实际作用域脱钩。
     return this.relationCommands.manualRetry({
       commandId,
+      clubId,
       actor: actor.userId,
       now: new Date(),
     });
@@ -179,7 +180,7 @@ export class OrgWorkspaceController {
   @HttpCode(200)
   async executeAppointment(
     @Actor() actor: RequestActor,
-    @Param('clubId') _clubId: string,
+    @Param('clubId') clubId: string,
     @Param('commandId') commandId: string,
   ) {
     // 调度到期执行由系统/调度任务驱动（ORG-039 单执行租约）：仅平台超管可经此
@@ -190,6 +191,7 @@ export class OrgWorkspaceController {
     }
     return this.appointments.scheduleExecute({
       commandId,
+      clubId,
       actor: actor.userId,
       now: new Date(),
     });
@@ -199,13 +201,14 @@ export class OrgWorkspaceController {
   @HttpCode(200)
   async retryAppointment(
     @Actor() actor: RequestActor,
-    @Param('clubId') _clubId: string,
+    @Param('clubId') clubId: string,
     @Param('commandId') commandId: string,
   ) {
     // 人工重试（ORG-039）：重试者须当前拥有预约管理权限，用例内重新鉴权并重验
     // 业务前置条件；单执行租约已持有则 409 拒绝并发重执行
     return this.appointments.retryExecute({
       commandId,
+      clubId,
       actor: actor.userId,
       now: new Date(),
     });
@@ -218,7 +221,11 @@ export class OrgWorkspaceController {
 
 function toStableRef(raw: string | undefined): { owner: string; name: string } | undefined {
   if (raw === undefined || raw === '') return undefined;
+  // Group 稳定定位元组必须为 owner/name（CAS-MAP-003）：缺 / 或空段无法唯一定位，
+  // 一律拒绝而非猜测 owner（避免与真实 Group 对不上导致预约/关系命令静默失效）。
   const parts = raw.split('/');
-  if (parts.length === 2) return { owner: parts[0], name: parts[1] };
-  return { owner: 'builtin', name: raw };
+  if (parts.length !== 2 || parts[0].length === 0 || parts[1].length === 0) {
+    throw orgError.validation(`Group 标识需为 owner/name 格式（${raw}）`);
+  }
+  return { owner: parts[0], name: parts[1] };
 }

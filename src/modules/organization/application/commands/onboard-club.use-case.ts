@@ -159,9 +159,14 @@ export class OnboardingUseCase {
   }
 
   async complete(
-    input: { clubId: string; actor: string; confirmed: boolean },
+    input: { clubId: string; actor: string; confirmed: boolean; reauthProof?: string },
     now: Date,
   ): Promise<ClubSpace> {
+    // 最终启用社团与创建向导同为高风控操作（GOV-007、IFC-ERR-002）：须提供重认证凭证
+    if (!input.reauthProof) {
+      // 空串/undefined 均视为未提供重新认证凭证，禁止空串绕过（IFC-ERR-002）
+      throw orgError.reauth('完成接入并启用社团为高风控操作，需重新认证（IFC-ERR-002）');
+    }
     const club = await this.requireClub(input.clubId);
     if (club.wizardCandidate === null) {
       throw orgError.precondition('向导未选择社团 Group（ORG-005）');

@@ -32,8 +32,9 @@ function isBefore(a: number, b: number): boolean {
 }
 
 /**
- * 把若干可能重叠的未结算受阻区间合并为"最早起点到最晚终点"的并集跨度，
- * 返回其总时长。已结束区间（endAt 非空）只计算到 endAt；进行中的计算到 now。
+ * 把若干可能重叠的未结算受阻区间合并为互不重叠的并集，累加实际受阻时长（毫秒）。
+ * 已结束区间（endAt 非空）只计算到 endAt；进行中的计算到 now。区间之间的空窗不计入，
+ * 与 ORG-028「按实际停用时长顺延」一致（不做跨空窗并集）。
  */
 export function computeFrozenSpan(
   intervals: readonly FreezeInterval[],
@@ -44,33 +45,45 @@ export function computeFrozenSpan(
   }
 
   const nowMs = now.getTime();
-  let earliestStart = Infinity;
-  let latestEnd = Number.NEGATIVE_INFINITY;
 
-  for (const interval of intervals) {
-    const start = toMs(interval.startAt);
-    if (Number.isNaN(start)) continue;
-    earliestStart = Math.min(earliestStart, start);
-    const end = interval.endAt === null ? nowMs : toMs(interval.endAt);
-    latestEnd = Math.max(latestEnd, Number.isNaN(end) ? start : end);
-  }
+  // 解析并裁剪为 [start, end]（开放区间 end 取 now；非法/倒置区间归零）
+  const parsed = intervals
+    .map((interval) => {
+      const start = toMs(interval.startAt);
+      if (Number.isNaN(start)) return null;
+      const endRaw = interval.endAt === null ? nowMs : toMs(interval.endAt);
+      const end = Number.isNaN(endRaw) ? start : endRaw;
+      return start <= end ? ({ start, end } as const) : null;
+    })
+    .filter((x): x is { start: number; end: number } => x !== null)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
 
-  if (earliestStart === Infinity) {
+  if (parsed.length === 0) {
     return { durationMs: 0, residualStartAt: null, settledFromAt: '' };
   }
 
-  // 并集跨度：最早起点 → 最晚终点（覆盖重叠的空窗），仅口径保守不缩水。
-  let duration = Math.max(0, latestEnd - earliestStart);
+  // 合并重叠/相邻区间并累加时长（空窗不计入）
+  let duration = 0;
+  const earliestStart = parsed[0].start;
+  let curStart = parsed[0].start;
+  let curEnd = parsed[0].end;
+  for (let i = 1; i < parsed.length; i += 1) {
+    const { start, end } = parsed[i];
+    if (start <= curEnd) {
+      curEnd = Math.max(curEnd, end);
+    } else {
+      duration += curEnd - curStart;
+      curStart = start;
+      curEnd = end;
+    }
+  }
+  duration += curEnd - curStart;
 
   const remainsOpen = intervals.some((i) => i.endAt === null);
-  // 抵消跨零点/极端入参保护
-  if (duration < 0) duration = 0;
-
   return {
-    durationMs: duration,
-    residualStartAt: remainsOpen
-      ? new Date(latestEnd === nowMs ? now : latestEnd).toISOString()
-      : null,
+    durationMs: Math.max(0, duration),
+    // 仍存在未结算（开放）区间时，结算边界为 now；调用方据此重设新的受阻起点
+    residualStartAt: remainsOpen ? new Date(nowMs).toISOString() : null,
     settledFromAt: new Date(earliestStart).toISOString(),
   };
 }
