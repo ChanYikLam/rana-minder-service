@@ -175,7 +175,13 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.pool.end();
+    // 带超时的连接池关闭：若仍有未归还连接（如测试中断言失败后遗漏 commit/rollback），
+    // 避免 pool.end() 无限等待导致 CI 超时强杀（Runner 10 分钟无输出）。
+    // 超时后强制终止剩余连接，保证进程可退出。
+    await Promise.race([
+      this.pool.end(),
+      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+    ]);
   }
 }
 
