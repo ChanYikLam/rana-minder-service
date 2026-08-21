@@ -1,21 +1,33 @@
 /**
- * 通知 HTTP 控制器（IFC-SM-027、接口清单 §7/§14.4）。
+ * 通知 HTTP 控制器（IFC-SM-027、接口清单 §7/§14.4/§15.9）。
  *
  * 路由命名空间：
- * - GET  /api/notifications          本人通知列表/类型筛选
+ * - GET  /api/notifications          本人通知列表/类型筛选/未读筛选/隐藏列表
  * - GET  /api/notifications/unread-count 未读数
  * - POST /api/notifications/read-all     全部标记已读
  * - POST /api/notifications/:id/read     标记已读
- * - POST /api/notifications/:id/hide     隐藏
+ * - POST /api/notifications/:id/hide     隐藏（权益通知不可物理删除）
  * - POST /api/notifications/:id/process  标记已处理
  * - GET  /api/me/notifications/preferences 通知偏好
  * - POST /api/me/notifications/preferences 更新通知偏好
- * - POST /api/org/:clubId/notifications/kill-switch 紧急关闭站内信
+ * - POST /api/org/:clubId/notifications/kill-switch 社团级紧急关闭站内信
+ * - GET  /api/org/:clubId/notifications/kill-switch 社团级关闭状态
+ * - GET/POST /api/admin/notifications/kill-switch 平台级关闭/状态（超管）
  * - POST /api/org/:clubId/notifications/email-config 配置邮件
- * - POST /api/admin/notifications/resend 人工重发
  */
 
-import { Controller, Get, Post, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import type {
   NotificationListResult,
   NotificationUnreadCount,
@@ -29,19 +41,42 @@ import type {
   EmailConfigSaved,
   EmailConfigTestResult,
   EmailKeyRotated,
+  NotificationListQuery,
 } from '../../../common/contracts/notifications.contracts';
 import { NotificationQueryService } from '../application/queries/notification-query.service';
-import { DeliverInboxCommand } from '../application/commands/deliver-inbox.command';
+import {
+  ApplyKillSwitchCommand,
+  MarkAllReadCommand,
+  MarkPresentationStatusCommand,
+  ResumeKillSwitchCommand,
+} from '../application/commands';
+import { KillSwitchRepository } from '../infrastructure';
+import type { KillSwitchScope, KillSwitchStateModel } from '../domain';
+
+const NOTIFICATION_KINDS = [
+  'application',
+  'interview',
+  'invitation',
+  'conclusion',
+  'system',
+  'member',
+  'transition',
+  'correction',
+];
 
 @Controller()
 export class NotificationController {
   constructor(
     private readonly queryService: NotificationQueryService,
-    private readonly deliverInbox: DeliverInboxCommand,
+    private readonly markPresentationStatus: MarkPresentationStatusCommand,
+    private readonly markAllRead: MarkAllReadCommand,
+    private readonly applyKillSwitch: ApplyKillSwitchCommand,
+    private readonly resumeKillSwitch: ResumeKillSwitchCommand,
+    private readonly killSwitches: KillSwitchRepository,
   ) {}
 
   // -------------------------------------------------------------------------
-  // 本人通知
+  // 本人通知（NTF-003：已读/未读/已处理/隐藏、类型筛选、跳转业务页）
   // -------------------------------------------------------------------------
 
   /** GET /api/notifications */
@@ -50,9 +85,17 @@ export class NotificationController {
     @Query('userId') userId: string,
     @Query('cursor') cursor: string | null,
     @Query('limit') limit: string = '20',
+    @Query('kind') kind: string | null,
+    @Query('unreadOnly') unreadOnly: string | null,
+    @Query('includeHidden') includeHidden: string | null,
   ): Promise<NotificationListResult> {
-    const result = await this.queryService.listForUser(userId, cursor ?? null, parseInt(limit, 10));
-    return result;
+    const query: NotificationListQuery = {
+      kind:
+        kind && NOTIFICATION_KINDS.includes(kind) ? (kind as NotificationListQuery['kind']) : null,
+      unreadOnly: unreadOnly === 'true',
+      includeHidden: includeHidden === 'true',
+    };
+    return this.queryService.listForUser(userId, query, cursor ?? null, parseInt(limit, 10) || 20);
   }
 
   /** GET /api/notifications/unread-count */
@@ -65,28 +108,32 @@ export class NotificationController {
   /** POST /api/notifications/read-all */
   @Post('/api/notifications/read-all')
   @HttpCode(HttpStatus.OK)
-  async readAll(@Body('userId') _userId: string): Promise<{ success: boolean }> {
-    // 批量标记已读由收件人本人操作，逐条幂等
-    return { success: true };
+  async readAll(
+    @Body('userId') userId: string,
+  ): Promise<{ success: boolean; updatedCount: number }> {
+    const result = await this.markAllRead.execute(userId);
+    return { success: true, updatedCount: result.updatedCount };
   }
 
   /** POST /api/notifications/:id/read */
   @Post('/api/notifications/:id/read')
   @HttpCode(HttpStatus.OK)
   async markRead(
-    @Param('id') _id: string,
-    @Body('userId') _userId: string,
+    @Param('id') id: string,
+    @Body('userId') userId: string,
   ): Promise<{ success: boolean }> {
+    await this.runMark(id, userId, 'READ');
     return { success: true };
   }
 
-  /** POST /api/notifications/:id/hide */
+  /** POST /api/notifications/:id/hide（权益通知不可物理删除，归入隐藏列表） */
   @Post('/api/notifications/:id/hide')
   @HttpCode(HttpStatus.OK)
   async hide(
-    @Param('id') _id: string,
-    @Body('userId') _userId: string,
+    @Param('id') id: string,
+    @Body('userId') userId: string,
   ): Promise<{ success: boolean }> {
+    await this.runMark(id, userId, 'HIDDEN');
     return { success: true };
   }
 
@@ -94,10 +141,25 @@ export class NotificationController {
   @Post('/api/notifications/:id/process')
   @HttpCode(HttpStatus.OK)
   async markProcessed(
-    @Param('id') _id: string,
-    @Body('userId') _userId: string,
+    @Param('id') id: string,
+    @Body('userId') userId: string,
   ): Promise<{ success: boolean }> {
+    await this.runMark(id, userId, 'PROCESSED');
     return { success: true };
+  }
+
+  private async runMark(
+    id: string,
+    userId: string,
+    target: 'READ' | 'PROCESSED' | 'HIDDEN',
+  ): Promise<void> {
+    try {
+      await this.markPresentationStatus.execute(id, userId, target);
+    } catch (error) {
+      const message = (error as Error).message;
+      if (message.includes('不存在')) throw new NotFoundException(message);
+      throw new BadRequestException(message);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -140,38 +202,95 @@ export class NotificationController {
   }
 
   // -------------------------------------------------------------------------
-  // 紧急关闭站内信
+  // 紧急关闭站内信（NTF-001、SRS-FAIL-009、IFC-NTF-001、XCC-FAIL-009）
   // -------------------------------------------------------------------------
 
-  /** POST /api/org/:clubId/notifications/kill-switch */
+  /** POST /api/org/:clubId/notifications/kill-switch（社团级） */
   @Post('/api/org/:clubId/notifications/kill-switch')
   @HttpCode(HttpStatus.OK)
-  async killSwitch(
+  async clubKillSwitch(
     @Param('clubId') clubId: string,
-    @Body() input: NotificationKillSwitchInput & { operatorId: string },
+    @Body() input: NotificationKillSwitchInput & { operatorId?: string },
   ): Promise<NotificationKillSwitchState> {
-    return {
-      active: input.active,
-      scope: 'club',
-      clubId,
-      reason: input.reason ?? '未填写原因',
-      operatorName: input.operatorId,
-      stoppedAt: new Date().toISOString(),
-      droppedCount: 0,
-    };
+    return this.toggleKillSwitch('CLUB', clubId, input, input.operatorId ?? 'unknown-operator');
   }
 
-  /** GET /api/org/:clubId/notifications/kill-switch */
+  /** GET /api/org/:clubId/notifications/kill-switch（社团级状态） */
   @Get('/api/org/:clubId/notifications/kill-switch')
-  async getKillSwitch(@Param('clubId') clubId: string): Promise<NotificationKillSwitchState> {
+  async getClubKillSwitch(@Param('clubId') clubId: string): Promise<NotificationKillSwitchState> {
+    return this.toState(await this.killSwitches.findByScope('CLUB', clubId));
+  }
+
+  /** POST /api/admin/notifications/kill-switch（平台级，超管；清单 15.9） */
+  @Post('/api/admin/notifications/kill-switch')
+  @HttpCode(HttpStatus.OK)
+  async platformKillSwitch(
+    @Body() input: NotificationKillSwitchInput & { operatorId?: string },
+  ): Promise<NotificationKillSwitchState> {
+    return this.toggleKillSwitch('PLATFORM', null, input, input.operatorId ?? 'unknown-operator');
+  }
+
+  /** GET /api/admin/notifications/kill-switch（平台级状态） */
+  @Get('/api/admin/notifications/kill-switch')
+  async getPlatformKillSwitch(): Promise<NotificationKillSwitchState> {
+    return this.toState(await this.killSwitches.findByScope('PLATFORM', null));
+  }
+
+  /**
+   * 关闭（active=true）或恢复（active=false）站内信。
+   * 关闭必须：填原因、二次确认、设预计恢复时间（并写入特权审计）。
+   */
+  private async toggleKillSwitch(
+    scope: KillSwitchScope,
+    clubId: string | null,
+    input: NotificationKillSwitchInput & { operatorId?: string },
+    operatorId: string,
+  ): Promise<NotificationKillSwitchState> {
+    try {
+      if (input.active) {
+        const result = await this.applyKillSwitch.execute({
+          scope,
+          clubId,
+          reason: input.reason ?? '',
+          expectedRecoveryAt: input.expectedRecoveryAt ?? null,
+          confirmed: input.confirmed ?? false,
+          operatorId,
+          operatorName: input.operatorName ?? operatorId,
+        });
+        return this.toState(result.state);
+      }
+      const result = await this.resumeKillSwitch.execute({
+        scope,
+        clubId,
+        operatorId,
+        operatorName: input.operatorName ?? operatorId,
+      });
+      return this.toState(result.state);
+    } catch (error) {
+      throw new BadRequestException((error as Error).message);
+    }
+  }
+
+  private toState(state: KillSwitchStateModel | null): NotificationKillSwitchState {
+    if (!state) {
+      return {
+        active: false,
+        scope: null,
+        clubId: null,
+        reason: '',
+        operatorName: '',
+        stoppedAt: '',
+        droppedCount: 0,
+      };
+    }
     return {
-      active: false,
-      scope: 'club',
-      clubId,
-      reason: '',
-      operatorName: '',
-      stoppedAt: '',
-      droppedCount: 0,
+      active: state.active,
+      scope: state.scope === 'PLATFORM' ? 'platform' : 'club',
+      clubId: state.clubId,
+      reason: state.reason,
+      operatorName: state.operatorName,
+      stoppedAt: state.stoppedAt ?? '',
+      droppedCount: state.droppedCount,
     };
   }
 

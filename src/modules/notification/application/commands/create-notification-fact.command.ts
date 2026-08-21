@@ -4,13 +4,20 @@
  * 由各领域命令在同事务内调用。通知事实、收件人快照与权益业务结果
  * 在同一数据库事务原子保存；保存失败则原业务整体回滚。
  *
+ * 站内信紧急关闭期间（SRS-FAIL-009）：通知事实与收件人快照仍保存，
+ * 新事实标记为暂停投递；权益业务可继续。
+ *
  * 此命令是"供各领域命令同事务调用的事务能力"，不是独立公开命令。
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import type { CreateNotificationFactInput, RecipientSnapshot } from '../../domain';
-import { validateNotificationFactInput } from '../../domain';
-import type { NotificationRepository } from '../../infrastructure';
+import type {
+  CreateNotificationFactInput,
+  NotificationFactStatus,
+  RecipientSnapshot,
+} from '../../domain';
+import { NotificationStateMachine, validateNotificationFactInput } from '../../domain';
+import type { KillSwitchRepository, NotificationRepository } from '../../infrastructure';
 import type { RecipientResolver } from '../../domain';
 
 export interface CreateNotificationFactResult {
@@ -21,10 +28,12 @@ export interface CreateNotificationFactResult {
 @Injectable()
 export class CreateNotificationFactCommand {
   private readonly logger = new Logger(CreateNotificationFactCommand.name);
+  private readonly stateMachine = new NotificationStateMachine();
 
   constructor(
     private readonly repository: NotificationRepository,
     private readonly resolver: RecipientResolver,
+    private readonly killSwitches: KillSwitchRepository,
   ) {}
 
   /**
@@ -67,19 +76,48 @@ export class CreateNotificationFactCommand {
       this.logger.warn(`通知事实 ${input.logicalEventId} 解析出的收件人列表为空`);
     }
 
+    // 站内信紧急关闭期间：新事实标记为暂停投递，事实与快照仍保存（SRS-FAIL-009）
+    const initialStatus = await this.resolveInitialStatus(input);
+
     // 原子保存通知事实＋收件人快照（IFC-TX-002 边界 2）
     // 保存失败则抛出异常，由调用方事务整体回滚
-    const result = await this.repository.saveFactWithSnapshots(input, snapshots);
+    const result = await this.repository.saveFactWithSnapshots(
+      { ...input, initialStatus },
+      snapshots,
+    );
 
     this.logger.log(
       `通知事实创建成功: factId=${result.fact.factId}, ` +
         `收件人数=${result.snapshots.length}, ` +
-        `事件类型=${input.eventType}`,
+        `事件类型=${input.eventType}, 初始状态=${initialStatus}`,
     );
 
     return {
       factId: result.fact.factId,
       snapshotCount: result.snapshots.length,
     };
+  }
+
+  /**
+   * 按紧急关闭范围计算初始投递状态（状态机转换 1）：
+   * 平台关闭或所属社团关闭时 → 暂停投递。
+   */
+  private async resolveInitialStatus(
+    input: CreateNotificationFactInput,
+  ): Promise<'CREATED_PENDING_DELIVERY' | 'CREATED_PAUSED_DELIVERY'> {
+    const platformKill = await this.killSwitches.findByScope('PLATFORM', null);
+    const clubKill =
+      input.scope.type === 'CLUB' && input.scope.clubId
+        ? await this.killSwitches.findByScope('CLUB', input.scope.clubId)
+        : null;
+
+    const inboxKilled = Boolean(platformKill?.active) || Boolean(clubKill?.active);
+    const transition = this.stateMachine.evaluate({
+      type: 'CREATE_NOTIFICATION_FACT',
+      currentStatus: 'NEW' as NotificationFactStatus,
+      inboxKilled,
+    });
+    return (transition.newStatus ?? 'CREATED_PENDING_DELIVERY') as
+      'CREATED_PENDING_DELIVERY' | 'CREATED_PAUSED_DELIVERY';
   }
 }
