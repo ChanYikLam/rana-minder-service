@@ -27,17 +27,13 @@ export interface PublishRecruitmentActivityUseCase {
   execute(input: PublishRecruitmentActivityInput): Promise<PublishRecruitmentActivityResult>;
 }
 
-export class DefaultPublishRecruitmentActivityUseCase
-  implements PublishRecruitmentActivityUseCase
-{
+export class DefaultPublishRecruitmentActivityUseCase implements PublishRecruitmentActivityUseCase {
   constructor(
     private readonly repository: RecruitmentRepository,
     private readonly authorization: RecruitmentAuthorizationPort,
   ) {}
 
-  async execute(
-    input: PublishRecruitmentActivityInput,
-  ): Promise<PublishRecruitmentActivityResult> {
+  async execute(input: PublishRecruitmentActivityInput): Promise<PublishRecruitmentActivityResult> {
     const snapshot = await this.repository.loadActivity(input.activityId);
     if (snapshot === null) {
       throw recruitmentErrors.notFound('招新活动');

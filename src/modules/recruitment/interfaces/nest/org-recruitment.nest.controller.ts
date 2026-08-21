@@ -69,9 +69,7 @@ export class OrgRecruitmentNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(
-      await this.controller.publishActivity(this.actor(request), activityId),
-    );
+    return toHttpResponse(await this.controller.publishActivity(this.actor(request), activityId));
   }
 
   @Post('activities/:activityId/channels')

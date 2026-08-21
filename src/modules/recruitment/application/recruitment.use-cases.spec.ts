@@ -241,11 +241,13 @@ describe('recruitment application layer (REC-001~004)', () => {
 
     const openChannel = new DefaultOpenApplicationChannelUseCase(repo, auth);
     await assert.rejects(
-      () => openChannel.execute({ activityId, minChoices: 3, maxChoices: 1, actor: ACTOR, now: NOW }),
+      () =>
+        openChannel.execute({ activityId, minChoices: 3, maxChoices: 1, actor: ACTOR, now: NOW }),
       { code: 'REC_VALIDATION' },
     );
     await assert.rejects(
-      () => openChannel.execute({ activityId, minChoices: 0, maxChoices: 3, actor: ACTOR, now: NOW }),
+      () =>
+        openChannel.execute({ activityId, minChoices: 0, maxChoices: 3, actor: ACTOR, now: NOW }),
       { code: 'REC_VALIDATION' },
     );
   });
