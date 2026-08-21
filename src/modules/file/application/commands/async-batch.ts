@@ -49,7 +49,9 @@ export async function mapWithConcurrency<T, R>(
  * 有界并发逐项删除并回读核验（孤儿清理 / 删除清单共用，消除重复实现）。
  *
  * - 保持输入顺序；已 `VERIFIED_DELETED` 的项直接跳过（幂等重试）；
- * - 删除失败或抛异常 → 置 `FAILED`（不伪装成功，由调用方决定是否保持未完成）；
+ * - **单对象删除明确失败**（`deleteFn` 返回 `{ok:false}`）→ 置 `FAILED`（真实原因，不伪装成功）；
+ * - **基础设施/瞬时异常**（`deleteFn` 抛异常，如对象存储整体不可用/网络抖动）→ **保持 `PENDING`**，
+ *   不误判为 `FAILED`，避免对象存储整体故障时所有条目全部 FAILED 引发重试风暴，并保留重试机会；
  * - 全部删除成功 → 置 `VERIFIED_DELETED`。
  */
 export async function deleteAndVerifyBatch<T extends VerifiableDeleteItem>(
@@ -61,12 +63,18 @@ export async function deleteAndVerifyBatch<T extends VerifiableDeleteItem>(
     if (item.status === 'VERIFIED_DELETED') {
       return item;
     }
-    let ok = false;
     try {
-      ok = (await deleteFn(item.location)).ok;
+      const ok = (await deleteFn(item.location)).ok;
+      // 仅当对象存储明确返回删除成功时才置 VERIFIED_DELETED；
+      // 明确失败（ok:false）置 FAILED 保留真实原因；抛异常则保持原状态（PENDING）以重试。
+      return {
+        ...item,
+        status: (ok ? 'VERIFIED_DELETED' : 'FAILED') as T['status'],
+      };
     } catch {
-      ok = false;
+      // 基础设施/瞬时异常：保持 PENDING，不得伪装成功也不得误判为 FAILED，
+      // 由调用方按未完成语义继续重试（部分失败保持待清理，不宣称完成）。
+      return item;
     }
-    return { ...item, status: (ok ? 'VERIFIED_DELETED' : 'FAILED') as T['status'] };
   });
 }

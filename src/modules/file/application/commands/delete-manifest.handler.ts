@@ -63,8 +63,10 @@ export class DeleteManifestHandler {
     const verified = items.filter((item) => item.status === 'VERIFIED_DELETED').length;
     const failed = items.filter((item) => item.status === 'FAILED').length;
 
-    // 全部项无失败即视为完成：清单为空（无版本对象待删除）时同样完成，避免永远卡在待清理
-    const completed = failed === 0;
+    // 仅当**所有项均已回读核验删除**才视为完成：单对象失败（FAILED）或基础设施/瞬时
+    // 异常（保持 PENDING）均不得宣称正式删除完成（IFC-TX-007 部分失败不宣称完成）；
+    // 清单为空（无版本对象待删除）时 `every` 为空真，同样收敛到终态，避免永远卡在待清理。
+    const completed = items.every((item) => item.status === 'VERIFIED_DELETED');
     const state = completed
       ? this.stateMachine.transition(FileState.PENDING_CLEANUP, FileState.FORMALLY_DELETED)
       : FileState.PENDING_CLEANUP; // 部分失败：保持未完成，不宣称完成

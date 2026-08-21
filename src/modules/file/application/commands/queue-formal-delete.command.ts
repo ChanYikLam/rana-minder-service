@@ -9,6 +9,8 @@ import type {
 } from '../../domain/models/file-model';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
+import { FORMAL_DELETE_CONFIRM_PORT } from '../../infrastructure/formal-delete-confirm-port';
+import type { FormalDeleteConfirmPort } from '../../infrastructure/formal-delete-confirm-port';
 import { locationKeyOf } from '../../domain/services/object-location';
 
 /** 正式删除输入（IFC-FIL-008/IFC-TX-007：仅超管；范围/二次确认/传播） */
@@ -49,6 +51,8 @@ export const MIN_CONFIRMATION_CODE_LENGTH = 6;
 export class QueueFormalDeleteCommand {
   constructor(
     @Inject(FILE_REPOSITORY) private readonly repo: FileRepository,
+    @Inject(FORMAL_DELETE_CONFIRM_PORT)
+    private readonly confirm: FormalDeleteConfirmPort,
     private readonly stateMachine: FileStateMachine = new FileStateMachine(),
   ) {}
 
@@ -70,6 +74,12 @@ export class QueueFormalDeleteCommand {
         'IFC-ERR-006',
         `正式删除二次确认凭据长度不足（至少 ${MIN_CONFIRMATION_CODE_LENGTH} 位）`,
       );
+    }
+    // AUD-008：长度校验只是第一道防线，凭据必须经核验端口向签发方确认真实有效，
+    // 否则任意 6 位字符串即可绕过"独立二次确认"语义（AUD-007~009 防绕过纵深防御）。
+    const confirmed = await this.confirm.verify(confirmationCode);
+    if (!confirmed) {
+      throw new FormalDeleteError('IFC-ERR-006', '独立二次确认凭据核验未通过，拒绝正式删除');
     }
     const file = await this.repo.load(input.fileId);
     if (file === null) {

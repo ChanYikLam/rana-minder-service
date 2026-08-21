@@ -12,6 +12,8 @@ import { RemoveDraftFileCommand } from './remove-draft-file.command';
 import { CleanupOrphansCommand } from './cleanup-orphans.command';
 import { QueueFormalDeleteCommand } from './queue-formal-delete.command';
 import { DeleteManifestHandler } from './delete-manifest.handler';
+import type { FormalDeleteConfirmPort } from '../../infrastructure/formal-delete-confirm-port';
+import type { CleanupReferenceGuardPort } from '../../infrastructure/cleanup-reference-guard-port';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { UploadPolicy } from '../../domain/services/upload-policy';
 import { FileTypeGuard } from '../../domain/services/file-type-guard';
@@ -50,7 +52,10 @@ const makeAvailableFile = async (repo: InMemoryFileRepository, store: InMemoryOb
   return promoted;
 };
 
-const makeRig = () => {
+const makeRig = (options?: {
+  confirm?: FormalDeleteConfirmPort;
+  referenceGuard?: CleanupReferenceGuardPort;
+}) => {
   const repo = new InMemoryFileRepository();
   const store = new InMemoryObjectStore();
   const sm = new FileStateMachine();
@@ -60,8 +65,17 @@ const makeRig = () => {
     store,
     replace: new ReplaceDraftFileCommand(repo, policy, sm),
     remove: new RemoveDraftFileCommand(repo, sm),
-    cleanup: new CleanupOrphansCommand(repo, store, sm),
-    queueFormalDelete: new QueueFormalDeleteCommand(repo, sm),
+    cleanup: new CleanupOrphansCommand(
+      repo,
+      store,
+      options?.referenceGuard ?? { hasActiveReference: async () => false },
+      sm,
+    ),
+    queueFormalDelete: new QueueFormalDeleteCommand(
+      repo,
+      options?.confirm ?? { verify: async () => true },
+      sm,
+    ),
     deleteManifest: new DeleteManifestHandler(repo, store, sm),
   };
 };
@@ -198,6 +212,25 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     assert.ok(manifest.items.length >= 1);
     const after = await rig.repo.load(file.fileId);
     assert.equal(after!.state, FileState.PENDING_CLEANUP);
+  });
+
+  it('独立二次确认凭据核验未通过：拒绝正式删除（AUD-008 真实核验）', async () => {
+    const rig = makeRig({ confirm: { verify: async () => false } });
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    // 超管 + 长度足够的凭据，但签发方核验不通过 → 不得放行
+    await assert.rejects(
+      rig.queueFormalDelete.execute({
+        fileId: file.fileId,
+        initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
+        reason: '数据违规，二次确认',
+        confirmationCode: 'CONF-001',
+      }),
+      /二次确认凭据核验未通过/,
+    );
+    // 文件状态未被篡改，仍为可用（未撤权、未生成清单）
+    const after = await rig.repo.load(file.fileId);
+    assert.equal(after!.state, FileState.AVAILABLE);
+    assert.equal(after!.deletionManifest, null);
   });
 
   it('删除清单执行：全部回读核验 → 正式删除终态；部分失败保持未完成不宣称完成', async () => {
@@ -379,5 +412,73 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     assert.equal(result.completed, true);
     const done = await rig.repo.load(file.fileId);
     assert.equal(done!.state, FileState.FORMALLY_DELETED);
+  });
+
+  it('删除清单：对象存储抛异常（基础设施/瞬时）保持 PENDING，不误判完成也不误标 FAILED', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    await rig.queueFormalDelete.execute({
+      fileId: file.fileId,
+      initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
+      reason: '二次确认',
+      confirmationCode: 'CONF-006',
+    });
+    const origDelete = rig.store.deleteAndVerify.bind(rig.store);
+    rig.store.deleteAndVerify = async (loc) => {
+      if (loc.randomKey === file.versions[0].objectLocation.randomKey) {
+        throw new Error('对象存储整体不可用');
+      }
+      return origDelete(loc);
+    };
+    const result = await rig.deleteManifest.execute(file.fileId);
+    assert.equal(result.completed, false, '基础设施异常不得宣称正式删除完成');
+    assert.equal(result.failed, 0, '基础设施异常不得误标为 FAILED');
+    const after = await rig.repo.load(file.fileId);
+    assert.equal(after!.state, FileState.PENDING_CLEANUP, '保持待清理待重试');
+    assert.ok(
+      after!.deletionManifest!.items.some((i) => i.status === 'PENDING'),
+      '基础设施异常项保持 PENDING 供重试，不落为 FAILED',
+    );
+  });
+
+  it('孤儿清理：对象存储抛异常（基础设施/瞬时）保持 PENDING，不收敛到已清理', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    await rig.remove.execute({ fileId: file.fileId, removable: true });
+    const pending = await rig.repo.load(file.fileId);
+    const failingKey = pending!.cleanupQueue[0].location.randomKey;
+    const origDelete = rig.store.deleteAndVerify.bind(rig.store);
+    rig.store.deleteAndVerify = async (loc) => {
+      if (loc.randomKey === failingKey) {
+        throw new Error('对象存储整体不可用');
+      }
+      return origDelete(loc);
+    };
+    const cleaned = await rig.cleanup.execute(file.fileId);
+    assert.equal(cleaned.state, FileState.PENDING_CLEANUP, '基础设施异常不得收敛到已清理');
+    assert.ok(
+      cleaned.cleanupQueue.some((i) => i.status === 'PENDING'),
+      '基础设施异常项保持 PENDING 供重试，不落为 FAILED',
+    );
+  });
+
+  it('孤儿清理防御性引用复核：仍有有效引用的对象跳过物理删除，保持待清理（FORM-009）', async () => {
+    // 引用复核端口判定 cleanupQueue 首对象仍被有效引用 → 不得物理删除
+    const rig = makeRig({
+      referenceGuard: { hasActiveReference: async () => true },
+    });
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    await rig.remove.execute({ fileId: file.fileId, removable: true });
+    const cleaned = await rig.cleanup.execute(file.fileId);
+    assert.equal(cleaned.state, FileState.PENDING_CLEANUP, '仍有引用 → 保持待清理，不收敛到已清理');
+    assert.ok(
+      cleaned.cleanupQueue.some((i) => i.status === 'PENDING'),
+      '仍被引用的对象不得被物理删除，保留 PENDING 待后续复核',
+    );
+    // 对象确实未被物理删除（对象仍存在于对象存储）
+    assert.ok(
+      await rig.store.read(cleaned.cleanupQueue[0].location),
+      '被保护的对象仍存在于对象存储，未被误删',
+    );
   });
 });

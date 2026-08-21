@@ -25,6 +25,10 @@ import { SIGNED_URL_PROVIDER } from './infrastructure/signed-url-provider';
 import { DefaultSignedUrlProvider } from './infrastructure/signed-url-provider';
 import { ACCESS_AUDIT_PORT } from './infrastructure/access-audit-port';
 import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
+import { FORMAL_DELETE_CONFIRM_PORT } from './infrastructure/formal-delete-confirm-port';
+import { LogOnlyFormalDeleteConfirm } from './infrastructure/formal-delete-confirm-port';
+import { CLEANUP_REFERENCE_GUARD } from './infrastructure/cleanup-reference-guard-port';
+import { LogOnlyCleanupReferenceGuard } from './infrastructure/cleanup-reference-guard-port';
 
 /**
  * 领域模块：文件（4.2，SRS-SM-FILE-001）。
@@ -54,6 +58,8 @@ import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
     { provide: FILE_CHECK_PORT, useClass: ApplicationFileCheck },
     { provide: SIGNED_URL_PROVIDER, useClass: DefaultSignedUrlProvider },
     { provide: ACCESS_AUDIT_PORT, useClass: LogOnlyAccessAudit },
+    { provide: FORMAL_DELETE_CONFIRM_PORT, useClass: LogOnlyFormalDeleteConfirm },
+    { provide: CLEANUP_REFERENCE_GUARD, useClass: LogOnlyCleanupReferenceGuard },
     // 应用命令与查询
     InitiateUploadCommand,
     CompleteUploadCommand,
@@ -84,6 +90,8 @@ import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
     FILE_CHECK_PORT,
     SIGNED_URL_PROVIDER,
     ACCESS_AUDIT_PORT,
+    FORMAL_DELETE_CONFIRM_PORT,
+    CLEANUP_REFERENCE_GUARD,
   ],
 })
 export class FileModule {}
