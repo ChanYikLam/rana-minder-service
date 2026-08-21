@@ -38,9 +38,11 @@ import { ConfigurationModule } from './config';
 import { DatabaseModule } from './database/database.module';
 import { ObservabilityModule } from './platform/observability/module';
 import { ReadModelModule } from './platform/read-model/module';
+import { CasdoorModule } from './platform/casdoor/module';
 import { TasksModule } from './platform/tasks/module';
 import { AdaptersModule } from './adapters/adapters.module';
 import { IdentityModule } from './modules/identity/identity.module';
+import { FormModule } from './modules/form/form.module';
 
 @Module({
   imports: [
@@ -49,9 +51,11 @@ import { IdentityModule } from './modules/identity/identity.module';
     DatabaseModule,
     ObservabilityModule,
     ReadModelModule,
+    CasdoorModule,
     TasksModule,
     AdaptersModule,
     IdentityModule,
+    FormModule,
   ],
   controllers: [],
   providers: [],

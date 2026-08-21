@@ -1,10 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../../config';
-import { TaskStatus, TASK_PROCESSOR_REGISTRY } from '../contracts';
+import { TaskStatus, TASK_PROCESSOR_REGISTRY, TaskExecutionError } from '../contracts';
 import type { TaskProcessorRegistry, TaskRecord, TaskRepository } from '../contracts';
 import { RecoveryReplayConvergence } from '../idempotency';
 import { LeaseManager } from '../lease';
-import { computeExponentialBackoffMs, requiresManualIntervention } from '../retry-policy';
+import {
+  classifyFailure,
+  computeExponentialBackoffMs,
+  requiresManualIntervention,
+} from '../retry-policy';
 import { TASK_PRECONDITION_PORT, type TaskPreconditionPort } from './task-precondition';
 
 @Injectable()
@@ -81,12 +85,31 @@ export class TaskExecutionPipeline {
       const reason = err instanceof Error ? err.message : String(err);
       await this.convergence.convergeAfterFailure(leased);
 
+      // 处理器明确声明不可重试（如 MANUAL_INTERVENTION_REQUIRED / THIRD_VALUE /
+      // payload 不完整）：立即人工处置，不耗尽重试次数。
+      if (err instanceof TaskExecutionError && err.retryable === false) {
+        await this.releaseWithPatch(leased, now, {
+          status: TaskStatus.MANUAL_INTERVENTION,
+          attempts: attempt,
+          failure: {
+            kind: err.failureKind,
+            reason,
+            occurredAt: now.toISOString(),
+          },
+        });
+        return;
+      }
+
       if (requiresManualIntervention(attempt, leased.maxAttempts) === false) {
         const backoffMs = computeExponentialBackoffMs(attempt, 1000, 60_000);
         await this.releaseWithPatch(leased, now, {
           status: TaskStatus.RETRYABLE_FAILED,
           attempts: attempt,
-          failure: { kind: 'EXTERNAL_FAILED', reason, occurredAt: now.toISOString() },
+          failure: {
+            kind: err instanceof TaskExecutionError ? err.failureKind : classifyFailure(reason),
+            reason,
+            occurredAt: now.toISOString(),
+          },
           notBefore: new Date(now.getTime() + backoffMs).toISOString(),
         });
       } else {
