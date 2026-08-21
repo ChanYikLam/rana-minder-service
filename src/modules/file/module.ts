@@ -1,0 +1,57 @@
+import { Module } from '@nestjs/common';
+import { InitiateUploadCommand } from './application/commands/initiate-upload.command';
+import { CompleteUploadCommand } from './application/commands/complete-upload.command';
+import { AskFileCheckCommand } from './application/commands/ask-file-check.command';
+import { PromoteFileCommand } from './application/commands/promote-file.command';
+import { FileStatusQuery } from './application/queries/file-status.query';
+import { FileStateMachine } from './domain/state-machines/file-state-machine';
+import { UploadPolicy } from './domain/services/upload-policy';
+import { FileTypeGuard } from './domain/services/file-type-guard';
+import { FILE_REPOSITORY } from './infrastructure/file-repository';
+import { InMemoryFileRepository } from './infrastructure/in-memory-file-repository';
+import { OBJECT_STORE_PORT } from './infrastructure/object-store-port';
+import { InMemoryObjectStore } from './infrastructure/object-store-port';
+import { FILE_CHECK_PORT } from './infrastructure/file-check-port';
+import { ApplicationFileCheck } from './infrastructure/file-check-port';
+
+/**
+ * 领域模块：文件（4.2，SRS-SM-FILE-001）。
+ *
+ * 职责：上传初始化、字节接收、检查收口（晋升/隔离/不可用）、状态查询；
+ * 字节在 S3 兼容对象存储（隔离区/权威原件区/临时派生区，ADR-008），
+ * 元数据/检查/引用状态在 PostgreSQL（占位内存实现）。
+ *
+ * 核心不变量（FORM-007、GOV-008）：
+ * - 未检查/检查中/失败/隔离的文件不可预览、下载或正式绑定；
+ * - 检查服务不可用保持不可访问，不得超时自动放行；
+ * - 数据库与对象存储不伪装原子事务，部分失败不得返回假成功。
+ */
+@Module({
+  providers: [
+    // 领域规则（纯规则）
+    FileStateMachine,
+    UploadPolicy,
+    FileTypeGuard,
+    // 基础设施端口（生产替换为 PostgreSQL/S3 适配实现）
+    { provide: FILE_REPOSITORY, useClass: InMemoryFileRepository },
+    { provide: OBJECT_STORE_PORT, useClass: InMemoryObjectStore },
+    { provide: FILE_CHECK_PORT, useClass: ApplicationFileCheck },
+    // 应用命令与查询
+    InitiateUploadCommand,
+    CompleteUploadCommand,
+    AskFileCheckCommand,
+    PromoteFileCommand,
+    FileStatusQuery,
+  ],
+  exports: [
+    InitiateUploadCommand,
+    CompleteUploadCommand,
+    AskFileCheckCommand,
+    PromoteFileCommand,
+    FileStatusQuery,
+    FILE_REPOSITORY,
+    OBJECT_STORE_PORT,
+    FILE_CHECK_PORT,
+  ],
+})
+export class FileModule {}
