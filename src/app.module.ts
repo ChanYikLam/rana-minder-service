@@ -46,6 +46,7 @@ import { FileModule } from './modules/file/module';
 import { AdaptersModule } from './adapters/adapters.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
+import { NotificationModule } from './modules/notification';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { FormModule } from './modules/form/form.module';
     AdaptersModule,
     IdentityModule,
     FormModule,
+    NotificationModule,
   ],
   controllers: [],
   providers: [],
