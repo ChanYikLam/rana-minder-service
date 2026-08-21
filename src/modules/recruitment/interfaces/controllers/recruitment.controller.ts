@@ -48,7 +48,10 @@ export class RecruitmentController {
   ) {}
 
   private run<T>(actor: ActorContext, fn: () => Promise<T>): Promise<ControllerResult<T>> {
-    const scope: RlsScope = { kind: 'single', subjectId: actor.subjectId };
+    // 招新域负责人需跨 owner 读全部申请/面试/活动（按 clubId/activityId 查询），
+    // 非 subjectId 单行可见；首版无组织授权数据可做 RLS 过滤，故用 unprotected
+    // 上下文（与 RecruitmentUnitOfWork 注释一致），由应用层负责按 clubId 授权。
+    const scope: RlsScope = { kind: 'unprotected' };
     return this.uow.run(scope, async () => {
       try {
         return { ok: true as const, value: await fn() };
