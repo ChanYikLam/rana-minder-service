@@ -238,7 +238,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadChannel(id: string): Promise<ApplicationChannelSnapshot | null> {
     const rows = await this.db.query<ChannelRow>(
       this.uow.active,
-       `SELECT id, activity_id, club_id, status, open_at, close_at, min_choices, max_choices, created_at, updated_at
+      `SELECT id, activity_id, club_id, status, open_at, close_at, min_choices, max_choices, created_at, updated_at
           FROM application_channels WHERE id = $1`,
       [id],
     );
@@ -366,7 +366,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadDepartmentPath(id: string): Promise<DepartmentPathSnapshot | null> {
     const rows = await this.db.query<PathRow>(
       this.uow.active,
-       `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
+      `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
                decisions, previous_status_before_suspend, created_at, updated_at
           FROM department_paths WHERE id = $1`,
       [id],
@@ -425,7 +425,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadDepartmentPathsByApplication(applicationId: string): Promise<DepartmentPathSnapshot[]> {
     const rows = await this.db.query<PathRow>(
       this.uow.active,
-       `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
+      `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
                decisions, previous_status_before_suspend, created_at, updated_at
           FROM department_paths WHERE application_id = $1 ORDER BY updated_at DESC`,
       [applicationId],
@@ -437,7 +437,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadInterview(id: string): Promise<InterviewRecordSnapshot | null> {
     const rows = await this.db.query<InterviewRow>(
       this.uow.active,
-       `SELECT id, application_id, activity_id, club_id, round_id, applicant_id, status, revision_number,
+      `SELECT id, application_id, activity_id, club_id, round_id, applicant_id, status, revision_number,
                interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
                created_at, updated_at
           FROM interview_records WHERE id = $1`,
@@ -507,7 +507,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]> {
     const rows = await this.db.query<InterviewRow>(
       this.uow.active,
-       `SELECT id, application_id, activity_id, club_id, round_id, applicant_id, status, revision_number,
+      `SELECT id, application_id, activity_id, club_id, round_id, applicant_id, status, revision_number,
                interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
                created_at, updated_at
           FROM interview_records WHERE round_id = $1 ORDER BY updated_at DESC`,

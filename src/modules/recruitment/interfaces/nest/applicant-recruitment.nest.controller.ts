@@ -41,7 +41,11 @@ export class ApplicantRecruitmentNestController {
   ): Promise<ApiSuccess<unknown>> {
     const env = parseRecruitmentRequestEnvelope(body);
     return toHttpResponse(
-      await this.controller.acceptInvitation(this.actor(request), applicationId, env.expectedVersion),
+      await this.controller.acceptInvitation(
+        this.actor(request),
+        applicationId,
+        env.expectedVersion,
+      ),
     );
   }
 }

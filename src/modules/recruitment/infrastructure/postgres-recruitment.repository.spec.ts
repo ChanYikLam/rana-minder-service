@@ -87,7 +87,8 @@ describe('postgres recruitment repository row mapping', () => {
       status: 'ADMITTED',
       revision_number: '0',
       allow_transfer: false,
-      decisions: '[{"decision":"ADMIT","decidedBy":"m1","decidedAt":"2026-01-01T00:00:00.000Z","note":null}]',
+      decisions:
+        '[{"decision":"ADMIT","decidedBy":"m1","decidedAt":"2026-01-01T00:00:00.000Z","note":null}]',
       previous_status_before_suspend: null,
       created_at: NOW,
       updated_at: NOW,
@@ -112,7 +113,8 @@ describe('postgres recruitment repository row mapping', () => {
       location: '线上',
       skip_reason: null,
       hold_until: null,
-      evaluations: '[{"interviewerId":"int1","values":{"score":5},"decidedAt":"2026-01-01T00:00:00.000Z"}]',
+      evaluations:
+        '[{"interviewerId":"int1","values":{"score":5},"decidedAt":"2026-01-01T00:00:00.000Z"}]',
       created_at: NOW,
       updated_at: NOW,
     });

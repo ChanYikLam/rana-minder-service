@@ -117,16 +117,32 @@ export class InterviewWorkflowUseCase {
   }
 
   async start(input: InterviewRefInput): Promise<InterviewWorkflowResult> {
-    return this.managedTransition(input, (record, machine, now) => record.start(machine, now), '面试开始失败');
+    return this.managedTransition(
+      input,
+      (record, machine, now) => record.start(machine, now),
+      '面试开始失败',
+    );
   }
   async complete(input: InterviewRefInput): Promise<InterviewWorkflowResult> {
-    return this.managedTransition(input, (record, machine, now) => record.complete(machine, now), '面试完成失败');
+    return this.managedTransition(
+      input,
+      (record, machine, now) => record.complete(machine, now),
+      '面试完成失败',
+    );
   }
   async void(input: InterviewRefInput): Promise<InterviewWorkflowResult> {
-    return this.managedTransition(input, (record, machine, now) => record.void(machine, now), '面试作废失败');
+    return this.managedTransition(
+      input,
+      (record, machine, now) => record.void(machine, now),
+      '面试作废失败',
+    );
   }
   async cancel(input: InterviewRefInput): Promise<InterviewWorkflowResult> {
-    return this.managedTransition(input, (record, machine, now) => record.cancel(machine, now), '面试取消失败');
+    return this.managedTransition(
+      input,
+      (record, machine, now) => record.cancel(machine, now),
+      '面试取消失败',
+    );
   }
   async skip(input: SkipInterviewInput): Promise<InterviewWorkflowResult> {
     const { record, expectedRevision } = await this.loadManaged(input.interviewId, input.actor);
@@ -214,12 +230,19 @@ export class InterviewWorkflowUseCase {
     ) {
       throw recruitmentErrors.forbidden('仅负责人/人事可操作面试记录');
     }
-    return { record: InterviewRecord.fromSnapshot(snapshot), expectedRevision: snapshot.revisionNumber };
+    return {
+      record: InterviewRecord.fromSnapshot(snapshot),
+      expectedRevision: snapshot.revisionNumber,
+    };
   }
 
   private async managedTransition(
     input: InterviewRefInput,
-    fn: (record: InterviewRecord, machine: DefaultInterviewRecordStateMachine, now: Date) => boolean,
+    fn: (
+      record: InterviewRecord,
+      machine: DefaultInterviewRecordStateMachine,
+      now: Date,
+    ) => boolean,
     message: string,
   ): Promise<InterviewWorkflowResult> {
     const { record, expectedRevision } = await this.loadManaged(input.interviewId, input.actor);

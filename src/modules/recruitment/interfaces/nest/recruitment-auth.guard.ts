@@ -18,7 +18,10 @@ import { TRACE_CONTEXT } from '../../../../platform/observability/tracing/tokens
 import type { TraceContextAdapter } from '../../../../platform/observability/infrastructure/trace-context.adapter';
 import { generateTraceId } from '../../../../platform/observability/domain/services/trace-id.generator';
 import { RECRUITMENT_AUTH_SESSION_PROVIDER } from '../../tokens';
-import type { RecruitmentAuthSession, RecruitmentAuthSessionProvider } from './recruitment-auth-session';
+import type {
+  RecruitmentAuthSession,
+  RecruitmentAuthSessionProvider,
+} from './recruitment-auth-session';
 
 export const RECRUITMENT_AUTH_SESSION_KEY = 'recruitmentAuthSession';
 
@@ -49,6 +52,8 @@ export class RecruitmentAuthGuard implements CanActivate {
   }
 }
 
-export function recruitmentSessionFromRequest(request: Record<string, unknown>): RecruitmentAuthSession {
+export function recruitmentSessionFromRequest(
+  request: Record<string, unknown>,
+): RecruitmentAuthSession {
   return request[RECRUITMENT_AUTH_SESSION_KEY] as RecruitmentAuthSession;
 }

@@ -11,13 +11,22 @@ import type { ActorContext } from './actor-context';
 import { toApiError, type ApiErrorResult } from '../http/recruitment-error-http';
 import type { CreateRecruitmentActivityUseCase } from '../../application/commands/create-recruitment-activity.use-case';
 import type { OpenApplicationChannelUseCase } from '../../application/commands/open-application-channel.use-case';
-import type { SubmitApplicationUseCase, SubmitApplicationInput } from '../../application/commands/submit-application.use-case';
-import type { RecordDepartmentDecisionUseCase, RecordDepartmentDecisionInput } from '../../application/commands/record-department-decision.use-case';
+import type {
+  SubmitApplicationUseCase,
+  SubmitApplicationInput,
+} from '../../application/commands/submit-application.use-case';
+import type {
+  RecordDepartmentDecisionUseCase,
+  RecordDepartmentDecisionInput,
+} from '../../application/commands/record-department-decision.use-case';
 import type { InterviewWorkflowUseCase } from '../../application/commands/interview-workflow.use-case';
 import type { ListActivitiesQuery } from '../../application/queries/list-activities.query';
 import type { ListApplicationsQuery } from '../../application/queries/list-applications.query';
 import type { ListInterviewsQuery } from '../../application/queries/list-interviews.query';
-import type { SendAdmissionInvitationUseCase, AcceptAdmissionInvitationUseCase } from '../../application/commands/admission.use-case';
+import type {
+  SendAdmissionInvitationUseCase,
+  AcceptAdmissionInvitationUseCase,
+} from '../../application/commands/admission.use-case';
 
 type ControllerResult<T> = { readonly ok: true; readonly value: T } | ApiErrorResult;
 
@@ -50,7 +59,11 @@ export class RecruitmentController {
   createActivity(
     actor: ActorContext,
     clubId: string,
-    input: { readonly title: string; readonly description: string | null; readonly endDate?: Date | null },
+    input: {
+      readonly title: string;
+      readonly description: string | null;
+      readonly endDate?: Date | null;
+    },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.createActivityUseCase.execute({

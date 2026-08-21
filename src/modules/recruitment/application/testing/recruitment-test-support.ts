@@ -68,7 +68,10 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
   async loadDepartmentPath(id: string): Promise<DepartmentPathSnapshot | null> {
     return this.paths.get(id) ?? null;
   }
-  async saveDepartmentPath(snapshot: DepartmentPathSnapshot, expectedRevision: number): Promise<void> {
+  async saveDepartmentPath(
+    snapshot: DepartmentPathSnapshot,
+    expectedRevision: number,
+  ): Promise<void> {
     const existing = this.paths.get(snapshot.id);
     if (existing !== undefined && existing.revisionNumber !== expectedRevision) {
       throw new RecruitmentDomainError('REC_CONFLICT', '部门路径并发更新冲突，请刷新后重试');

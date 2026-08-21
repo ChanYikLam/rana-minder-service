@@ -20,7 +20,10 @@ export function toHttpResponse(
   throw new HttpException(result.body, result.status);
 }
 
-export function actorFromRequest(request: Record<string, unknown>, traceId: string | null): ActorContext {
+export function actorFromRequest(
+  request: Record<string, unknown>,
+  traceId: string | null,
+): ActorContext {
   const session = request[RECRUITMENT_AUTH_SESSION_KEY] as RecruitmentAuthSession | undefined;
   if (session === undefined) {
     throw new HttpException(

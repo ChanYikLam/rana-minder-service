@@ -84,10 +84,18 @@ describe('recruitment interview workflow (REC-005)', () => {
     });
     assert.strictEqual(scheduled.status, 'SCHEDULED');
 
-    const started = await workflow.start({ interviewId: scheduled.interviewId, actor: MANAGER, now: NOW });
+    const started = await workflow.start({
+      interviewId: scheduled.interviewId,
+      actor: MANAGER,
+      now: NOW,
+    });
     assert.strictEqual(started.status, 'IN_PROGRESS');
 
-    const completed = await workflow.complete({ interviewId: scheduled.interviewId, actor: MANAGER, now: NOW });
+    const completed = await workflow.complete({
+      interviewId: scheduled.interviewId,
+      actor: MANAGER,
+      now: NOW,
+    });
     assert.strictEqual(completed.status, 'COMPLETED');
 
     const evaluated = await workflow.recordEvaluation({
@@ -154,7 +162,11 @@ describe('recruitment interview workflow (REC-005)', () => {
       actor: MANAGER,
       now: NOW,
     });
-    const voided = await workflow.void({ interviewId: scheduled.interviewId, actor: MANAGER, now: NOW });
+    const voided = await workflow.void({
+      interviewId: scheduled.interviewId,
+      actor: MANAGER,
+      now: NOW,
+    });
     assert.strictEqual(voided.status, 'VOIDED');
   });
 

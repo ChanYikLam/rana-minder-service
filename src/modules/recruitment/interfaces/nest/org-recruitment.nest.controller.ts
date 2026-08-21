@@ -160,7 +160,9 @@ export class OrgRecruitmentNestController {
     @Param('interviewId') interviewId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.completeInterview(this.actor(request), interviewId));
+    return toHttpResponse(
+      await this.controller.completeInterview(this.actor(request), interviewId),
+    );
   }
 
   @Post('interviews/:interviewId/void')
@@ -190,7 +192,10 @@ export class OrgRecruitmentNestController {
   ): Promise<ApiSuccess<unknown>> {
     const input = parseRecruitmentRequestEnvelope(body).input as { reason: string };
     return toHttpResponse(
-      await this.controller.skipInterview(this.actor(request), { interviewId, reason: input.reason }),
+      await this.controller.skipInterview(this.actor(request), {
+        interviewId,
+        reason: input.reason,
+      }),
     );
   }
 
@@ -226,7 +231,9 @@ export class OrgRecruitmentNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseRecruitmentRequestEnvelope(body).input as { values: Record<string, unknown> };
+    const input = parseRecruitmentRequestEnvelope(body).input as {
+      values: Record<string, unknown>;
+    };
     return toHttpResponse(
       await this.controller.recordInterviewEvaluation(this.actor(request), {
         interviewId,
@@ -274,7 +281,11 @@ export class OrgRecruitmentNestController {
   ): Promise<ApiSuccess<unknown>> {
     const env = parseRecruitmentRequestEnvelope(body);
     return toHttpResponse(
-      await this.controller.acceptInvitation(this.actor(request), applicationId, env.expectedVersion),
+      await this.controller.acceptInvitation(
+        this.actor(request),
+        applicationId,
+        env.expectedVersion,
+      ),
     );
   }
 

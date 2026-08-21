@@ -44,7 +44,10 @@ import { DefaultOpenApplicationChannelUseCase } from './application/commands/ope
 import { DefaultSubmitApplicationUseCase } from './application/commands/submit-application.use-case';
 import { DefaultRecordDepartmentDecisionUseCase } from './application/commands/record-department-decision.use-case';
 import { InterviewWorkflowUseCase } from './application/commands/interview-workflow.use-case';
-import { SendAdmissionInvitationUseCase, AcceptAdmissionInvitationUseCase } from './application/commands/admission.use-case';
+import {
+  SendAdmissionInvitationUseCase,
+  AcceptAdmissionInvitationUseCase,
+} from './application/commands/admission.use-case';
 import { DefaultListActivitiesQuery } from './application/queries/list-activities.query';
 import { DefaultListApplicationsQuery } from './application/queries/list-applications.query';
 import { DefaultListInterviewsQuery } from './application/queries/list-interviews.query';
@@ -60,7 +63,10 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
   controllers: [OrgRecruitmentNestController, ApplicantRecruitmentNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
-    { provide: RECRUITMENT_AUTH_SESSION_PROVIDER, useClass: RejectAllRecruitmentAuthSessionProvider },
+    {
+      provide: RECRUITMENT_AUTH_SESSION_PROVIDER,
+      useClass: RejectAllRecruitmentAuthSessionProvider,
+    },
     RecruitmentAuthGuard,
     // ----- 工作单元（事务边界）-----
     {
@@ -132,7 +138,19 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
     // ----- 传输中立控制器 -----
     {
       provide: RECRUITMENT_CONTROLLER,
-      useFactory: (uow, create, open, submit, decide, interview, listA, listApp, listInt, send, accept) =>
+      useFactory: (
+        uow,
+        create,
+        open,
+        submit,
+        decide,
+        interview,
+        listA,
+        listApp,
+        listInt,
+        send,
+        accept,
+      ) =>
         new RecruitmentController(
           uow,
           create,

@@ -21,7 +21,10 @@ import { DefaultCreateRecruitmentActivityUseCase } from './commands/create-recru
 import { DefaultOpenApplicationChannelUseCase } from './commands/open-application-channel.use-case';
 import { DefaultSubmitApplicationUseCase } from './commands/submit-application.use-case';
 import { DefaultRecordDepartmentDecisionUseCase } from './commands/record-department-decision.use-case';
-import { SendAdmissionInvitationUseCase, AcceptAdmissionInvitationUseCase } from './commands/admission.use-case';
+import {
+  SendAdmissionInvitationUseCase,
+  AcceptAdmissionInvitationUseCase,
+} from './commands/admission.use-case';
 
 const CLUB_ID = 'club-1';
 const MANAGER = 'manager-1';
@@ -78,10 +81,9 @@ describe('admission invitation & acceptance (REC-043 / REC-044)', () => {
 
   it('无部门 ADMIT 结论时发送录取邀请被拒绝', async () => {
     const send = new SendAdmissionInvitationUseCase(repo, auth);
-    await assert.rejects(
-      () => send.execute({ applicationId, actor: MANAGER, now: NOW }),
-      { code: 'REC_PRECONDITION' },
-    );
+    await assert.rejects(() => send.execute({ applicationId, actor: MANAGER, now: NOW }), {
+      code: 'REC_PRECONDITION',
+    });
   });
 
   it('部门 ADMIT 后发邀请并接受到 ACCEPTED', async () => {
