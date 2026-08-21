@@ -35,6 +35,7 @@ import { ObservabilityModule } from './platform/observability/module';
 import { ReadModelModule } from './platform/read-model/module';
 import { CasdoorModule } from './platform/casdoor/module';
 import { TasksModule } from './platform/tasks/module';
+import { NotificationModule } from './modules/notification';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { TasksModule } from './platform/tasks/module';
     ReadModelModule,
     CasdoorModule,
     TasksModule,
+    NotificationModule,
   ],
   controllers: [],
   providers: [],
