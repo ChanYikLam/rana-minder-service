@@ -57,6 +57,13 @@ export class InMemoryClubStore implements ClubStore {
   private readonly byId = new Map<string, ClubSpace>();
 
   async save(club: ClubSpace): Promise<void> {
+    const existing = this.byId.get(club.id);
+    if (existing && club.version < existing.version) {
+      // 乐观锁：禁止旧版本覆盖新版本（与 relation/appointment 内存桩的 CAS 语义对齐）
+      throw orgError.stateConflict(
+        `检测到旧版本写入，拒绝回退覆盖（乐观锁，IFC-ERR-007）${club.id}`,
+      );
+    }
     this.byId.set(club.id, structuredClone(club));
   }
 

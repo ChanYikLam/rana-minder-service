@@ -91,12 +91,17 @@ export class OrgWorkspaceController {
     });
   }
 
-  @Post(':clubId/members/transition/retry')
+  @Post(':clubId/members/transition/:commandId/retry')
   @HttpCode(200)
-  async retryRelation(@Actor() actor: RequestActor, @Body() dto: { commandId: string }) {
-    if (dto?.commandId === undefined) throw orgError.validation('缺少 commandId');
+  async retryRelation(
+    @Actor() actor: RequestActor,
+    @Param('clubId') _clubId: string,
+    @Param('commandId') commandId: string,
+  ) {
+    // 命令作用域由 URL 路径 :clubId/:commandId 承载（ORG-038），commandId 走路径参数，
+    // 与预约命令 retryAppointment 保持一致，避免 URL 作用域形同虚设。
     return this.relationCommands.manualRetry({
-      commandId: dto.commandId,
+      commandId,
       actor: actor.userId,
       now: new Date(),
     });

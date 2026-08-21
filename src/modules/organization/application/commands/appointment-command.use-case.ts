@@ -371,8 +371,9 @@ export class AppointmentCommandUseCase {
     return [
       { name: 'club_enabled', ok: club !== null && club.status === 'enabled' },
       { name: 'subject_member', ok: subjectIsMember },
-      // 命令版本须已进入有效调度周期（至少完成一次编排）才能执行（ORG-039）
-      { name: 'command_version', ok: command.scheduleVersion >= command.createdVersion },
+      // 命令版本/调度周期由状态机与单执行租约共同保证（ORG-039）：scheduleVersion
+      // 在 create/schedule_execute/reconfirm 时自增，调度幂等通过 taskId 与租约锁定，
+      // 此处无需再重复校验版本（避免恒真死守卫误导）。
     ];
   }
 }

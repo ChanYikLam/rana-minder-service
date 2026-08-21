@@ -74,13 +74,14 @@ export class AdminClubsController {
   @Get('groups/:groupId')
   async groupDetail(@Actor() actor: RequestActor, @Param('groupId') groupId: string) {
     await this.assertPlatformClubManage(actor);
-    const [owner, name] = groupId.split('/');
     const dir = await this.groups.list();
     const item = dir.find((d) => d.id === groupId) ?? dir.find((d) => d.parentId === groupId);
     if (item === undefined) {
       throw orgError.notVisible(`Group 不存在（${groupId}，IFC-ERR-015）`);
     }
-    return { ...item, id: `${owner}/${name}`, leaderGroups: [], departments: [], positions: [] };
+    // 直接复用目录项的稳定 id（owner/name），避免对非复合 groupId 二次拼接产生
+    // "owner/undefined" 或与目录 id 不一致（ORG-013/CAS-MAP-003）。
+    return { ...item, id: item.id, leaderGroups: [], departments: [], positions: [] };
   }
 
   @Post('clubs/wizard')

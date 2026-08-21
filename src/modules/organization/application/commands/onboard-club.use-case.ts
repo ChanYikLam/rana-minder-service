@@ -166,9 +166,13 @@ export class OnboardingUseCase {
       throw orgError.precondition('向导未选择社团 Group（ORG-005）');
     }
 
-    // 负责人连续性：负责人职位 Group 必须至少一名有效成员（ORG-024）
-    const leaderGroup =
-      club.leaderGroup ?? toStableRef(club.wizardCandidate.name, club.wizardCandidate.owner);
+    // 负责人连续性：负责人职位 Group 必须至少一名有效成员（ORG-024）。
+    // 负责人职位 Group 必须在向导中显式配置，缺失即视为未满足连续性（fail-closed），
+    // 不做静默回退到社团自身（ORG-013/024）。
+    const leaderGroup = club.leaderGroup;
+    if (leaderGroup === null) {
+      throw orgError.precondition('未配置负责人职位 Group，无法完成接入（ORG-024）');
+    }
     const leaders = await this.casdoor.getGroupMembers(leaderGroup);
     const leaderContinuityOk = leaders.length > 0;
 
@@ -258,6 +262,25 @@ export class OnboardingUseCase {
       await this.assertDescendant(pos, club.clubGroup);
       await this.registry.save({
         ref: pos,
+        clubId: club.id,
+        purpose: 'position',
+        departmentId: null,
+        positionId: newId(IdPrefix.POSITION),
+        mappingVersion: club.mappingVersion,
+      });
+    }
+
+    // 负责人职位 Group 同样登记为 position 映射，使其能绑定权限模板、承载负责人角色
+    // 权限（ORG-024/GOV-007）。leaderGroup 与 leaderRoleGroup 缺省均不作登记。
+    for (const leaderRef of [club.leaderGroup, club.leaderRoleGroup]) {
+      if (leaderRef === null) continue;
+      // 负责人职位 Group 通常位于社团之下（直属或后代），但需避免与社团 Group 自身重复登记
+      if (leaderRef.owner === club.clubGroup.owner && leaderRef.name === club.clubGroup.name) {
+        continue;
+      }
+      await this.assertDescendant(leaderRef, club.clubGroup);
+      await this.registry.save({
+        ref: leaderRef,
         clubId: club.id,
         purpose: 'position',
         departmentId: null,
