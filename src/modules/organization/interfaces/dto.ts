@@ -32,7 +32,7 @@ export class WizardCreateDto {
   @IsArray() @IsString({ each: true }) @IsOptional() departmentGroupIds!: string[];
   @IsArray() @IsString({ each: true }) @IsOptional() positionGroupIds!: string[];
   @IsString() @IsOptional() leaderRoleGroupId!: string;
-  @IsString() @IsOptional() reauthProof!: string;
+  @IsString() @IsOptional() @IsNotEmpty() reauthProof!: string;
 }
 
 export class WizardSaveStepDto {
@@ -46,7 +46,7 @@ export class WizardCompleteDto {
   @IsString() @IsNotEmpty() clubId!: string;
   @IsBoolean() confirmed!: boolean;
   // 最终启用社团与创建向导同为高风控操作（IFC-ERR-002），须提供重认证凭证
-  @IsString() @IsOptional() reauthProof!: string;
+  @IsString() @IsOptional() @IsNotEmpty() reauthProof!: string;
 }
 
 export class ImportMembersDto {
