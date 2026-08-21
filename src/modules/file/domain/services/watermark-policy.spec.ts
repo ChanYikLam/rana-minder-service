@@ -5,11 +5,20 @@ import { WatermarkPolicy } from './watermark-policy';
 describe('WatermarkPolicy（GOV-008/AUD-004：敏感附件默认加查看者与时间水印）', () => {
   const policy = new WatermarkPolicy();
 
-  it('敏感标记 → 必须加水印，内容含查看者与时间', () => {
+  it('敏感标记 → 必须加水印，内容含查看者（脱敏）与时间', () => {
     const d = policy.decide('GENERIC', 'resume', true, 'u1', '2026-08-21T06:00:00.000Z');
     assert.equal(d.required, true);
-    assert.ok(d.content.includes('u1'));
+    assert.ok(d.content.includes('u1')); // 脱敏后仍含前缀，便于追溯
     assert.ok(d.content.includes('2026-08-21T06:00:00.000Z'));
+  });
+
+  it('水印对查看者标识脱敏：不泄露完整 principalId', () => {
+    const longId = 'internal-user-42-abcdef';
+    const d = policy.decide('PHOTO', 'other', false, longId, 'x');
+    assert.equal(d.required, true);
+    assert.ok(d.content.includes(longId.slice(0, 4)));
+    assert.ok(!d.content.includes(longId)); // 完整标识不得出现在水印中
+    assert.ok(d.content.includes('****'));
   });
 
   it('招新报名/面试材料字段键 → 即使未标记也触发水印', () => {

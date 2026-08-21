@@ -1,4 +1,6 @@
 import type { FileCategory } from '../models/file-model';
+import { FileState } from '../state-machines/file-state-machine';
+import type { FileStateMachine } from '../state-machines/file-state-machine';
 
 /**
  * 访问动作（IFC-FIL-005 预览/下载）。
@@ -48,8 +50,8 @@ export class FileAccessDeniedError extends Error {
 /** 访问策略输入（实时鉴权依据） */
 export interface FileAccessRequest {
   readonly fileId: string;
-  /** 文件当前状态（未检查/隔离/删除拒绝） */
-  readonly fileState: string;
+  /** 文件当前状态（未检查/隔离/删除拒绝；复用状态机枚举） */
+  readonly fileState: FileState;
   /** 文件类别（敏感判定：招新报名/面试材料等） */
   readonly category: FileCategory;
   /** 上传者（本人历史访问判定） */
@@ -65,6 +67,8 @@ export interface FileAccessRequest {
   readonly sensitive: boolean;
   /** 仅本人可访问（如私人材料）；false=可被有权业务角色访问 */
   readonly ownerOnly: boolean;
+  /** 本人历史访问时，上传者是否仍有权查看对应历史提交（服务端入口校验后传入） */
+  readonly uploaderHistoryVisible?: boolean;
 }
 
 /**
@@ -75,6 +79,8 @@ export interface FileAccessRequest {
  * 字段可进一步限制预览/下载但不能扩大权限。
  */
 export class AccessPolicy {
+  constructor(private readonly stateMachine: FileStateMachine) {}
+
   /**
    * 实时鉴权。
    * @param context 当前请求实时上下文
@@ -97,11 +103,16 @@ export class AccessPolicy {
       return { allowed: false, errorCode: 'IFC-ERR-003' };
     }
     // 3) 文件状态：未检查/隔离/失败/待清理/已清理 → 不可访问（IFC-FIL-005）
-    if (request.fileState !== 'AVAILABLE' && request.fileState !== 'BOUND_TO_SUBMISSION') {
+    //    复用状态机 isUnsafe 规则，避免魔法字符串漂移
+    if (this.stateMachine.isUnsafe(request.fileState)) {
       return { allowed: false, errorCode: 'IFC-ERR-011' };
     }
-    // 4) 本人历史访问：上传者且业务对象仍有权（调用方已校验历史提交可见性）
+    // 4) 本人历史访问：仅当 主体确为上传者 且 对应历史提交仍可见 时放行；
+    //    权限判定下沉到领域规则，主体验证在策略内独立完成，防止调用方误传越权
     if (principalIsUploader) {
+      if (context.principalId !== request.uploaderId || !request.uploaderHistoryVisible) {
+        return { allowed: false, errorCode: 'IFC-ERR-003' };
+      }
       return this.checkField(request, action);
     }
     // 5) 非本人：仅本人材料 → 拒绝；否则要求有权业务角色

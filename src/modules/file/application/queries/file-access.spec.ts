@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { AccessPolicy, FileAccessAction } from '../../domain/services/access-policy';
+import { FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { WatermarkPolicy } from '../../domain/services/watermark-policy';
 import { DefaultSignedUrlProvider } from '../../infrastructure/signed-url-provider';
 import { FileAccessQuery } from './file-access.query';
@@ -28,7 +29,7 @@ const req = (overrides: Partial<FileAccessRequest> = {}): FileAccessRequest => (
 const makeQuery = () => {
   const auditEvents: string[] = [];
   const query = new FileAccessQuery(
-    new AccessPolicy(),
+    new AccessPolicy(new FileStateMachine()),
     new WatermarkPolicy(),
     new DefaultSignedUrlProvider(),
     { report: async (e: { action: string }) => void auditEvents.push(e.action) },
@@ -68,7 +69,7 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
     const issued = await query.issueAccess({
       fileId: 'f1',
       context: ctx(),
-      request: req(),
+      request: req({ uploaderHistoryVisible: true }),
       principalIsUploader: true,
       action: FileAccessAction.DOWNLOAD,
       safeForPreview: false,
@@ -97,7 +98,7 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
     const issued = await query.issueAccess({
       fileId: 'f1',
       context: ctx(),
-      request: req(),
+      request: req({ uploaderHistoryVisible: true }),
       principalIsUploader: true,
       action: FileAccessAction.PREVIEW,
       safeForPreview: false, // 视频等非安全格式
@@ -111,7 +112,7 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
     await query.issueAccess({
       fileId: 'f1',
       context: ctx(),
-      request: req({ sensitive: false, category: 'VIDEO' }),
+      request: req({ sensitive: false, category: 'VIDEO', uploaderHistoryVisible: true }),
       principalIsUploader: true,
       action: FileAccessAction.PREVIEW,
       safeForPreview: true,
@@ -121,7 +122,7 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
     await query.issueAccess({
       fileId: 'f1',
       context: ctx(),
-      request: req({ sensitive: false }),
+      request: req({ sensitive: false, uploaderHistoryVisible: true }),
       principalIsUploader: true,
       action: FileAccessAction.DOWNLOAD,
       safeForPreview: false,
@@ -131,7 +132,7 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
     await query.issueAccess({
       fileId: 'f1',
       context: ctx(),
-      request: req({ sensitive: true }),
+      request: req({ sensitive: true, uploaderHistoryVisible: true }),
       principalIsUploader: true,
       action: FileAccessAction.PREVIEW,
       safeForPreview: true,
@@ -144,7 +145,7 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
     const issued = await query.issueAccess({
       fileId: 'f1',
       context: ctx({ principalId: 'u1' }),
-      request: req({ uploaderId: 'u1' }),
+      request: req({ uploaderId: 'u1', uploaderHistoryVisible: true }),
       principalIsUploader: true,
       action: FileAccessAction.DOWNLOAD,
       safeForPreview: false,

@@ -19,7 +19,7 @@ export interface IssueAccessInput {
   readonly context: FileAccessContext;
   /** 文件与目标事实（当前状态/类别/上传者/字段限制/敏感标记） */
   readonly request: FileAccessRequest;
-  /** 当前主体是否为上传者（本人历史访问：调用方已校验历史提交仍有权） */
+  /** 当前主体是否为上传者（本人历史访问）；主体验证与历史可见性由领域规则在策略内判定 */
   readonly principalIsUploader: boolean;
   /** 请求动作 */
   readonly action: FileAccessAction;
@@ -45,7 +45,8 @@ export interface IssuedAccess {
  *   字段可进一步限制预览/下载但不能扩大权限；
  * - **水印与审计**：敏感附件（招新报名/面试材料）预览/下载默认加查看者+时间
  *   水印；下载及敏感附件预览记录审计（GOV-008、AUD-004）；
- * - **本人历史访问**：上传者在仍有权查看对应历史提交时可查看/下载自己的附件。
+ * - **本人历史访问**：仅当主体确为上传者且对应历史提交仍可见（`uploaderHistoryVisible`
+ *   由服务端入口校验后随 request 传入）时，才可查看/下载自己的附件。
  */
 @Injectable()
 export class FileAccessQuery {
@@ -65,10 +66,7 @@ export class FileAccessQuery {
       input.principalIsUploader,
     );
     if (!decision.allowed) {
-      throw new FileAccessDeniedError(
-        decision.errorCode ?? 'IFC-ERR-003',
-        '附件访问被拒绝',
-      );
+      throw new FileAccessDeniedError(decision.errorCode ?? 'IFC-ERR-003', '附件访问被拒绝');
     }
 
     // 安全格式在线预览；其他格式仅下载（不扩大权限）

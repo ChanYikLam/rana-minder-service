@@ -1,3 +1,5 @@
+import type { FileCategory } from '../models/file-model';
+
 /**
  * 水印策略（FORM-008、GOV-008、AUD-004）。
  *
@@ -13,13 +15,12 @@ export interface WatermarkDecision {
 
 /**
  * 敏感附件类别（招新报名/面试材料等；首版按类别与字段键判定）。
+ * 仅照片类别默认敏感；普通文件（GENERIC）按字段键与敏感标记判定，避免过宽。
  */
-const SENSITIVE_CATEGORIES = new Set<FileCategoryKey>(['PHOTO', 'GENERIC']);
+const SENSITIVE_CATEGORIES = new Set<FileCategory>(['PHOTO']);
 
-type FileCategoryKey = 'PHOTO' | 'VIDEO' | 'GENERIC';
-
-/** 敏感字段键前缀（招新报名/面试材料等字段） */
-const SENSITIVE_FIELD_PREFIXES = ['resume', 'interview', 'material', 'photo', 'idPhoto'];
+/** 敏感字段键前缀（小写匹配；招新报名/面试材料等字段） */
+const SENSITIVE_FIELD_PREFIXES = ['resume', 'interview', 'material', 'photo', 'idphoto'];
 
 /**
  * 水印策略（纯规则）。
@@ -31,18 +32,17 @@ export class WatermarkPolicy {
    * @param category 文件类别
    * @param fieldKey 附件字段键
    * @param sensitive 是否已标记敏感（调用方业务标记）
-   * @param principalId 查看者（水印内容）
+   * @param principalId 查看者（水印内容，脱敏后嵌入）
    * @param occurredAt 访问时间（ISO 8601；服务端可信时钟）
-   * @param action 预览/下载（水印均应用）
    */
   decide(
-    category: string,
+    category: FileCategory,
     fieldKey: string,
     sensitive: boolean,
     principalId: string,
     occurredAt: string,
   ): WatermarkDecision {
-    const sensitiveByCategory = SENSITIVE_CATEGORIES.has(category as FileCategoryKey);
+    const sensitiveByCategory = SENSITIVE_CATEGORIES.has(category);
     const sensitiveByField = SENSITIVE_FIELD_PREFIXES.some((p) =>
       fieldKey.toLowerCase().startsWith(p),
     );
@@ -51,7 +51,20 @@ export class WatermarkPolicy {
     }
     return {
       required: true,
-      content: `查看者:${principalId} 时间:${occurredAt}`,
+      content: `查看者:${maskPrincipal(principalId)} 时间:${occurredAt}`,
     };
   }
+}
+
+/**
+ * 对查看者标识脱敏：仅保留头部若干位 + 稳定短哈希，避免完整内部标识
+ * 经水印渲染/截图传播而泄露（GOV-008）。
+ */
+function maskPrincipal(principalId: string): string {
+  const head = principalId.slice(0, 4);
+  let hash = 0;
+  for (let i = 0; i < principalId.length; i++) {
+    hash = (hash * 31 + principalId.charCodeAt(i)) >>> 0;
+  }
+  return `${head}****${hash.toString(16).slice(0, 4)}`;
 }
