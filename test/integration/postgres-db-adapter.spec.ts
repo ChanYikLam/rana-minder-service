@@ -118,14 +118,16 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
     );
     assert.equal(rows[0].ctx, 'u-1');
     await db.commit(tx);
-    // 提交后上下文失效（新事务不再有该值）
+    // 提交后上下文失效（新事务不再有该值）。注意：SET LOCAL 在提交时回退为会话级
+    // 默认值；自定义 GUC 一经引用即存在，回退值为空串 ''（连接池复用）或未定义
+    // NULL（全新会话）。此处只断言「不再是 u-1」，兼容两种会话状态。
     const tx2 = await db.beginTransaction();
     const rows2 = await db.query<{ ctx: string | null }>(
       tx2,
       "SELECT current_setting('app.subject_id', true) AS ctx",
       [],
     );
-    assert.equal(rows2[0].ctx, null);
+    assert.notEqual(rows2[0].ctx, 'u-1');
     await db.commit(tx2);
   });
 });
