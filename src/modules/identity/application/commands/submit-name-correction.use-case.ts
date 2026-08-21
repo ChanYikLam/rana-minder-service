@@ -68,7 +68,7 @@ export class DefaultSubmitNameCorrectionUseCase implements SubmitNameCorrectionU
       proofReference: input.proofReference,
       now: input.now,
     });
-    await this.repository.save(request.toSnapshot(), request.events);
+    await this.repository.save(request.toSnapshot(), request.events, 0);
 
     await this.audit.record({
       type: 'NAME_CORRECTION',

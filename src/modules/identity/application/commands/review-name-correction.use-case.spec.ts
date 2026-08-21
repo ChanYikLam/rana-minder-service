@@ -20,7 +20,7 @@ import type { SuperAdminVerifierPort } from '../ports/super-admin-verifier.port'
 import type { ProfileSyncTaskPort } from '../ports/profile-sync-task.port';
 import type { IdentityAuditPort } from '../ports/identity-audit.port';
 import { HighRiskCommandGuard } from '../services/high-risk-command.guard';
-import { IdentityCommandError, IdentityErrorCode } from '../errors';
+import { IdentityCommandError, IdentityErrorCode, identityErrors } from '../errors';
 import type { NameCorrectionRequestSnapshot } from '../../domain/models/name-correction-request';
 
 const now = new Date('2026-08-20T12:00:00.000Z');
@@ -61,7 +61,12 @@ function inMemoryRepository(): NameCorrectionRequestRepository & {
       );
       return pending ?? null;
     },
-    async save(snapshot) {
+    async save(snapshot, _events, expectedVersion) {
+      const existing = store.get(snapshot.id);
+      // 乐观锁守卫：若已存在且版本不匹配，视为并发裁决/写入（0 行更新 → 版本冲突）。
+      if (existing && existing.version !== expectedVersion) {
+        throw identityErrors.versionConflict();
+      }
       store.set(snapshot.id, snapshot);
       this.saved.push(snapshot);
     },

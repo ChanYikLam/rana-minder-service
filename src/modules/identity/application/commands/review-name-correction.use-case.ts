@@ -79,7 +79,9 @@ export class DefaultReviewNameCorrectionUseCase implements ReviewNameCorrectionU
       throw identityErrors.preconditionFailed('该申请已裁决或不可再裁决（终态）');
     }
 
-    await this.repository.save(request.toSnapshot(), request.events);
+    // 乐观锁在 SQL 层落地：以载入时的原版本守卫，防并发超管同时裁决
+    // 同一 SUBMITTED 申请（0 行更新 → IFC-ERR-008 版本冲突，避免重复调度）。
+    await this.repository.save(request.toSnapshot(), request.events, snapshot.version);
 
     await this.audit.record({
       type: 'NAME_CORRECTION',

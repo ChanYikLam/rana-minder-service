@@ -41,7 +41,7 @@ describe('PostgresNameCorrectionRepository（IDN-016）', () => {
     const repository = new PostgresNameCorrectionRepository(db, uow);
 
     await uow.run({ kind: 'single', subjectId: 'user-1' }, async () => {
-      await repository.save(snapshot(), []);
+      await repository.save(snapshot(), [], 0);
       db.seed('name_correction_requests', [
         {
           id: 'req-1',
@@ -77,6 +77,39 @@ describe('PostgresNameCorrectionRepository（IDN-016）', () => {
     const query = db.queries.find((q) => q.sql.includes('status'))!;
     assert.equal(query.sql.includes("status = 'SUBMITTED'"), true);
     assert.deepEqual(query.params, ['user-1']);
+  });
+
+  it('save：SQL 层版本守卫——预期版本不匹配 → 0 行更新 → IFC-ERR-008（防并发重复裁决）', async () => {
+    const db = new FakeDbAdapter();
+    db.seed('name_correction_requests', [
+      {
+        id: 'req-1',
+        subject_id: 'user-1',
+        old_name: '旧姓名',
+        requested_name: '新姓名',
+        status: 'APPROVED',
+        version: 1,
+      },
+    ]);
+    const uow = new IdentityUnitOfWork(db);
+    const repository = new PostgresNameCorrectionRepository(db, uow);
+
+    // 预期版本 0 与库中当前版本 1 不匹配 → 0 行更新 → 版本冲突。
+    await assert.rejects(
+      uow.run({ kind: 'single', subjectId: 'user-1' }, () => repository.save(snapshot(), [], 0)),
+      (error: Error & { code?: string }) =>
+        error.name === 'IdentityCommandError' && error.code === 'IFC-ERR-008',
+    );
+
+    // 预期版本与库中当前版本匹配 → 更新成功。
+    await uow.run({ kind: 'single', subjectId: 'user-1' }, () =>
+      repository.save(snapshot(), [], 1),
+    );
+
+    const successful = db.queries[db.queries.length - 1];
+    assert.match(successful.sql, /WHERE name_correction_requests\.version = \$13/);
+    assert.equal(successful.params[12], 1);
+    assert.match(successful.sql, /RETURNING id/);
   });
 });
 

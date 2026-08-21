@@ -237,11 +237,38 @@ describe('PostgresEmailVerificationRepository', () => {
     const uow = new IdentityUnitOfWork(db);
     const repo = new PostgresEmailVerificationRepository(db, uow);
 
-    await inTx(uow, () => repo.save(snapshot));
+    const affected = await inTx(uow, () => repo.save(snapshot));
 
     const upsert = db.queries[0];
     assert.equal(upsert.params[3], 'abc123');
     assert.equal(upsert.params.includes('secret-token'), false);
+    assert.equal(affected, 1);
+  });
+
+  it('save：SQL 层单次消费守卫（WHERE consumed_at IS NULL + RETURNING id）', async () => {
+    const db = new FakeDbAdapter();
+    db.seed('email_verification_requests', [
+      {
+        id: 'v-1',
+        subject_id: 'user-1',
+        email: 'new@example.com',
+        token_hash: 'abc123',
+        expires_at: snapshot.expiresAt,
+        consumed_at: new Date(now.getTime() + 1000),
+        request_version: 2,
+        created_at: now,
+      },
+    ]);
+    const uow = new IdentityUnitOfWork(db);
+    const repo = new PostgresEmailVerificationRepository(db, uow);
+
+    // 尝试用 consumed_at=null 重放覆盖已消费记录；SQL 层以守卫拦截（并发重复消费防护）。
+    const affected = await inTx(uow, () => repo.save({ ...snapshot, consumedAt: null }));
+
+    assert.equal(typeof affected, 'number');
+    const upsert = db.queries[0];
+    assert.match(upsert.sql, /WHERE email_verification_requests\.consumed_at IS NULL/);
+    assert.match(upsert.sql, /RETURNING id/);
   });
 });
 

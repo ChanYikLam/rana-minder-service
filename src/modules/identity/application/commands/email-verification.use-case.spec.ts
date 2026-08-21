@@ -73,8 +73,14 @@ function inMemoryVerificationRepository(): EmailVerificationRepository & {
       return store.get(id) ?? null;
     },
     async save(snapshot) {
+      const existing = store.get(snapshot.id);
+      // 模拟 DB 层单次消费守卫：已消费记录不接受覆盖（返回 0 行），供消费方判定并发。
+      if (existing && existing.consumedAt !== null && snapshot.consumedAt === null) {
+        return 0;
+      }
       store.set(snapshot.id, snapshot);
       this.saved.push(snapshot);
+      return 1;
     },
     async findLatestBySubjectAndEmail(subjectId, email) {
       for (const v of store.values()) {
@@ -364,6 +370,53 @@ describe('EmailVerificationUseCase R005 验证链接成功', () => {
     );
     assert.equal(repository.saved.length, 0);
     assert.equal(verificationRepository.saved.length, 0); // 验证请求未被改写
+  });
+
+  it('并发消费：save 返回 0 行（令牌已被并发请求消费）→ 拒绝且不创建同步意图/任务', async () => {
+    const repository = inMemoryProfileRepository();
+    repository.seed(pendingEmailProfile());
+    const verificationRepository = inMemoryVerificationRepository();
+    const { verification, token } = EmailVerification.issue(
+      'v-1',
+      'user-1',
+      'new@example.com',
+      1,
+      new Date(now.getTime() - 60_000),
+    );
+    verificationRepository.seed(verification.toSnapshot());
+    const intentRepository = inMemorySyncIntentRepository();
+    let scheduled = 0;
+    // 模拟并发：另一请求先落库消费，本请求 save 受 consumed_at IS NULL 守卫拦截 → 0 行。
+    verificationRepository.save = async () => 0;
+    const useCase = createUseCase({
+      repository,
+      verificationRepository,
+      intentRepository,
+      taskPort: {
+        async scheduleProfileSync() {
+          scheduled += 1;
+        },
+        async scheduleProfileReadback() {},
+        async scheduleNameCorrectionWrite() {},
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        useCase.consumeVerificationToken({
+          verificationId: 'v-1',
+          token,
+          subjectId: 'user-1',
+          now,
+          actor: 'user-1',
+          traceId: null,
+        }),
+      (err: any) => err.code === IdentityErrorCode.PRECONDITION_FAILED,
+    );
+    // 未创建同步意图、未调度任务、资料未被改写 → 杜绝重复同步。
+    assert.equal(intentRepository.saved.length, 0);
+    assert.equal(scheduled, 0);
+    assert.equal(repository.saved.length, 0);
   });
 
   it('AUT：跨主体消费他人验证令牌 → IFC-ERR-003 拒绝，无副作用', async () => {

@@ -70,7 +70,8 @@ export class DefaultApplyNameCorrectionWriteUseCase implements ApplyNameCorrecti
     }
 
     request.markApplied(input.now);
-    await this.repository.save(request.toSnapshot(), request.events);
+    // 乐观锁在 SQL 层落地：以载入时的原版本守卫，防并发覆盖已收口申请。
+    await this.repository.save(request.toSnapshot(), request.events, snapshot.version);
 
     await this.audit.record({
       type: 'NAME_CORRECTION',

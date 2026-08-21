@@ -198,7 +198,13 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
     });
     const intentSnapshot = intent.toSnapshot();
 
-    await this.verificationRepository.save(verification.toSnapshot());
+    // 乐观消费：save 的 `WHERE consumed_at IS NULL` 守卫在 DB 层保证单次消费。
+    // 0 行更新说明令牌已被并发请求消费，丢弃本次后续动作（不创建同步意图/调度任务），
+    // 杜绝并发消费产生重复同步。
+    const affected = await this.verificationRepository.save(verification.toSnapshot());
+    if (affected === 0) {
+      throw identityErrors.preconditionFailed('验证链接已使用，请重新发送');
+    }
     await this.syncIntentRepository.save(intentSnapshot, intent.events);
     await this.profileRepository.save(
       profile.toSnapshot(),

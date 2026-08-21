@@ -45,9 +45,9 @@ export class PostgresEmailVerificationRepository implements EmailVerificationRep
     return rows[0] ? rowToSnapshot(rows[0]) : null;
   }
 
-  async save(snapshot: EmailVerificationSnapshot): Promise<void> {
+  async save(snapshot: EmailVerificationSnapshot): Promise<number> {
     const tx = this.uow.active;
-    await this.db.query(
+    const rows = await this.db.query<{ id: string }>(
       tx,
       `INSERT INTO email_verification_requests
          (id, subject_id, email, token_hash, expires_at, consumed_at, request_version, created_at)
@@ -60,7 +60,8 @@ export class PostgresEmailVerificationRepository implements EmailVerificationRep
          consumed_at = EXCLUDED.consumed_at,
          request_version = EXCLUDED.request_version,
          created_at = EXCLUDED.created_at
-       WHERE email_verification_requests.consumed_at IS NULL`,
+       WHERE email_verification_requests.consumed_at IS NULL
+       RETURNING id`,
       [
         snapshot.id,
         snapshot.subjectId,
@@ -72,6 +73,7 @@ export class PostgresEmailVerificationRepository implements EmailVerificationRep
         snapshot.createdAt,
       ],
     );
+    return rows.length;
   }
 
   async findLatestBySubjectAndEmail(

@@ -20,7 +20,9 @@
  */
 
 import type { DbAdapter } from '../../../shared/db-adapter';
+import type { TransactionContext } from '../../../shared/db-adapter';
 import type { IdentityUnitOfWork } from './unit-of-work';
+import { identityErrors } from '../application/errors';
 import type {
   NameCorrectionRequestSnapshot,
   NameCorrectionDomainEvent,
@@ -79,9 +81,11 @@ export class PostgresNameCorrectionRepository implements NameCorrectionRequestRe
   async save(
     snapshot: NameCorrectionRequestSnapshot,
     events: readonly NameCorrectionDomainEvent[],
+    expectedVersion: number,
   ): Promise<void> {
-    await this.db.query(
-      this.uow.active,
+    const tx: TransactionContext = this.uow.active;
+    const rows = await this.db.query<{ id: string }>(
+      tx,
       `INSERT INTO name_correction_requests
          (id, subject_id, old_name, requested_name, proof_reference, status,
           decided_by, decided_at, decision_reason, applied_at, version, created_at)
@@ -92,7 +96,9 @@ export class PostgresNameCorrectionRepository implements NameCorrectionRequestRe
          decided_at = EXCLUDED.decided_at,
          decision_reason = EXCLUDED.decision_reason,
          applied_at = EXCLUDED.applied_at,
-         version = EXCLUDED.version`,
+         version = EXCLUDED.version
+       WHERE name_correction_requests.version = $13
+       RETURNING id`,
       [
         snapshot.id,
         snapshot.subjectId,
@@ -106,8 +112,12 @@ export class PostgresNameCorrectionRepository implements NameCorrectionRequestRe
         snapshot.appliedAt,
         snapshot.version,
         snapshot.createdAt,
+        expectedVersion,
       ],
     );
+    if (rows.length === 0) {
+      throw identityErrors.versionConflict();
+    }
     void events;
   }
 }

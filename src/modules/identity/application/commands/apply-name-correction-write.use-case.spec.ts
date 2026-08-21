@@ -15,7 +15,7 @@ import type { NameCorrectionRequestRepository } from '../ports/name-correction-r
 import type { CasdoorUserPort } from '../ports/casdoor-user.port';
 import type { IdentityAuditPort } from '../ports/identity-audit.port';
 import { NameCorrectionState } from '../../domain/state-machines/name-correction.state-machine';
-import { IdentityCommandError, IdentityErrorCode } from '../errors';
+import { IdentityCommandError, IdentityErrorCode, identityErrors } from '../errors';
 import type { NameCorrectionRequestSnapshot } from '../../domain/models/name-correction-request';
 import { externalSuccess, externalFailure } from '../../../../common/contracts/external-result';
 
@@ -54,7 +54,12 @@ function inMemoryRepository(): NameCorrectionRequestRepository & {
     async findPendingBySubject() {
       return null;
     },
-    async save(snapshot) {
+    async save(snapshot, _events, expectedVersion) {
+      const existing = store.get(snapshot.id);
+      // 乐观锁守卫：版本不匹配视为并发覆盖（0 行更新 → 版本冲突）。
+      if (existing && existing.version !== expectedVersion) {
+        throw identityErrors.versionConflict();
+      }
       store.set(snapshot.id, snapshot);
       this.saved.push(snapshot);
     },
