@@ -6,8 +6,16 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import type { InboxAdapter, NotificationRepository } from '../../infrastructure';
-import { NotificationStateMachine } from '../../domain';
+import type {
+  ChannelDeliveryAttemptRepository,
+  InboxAdapter,
+  NotificationRepository,
+} from '../../infrastructure';
+import {
+  type ChannelDeliveryAttemptModel,
+  type RecipientSnapshot,
+  NotificationStateMachine,
+} from '../../domain';
 
 @Injectable()
 export class DeliverInboxCommand {
@@ -17,6 +25,7 @@ export class DeliverInboxCommand {
   constructor(
     private readonly repository: NotificationRepository,
     private readonly inboxAdapter: InboxAdapter,
+    private readonly attemptRepository: ChannelDeliveryAttemptRepository,
   ) {}
 
   /**
@@ -56,9 +65,51 @@ export class DeliverInboxCommand {
       this.logger.log(`站内信投递成功: factId=${factId}, 呈现=${snapshots.length} 条`);
       return { presentationCount: snapshots.length };
     } catch (error) {
-      // 临时失败：进入失败重试，不回滚业务（NTF-001、IFC-TX-005）
+      // 临时失败：记录失败重试尝试，接入重试队列；不回滚业务（NTF-001、IFC-TX-005）
+      const snapshots = await this.repository
+        .findSnapshotsByFactId(factId)
+        .catch(() => [] as readonly RecipientSnapshot[]);
+      const now = new Date().toISOString();
+      for (const snapshot of snapshots) {
+        await this.recordInboxFailure(factId, snapshot, (error as Error).message, now);
+      }
       this.logger.error(`站内信投递临时失败: factId=${factId}, error=${(error as Error).message}`);
       return { presentationCount: 0 };
     }
+  }
+
+  /**
+   * 记录站内信投递失败尝试，供重试队列拉取（NTF-007、IFC-TX-005）。
+   */
+  private async recordInboxFailure(
+    factId: string,
+    snapshot: RecipientSnapshot,
+    error: string,
+    now: string,
+  ): Promise<void> {
+    const attempt: ChannelDeliveryAttemptModel = {
+      attemptId: `inbox-attempt-${factId}-${snapshot.recipientId}-${Date.now()}`,
+      factId,
+      snapshotId: snapshot.snapshotId,
+      channel: 'INBOX',
+      channelMessageId: null,
+      attemptNumber: 1,
+      status: 'FAILED_RETRY',
+      targetAddress: null,
+      templateVersionId: null,
+      senderIdentity: null,
+      responseCategory: 'TEMPORARY_FAILURE',
+      sanitizedError: error,
+      nextRetryAt: this.calculateNextRetry(1),
+      createdAt: now,
+      completedAt: null,
+      version: 1,
+    };
+    await this.attemptRepository.saveAttempt(attempt);
+  }
+
+  private calculateNextRetry(attemptNumber: number): string {
+    const minutes = Math.min(2 ** attemptNumber, 60 * 6); // 指数退避，最多 6 小时
+    return new Date(Date.now() + minutes * 60 * 1000).toISOString();
   }
 }
