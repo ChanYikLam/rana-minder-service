@@ -49,6 +49,10 @@ export class SendAdmissionInvitationUseCase {
     if (input.expectedVersion !== undefined && snapshot.revisionNumber !== input.expectedVersion) {
       throw recruitmentErrors.conflict('申请版本冲突，请刷新后重试');
     }
+    const paths = await this.repository.loadDepartmentPathsByApplication(input.applicationId);
+    if (!paths.some((path) => path.status === 'ADMITTED')) {
+      throw recruitmentErrors.preconditionFailed('发送录取邀请前须存在部门 ADMITTED 的考察结论');
+    }
     const application = Application.fromSnapshot(snapshot);
     if (!application.sendAdmissionInvitation(input.now)) {
       throw recruitmentErrors.preconditionFailed('当前申请状态不允许发送录取邀请');
