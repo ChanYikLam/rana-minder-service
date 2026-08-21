@@ -17,7 +17,8 @@ export interface FormSubmissionRepository {
     submittedBy: string,
   ): Promise<FormSubmissionSnapshot | null>;
   listByScope(scope: FormScope): Promise<FormSubmissionSnapshot[]>;
-  listByForm(formId: string): Promise<FormSubmissionSnapshot[]>;
+  /** 按表单+作用域列出（作用域过滤下沉到存储层，避免跨 owner 数据进内存） */
+  listByForm(formId: string, scope: FormScope): Promise<FormSubmissionSnapshot[]>;
   /** 新建提交行（id 冲突 → 调用方映射 IFC-ERR-008） */
   insert(snapshot: FormSubmissionSnapshot): Promise<void>;
   /** 修订保存：以期望修订号守卫（0 行 → 并发单胜者失败 IFC-ERR-008） */

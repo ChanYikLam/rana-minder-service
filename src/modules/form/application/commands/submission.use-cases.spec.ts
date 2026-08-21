@@ -162,7 +162,7 @@ describe('SubmitFormUseCase（FORM-002）', () => {
         actor: 'u-1',
         now: NOW,
       }),
-      (err: Error) => err.message.includes('请勿重复提交'),
+      (err: Error) => err.message.includes('已提交过当前版本'),
     );
   });
 });

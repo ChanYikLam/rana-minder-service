@@ -93,7 +93,8 @@ export class DefaultSubmitFormUseCase implements SubmitFormUseCase {
       input.submittedBy,
     );
     if (existing !== null) {
-      throw formErrors.versionConflict('请勿重复提交，可走修订');
+      // 该提交者已对当前版本提交：非版本变化，而是提交状态已存在 → 409 IFC-ERR-007
+      throw formErrors.stateConflict('该提交者已提交过当前版本，请走修订');
     }
 
     const id = input.id ?? randomUUID();
@@ -106,7 +107,10 @@ export class DefaultSubmitFormUseCase implements SubmitFormUseCase {
       values: input.values as Record<string, FormAnswerValue>,
       now: input.now,
     });
-    submission.submit(new DefaultFormSubmissionStateMachine(), input.now);
+    const submitted = submission.submit(new DefaultFormSubmissionStateMachine(), input.now);
+    if (!submitted) {
+      throw formErrors.stateConflict('提交状态不允许该操作，请刷新后重试');
+    }
 
     await this.submissions.insert(submission.toSnapshot());
 

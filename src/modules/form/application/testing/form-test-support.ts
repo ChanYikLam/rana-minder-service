@@ -269,8 +269,13 @@ export class InMemoryFormSubmissionRepository implements FormSubmissionRepositor
     );
   }
 
-  async listByForm(formId: string): Promise<FormSubmissionSnapshot[]> {
-    return this.submissions.filter((submission) => submission.formId === formId);
+  async listByForm(formId: string, scope: FormScope): Promise<FormSubmissionSnapshot[]> {
+    return this.submissions.filter(
+      (submission) =>
+        submission.formId === formId &&
+        submission.scope.kind === scope.kind &&
+        submission.scope.ownerId === scope.ownerId,
+    );
   }
 
   async insert(snapshot: FormSubmissionSnapshot): Promise<void> {

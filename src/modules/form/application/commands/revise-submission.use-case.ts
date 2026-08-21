@@ -59,8 +59,18 @@ export class DefaultReviseSubmissionUseCase implements ReviseSubmissionUseCase {
     }
 
     const version = await this.definitions.loadVersion(submission.formId, submission.versionNumber);
-    if (version === null || version.status !== FormVersionState.PUBLISHED) {
-      throw formErrors.preconditionFailed('目标表单版本不可提交');
+    if (version === null) {
+      // 修订需要按原版本字段重验答案；版本定义缺失则无法校验
+      throw formErrors.notFound('表单版本');
+    }
+    // 修订是对既有已提交内容的纠错，不因版本后续停用而追溯性剥夺
+    // （DEPRECATED 只阻止新提交，既有提交与附件保留）；DRAFT/PREVIEW_TESTING
+    // 表示该版本从未正式发布过，不存在可修订的历史提交。
+    if (
+      version.status !== FormVersionState.PUBLISHED &&
+      version.status !== FormVersionState.DEPRECATED
+    ) {
+      throw formErrors.preconditionFailed('目标表单版本不可修订');
     }
 
     validateFormAnswer(version.fields, input.values);

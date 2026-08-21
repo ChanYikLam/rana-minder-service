@@ -46,6 +46,9 @@ export const formErrors = {
       message ?? '表单版本已变化，请刷新后重试',
     );
   },
+  stateConflict(message: string): FormCommandError {
+    return new FormCommandError(FormErrorCode.STATE_CONFLICT, message);
+  },
   resourceContention(message: string): FormCommandError {
     return new FormCommandError(FormErrorCode.RESOURCE_CONTENTION, message);
   },
