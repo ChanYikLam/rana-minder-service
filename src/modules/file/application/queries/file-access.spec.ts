@@ -164,11 +164,16 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
 
   it('下载及敏感附件预览记录审计；普通预览不记录', async () => {
     const { query, auditEvents } = makeQuery();
-    // 非敏感普通预览 → 不审计
+    // 非敏感普通预览 → 不审计（类别 VIDEO、字段键非敏感，水印与审计均不触发）
     await query.issueAccess({
       fileId: 'f1',
       context: ctx(),
-      request: req({ sensitive: false, category: 'VIDEO', uploaderHistoryVisible: true }),
+      request: req({
+        sensitive: false,
+        category: 'VIDEO',
+        target: { objectType: 'FORM_SUBMISSION', objectId: 's1', fieldKey: 'activityVideo' },
+        uploaderHistoryVisible: true,
+      }),
       principalIsUploader: true,
       action: FileAccessAction.PREVIEW,
       safeForPreview: true,
@@ -194,6 +199,19 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
       safeForPreview: true,
     });
     assert.deepEqual(auditEvents, ['DOWNLOAD', 'PREVIEW']);
+  });
+
+  it('类别敏感（PHOTO）预览即使未显式标记 sensitive 也须审计（与 WatermarkPolicy 口径一致）', async () => {
+    const { query, auditEvents } = makeQuery();
+    await query.issueAccess({
+      fileId: 'f1',
+      context: ctx(),
+      request: req({ sensitive: false, category: 'PHOTO', uploaderHistoryVisible: true }),
+      principalIsUploader: true,
+      action: FileAccessAction.PREVIEW,
+      safeForPreview: true,
+    });
+    assert.deepEqual(auditEvents, ['PREVIEW']);
   });
 
   it('本人历史访问：上传者本人 → 放行并签发', async () => {

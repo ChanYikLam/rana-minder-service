@@ -114,9 +114,12 @@ export class FileAccessQuery {
     });
 
     // 审计：下载及敏感附件预览
+    // 敏感判定与 WatermarkPolicy 口径一致：除调用方显式标记 sensitive 外，
+    // 类别敏感（如 PHOTO）或敏感字段键触发的预览同样必须留痕（AUD-004），
+    // 避免出现“加了水印却不审计”的缺口。
     if (
       effectiveAction === FileAccessAction.DOWNLOAD ||
-      (effectiveAction === FileAccessAction.PREVIEW && input.request.sensitive)
+      (effectiveAction === FileAccessAction.PREVIEW && (input.request.sensitive || watermark.required))
     ) {
       await this.audit.report({
         action: effectiveAction,
