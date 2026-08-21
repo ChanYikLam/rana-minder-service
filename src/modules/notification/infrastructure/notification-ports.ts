@@ -57,6 +57,11 @@ export interface NotificationRepository {
    * 查询待投递的通知事实（供站内信/邮件任务轮询）。
    */
   findFactsPendingDelivery(limit: number): Promise<readonly NotificationFactModel[]>;
+
+  /**
+   * 按通知事实标识查询关联的收件人快照。
+   */
+  findSnapshotsByFactId(factId: string): Promise<readonly RecipientSnapshot[]>;
 }
 
 /**
@@ -95,6 +100,16 @@ export interface InboxAdapter {
    * 查询用户未读数。
    */
   countUnread(recipientId: string): Promise<number>;
+
+  /**
+   * 按呈现标识查询单条站内信（用于标记已读/已处理/隐藏）。
+   */
+  findPresentation(presentationId: string): Promise<InboxPresentationModel | null>;
+
+  /**
+   * 将收件人全部未读站内信标记为已读，逐条幂等，返回更新条数。
+   */
+  markAllRead(recipientId: string): Promise<number>;
 }
 
 /**

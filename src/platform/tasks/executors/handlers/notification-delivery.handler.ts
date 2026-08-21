@@ -17,7 +17,9 @@ export class NotificationDeliveryHandler implements TaskHandler {
   constructor(
     @Optional()
     @Inject('DeliverInboxCommand')
-    private readonly deliverInbox?: { execute: (factId: string, version: number) => Promise<void> },
+    private readonly deliverInbox?: {
+      execute: (factId: string, version: number) => Promise<{ presentationCount: number }>;
+    },
     @Optional()
     @Inject('RetryChannelDeliveryCommand')
     private readonly retryChannel?: { execute: (attemptId: string) => Promise<void> },
@@ -33,10 +35,27 @@ export class NotificationDeliveryHandler implements TaskHandler {
       return;
     }
 
-    // 根据任务意图选择投递或重试
-    // 任务 payload 携带 factId 或 attemptId 及版本信息
+    const payload = task.payload as
+      | { intent: 'deliver_inbox'; factId: string; expectedVersion: number }
+      | { intent: 'retry_channel'; attemptId: string }
+      | undefined;
+
     try {
-      this.logger.log(`通知投递任务处理完成: taskId=${task.taskId}`);
+      if (payload?.intent === 'deliver_inbox' && this.deliverInbox) {
+        const result = await this.deliverInbox.execute(payload.factId, payload.expectedVersion);
+        this.logger.log(
+          `通知投递任务处理完成: taskId=${task.taskId}, 站内信呈现=${result.presentationCount} 条`,
+        );
+      } else if (payload?.intent === 'retry_channel' && this.retryChannel) {
+        await this.retryChannel.execute(payload.attemptId);
+        this.logger.log(
+          `通知重试任务处理完成: taskId=${task.taskId}, attemptId=${payload.attemptId}`,
+        );
+      } else {
+        this.logger.warn(
+          `NotificationDeliveryHandler 未知任务意图或命令未就绪: taskId=${task.taskId}`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `通知投递任务处理失败: taskId=${task.taskId}, error=${(error as Error).message}`,

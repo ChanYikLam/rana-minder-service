@@ -196,21 +196,12 @@ export class NotificationStateMachine {
   }
 
   /**
-   * 转换 5a：收件人标记已读。
+   * 转换 5a：收件人标记已读（幂等：已读状态重复标记不拒绝）。
    * 已投递 → 已读
    */
   private evaluateMarkRead(command: StateTransitionCommand): TransitionResult {
     if (command.currentStatus !== 'DELIVERED') {
       return this.reject('通知尚未投递，不能标记已读');
-    }
-    if (command.currentPresentationStatus === 'READ') {
-      return {
-        allowed: true,
-        newStatus: 'DELIVERED',
-        newChannelStatus: null,
-        newPresentationStatus: 'READ',
-        reason: null,
-      };
     }
     return {
       allowed: true,
@@ -235,21 +226,12 @@ export class NotificationStateMachine {
   }
 
   /**
-   * 转换 5c：收件人标记已处理。
+   * 转换 5c：收件人标记已处理（幂等：已处理状态重复标记不拒绝）。
    * 已投递 → 已处理
    */
   private evaluateMarkProcessed(command: StateTransitionCommand): TransitionResult {
     if (command.currentStatus !== 'DELIVERED') {
       return this.reject('通知尚未投递，不能标记已处理');
-    }
-    if (command.currentPresentationStatus === 'PROCESSED') {
-      return {
-        allowed: true,
-        newStatus: 'DELIVERED',
-        newChannelStatus: null,
-        newPresentationStatus: 'PROCESSED',
-        reason: null,
-      };
     }
     return {
       allowed: true,

@@ -27,11 +27,11 @@ export class DeliverInboxCommand {
    * @param expectedVersion 乐观锁版本
    * @returns 投递结果
    */
-  async execute(factId: string, expectedVersion: number): Promise<void> {
+  async execute(factId: string, expectedVersion: number): Promise<{ presentationCount: number }> {
     const fact = await this.repository.findFactById(factId);
     if (!fact) {
       this.logger.warn(`通知事实不存在: ${factId}`);
-      return;
+      return { presentationCount: 0 };
     }
 
     // 状态机校验：已创建＋待投递 → 已投递
@@ -42,19 +42,23 @@ export class DeliverInboxCommand {
 
     if (!transition.allowed) {
       this.logger.warn(`站内信投递拒绝: factId=${factId}, reason=${transition.reason}`);
-      return;
+      return { presentationCount: 0 };
     }
 
     try {
-      // 创建站内信呈现记录（逻辑事件＋收件人唯一）
-      // 通知事实的收件人快照需从仓储获取
-      await this.repository.updateFactStatus(factId, 'DELIVERED', expectedVersion);
+      // 按收件人快照创建/确认唯一站内信呈现（逻辑事件＋收件人唯一，NTF-003）
+      const snapshots = await this.repository.findSnapshotsByFactId(factId);
+      for (const snapshot of snapshots) {
+        await this.inboxAdapter.createOrConfirmPresentation(fact, snapshot);
+      }
 
-      this.logger.log(`站内信投递成功: factId=${factId}`);
+      await this.repository.updateFactStatus(factId, 'DELIVERED', expectedVersion);
+      this.logger.log(`站内信投递成功: factId=${factId}, 呈现=${snapshots.length} 条`);
+      return { presentationCount: snapshots.length };
     } catch (error) {
       // 临时失败：进入失败重试，不回滚业务（NTF-001、IFC-TX-005）
       this.logger.error(`站内信投递临时失败: factId=${factId}, error=${(error as Error).message}`);
-      // 进入失败重试状态，由重试调度器处理
+      return { presentationCount: 0 };
     }
   }
 }

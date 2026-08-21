@@ -15,7 +15,18 @@
  * - POST /api/admin/notifications/resend 人工重发
  */
 
-import { Controller, Get, Post, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Query,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  BadRequestException,
+} from '@nestjs/common';
 import type {
   NotificationListResult,
   NotificationUnreadCount,
@@ -32,12 +43,17 @@ import type {
 } from '../../../common/contracts/notifications.contracts';
 import { NotificationQueryService } from '../application/queries/notification-query.service';
 import { DeliverInboxCommand } from '../application/commands/deliver-inbox.command';
+import type { InboxAdapter } from '../infrastructure';
+import { NotificationStateMachine } from '../domain';
 
 @Controller()
 export class NotificationController {
+  private readonly stateMachine = new NotificationStateMachine();
+
   constructor(
     private readonly queryService: NotificationQueryService,
     private readonly deliverInbox: DeliverInboxCommand,
+    @Inject('InboxAdapter') private readonly inboxAdapter: InboxAdapter,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -65,18 +81,30 @@ export class NotificationController {
   /** POST /api/notifications/read-all */
   @Post('/api/notifications/read-all')
   @HttpCode(HttpStatus.OK)
-  async readAll(@Body('userId') _userId: string): Promise<{ success: boolean }> {
+  async readAll(@Body('userId') userId: string): Promise<{ success: boolean; updated: number }> {
     // 批量标记已读由收件人本人操作，逐条幂等
-    return { success: true };
+    const updated = await this.inboxAdapter.markAllRead(userId);
+    return { success: true, updated };
   }
 
   /** POST /api/notifications/:id/read */
   @Post('/api/notifications/:id/read')
   @HttpCode(HttpStatus.OK)
   async markRead(
-    @Param('id') _id: string,
-    @Body('userId') _userId: string,
+    @Param('id') id: string,
+    @Body('userId') userId: string,
   ): Promise<{ success: boolean }> {
+    const pres = await this.inboxAdapter.findPresentation(id);
+    if (!pres) throw new BadRequestException('站内信不存在');
+    if (pres.recipientId !== userId) throw new BadRequestException('无权操作他人站内信');
+    const transition = this.stateMachine.evaluate({
+      type: 'MARK_READ',
+      currentStatus: 'DELIVERED',
+      currentPresentationStatus: pres.status,
+    });
+    if (!transition.allowed)
+      throw new BadRequestException(transition.reason ?? '当前状态不允许标记已读');
+    await this.inboxAdapter.updatePresentationStatus(id, 'READ', pres.version);
     return { success: true };
   }
 
@@ -84,9 +112,20 @@ export class NotificationController {
   @Post('/api/notifications/:id/hide')
   @HttpCode(HttpStatus.OK)
   async hide(
-    @Param('id') _id: string,
-    @Body('userId') _userId: string,
+    @Param('id') id: string,
+    @Body('userId') userId: string,
   ): Promise<{ success: boolean }> {
+    const pres = await this.inboxAdapter.findPresentation(id);
+    if (!pres) throw new BadRequestException('站内信不存在');
+    if (pres.recipientId !== userId) throw new BadRequestException('无权操作他人站内信');
+    const transition = this.stateMachine.evaluate({
+      type: 'MARK_HIDDEN',
+      currentStatus: 'DELIVERED',
+      currentPresentationStatus: pres.status,
+    });
+    if (!transition.allowed)
+      throw new BadRequestException(transition.reason ?? '当前状态不允许隐藏');
+    await this.inboxAdapter.updatePresentationStatus(id, 'HIDDEN', pres.version);
     return { success: true };
   }
 
@@ -94,9 +133,20 @@ export class NotificationController {
   @Post('/api/notifications/:id/process')
   @HttpCode(HttpStatus.OK)
   async markProcessed(
-    @Param('id') _id: string,
-    @Body('userId') _userId: string,
+    @Param('id') id: string,
+    @Body('userId') userId: string,
   ): Promise<{ success: boolean }> {
+    const pres = await this.inboxAdapter.findPresentation(id);
+    if (!pres) throw new BadRequestException('站内信不存在');
+    if (pres.recipientId !== userId) throw new BadRequestException('无权操作他人站内信');
+    const transition = this.stateMachine.evaluate({
+      type: 'MARK_PROCESSED',
+      currentStatus: 'DELIVERED',
+      currentPresentationStatus: pres.status,
+    });
+    if (!transition.allowed)
+      throw new BadRequestException(transition.reason ?? '当前状态不允许标记已处理');
+    await this.inboxAdapter.updatePresentationStatus(id, 'PROCESSED', pres.version);
     return { success: true };
   }
 
