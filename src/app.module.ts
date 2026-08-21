@@ -36,6 +36,8 @@ import { ReadModelModule } from './platform/read-model/module';
 import { CasdoorModule } from './platform/casdoor/module';
 import { TasksModule } from './platform/tasks/module';
 import { FileModule } from './modules/file/module';
+import { AdaptersModule } from './adapters/adapters.module';
+import { FormModule } from './modules/form/form.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { FileModule } from './modules/file/module';
     CasdoorModule,
     TasksModule,
     FileModule,
+    AdaptersModule,
+    FormModule,
   ],
   controllers: [],
   providers: [],
