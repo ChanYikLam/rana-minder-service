@@ -107,14 +107,13 @@ export class OrgRecruitmentNestController {
     const input = parseRecruitmentRequestEnvelope(body).input as {
       departmentId: string;
       decision: string;
-      decidedBy: string;
       note?: string | null;
     };
     return toHttpResponse(
       await this.controller.recordDecision(this.actor(request), applicationId, {
         departmentId: input.departmentId,
         decision: input.decision as DepartmentDecision,
-        decidedBy: input.decidedBy,
+        decidedBy: this.actor(request).subjectId,
         note: input.note ?? null,
       }),
     );

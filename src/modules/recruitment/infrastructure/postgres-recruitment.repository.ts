@@ -52,7 +52,7 @@ interface ApplicationRow {
   department_choices: unknown;
   form_ref: unknown;
   qualify_snapshot: unknown;
-  revision_number: string;
+  revision_number: number;
   revisions: unknown;
   supplement_due_at: Date | null;
   created_at: Date;
@@ -65,7 +65,7 @@ interface PathRow {
   club_id: string;
   department_id: string;
   status: string;
-  revision_number: string;
+  revision_number: number;
   allow_transfer: boolean;
   decisions: unknown;
   previous_status_before_suspend: string | null;
@@ -80,7 +80,7 @@ interface InterviewRow {
   round_id: string;
   applicant_id: string;
   status: string;
-  revision_number: string;
+  revision_number: number;
   interviewer_id: string | null;
   scheduled_at: Date | null;
   location: string | null;

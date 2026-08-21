@@ -14,10 +14,10 @@ export interface MigrationQueryRunner {
 
 export async function up(runner: MigrationQueryRunner): Promise<void> {
   await runner.query(
-    `ALTER TABLE public.interview_records ADD COLUMN revision_number text NOT NULL DEFAULT '0'`,
+    `ALTER TABLE public.interview_records ADD COLUMN revision_number bigint NOT NULL DEFAULT 0`,
   );
   await runner.query(
-    `ALTER TABLE public.department_paths ADD COLUMN revision_number text NOT NULL DEFAULT '0'`,
+    `ALTER TABLE public.department_paths ADD COLUMN revision_number bigint NOT NULL DEFAULT 0`,
   );
 }
 
