@@ -19,6 +19,7 @@ export function validateFormAnswer(fields: FormFieldSet, values: Record<string, 
   const errors: Record<string, string[]> = {};
   for (const field of fields) {
     if (field.permission === 'hidden') {
+      delete values[field.id];
       continue;
     }
     const raw = values[field.id];
@@ -144,6 +145,10 @@ function validateRows(
 ): void {
   const items = field.items ?? [];
   rows.forEach((row, index) => {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+      errors[`${field.id}[${index}]`] = ['子表行必须是对象'];
+      return;
+    }
     for (const item of items) {
       const key = `${field.id}[${index}].${item.id}`;
       const raw = (row as Record<string, unknown>)[item.id];

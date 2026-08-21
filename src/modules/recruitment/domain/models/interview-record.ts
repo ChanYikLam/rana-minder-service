@@ -180,6 +180,7 @@ export class InterviewRecord {
       ...this.snapshot,
       evaluations: [...this.snapshot.evaluations, evaluation],
       updatedAt: now,
+      revisionNumber: this.snapshot.revisionNumber + 1,
     };
   }
 

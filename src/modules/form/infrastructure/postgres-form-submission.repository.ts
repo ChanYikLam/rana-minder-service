@@ -11,6 +11,7 @@
  */
 
 import type { DbAdapter } from '../../../shared/db-adapter';
+import { FormCommandError, FormErrorCode } from '../application/errors';
 import type { FormUnitOfWork } from './unit-of-work';
 import type { FormSubmissionSnapshot } from '../domain/models/form-submission';
 import type { FormScope } from '../domain/models/form-scope';
@@ -116,7 +117,10 @@ export class PostgresFormSubmissionRepository implements FormSubmissionRepositor
       ],
     );
     if (rows.length === 0) {
-      throw new Error('FormSubmissionRepository.insert: 提交 id 冲突');
+      throw new FormCommandError(
+        FormErrorCode.VERSION_CONFLICT,
+        '表单提交 id 冲突，请确认幂等键或刷新后重试',
+      );
     }
   }
 
@@ -142,7 +146,10 @@ export class PostgresFormSubmissionRepository implements FormSubmissionRepositor
       ],
     );
     if (rows.length === 0) {
-      throw new Error('FormSubmissionRepository.save: 修订号守卫未命中（并发单胜者冲突）');
+      throw new FormCommandError(
+        FormErrorCode.VERSION_CONFLICT,
+        '表单提交并发更新冲突（修订号守卫未命中），请刷新后重试',
+      );
     }
   }
 }
