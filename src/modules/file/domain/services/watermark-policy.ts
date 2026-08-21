@@ -60,13 +60,13 @@ export class WatermarkPolicy {
 }
 
 /**
- * 对查看者标识脱敏：仅保留头部若干位 + 稳定短哈希，避免完整内部标识
- * 经水印渲染/截图传播而泄露（GOV-008）。
+ * 对查看者/主体标识脱敏：仅保留头部若干位 + 稳定短哈希，避免完整内部标识
+ * 经水印渲染/审计日志传播而泄露（GOV-008）。
  *
- * ⚠️ 非密码学安全用途：此为**展示性脱敏**，仅用于水印可读性/追溯，
+ * ⚠️ 非密码学安全用途：此为**展示性脱敏**，仅用于可读性/追溯，
  * 乘法哈希可被逆向碰撞，**不得**用于鉴权、签名或任何安全校验场景。
  */
-function maskPrincipal(principalId: string): string {
+export function maskPrincipal(principalId: string): string {
   const head = principalId.slice(0, 4);
   let hash = 0;
   for (let i = 0; i < principalId.length; i++) {

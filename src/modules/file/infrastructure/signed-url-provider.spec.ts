@@ -68,6 +68,33 @@ describe('DefaultSignedUrlProvider（IFC-FIL-005 短时地址：到期 + 一次�
     assert.equal(result.reason, 'EXPIRED');
   });
 
+  it('已消费令牌不永久滞留：重复 verify 返回 USED 并同步删除状态，prune 亦回收已消费令牌', async () => {
+    const fresh = new DefaultSignedUrlProvider();
+    const access = await fresh.issue('f1', FileAccessAction.DOWNLOAD);
+    const store = (
+      fresh as unknown as {
+        store: Map<string, { expiresAt: number; consumed: boolean; access: unknown }>;
+        lastPrunedAt: number;
+      }
+    ).store;
+    // 首次消费成功
+    const first = await fresh.verify(access.token);
+    assert.equal(first.valid, true);
+    // 已消费令牌：重复校验返回 USED 且状态被删除，不滞留内存（评审 warning）
+    const second = await fresh.verify(access.token);
+    assert.equal(second.valid, false);
+    assert.equal(second.reason, 'USED');
+    assert.equal(store.has(access.token), false, '已消费令牌重复校验后应同步删除状态');
+
+    // 即使成功消费后不再被校验，下次 issue 的 prune 也会回收已消费令牌
+    const consumed = await fresh.issue('f1', FileAccessAction.DOWNLOAD);
+    await fresh.verify(consumed.token); // 消费一次，置为 consumed
+    assert.ok(store.has(consumed.token));
+    (fresh as unknown as { lastPrunedAt: number }).lastPrunedAt = Date.now() - 60_000;
+    await fresh.issue('f1', FileAccessAction.DOWNLOAD);
+    assert.equal(store.has(consumed.token), false, '已消费令牌应在下次 prune 时被回收');
+  });
+
   it('issue 时清理已过期但从未被 verify 的残留令牌，避免内存不可收敛增长', async () => {
     // 用全新实例验证清理：确保首次 issue 即触发清理
     const fresh = new DefaultSignedUrlProvider();

@@ -8,7 +8,11 @@ import type { FileAccessContext, FileAccessRequest } from '../../domain/services
 import { WatermarkPolicy } from '../../domain/services/watermark-policy';
 import type { WatermarkDecision } from '../../domain/services/watermark-policy';
 import { SIGNED_URL_PROVIDER } from '../../infrastructure/signed-url-provider';
-import type { ShortLivedAccess, SignedUrlProvider } from '../../infrastructure/signed-url-provider';
+import type {
+  ShortLivedAccess,
+  SignedUrlProvider,
+  TokenVerification,
+} from '../../infrastructure/signed-url-provider';
 import { ACCESS_AUDIT_PORT } from '../../infrastructure/access-audit-port';
 import type { AccessAuditPort } from '../../infrastructure/access-audit-port';
 
@@ -33,6 +37,14 @@ export interface IssueAccessInput {
 export interface IssuedAccess {
   readonly access: ShortLivedAccess;
   readonly watermark: WatermarkDecision;
+}
+
+/** 短时令牌消费异常（到期/已用/未知均拒绝；调用方不得继续取文件） */
+export class ShortLivedAccessRejectedError extends Error {
+  constructor(reason: NonNullable<TokenVerification['reason']>) {
+    super(`${reason}: 短时访问令牌无效或已失效`);
+    this.name = 'ShortLivedAccessRejectedError';
+  }
 }
 
 /**
@@ -116,5 +128,24 @@ export class FileAccessQuery {
       });
     }
     return { access, watermark };
+  }
+
+  /**
+   * 消费短时访问令牌（IFC-FIL-005 取文件入口接入）。
+   *
+   * 兑现“短时失效 + 一次性语义”承诺：签发地址只是第一步，实际取文件/预览入口必须先
+   * 调用本方法核验并消费令牌——到期（EXPIRED）、已被消费（USED）、未知（UNKNOWN）
+   * 一律拒绝，旧链接/复用令牌不得继续访问。
+   *
+   * @param token 从短时地址中解析出的一次性令牌
+   * @returns 通过校验时返回关联的最小范围访问能力（供消费侧取文件/水印/动作）
+   * @throws ShortLivedAccessRejectedError 令牌无效/已失效时，调用方不得继续取文件
+   */
+  async resolveAccess(token: string): Promise<ShortLivedAccess> {
+    const verification: TokenVerification = await this.signedUrl.verify(token);
+    if (!verification.valid || verification.access === undefined) {
+      throw new ShortLivedAccessRejectedError(verification.reason ?? 'UNKNOWN');
+    }
+    return verification.access;
   }
 }

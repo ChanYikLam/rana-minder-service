@@ -4,7 +4,7 @@ import { AccessPolicy, FileAccessAction } from '../../domain/services/access-pol
 import { FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { WatermarkPolicy } from '../../domain/services/watermark-policy';
 import { DefaultSignedUrlProvider } from '../../infrastructure/signed-url-provider';
-import { FileAccessQuery } from './file-access.query';
+import { FileAccessQuery, ShortLivedAccessRejectedError } from './file-access.query';
 import type { FileAccessContext, FileAccessRequest } from '../../domain/services/access-policy';
 
 const ctx = (overrides: Partial<FileAccessContext> = {}): FileAccessContext => ({
@@ -207,5 +207,47 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
       safeForPreview: false,
     });
     assert.equal(issued.access.action, FileAccessAction.DOWNLOAD);
+  });
+
+  it('resolveAccess 接线 verify：有效令牌首次消费通过并返回最小访问能力', async () => {
+    const { query } = makeQuery();
+    const issued = await query.issueAccess({
+      fileId: 'f1',
+      context: ctx(),
+      request: req({ uploaderHistoryVisible: true }),
+      principalIsUploader: true,
+      action: FileAccessAction.DOWNLOAD,
+      safeForPreview: false,
+    });
+    const resolved = await query.resolveAccess(issued.access.token);
+    assert.equal(resolved.token, issued.access.token);
+    assert.equal(resolved.fileId, 'f1');
+    assert.equal(resolved.action, FileAccessAction.DOWNLOAD);
+  });
+
+  it('resolveAccess 接线 verify：重复消费同一令牌被拒（USED）——一次性语义在消费侧落地', async () => {
+    const { query } = makeQuery();
+    const issued = await query.issueAccess({
+      fileId: 'f1',
+      context: ctx(),
+      request: req({ uploaderHistoryVisible: true }),
+      principalIsUploader: true,
+      action: FileAccessAction.PREVIEW,
+      safeForPreview: true,
+    });
+    await query.resolveAccess(issued.access.token); // 首次消费
+    await assert.rejects(
+      query.resolveAccess(issued.access.token),
+      (e: unknown) => e instanceof ShortLivedAccessRejectedError,
+      '一次性令牌被消费后不得再次访问',
+    );
+  });
+
+  it('resolveAccess 接线 verify：未知令牌被拒（UNKNOWN）', async () => {
+    const { query } = makeQuery();
+    await assert.rejects(
+      query.resolveAccess('no-such-token'),
+      (e: unknown) => e instanceof ShortLivedAccessRejectedError,
+    );
   });
 });

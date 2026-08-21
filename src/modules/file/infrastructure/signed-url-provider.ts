@@ -113,6 +113,9 @@ export class DefaultSignedUrlProvider implements SignedUrlProvider {
       return { valid: false, reason: 'UNKNOWN' };
     }
     if (state.consumed) {
+      // 已消费令牌：立即删除状态，避免已消费令牌永久滞留内存（评审 warning）；
+      // 仍保留 USED 语义，让重复消费可被识别（而非误判为未知令牌）
+      this.store.delete(token);
       return { valid: false, reason: 'USED' };
     }
     if (Date.now() > state.expiresAt) {
@@ -120,19 +123,21 @@ export class DefaultSignedUrlProvider implements SignedUrlProvider {
       this.store.delete(token);
       return { valid: false, reason: 'EXPIRED' };
     }
-    // 一次性语义：消费后作废
+    // 一次性语义：消费后置为已消费（下轮清理时一并回收）；同时立即作废
     state.consumed = true;
     return { valid: true, access: state.access };
   }
 
   /**
-   * 清理已过期且未被消费的令牌状态，避免过期但从未被 verify 的短时地址永久滞留内存。
+   * 清理不再有用的令牌状态，避免短时地址永久滞留内存：
+   * - 已过期且未被消费的残留令牌（用户拿到短时地址但从未点击）；
+   * - 已被消费的令牌（一次性语义已用尽，无论是否过期均无保留价值）。
    * 在每次 `issue` 签发时顺带执行，开销为一次 O(n) 遍历，令牌总量有 TTL 上限兜底。
    */
   private pruneExpired(): void {
     const now = Date.now();
     for (const [token, state] of this.store) {
-      if (!state.consumed && now > state.expiresAt) {
+      if (state.consumed || now > state.expiresAt) {
         this.store.delete(token);
       }
     }
