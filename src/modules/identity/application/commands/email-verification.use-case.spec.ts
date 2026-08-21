@@ -84,6 +84,18 @@ function inMemoryVerificationRepository(): EmailVerificationRepository & {
       }
       return null;
     },
+    async findLatestBySubject(subjectId) {
+      let latest = null;
+      for (const v of store.values()) {
+        if (
+          v.subjectId === subjectId &&
+          (latest === null || v.requestVersion > latest.requestVersion)
+        ) {
+          latest = v;
+        }
+      }
+      return latest;
+    },
   };
 }
 

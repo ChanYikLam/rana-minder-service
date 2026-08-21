@@ -89,6 +89,19 @@ export class PostgresEmailVerificationRepository implements EmailVerificationRep
     );
     return rows[0] ? rowToSnapshot(rows[0]) : null;
   }
+
+  async findLatestBySubject(subjectId: string): Promise<EmailVerificationSnapshot | null> {
+    const rows = await this.db.query<Row>(
+      this.uow.active,
+      `SELECT id, subject_id, email, token_hash, expires_at, consumed_at, request_version, created_at
+         FROM email_verification_requests
+        WHERE subject_id = $1
+        ORDER BY request_version DESC, created_at DESC
+        LIMIT 1`,
+      [subjectId],
+    );
+    return rows[0] ? rowToSnapshot(rows[0]) : null;
+  }
 }
 
 function rowToSnapshot(row: Row): EmailVerificationSnapshot {

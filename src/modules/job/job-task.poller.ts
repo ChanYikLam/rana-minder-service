@@ -29,8 +29,8 @@ export class JobTaskPoller implements OnApplicationBootstrap, OnApplicationShutd
     private readonly config: RanaMinderConfig,
   ) {}
 
-  onApplicationBootstrap(): void {
-    void this.tick('启动首轮');
+  async onApplicationBootstrap(): Promise<void> {
+    await this.tick('启动首轮');
     this.timer = setInterval(() => void this.tick('周期轮询'), this.config.job.schedulerIntervalMs);
     this.timer.unref();
   }

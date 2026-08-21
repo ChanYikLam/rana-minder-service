@@ -48,6 +48,8 @@ export class JobTaskRunner {
       await this.store.complete(task.id, now);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // 注意：task.attempts 是领取时已递增值（1 起，表示“已尝试第几次”），
+      // 因此达到 maxAttempts 即视为重试耗尽，而非从 0 起的计数。
       if (task.attempts >= this.maxAttempts) {
         await this.store.fail(task.id, message, now);
         return;

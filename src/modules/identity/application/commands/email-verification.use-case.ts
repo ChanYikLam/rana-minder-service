@@ -79,10 +79,13 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
       throw identityErrors.notFound('资料');
     }
     const normalized = Email.of(input.email).toString();
+    // 同邮箱最近一次请求：用于重发频率判定（冷却窗口按同邮箱收敛）。
     const latest = await this.verificationRepository.findLatestBySubjectAndEmail(
       input.subjectId,
       normalized,
     );
+    // 同主体最近一次请求：requestVersion 在同主体下跨邮箱单调递增，避免换邮箱后版本号回退。
+    const latestBySubject = await this.verificationRepository.findLatestBySubject(input.subjectId);
     const resendAllowed =
       !latest || latest.createdAt.getTime() + RESEND_COOLDOWN_MS <= input.now.getTime();
 
@@ -101,7 +104,7 @@ export class DefaultEmailVerificationUseCase implements EmailVerificationUseCase
     }
 
     const id = randomUUID();
-    const requestVersion = latest ? latest.requestVersion + 1 : 1;
+    const requestVersion = latestBySubject ? latestBySubject.requestVersion + 1 : 1;
     const { verification, token } = EmailVerification.issue(
       id,
       input.subjectId,

@@ -176,4 +176,33 @@ describe('MailVerificationChannel（IFC-TX-005）', () => {
     assert.equal(received[0].toEmail, 'new@example.com');
     assert.equal(received[0].code, 'v-1:secret');
   });
+
+  it('投递失败不抛错也不改变业务（XCC-FAIL-007），仅记录结果', async () => {
+    const mail: MailChannelAdapter = {
+      async sendVerificationEmail() {
+        return externalFailure(
+          'UNAVAILABLE',
+          {
+            code: 'MAIL-NOT-WIRED',
+            message: '邮件渠道适配未连接（首版桩）',
+            retryable: true,
+            rawStatusCode: null,
+          },
+          'a-2',
+          now,
+        );
+      },
+    };
+    const channel = new MailVerificationChannel(mail);
+
+    // 不应抛错（投递失败不改变业务与通知事实）
+    await assert.doesNotReject(
+      channel.sendVerificationEmail({
+        subjectId: 'user-1',
+        toEmail: 'new@example.com',
+        token: 'v-1:secret',
+        expiresAt: new Date(now.getTime() + 86400000),
+      }),
+    );
+  });
 });

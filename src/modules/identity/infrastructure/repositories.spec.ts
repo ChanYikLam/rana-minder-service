@@ -190,6 +190,48 @@ describe('PostgresEmailVerificationRepository', () => {
     assert.equal(latest?.requestVersion, 2);
   });
 
+  it('findLatestBySubject 按同主体最高 requestVersion 返回（跨邮箱单调递增依据）', async () => {
+    const db = new FakeDbAdapter();
+    db.seed('email_verification_requests', [
+      {
+        id: 'v-a',
+        subject_id: 'user-1',
+        email: 'a@example.com',
+        token_hash: 'a',
+        expires_at: now,
+        consumed_at: null,
+        request_version: 1,
+        created_at: now,
+      },
+      {
+        id: 'v-b',
+        subject_id: 'user-1',
+        email: 'b@example.com',
+        token_hash: 'b',
+        expires_at: now,
+        consumed_at: null,
+        request_version: 3,
+        created_at: new Date(now.getTime() + 60000),
+      },
+      {
+        id: 'v-other',
+        subject_id: 'user-2',
+        email: 'c@example.com',
+        token_hash: 'c',
+        expires_at: now,
+        consumed_at: null,
+        request_version: 9,
+        created_at: now,
+      },
+    ]);
+    const uow = new IdentityUnitOfWork(db);
+    const repo = new PostgresEmailVerificationRepository(db, uow);
+
+    const latest = await inTx(uow, () => repo.findLatestBySubject('user-1'));
+    assert.equal(latest?.id, 'v-b');
+    assert.equal(latest?.requestVersion, 3);
+  });
+
   it('save：只存令牌哈希，不存明文', async () => {
     const db = new FakeDbAdapter();
     const uow = new IdentityUnitOfWork(db);

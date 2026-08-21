@@ -70,8 +70,55 @@ export class FakeDbAdapter implements DbAdapter {
       const value = params[index];
       rows = rows.filter((row) => row[column] === value);
     }
+    const orderBy = matchOrderBy(sql);
+    if (orderBy.length > 0) {
+      rows = [...rows].sort((a, b) => {
+        for (const { column, desc } of orderBy) {
+          const av = a[column] as unknown;
+          const bv = b[column] as unknown;
+          const cmp =
+            av instanceof Date && bv instanceof Date
+              ? av.getTime() - bv.getTime()
+              : av === bv
+                ? 0
+                : (av as number) > (bv as number)
+                  ? 1
+                  : -1;
+          if (cmp !== 0) {
+            return desc ? -cmp : cmp;
+          }
+        }
+        return 0;
+      });
+    }
+    const limit = matchLimit(sql);
+    if (limit !== null) {
+      rows = rows.slice(0, limit);
+    }
     return rows as unknown as T[];
   }
+}
+
+function matchOrderBy(sql: string): Array<{ column: string; desc: boolean }> {
+  const match = /ORDER\s+BY\s+([\s\S]+?)(?:LIMIT|$)/i.exec(sql);
+  if (!match) {
+    return [];
+  }
+  return match[1]
+    .trim()
+    .split(',')
+    .map((part) => {
+      const tokens = part.trim().split(/\s+/);
+      return {
+        column: tokens[0].toLowerCase(),
+        desc: (tokens[1] ?? '').toUpperCase() === 'DESC',
+      };
+    });
+}
+
+function matchLimit(sql: string): number | null {
+  const match = /LIMIT\s+(\d+)/i.exec(sql);
+  return match ? Number(match[1]) : null;
 }
 
 interface InsertShape {

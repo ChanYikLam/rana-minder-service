@@ -16,4 +16,6 @@ export interface EmailVerificationRepository {
     subjectId: string,
     email: string,
   ): Promise<EmailVerificationSnapshot | null>;
+  /** 查最近一次同主体的验证请求（requestVersion 单调递增依据；无则 null） */
+  findLatestBySubject(subjectId: string): Promise<EmailVerificationSnapshot | null>;
 }
