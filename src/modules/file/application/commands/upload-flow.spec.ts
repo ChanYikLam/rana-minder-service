@@ -201,6 +201,28 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     );
   });
 
+  it('初始化上传：字段附件数量硬上限真正执行（超量拒绝创建，IFC-FIL-001）', async () => {
+    const flow = makeFlow();
+    // configuredPerField = 2：同一目标字段只允许 2 个附件
+    const input = { ...baseInput, configuredPerField: 2 };
+    await flow.initiate.execute(input);
+    await flow.initiate.execute(input);
+    // 已存在 2 个，再创建第 3 个 → 拒绝（listByTarget 统计已有文件数）
+    await assert.rejects(flow.initiate.execute(input), /字段附件数量已达上限/);
+  });
+
+  it('晋升通过：权威原件定位记录 actualSize 使用版本真实大小（非隔离区固定 0）', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    await flow.complete.execute(completeInput(file, pngBytes()));
+    await flow.ask.execute({ fileId: file.fileId, principalId: 'u1' });
+    const promoted = await flow.promote.execute({ fileId: file.fileId, principalId: 'u1' });
+    assert.equal(promoted.state, FileState.AVAILABLE);
+    const loc = promoted.versions[0].objectLocation;
+    // 隔离定位记录初始化 actualSize=0，晋升出的权威原件定位须回填真实字节长度
+    assert.equal(loc.actualSize, pngBytes().length);
+  });
+
   it('晋升失败：保持检查中(UNAVAILABLE)，清除 finishedAt，不开放访问', async () => {
     const flow = makeFlow();
     const file = await flow.initiate.execute(baseInput);

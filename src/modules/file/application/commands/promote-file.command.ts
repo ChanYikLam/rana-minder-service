@@ -76,12 +76,15 @@ export class PromoteFileCommand {
     // 通过：晋升（隔离区 → 权威原件区，只写一次新键；核验大小与可信 SHA-256）
     const currentVersion = file.versions[file.versions.length - 1];
     const quarantine = currentVersion.objectLocation;
+    // 权威原件定位记录的大小/摘要以**版本**为准：隔离定位的 actualSize 在
+    // InitiateUpload 中固定初始化为 0，只有版本在 CompleteUpload 回填了真实字节
+    // 长度与可信 SHA-256，不得沿用隔离定位记录（否则晋升出的 actualSize 恒为 0）。
     const objectLocation: ObjectLocation = {
       bucketRole: BucketRole.OBJECT,
       keyVersion: 'v1',
       randomKey: quarantine.randomKey, // 复用同熵随机键（键格式前缀不同，互不冲突）
       objectKind: 'OBJECT',
-      actualSize: quarantine.actualSize,
+      actualSize: currentVersion.actualSize ?? 0,
       sha256: currentVersion.sha256 ?? '',
       storageToken: quarantine.storageToken,
     };

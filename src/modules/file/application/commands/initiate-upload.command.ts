@@ -64,12 +64,18 @@ export class InitiateUploadCommand {
   async execute(input: InitiateUploadInput): Promise<FileRecord> {
     // 平台硬上限：单文件声明大小（类别维度）
     this.policy.assertDeclaredSizeWithinLimit(input.category, input.declaredSizeBytes);
-    // 字段附件数量上限不得突破平台硬上限
+    // 字段附件数量硬上限：真正执行（IFC-FIL-001），不得仅靠表单侧维护计数
     if (input.configuredPerField !== undefined) {
+      // 配置数不得超过平台硬上限
       this.policy.assertCountWithinLimit(input.configuredPerField);
+      // 统计该目标字段已有文件数，校验 已有数 + 1 ≤ 配置上限（超量即拒绝创建）
+      const existing = await this.repo.listByTarget(input.target);
+      if (existing.length + 1 > input.configuredPerField) {
+        throw new InitiateUploadError(
+          `字段附件数量已达上限（${input.configuredPerField}），无法继续上传`,
+        );
+      }
     }
-    // 数量硬上限：该字段已有文件数 + 1 ≤ 配置上限（调用方传入配置数即代表该字段配置）
-    // 首版：按 configuredPerField 单值校验（多文件计数由表单侧维护）
 
     const now = new Date().toISOString();
     const fileId = randomUUID();
