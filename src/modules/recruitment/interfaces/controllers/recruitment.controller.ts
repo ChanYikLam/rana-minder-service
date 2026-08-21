@@ -50,13 +50,14 @@ export class RecruitmentController {
   createActivity(
     actor: ActorContext,
     clubId: string,
-    input: { readonly title: string; readonly description: string | null },
+    input: { readonly title: string; readonly description: string | null; readonly endDate?: Date | null },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.createActivityUseCase.execute({
         clubId,
         title: input.title,
         description: input.description,
+        endDate: input.endDate ?? null,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -177,15 +178,33 @@ export class RecruitmentController {
     return this.run(actor, () => this.listInterviewsQuery.execute({ roundId }));
   }
 
-  sendInvitation(actor: ActorContext, applicationId: string): Promise<ControllerResult<unknown>> {
+  sendInvitation(
+    actor: ActorContext,
+    applicationId: string,
+    expectedVersion?: number,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.sendInvitationUseCase.execute({ applicationId, actor: actor.subjectId, now: actor.now }),
+      this.sendInvitationUseCase.execute({
+        applicationId,
+        actor: actor.subjectId,
+        now: actor.now,
+        expectedVersion,
+      }),
     );
   }
 
-  acceptInvitation(actor: ActorContext, applicationId: string): Promise<ControllerResult<unknown>> {
+  acceptInvitation(
+    actor: ActorContext,
+    applicationId: string,
+    expectedVersion?: number,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.acceptInvitationUseCase.execute({ applicationId, actor: actor.subjectId, now: actor.now }),
+      this.acceptInvitationUseCase.execute({
+        applicationId,
+        actor: actor.subjectId,
+        now: actor.now,
+        expectedVersion,
+      }),
     );
   }
 }

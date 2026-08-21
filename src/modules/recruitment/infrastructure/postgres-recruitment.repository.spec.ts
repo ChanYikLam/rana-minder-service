@@ -24,6 +24,7 @@ describe('postgres recruitment repository row mapping', () => {
       description: null,
       status: 'OPEN',
       paused: false,
+      end_date: null,
       created_by: 'm1',
       created_at: NOW,
       updated_at: NOW,

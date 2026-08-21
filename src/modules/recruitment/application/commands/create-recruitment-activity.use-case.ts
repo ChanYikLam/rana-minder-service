@@ -14,6 +14,7 @@ export interface CreateRecruitmentActivityInput {
   readonly clubId: string;
   readonly title: string;
   readonly description: string | null;
+  readonly endDate?: Date | null;
   readonly actor: string;
   readonly now: Date;
   readonly id?: string;
@@ -49,6 +50,7 @@ export class DefaultCreateRecruitmentActivityUseCase implements CreateRecruitmen
       clubId: input.clubId,
       title: input.title,
       description: input.description,
+      endDate: input.endDate ?? null,
       createdBy: input.actor,
       now: input.now,
     });

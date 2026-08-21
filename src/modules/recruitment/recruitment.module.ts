@@ -53,10 +53,11 @@ import { RecruitmentController } from './interfaces/controllers/recruitment.cont
 import { RejectAllRecruitmentAuthSessionProvider } from './interfaces/nest/recruitment-auth-session';
 import { RecruitmentAuthGuard } from './interfaces/nest/recruitment-auth.guard';
 import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.nest.controller';
+import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-recruitment.nest.controller';
 
 @Module({
   imports: [AdaptersModule, ObservabilityModule],
-  controllers: [OrgRecruitmentNestController],
+  controllers: [OrgRecruitmentNestController, ApplicantRecruitmentNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
     { provide: RECRUITMENT_AUTH_SESSION_PROVIDER, useClass: RejectAllRecruitmentAuthSessionProvider },

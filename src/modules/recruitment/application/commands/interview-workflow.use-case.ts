@@ -72,13 +72,23 @@ export class InterviewWorkflowUseCase {
     ) {
       throw recruitmentErrors.forbidden('仅负责人/人事可调度面试');
     }
-    const clash = (await this.repository.loadInterviewsByRound(input.roundId)).find(
-      (r) =>
-        r.applicationId === input.applicationId &&
-        r.status !== 'VOIDED' &&
-        r.status !== 'CANCELLED',
+    const existing = (await this.repository.loadInterviewsByRound(input.roundId)).find(
+      (r) => r.applicationId === input.applicationId,
     );
-    if (clash !== undefined) {
+    if (existing !== undefined) {
+      if (existing.status === 'VOIDED') {
+        // 作废后重排：复用同一记录（VOIDED → RESCHEDULE → SCHEDULED）
+        const record = InterviewRecord.fromSnapshot(existing);
+        if (!record.reschedule(new DefaultInterviewRecordStateMachine(), input.now)) {
+          throw recruitmentErrors.preconditionFailed('面试重排失败');
+        }
+        record.reassign(input.interviewerId, input.scheduledAt, input.location, input.now);
+        await this.repository.saveInterview(record.toSnapshot());
+        return { interviewId: record.id, status: record.status };
+      }
+      if (existing.status === 'CANCELLED') {
+        throw recruitmentErrors.conflict('该申请在此轮次已有取消的面试记录');
+      }
       throw recruitmentErrors.conflict('该申请在此轮次已有有效面试记录');
     }
     const id = input.id ?? randomUUID();
@@ -127,7 +137,29 @@ export class InterviewWorkflowUseCase {
     return { interviewId: record.id, status: record.status };
   }
   async hold(input: HoldInterviewInput): Promise<InterviewWorkflowResult> {
-    const record = await this.loadManaged(input.interviewId, input.actor);
+    const snapshot = await this.repository.loadInterview(input.interviewId);
+    if (snapshot === null) {
+      throw recruitmentErrors.notFound('面试记录');
+    }
+    if (
+      !(await this.authorization.canManageRecruitment({
+        clubId: snapshot.clubId,
+        subjectId: input.actor,
+        activityId: snapshot.activityId,
+      }))
+    ) {
+      throw recruitmentErrors.forbidden('仅负责人/人事可操作面试记录');
+    }
+    const activity = await this.repository.loadActivity(snapshot.activityId);
+    if (activity !== null && activity.endDate !== null && input.until > activity.endDate) {
+      throw recruitmentErrors.validation('暂缓期限不得晚于招新活动结束时间', {
+        activityEndDate: activity.endDate,
+      });
+    }
+    if (input.until <= input.now) {
+      throw recruitmentErrors.validation('暂缓期限须晚于当前时间');
+    }
+    const record = InterviewRecord.fromSnapshot(snapshot);
     if (!record.hold(new DefaultInterviewRecordStateMachine(), input.until, input.now)) {
       throw recruitmentErrors.preconditionFailed('面试暂缓失败');
     }

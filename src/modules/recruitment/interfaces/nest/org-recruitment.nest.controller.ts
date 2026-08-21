@@ -50,11 +50,13 @@ export class OrgRecruitmentNestController {
     const input = parseRecruitmentRequestEnvelope(body).input as {
       title: string;
       description?: string | null;
+      endDate?: string;
     };
     return toHttpResponse(
       await this.controller.createActivity(this.actor(request), clubId, {
         title: input.title,
         description: input.description ?? null,
+        endDate: input.endDate ? new Date(input.endDate) : null,
       }),
     );
   }
@@ -227,8 +229,12 @@ export class OrgRecruitmentNestController {
     @Param('clubId') _clubId: string,
     @Param('applicationId') applicationId: string,
     @Req() request: Record<string, unknown>,
+    @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.sendInvitation(this.actor(request), applicationId));
+    const env = parseRecruitmentRequestEnvelope(body);
+    return toHttpResponse(
+      await this.controller.sendInvitation(this.actor(request), applicationId, env.expectedVersion),
+    );
   }
 
   @Post('applications/:applicationId/accept')
@@ -236,8 +242,12 @@ export class OrgRecruitmentNestController {
     @Param('clubId') _clubId: string,
     @Param('applicationId') applicationId: string,
     @Req() request: Record<string, unknown>,
+    @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.acceptInvitation(this.actor(request), applicationId));
+    const env = parseRecruitmentRequestEnvelope(body);
+    return toHttpResponse(
+      await this.controller.acceptInvitation(this.actor(request), applicationId, env.expectedVersion),
+    );
   }
 
   @Get('rounds/:roundId/interviews')

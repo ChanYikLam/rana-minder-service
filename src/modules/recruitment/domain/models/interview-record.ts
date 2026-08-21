@@ -105,6 +105,20 @@ export class InterviewRecord {
     return true;
   }
 
+  /** 作废后重排到 SCHEDULED 时重新分配面试官/时间/地点（不切换状态） */
+  reassign(interviewerId: string, scheduledAt: Date, location: string | null, now: Date): void {
+    if (this.snapshot.status !== InterviewRecordStatus.SCHEDULED) {
+      throw new Error('仅已重排至 SCHEDULED 的面试记录可重新分配');
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      interviewerId,
+      scheduledAt,
+      location,
+      updatedAt: now,
+    };
+  }
+
   start(machine: InterviewRecordStateMachine, now: Date): boolean {
     return this.transition(machine, InterviewRecordEvent.START, now);
   }

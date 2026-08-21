@@ -25,6 +25,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       description text        NULL,
       status      text        NOT NULL,
       paused      boolean     NOT NULL DEFAULT false,
+      end_date    timestamptz NULL,
       created_by  text        NOT NULL,
       created_at  timestamptz NOT NULL DEFAULT now(),
       updated_at  timestamptz NOT NULL DEFAULT now(),

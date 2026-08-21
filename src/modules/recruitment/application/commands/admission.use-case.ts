@@ -14,11 +14,13 @@ export interface SendInvitationInput {
   readonly applicationId: string;
   readonly actor: string;
   readonly now: Date;
+  readonly expectedVersion?: number;
 }
 export interface AcceptInvitationInput {
   readonly applicationId: string;
   readonly actor: string;
   readonly now: Date;
+  readonly expectedVersion?: number;
 }
 export interface AdmissionResult {
   readonly status: string;
@@ -43,6 +45,9 @@ export class SendAdmissionInvitationUseCase {
       }))
     ) {
       throw recruitmentErrors.forbidden('仅负责人/人事可发送录取邀请');
+    }
+    if (input.expectedVersion !== undefined && snapshot.revisionNumber !== input.expectedVersion) {
+      throw recruitmentErrors.conflict('申请版本冲突，请刷新后重试');
     }
     const application = Application.fromSnapshot(snapshot);
     if (!application.sendAdmissionInvitation(input.now)) {
@@ -74,6 +79,9 @@ export class AcceptAdmissionInvitationUseCase {
       }))
     ) {
       throw recruitmentErrors.forbidden('仅申请人本人或负责人/人事可接受录取');
+    }
+    if (input.expectedVersion !== undefined && snapshot.revisionNumber !== input.expectedVersion) {
+      throw recruitmentErrors.conflict('申请版本冲突，请刷新后重试');
     }
     const application = Application.fromSnapshot(snapshot);
     if (!application.acceptInvitation(input.now)) {

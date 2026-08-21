@@ -24,6 +24,7 @@ interface ActivityRow {
   description: string | null;
   status: string;
   paused: boolean;
+  end_date: Date | null;
   created_by: string;
   created_at: Date;
   updated_at: Date;
@@ -100,6 +101,7 @@ export function activityRowToSnapshot(row: ActivityRow): RecruitmentActivitySnap
     description: row.description,
     status: row.status as RecruitmentActivitySnapshot['status'],
     paused: row.paused,
+    endDate: row.end_date,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -193,12 +195,24 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     await this.db.query(
       this.uow.active,
       `INSERT INTO recruitment_activities
-         (id, club_id, title, description, status, paused, created_by, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         (id, club_id, title, description, status, paused, end_date, created_by, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (id) DO UPDATE SET
          club_id = EXCLUDED.club_id, title = EXCLUDED.title, description = EXCLUDED.description,
-         status = EXCLUDED.status, paused = EXCLUDED.paused, updated_at = EXCLUDED.updated_at`,
-      [s.id, s.clubId, s.title, s.description, s.status, s.paused, s.createdBy, s.createdAt, s.updatedAt],
+         status = EXCLUDED.status, paused = EXCLUDED.paused, end_date = EXCLUDED.end_date,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        s.id,
+        s.clubId,
+        s.title,
+        s.description,
+        s.status,
+        s.paused,
+        s.endDate,
+        s.createdBy,
+        s.createdAt,
+        s.updatedAt,
+      ],
     );
   }
   async loadActivitiesByClub(clubId: string): Promise<RecruitmentActivitySnapshot[]> {

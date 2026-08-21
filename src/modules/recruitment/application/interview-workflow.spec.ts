@@ -44,6 +44,7 @@ describe('recruitment interview workflow (REC-005)', () => {
       clubId: CLUB_ID,
       title: '秋招',
       description: null,
+      endDate: new Date('2026-12-31T00:00:00Z'),
       actor: MANAGER,
       now: NOW,
       id: activityId,
@@ -157,5 +158,59 @@ describe('recruitment interview workflow (REC-005)', () => {
     });
     const voided = await workflow.void({ interviewId: scheduled.interviewId, actor: MANAGER, now: NOW });
     assert.strictEqual(voided.status, 'VOIDED');
+  });
+
+  it('作废后重排复用同一记录（VOIDED → SCHEDULED）', async () => {
+    const scheduled = await workflow.schedule({
+      applicationId,
+      roundId: 'round-4',
+      interviewerId: INTERVIEWER,
+      scheduledAt: NOW,
+      location: null,
+      actor: MANAGER,
+      now: NOW,
+    });
+    await workflow.void({ interviewId: scheduled.interviewId, actor: MANAGER, now: NOW });
+    const rescheduled = await workflow.schedule({
+      applicationId,
+      roundId: 'round-4',
+      interviewerId: 'interviewer-2',
+      scheduledAt: NOW,
+      location: '线下',
+      actor: MANAGER,
+      now: NOW,
+    });
+    assert.strictEqual(rescheduled.interviewId, scheduled.interviewId);
+    assert.strictEqual(rescheduled.status, 'SCHEDULED');
+  });
+
+  it('暂缓期限不得晚于活动结束且须晚于当前', async () => {
+    const pending = InterviewRecord.createPending({
+      id: 'iv-h',
+      applicationId,
+      activityId: (await repo.loadApplication(applicationId))!.activityId,
+      clubId: CLUB_ID,
+      roundId: 'round-5',
+      applicantId: APPLICANT,
+      now: NOW,
+    });
+    await repo.saveInterview(pending.toSnapshot());
+    await assert.rejects(
+      () =>
+        workflow.hold({
+          interviewId: pending.id,
+          until: new Date('2027-01-01T00:00:00Z'),
+          actor: MANAGER,
+          now: NOW,
+        }),
+      { code: 'REC_VALIDATION' },
+    );
+    const held = await workflow.hold({
+      interviewId: pending.id,
+      until: new Date('2026-06-01T00:00:00Z'),
+      actor: MANAGER,
+      now: NOW,
+    });
+    assert.strictEqual(held.status, 'HOLD');
   });
 });

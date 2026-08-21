@@ -19,6 +19,7 @@ export interface RecruitmentActivitySnapshot {
   readonly description: string | null;
   readonly status: RecruitmentActivityStatus;
   readonly paused: boolean;
+  readonly endDate: Date | null;
   readonly createdBy: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -37,6 +38,7 @@ export class RecruitmentActivity {
     title: string;
     description: string | null;
     createdBy: string;
+    endDate?: Date | null;
     now: Date;
   }): RecruitmentActivity {
     return new RecruitmentActivity({
@@ -46,6 +48,7 @@ export class RecruitmentActivity {
       description: input.description,
       status: RecruitmentActivityStatus.DRAFT,
       paused: false,
+      endDate: input.endDate ?? null,
       createdBy: input.createdBy,
       createdAt: input.now,
       updatedAt: input.now,
