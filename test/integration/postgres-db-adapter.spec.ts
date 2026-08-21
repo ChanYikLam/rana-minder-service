@@ -118,14 +118,16 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
     );
     assert.equal(rows[0].ctx, 'u-1');
     await db.commit(tx);
-    // 提交后上下文失效（新事务不再有该值）
+    // 提交后上下文失效（新事务不再有该值）——自定义 GUC 经 set_config(..., true)
+    // 提交后回退为默认空串 ''（而非 NULL），此处断言不再等于事务内设置值即可。
     const tx2 = await db.beginTransaction();
     const rows2 = await db.query<{ ctx: string | null }>(
       tx2,
       "SELECT current_setting('app.subject_id', true) AS ctx",
       [],
     );
-    assert.equal(rows2[0].ctx, null);
+    assert.notEqual(rows2[0].ctx, 'u-1');
+    assert.equal(rows2[0].ctx, '');
     await db.commit(tx2);
   });
 });
