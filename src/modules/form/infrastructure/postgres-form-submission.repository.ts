@@ -99,7 +99,7 @@ export class PostgresFormSubmissionRepository implements FormSubmissionRepositor
               (id, form_id, version_number, scope, owner_id, submitted_by, values,
                status, revision_number, revisions, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT (id) DO NOTHING
+        ON CONFLICT (form_id, version_number, submitted_by) DO NOTHING
         RETURNING id`,
       [
         snapshot.id,
@@ -117,8 +117,8 @@ export class PostgresFormSubmissionRepository implements FormSubmissionRepositor
       ],
     );
     if (rows.length === 0) {
-      // 并发重复提交：id 主键冲突 → 409 IFC-ERR-010 资源争用
-      throw formErrors.resourceContention('提交记录已存在，请勿重复提交');
+      // 并发重复提交：同一提交者对同一版本已存在记录（唯一约束命中）→ 409 IFC-ERR-010 资源争用
+      throw formErrors.resourceContention('该提交者已提交过当前版本，请走修订');
     }
   }
 
