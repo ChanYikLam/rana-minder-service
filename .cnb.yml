@@ -107,10 +107,10 @@
             # 与开发环境 scripts/dev/postgres-init.sql 保持一致的扩展初始化
             docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
               -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
-            # 应用经 TCP 连接 DB：dind 下 job 容器与 pg 容器同属 daemon bridge 网络，
-            # 需以容器 IP 作为 DATABASE_HOST（localhost 在 job 容器内不可达）。
-            DATABASE_HOST=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' pg18-ci | awk 'NR==1{print; exit}')
-            export DATABASE_HOST DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
+            # 应用经 TCP 连接 DB：pg 容器以 -p 5432:5432 发布端口，dind 下
+            # job 容器共享 daemon 网络命名空间，经 127.0.0.1 即可访问（CNB 官方
+            # docker 服务连接数据库推荐口径；容器桥接 IP 在 dind 下并不可达）。
+            export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
               DATABASE_USER=postgres DATABASE_PASSWORD=ci DATABASE_SSL=false
             export CI=true
             npm run test:integration
@@ -206,10 +206,10 @@
             done
             docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
               -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
-            # 应用经 TCP 连接 DB：dind 下 job 容器与 pg 容器同属 daemon bridge 网络，
-            # 需以容器 IP 作为 DATABASE_HOST（localhost 在 job 容器内不可达）。
-            DATABASE_HOST=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' pg18-ci | awk 'NR==1{print; exit}')
-            export DATABASE_HOST DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
+            # 应用经 TCP 连接 DB：pg 容器以 -p 5432:5432 发布端口，dind 下
+            # job 容器共享 daemon 网络命名空间，经 127.0.0.1 即可访问（CNB 官方
+            # docker 服务连接数据库推荐口径；容器桥接 IP 在 dind 下并不可达）。
+            export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
               DATABASE_USER=postgres DATABASE_PASSWORD=ci DATABASE_SSL=false
             export CI=true
             npm run test:integration
@@ -296,10 +296,10 @@
             done
             docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
               -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
-            # 应用经 TCP 连接 DB：dind 下 job 容器与 pg 容器同属 daemon bridge 网络，
-            # 需以容器 IP 作为 DATABASE_HOST（localhost 在 job 容器内不可达）。
-            DATABASE_HOST=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' pg18-ci | awk 'NR==1{print; exit}')
-            export DATABASE_HOST DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
+            # 应用经 TCP 连接 DB：pg 容器以 -p 5432:5432 发布端口，dind 下
+            # job 容器共享 daemon 网络命名空间，经 127.0.0.1 即可访问（CNB 官方
+            # docker 服务连接数据库推荐口径；容器桥接 IP 在 dind 下并不可达）。
+            export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
               DATABASE_USER=postgres DATABASE_PASSWORD=ci DATABASE_SSL=false
             export CI=true
             npm run test:integration
