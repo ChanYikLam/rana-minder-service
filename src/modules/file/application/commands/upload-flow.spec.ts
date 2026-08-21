@@ -12,7 +12,7 @@ import { FileStatusQuery } from '../queries/file-status.query';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { UploadPolicy } from '../../domain/services/upload-policy';
 import { FileTypeGuard } from '../../domain/services/file-type-guard';
-import { MAX_SESSION_TTL_MINUTES } from './initiate-upload.command';
+import { MAX_SESSION_TTL_MINUTES } from './session-ttl';
 import type { FileRecord } from '../../domain/models/file-model';
 
 const pngBytes = (): Uint8Array =>
