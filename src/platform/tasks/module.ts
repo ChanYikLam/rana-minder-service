@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ReadModelModule } from '../read-model/module';
 import { CasdoorModule } from '../casdoor/module';
+import { NotificationModule } from '../../modules/notification';
 import { TASK_OPS_TELEMETRY_PORT, TASK_PROCESSOR_REGISTRY, TASK_REPOSITORY } from './contracts';
 import { PostgresTaskRepository } from './infrastructure/postgres-task-repository';
 import {
@@ -42,7 +43,7 @@ import { ManualInterventionService, TaskScheduler } from './scheduler';
 import { TasksWorker } from './worker-entry';
 
 @Module({
-  imports: [ReadModelModule, CasdoorModule, AdaptersModule],
+  imports: [ReadModelModule, CasdoorModule, AdaptersModule, NotificationModule],
   providers: [
     PostgresTaskRepository,
     InMemoryTransactionOutboxStore,
