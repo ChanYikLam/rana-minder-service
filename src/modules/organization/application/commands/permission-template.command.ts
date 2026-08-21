@@ -62,7 +62,8 @@ export class PermissionTemplateCommand {
     previewVersion: number;
     reason: string;
   }): Promise<TemplateView> {
-    if (input.reauthProof === undefined) {
+    if (!input.reauthProof) {
+      // 空串/undefined 均视为未提供重新认证凭证，禁止空串绕过（IFC-ERR-002）
       throw orgError.reauth('发布权限模板为高风控操作，需重新认证（IFC-ERR-002）');
     }
     const template = await requireTemplate(this.store, input.templateId);

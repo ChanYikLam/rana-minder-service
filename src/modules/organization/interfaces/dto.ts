@@ -11,7 +11,6 @@ import {
   IsEmail,
   IsIn,
   IsNotEmpty,
-  IsObject,
   IsOptional,
   IsString,
   Min,
@@ -94,8 +93,15 @@ export class TemplatePublishDto {
 // 关系命令（org 域）
 // --------------------------------------------------------------------------
 
+export class GroupStableRefDto {
+  @IsString() @IsNotEmpty() owner!: string;
+  @IsString() @IsNotEmpty() name!: string;
+}
+
 export class TargetGroupDto {
-  @IsObject() ref!: { owner: string; name: string };
+  @ValidateNested()
+  @Type(() => GroupStableRefDto)
+  ref!: GroupStableRefDto;
   @IsIn(['add', 'remove']) kind!: 'add' | 'remove';
 }
 

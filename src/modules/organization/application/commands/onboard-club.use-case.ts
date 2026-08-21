@@ -100,7 +100,8 @@ export class OnboardingUseCase {
   }
 
   async createWizard(input: WizardCreateInput, now: Date): Promise<ClubSpace> {
-    if (input.reauthProof === undefined) {
+    if (!input.reauthProof) {
+      // 空串/undefined 均视为未提供重新认证凭证，禁止空串绕过（IFC-ERR-002）
       throw orgError.reauth('社团接入为高风控操作，需重新认证（IFC-ERR-002）');
     }
     const clubRef: GroupStableRef = toStableRef(input.groupId, input.name);
