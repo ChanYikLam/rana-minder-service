@@ -14,7 +14,7 @@ import type {
   TemplateSnapshotService,
 } from '../../infrastructure';
 import type { ChannelDeliveryAttemptModel } from '../../domain';
-import { NotificationStateMachine } from '../../domain';
+import { computeNextRetryAt, NotificationStateMachine } from '../../domain';
 import {
   CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
   EMAIL_ADAPTER,
@@ -59,11 +59,17 @@ export class ManualResendCommand {
 
     const templateVersionId = await this.templateService.snapshotTemplate(eventType, 'EMAIL');
 
+    // 回溯收件人快照，保证投递尝试与快照的关联完整性（DATA-NTF-001）。
+    // 人工补发不传入收件人标识，取该事实的首条收件人快照作为关联引用；
+    // 若确实需要精确定位收件人，应由调用方传入 recipientId 匹配。
+    const snapshots = await this.repository.findSnapshotsByFactId(factId);
+    const snapshot = snapshots[0] ?? null;
+
     const now = new Date().toISOString();
     const newAttempt: ChannelDeliveryAttemptModel = {
       attemptId: `manual-resend-${factId}-${Date.now()}`,
       factId,
-      snapshotId: null,
+      snapshotId: snapshot?.snapshotId ?? null,
       channel: 'EMAIL',
       channelMessageId: null,
       attemptNumber: 1,
@@ -99,6 +105,23 @@ export class ManualResendCommand {
           status: 'DELIVERED',
           channelMessageId: result.channelMessageId,
           completedAt: new Date().toISOString(),
+        });
+      } else if (result.status === 'BOUNCE') {
+        await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+          status: 'PERMANENT_FAILURE',
+          responseCategory: 'BOUNCE',
+          sanitizedError: result.sanitizedError,
+          completedAt: new Date().toISOString(),
+        });
+      } else {
+        // TEMPORARY_FAILURE / UNCERTAIN：进入失败重试，记录首次失败时间（NTF-007）
+        await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+          status: 'FAILED_RETRY',
+          responseCategory:
+            result.status === 'UNCERTAIN' ? ('UNCERTAIN' as const) : ('TEMPORARY_FAILURE' as const),
+          firstFailedAt: now,
+          sanitizedError: result.sanitizedError,
+          nextRetryAt: computeNextRetryAt(1, now),
         });
       }
     } catch (error) {

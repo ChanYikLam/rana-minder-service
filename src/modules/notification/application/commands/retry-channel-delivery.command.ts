@@ -78,16 +78,27 @@ export class RetryChannelDeliveryCommand {
           completedAt: new Date().toISOString(),
         });
         this.logger.log(`投递重试成功: attemptId=${attemptId}`);
+      } else if (result.status === 'BOUNCE') {
+        // 明确退信：立即进入永久失败，不再重试（NTF-007）
+        await this.attemptRepository.updateAttempt(attemptId, {
+          status: 'PERMANENT_FAILURE',
+          responseCategory: 'BOUNCE',
+          sanitizedError: result.sanitizedError,
+          completedAt: new Date().toISOString(),
+        });
+        this.logger.log(`投递重试遇明确退信，进入永久失败: attemptId=${attemptId}`);
       } else {
+        // TEMPORARY_FAILURE / UNCERTAIN：继续失败重试（NTF-007）
         const nextNumber = attempt.attemptNumber + 1;
         const now = new Date().toISOString();
         await this.attemptRepository.updateAttempt(attemptId, {
           attemptNumber: nextNumber,
           status: 'FAILED_RETRY',
+          responseCategory: result.status === 'UNCERTAIN' ? 'UNCERTAIN' : 'TEMPORARY_FAILURE',
           firstFailedAt: attempt.firstFailedAt ?? now,
           sanitizedError: result.sanitizedError,
-          // 刚失败的尝试序号 = attempt.attemptNumber，退避 2^N 递增
-          nextRetryAt: computeNextRetryAt(attempt.attemptNumber, now),
+          // 本次为第 nextNumber 次尝试，退避 2^N 递增（NTF-007）
+          nextRetryAt: computeNextRetryAt(nextNumber, now),
         });
       }
     } catch (error) {
@@ -98,7 +109,7 @@ export class RetryChannelDeliveryCommand {
         status: 'FAILED_RETRY',
         firstFailedAt: attempt.firstFailedAt ?? now,
         sanitizedError: (error as Error).message,
-        nextRetryAt: computeNextRetryAt(attempt.attemptNumber, now),
+        nextRetryAt: computeNextRetryAt(nextNumber, now),
       });
     }
   }

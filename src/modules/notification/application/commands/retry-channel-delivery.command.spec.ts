@@ -6,7 +6,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { EmailSendInput } from '../../infrastructure';
+import type { EmailSendInput, EmailSendResult } from '../../infrastructure';
 import {
   InMemoryChannelDeliveryAttemptRepository,
   InMemoryEmailAdapter,
@@ -125,5 +125,43 @@ describe('RetryChannelDeliveryCommand（评审 #3/#1/#2）', () => {
     await command.execute('attempt-delivered');
     const updated = await attempts.findAttemptById('attempt-delivered');
     assert.equal(updated?.status, 'DELIVERED');
+  });
+
+  it('重试返回明确退信 BOUNCE → 立即进入永久失败，不再重试（NTF-007）', async () => {
+    // 自定义适配器：重试发送返回 BOUNCE
+    const bounceEmail = new (class extends InMemoryEmailAdapter {
+      async send(_input: EmailSendInput): Promise<EmailSendResult> {
+        return {
+          status: 'BOUNCE',
+          channelMessageId: null,
+          sanitizedError: '550 5.1.1 mailbox does not exist',
+        };
+      }
+    })();
+    const cmd = new RetryChannelDeliveryCommand(attempts, bounceEmail);
+    await attempts.saveAttempt(makeAttempt('attempt-bounce', 'FAILED_RETRY'));
+
+    await cmd.execute('attempt-bounce');
+    const updated = await attempts.findAttemptById('attempt-bounce');
+    assert.equal(updated?.status, 'PERMANENT_FAILURE');
+    assert.equal(updated?.responseCategory, 'BOUNCE');
+    assert.ok(updated?.completedAt, '永久失败应记录完成时间');
+  });
+
+  it('重试返回临时失败 → 继续进入失败重试并递增尝试序号/记录退避', async () => {
+    const tempEmail = new (class extends InMemoryEmailAdapter {
+      async send(_input: EmailSendInput): Promise<EmailSendResult> {
+        return { status: 'TEMPORARY_FAILURE', channelMessageId: null, sanitizedError: 'timeout' };
+      }
+    })();
+    const cmd = new RetryChannelDeliveryCommand(attempts, tempEmail);
+    await attempts.saveAttempt(makeAttempt('attempt-temp', 'FAILED_RETRY'));
+
+    await cmd.execute('attempt-temp');
+    const updated = await attempts.findAttemptById('attempt-temp');
+    assert.equal(updated?.status, 'FAILED_RETRY');
+    assert.equal(updated?.attemptNumber, 2);
+    assert.equal(updated?.responseCategory, 'TEMPORARY_FAILURE');
+    assert.ok(updated?.nextRetryAt, '应记录下次重试时间');
   });
 });
