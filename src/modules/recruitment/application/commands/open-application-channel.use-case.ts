@@ -13,6 +13,8 @@ import { recruitmentErrors } from '../errors';
 
 export interface OpenApplicationChannelInput {
   readonly activityId: string;
+  readonly minChoices?: number;
+  readonly maxChoices?: number;
   readonly actor: string;
   readonly now: Date;
   readonly id?: string;
@@ -54,6 +56,8 @@ export class DefaultOpenApplicationChannelUseCase implements OpenApplicationChan
       id,
       activityId: activity.id,
       clubId: activity.clubId,
+      minChoices: input.minChoices,
+      maxChoices: input.maxChoices,
       now: input.now,
     });
     if (!channel.open(new DefaultApplicationChannelStateMachine(), input.now)) {

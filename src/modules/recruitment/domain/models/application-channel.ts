@@ -18,6 +18,8 @@ export interface ApplicationChannelSnapshot {
   readonly status: ApplicationChannelStatus;
   readonly openAt: Date | null;
   readonly closeAt: Date | null;
+  readonly minChoices: number;
+  readonly maxChoices: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -33,6 +35,8 @@ export class ApplicationChannel {
     id: string;
     activityId: string;
     clubId: string;
+    minChoices?: number;
+    maxChoices?: number;
     now: Date;
   }): ApplicationChannel {
     return new ApplicationChannel({
@@ -42,6 +46,8 @@ export class ApplicationChannel {
       status: ApplicationChannelStatus.CLOSED,
       openAt: null,
       closeAt: null,
+      minChoices: input.minChoices ?? 1,
+      maxChoices: input.maxChoices ?? 1,
       createdAt: input.now,
       updatedAt: input.now,
     });
@@ -61,6 +67,12 @@ export class ApplicationChannel {
   }
   get closeAt(): Date | null {
     return this.snapshot.closeAt;
+  }
+  get minChoices(): number {
+    return this.snapshot.minChoices;
+  }
+  get maxChoices(): number {
+    return this.snapshot.maxChoices;
   }
 
   toSnapshot(): ApplicationChannelSnapshot {

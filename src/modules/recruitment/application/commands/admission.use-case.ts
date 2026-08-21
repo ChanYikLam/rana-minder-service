@@ -55,9 +55,9 @@ export class SendAdmissionInvitationUseCase {
     }
     const application = Application.fromSnapshot(snapshot);
     if (!application.sendAdmissionInvitation(input.now)) {
-      throw recruitmentErrors.preconditionFailed('当前申请状态不允许发送录取邀请');
+      throw recruitmentErrors.preconditionFailed('发送录取邀请失败');
     }
-    await this.repository.saveApplication(application.toSnapshot());
+    await this.repository.saveApplication(application.toSnapshot(), snapshot.revisionNumber);
     return { status: application.status };
   }
 }
@@ -89,9 +89,9 @@ export class AcceptAdmissionInvitationUseCase {
     }
     const application = Application.fromSnapshot(snapshot);
     if (!application.acceptInvitation(input.now)) {
-      throw recruitmentErrors.preconditionFailed('当前申请状态不允许接受录取');
+      throw recruitmentErrors.preconditionFailed('接受录取失败');
     }
-    await this.repository.saveApplication(application.toSnapshot());
+    await this.repository.saveApplication(application.toSnapshot(), snapshot.revisionNumber);
     return { status: application.status };
   }
 }

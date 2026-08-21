@@ -12,6 +12,7 @@ import {
   ApplicationEvent,
   DefaultApplicationStateMachine,
 } from '../state-machines/application.state-machine';
+import { RecruitmentDomainError } from '../errors';
 
 export interface DepartmentChoice {
   readonly departmentId: string;
@@ -239,12 +240,15 @@ export class Application {
     maxChoices: number,
   ): void {
     if (choices.length < minChoices || choices.length > maxChoices) {
-      throw new Error(`志愿数量须介于 ${minChoices} 与 ${maxChoices} 之间`);
+      throw new RecruitmentDomainError(
+        'REC_VALIDATION',
+        `志愿数量须介于 ${minChoices} 与 ${maxChoices} 之间`,
+      );
     }
     const seen = new Set<string>();
     for (const choice of choices) {
       if (seen.has(choice.departmentId)) {
-        throw new Error('志愿部门不可重复');
+        throw new RecruitmentDomainError('REC_VALIDATION', '志愿部门不可重复');
       }
       seen.add(choice.departmentId);
     }

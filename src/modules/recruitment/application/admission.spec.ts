@@ -70,8 +70,6 @@ describe('admission invitation & acceptance (REC-043 / REC-044)', () => {
       applicantId: APPLICANT,
       departmentChoices: ['dept-a'],
       formRef: { formId: 'form-1', submissionId: 'sub-1', versionNumber: 1 },
-      minChoices: 1,
-      maxChoices: 1,
       actor: APPLICANT,
       now: NOW,
     });

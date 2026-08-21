@@ -25,8 +25,6 @@ export interface SubmitApplicationInput {
   readonly departmentChoices: readonly string[];
   readonly formRef?: SubmitApplicationFormRef | null;
   readonly qualifySnapshot?: Record<string, unknown> | null;
-  readonly minChoices: number;
-  readonly maxChoices: number;
   readonly actor: string;
   readonly now: Date;
   readonly id?: string;
@@ -112,13 +110,13 @@ export class DefaultSubmitApplicationUseCase implements SubmitApplicationUseCase
       departmentChoices,
       formRef,
       qualifySnapshot: input.qualifySnapshot,
-      minChoices: input.minChoices,
-      maxChoices: input.maxChoices,
+      minChoices: channel.minChoices,
+      maxChoices: channel.maxChoices,
     });
     if (!submitted) {
       throw recruitmentErrors.preconditionFailed('申请提交失败（当前状态不允许）');
     }
-    await this.repository.saveApplication(application.toSnapshot());
+    await this.repository.saveApplication(application.toSnapshot(), -1);
     return { applicationId: id, revisionNumber: application.revisionNumber };
   }
 }

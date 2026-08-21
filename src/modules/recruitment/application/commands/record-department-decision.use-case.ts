@@ -57,6 +57,7 @@ export class DefaultRecordDepartmentDecisionUseCase implements RecordDepartmentD
     }
     const paths = await this.repository.loadDepartmentPathsByApplication(application.id);
     let snapshot = paths.find((p) => p.departmentId === input.departmentId) ?? null;
+    const expectedRevision = snapshot === null ? -1 : snapshot.revisionNumber;
     if (snapshot === null) {
       snapshot = DepartmentPath.createFromChoice({
         id: input.id ?? randomUUID(),
@@ -79,7 +80,7 @@ export class DefaultRecordDepartmentDecisionUseCase implements RecordDepartmentD
     if (!ok) {
       throw recruitmentErrors.preconditionFailed('当前部门路径状态不允许该决定');
     }
-    await this.repository.saveDepartmentPath(path.toSnapshot());
+    await this.repository.saveDepartmentPath(path.toSnapshot(), expectedRevision);
     return { pathId: path.id, status: path.status };
   }
 }

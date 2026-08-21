@@ -25,6 +25,7 @@ import type { RecruitmentController } from '../controllers/recruitment.controlle
 import { RecruitmentAuthGuard } from './recruitment-auth.guard';
 import { toHttpResponse, actorFromRequest } from './recruitment-response-mapper';
 import { parseRecruitmentRequestEnvelope } from '../http/recruitment-envelope';
+import type { DepartmentDecision } from '../../domain/state-machines/department-path.state-machine';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 
 @UseGuards(RecruitmentAuthGuard)
@@ -76,8 +77,25 @@ export class OrgRecruitmentNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseRecruitmentRequestEnvelope(body).input as Record<string, unknown>;
-    return toHttpResponse(await this.controller.submitApplication(this.actor(request), input as never));
+    const env = parseRecruitmentRequestEnvelope(body);
+    const input = env.input as {
+      activityId: string;
+      applicantId: string;
+      channelId: string;
+      departmentChoices: string[];
+      formRef?: { formId: string; submissionId: string; versionNumber: number } | null;
+      qualifySnapshot?: Record<string, unknown> | null;
+    };
+    return toHttpResponse(
+      await this.controller.submitApplication(this.actor(request), {
+        activityId: input.activityId,
+        applicantId: input.applicantId,
+        channelId: input.channelId,
+        departmentChoices: input.departmentChoices,
+        formRef: input.formRef ?? null,
+        qualifySnapshot: input.qualifySnapshot ?? null,
+      }),
+    );
   }
 
   @Post('applications/:applicationId/decisions')
@@ -87,9 +105,19 @@ export class OrgRecruitmentNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseRecruitmentRequestEnvelope(body).input as Record<string, unknown>;
+    const input = parseRecruitmentRequestEnvelope(body).input as {
+      departmentId: string;
+      decision: string;
+      decidedBy: string;
+      note?: string | null;
+    };
     return toHttpResponse(
-      await this.controller.recordDecision(this.actor(request), applicationId, input as never),
+      await this.controller.recordDecision(this.actor(request), applicationId, {
+        departmentId: input.departmentId,
+        decision: input.decision as DepartmentDecision,
+        decidedBy: input.decidedBy,
+        note: input.note ?? null,
+      }),
     );
   }
 

@@ -19,7 +19,7 @@ export interface RecruitmentRepository {
   saveChannel(snapshot: ApplicationChannelSnapshot): Promise<void>;
 
   loadApplication(id: string): Promise<ApplicationSnapshot | null>;
-  saveApplication(snapshot: ApplicationSnapshot): Promise<void>;
+  saveApplication(snapshot: ApplicationSnapshot, expectedRevision: number): Promise<void>;
   loadApplicationByApplicantAndChannel(
     applicantId: string,
     channelId: string,
@@ -27,10 +27,10 @@ export interface RecruitmentRepository {
   loadApplicationsByActivity(activityId: string): Promise<ApplicationSnapshot[]>;
 
   loadDepartmentPath(id: string): Promise<DepartmentPathSnapshot | null>;
-  saveDepartmentPath(snapshot: DepartmentPathSnapshot): Promise<void>;
+  saveDepartmentPath(snapshot: DepartmentPathSnapshot, expectedRevision: number): Promise<void>;
   loadDepartmentPathsByApplication(applicationId: string): Promise<DepartmentPathSnapshot[]>;
 
   loadInterview(id: string): Promise<InterviewRecordSnapshot | null>;
-  saveInterview(snapshot: InterviewRecordSnapshot): Promise<void>;
+  saveInterview(snapshot: InterviewRecordSnapshot, expectedRevision: number): Promise<void>;
   loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]>;
 }

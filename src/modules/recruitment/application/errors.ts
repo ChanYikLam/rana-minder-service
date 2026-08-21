@@ -2,13 +2,11 @@
  * 招新应用层错误（recruitment 应用层；与 form 模块 errors 同构）。
  */
 
-export class RecruitmentError extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-    public readonly details?: unknown,
-  ) {
-    super(message);
+import { RecruitmentDomainError } from '../domain/errors';
+
+export class RecruitmentError extends RecruitmentDomainError {
+  constructor(code: string, message: string, details?: unknown) {
+    super(code, message, details);
     this.name = 'RecruitmentError';
   }
 }

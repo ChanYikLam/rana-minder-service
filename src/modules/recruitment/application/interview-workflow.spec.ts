@@ -66,8 +66,6 @@ describe('recruitment interview workflow (REC-005)', () => {
       applicantId: APPLICANT,
       departmentChoices: ['dept-a'],
       formRef: { formId: 'form-1', submissionId: 'sub-1', versionNumber: 1 },
-      minChoices: 1,
-      maxChoices: 1,
       actor: APPLICANT,
       now: NOW,
     });
@@ -136,7 +134,7 @@ describe('recruitment interview workflow (REC-005)', () => {
       applicantId: APPLICANT,
       now: NOW,
     });
-    await repo.saveInterview(pending.toSnapshot());
+    await repo.saveInterview(pending.toSnapshot(), -1);
     const skipped = await workflow.skip({
       interviewId: pending.id,
       reason: '免试直录',
@@ -194,7 +192,7 @@ describe('recruitment interview workflow (REC-005)', () => {
       applicantId: APPLICANT,
       now: NOW,
     });
-    await repo.saveInterview(pending.toSnapshot());
+    await repo.saveInterview(pending.toSnapshot(), -1);
     await assert.rejects(
       () =>
         workflow.hold({

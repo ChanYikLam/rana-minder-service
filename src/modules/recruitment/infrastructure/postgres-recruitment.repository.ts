@@ -9,6 +9,7 @@
  */
 
 import type { DbAdapter } from '../../../shared/db-adapter';
+import { RecruitmentDomainError } from '../domain/errors';
 import type { RecruitmentUnitOfWork } from './unit-of-work';
 import type { RecruitmentRepository } from '../application/ports/recruitment-repository.port';
 import type { RecruitmentActivitySnapshot } from '../domain/models/recruitment-activity';
@@ -36,6 +37,8 @@ interface ChannelRow {
   status: string;
   open_at: Date | null;
   close_at: Date | null;
+  min_choices: number;
+  max_choices: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -62,6 +65,7 @@ interface PathRow {
   club_id: string;
   department_id: string;
   status: string;
+  revision_number: string;
   allow_transfer: boolean;
   decisions: unknown;
   previous_status_before_suspend: string | null;
@@ -76,6 +80,7 @@ interface InterviewRow {
   round_id: string;
   applicant_id: string;
   status: string;
+  revision_number: string;
   interviewer_id: string | null;
   scheduled_at: Date | null;
   location: string | null;
@@ -115,6 +120,8 @@ export function channelRowToSnapshot(row: ChannelRow): ApplicationChannelSnapsho
     status: row.status as ApplicationChannelSnapshot['status'],
     openAt: row.open_at,
     closeAt: row.close_at,
+    minChoices: row.min_choices,
+    maxChoices: row.max_choices,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -145,6 +152,7 @@ export function departmentPathRowToSnapshot(row: PathRow): DepartmentPathSnapsho
     clubId: row.club_id,
     departmentId: row.department_id,
     status: row.status as DepartmentPathSnapshot['status'],
+    revisionNumber: Number(row.revision_number),
     allowTransfer: row.allow_transfer,
     decisions: parseJsonb(row.decisions),
     previousStatusBeforeSuspend:
@@ -164,6 +172,7 @@ export function interviewRowToSnapshot(row: InterviewRow): InterviewRecordSnapsh
     roundId: row.round_id,
     applicantId: row.applicant_id,
     status: row.status as InterviewRecordSnapshot['status'],
+    revisionNumber: Number(row.revision_number),
     interviewerId: row.interviewer_id,
     scheduledAt: row.scheduled_at,
     location: row.location,
@@ -229,8 +238,8 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadChannel(id: string): Promise<ApplicationChannelSnapshot | null> {
     const rows = await this.db.query<ChannelRow>(
       this.uow.active,
-      `SELECT id, activity_id, club_id, status, open_at, close_at, created_at, updated_at
-         FROM application_channels WHERE id = $1`,
+       `SELECT id, activity_id, club_id, status, open_at, close_at, min_choices, max_choices, created_at, updated_at
+          FROM application_channels WHERE id = $1`,
       [id],
     );
     return rows[0] ? channelRowToSnapshot(rows[0]) : null;
@@ -239,12 +248,24 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     await this.db.query(
       this.uow.active,
       `INSERT INTO application_channels
-         (id, activity_id, club_id, status, open_at, close_at, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (id) DO UPDATE SET
-         activity_id = EXCLUDED.activity_id, club_id = EXCLUDED.club_id, status = EXCLUDED.status,
-         open_at = EXCLUDED.open_at, close_at = EXCLUDED.close_at, updated_at = EXCLUDED.updated_at`,
-      [s.id, s.activityId, s.clubId, s.status, s.openAt, s.closeAt, s.createdAt, s.updatedAt],
+          (id, activity_id, club_id, status, open_at, close_at, min_choices, max_choices, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        ON CONFLICT (id) DO UPDATE SET
+          activity_id = EXCLUDED.activity_id, club_id = EXCLUDED.club_id, status = EXCLUDED.status,
+          open_at = EXCLUDED.open_at, close_at = EXCLUDED.close_at, min_choices = EXCLUDED.min_choices,
+          max_choices = EXCLUDED.max_choices, updated_at = EXCLUDED.updated_at`,
+      [
+        s.id,
+        s.activityId,
+        s.clubId,
+        s.status,
+        s.openAt,
+        s.closeAt,
+        s.minChoices,
+        s.maxChoices,
+        s.createdAt,
+        s.updatedAt,
+      ],
     );
   }
 
@@ -260,19 +281,40 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     );
     return rows[0] ? applicationRowToSnapshot(rows[0]) : null;
   }
-  async saveApplication(s: ApplicationSnapshot): Promise<void> {
-    await this.db.query(
+  async saveApplication(s: ApplicationSnapshot, expectedRevision: number): Promise<void> {
+    const updated = await this.db.query<{ id: string }>(
+      this.uow.active,
+      `UPDATE applications SET
+          activity_id = $2, channel_id = $3, club_id = $4, applicant_id = $5, status = $6,
+          department_choices = $7, form_ref = $8, qualify_snapshot = $9, revision_number = $10,
+          revisions = $11, supplement_due_at = $12, updated_at = $13
+        WHERE id = $1 AND revision_number = $14::text
+        RETURNING id`,
+      [
+        s.id,
+        s.activityId,
+        s.channelId,
+        s.clubId,
+        s.applicantId,
+        s.status,
+        JSON.stringify(s.departmentChoices),
+        s.formRef === null ? null : JSON.stringify(s.formRef),
+        JSON.stringify(s.qualifySnapshot),
+        s.revisionNumber,
+        JSON.stringify(s.revisions),
+        s.supplementDueAt,
+        s.updatedAt,
+        String(expectedRevision),
+      ],
+    );
+    if (updated.length > 0) return;
+    const inserted = await this.db.query<{ id: string }>(
       this.uow.active,
       `INSERT INTO applications
-         (id, activity_id, channel_id, club_id, applicant_id, status, department_choices,
-          form_ref, qualify_snapshot, revision_number, revisions, supplement_due_at, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-       ON CONFLICT (id) DO UPDATE SET
-         activity_id = EXCLUDED.activity_id, channel_id = EXCLUDED.channel_id, club_id = EXCLUDED.club_id,
-         status = EXCLUDED.status, department_choices = EXCLUDED.department_choices,
-         form_ref = EXCLUDED.form_ref, qualify_snapshot = EXCLUDED.qualify_snapshot,
-         revision_number = EXCLUDED.revision_number, revisions = EXCLUDED.revisions,
-         supplement_due_at = EXCLUDED.supplement_due_at, updated_at = EXCLUDED.updated_at`,
+          (id, activity_id, channel_id, club_id, applicant_id, status, department_choices,
+           form_ref, qualify_snapshot, revision_number, revisions, supplement_due_at, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ON CONFLICT (id) DO NOTHING RETURNING id`,
       [
         s.id,
         s.activityId,
@@ -290,6 +332,9 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.updatedAt,
       ],
     );
+    if (inserted.length === 0) {
+      throw new RecruitmentDomainError('REC_CONFLICT', '申请并发更新冲突，请刷新后重试');
+    }
   }
   async loadApplicationByApplicantAndChannel(
     applicantId: string,
@@ -321,26 +366,21 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadDepartmentPath(id: string): Promise<DepartmentPathSnapshot | null> {
     const rows = await this.db.query<PathRow>(
       this.uow.active,
-      `SELECT id, application_id, activity_id, club_id, department_id, status, allow_transfer,
-              decisions, previous_status_before_suspend, created_at, updated_at
-         FROM department_paths WHERE id = $1`,
+       `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
+               decisions, previous_status_before_suspend, created_at, updated_at
+          FROM department_paths WHERE id = $1`,
       [id],
     );
     return rows[0] ? departmentPathRowToSnapshot(rows[0]) : null;
   }
-  async saveDepartmentPath(s: DepartmentPathSnapshot): Promise<void> {
-    await this.db.query(
+  async saveDepartmentPath(s: DepartmentPathSnapshot, expectedRevision: number): Promise<void> {
+    const updated = await this.db.query<{ id: string }>(
       this.uow.active,
-      `INSERT INTO department_paths
-         (id, application_id, activity_id, club_id, department_id, status, allow_transfer,
-          decisions, previous_status_before_suspend, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       ON CONFLICT (id) DO UPDATE SET
-         application_id = EXCLUDED.application_id, activity_id = EXCLUDED.activity_id,
-         club_id = EXCLUDED.club_id, department_id = EXCLUDED.department_id, status = EXCLUDED.status,
-         allow_transfer = EXCLUDED.allow_transfer, decisions = EXCLUDED.decisions,
-         previous_status_before_suspend = EXCLUDED.previous_status_before_suspend,
-         updated_at = EXCLUDED.updated_at`,
+      `UPDATE department_paths SET
+          application_id = $2, activity_id = $3, club_id = $4, department_id = $5, status = $6,
+          allow_transfer = $7, decisions = $8, previous_status_before_suspend = $9, updated_at = $10
+        WHERE id = $1 AND revision_number = $11::text
+        RETURNING id`,
       [
         s.id,
         s.applicationId,
@@ -351,17 +391,43 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.allowTransfer,
         JSON.stringify(s.decisions),
         s.previousStatusBeforeSuspend,
+        s.updatedAt,
+        String(expectedRevision),
+      ],
+    );
+    if (updated.length > 0) return;
+    const inserted = await this.db.query<{ id: string }>(
+      this.uow.active,
+      `INSERT INTO department_paths
+          (id, application_id, activity_id, club_id, department_id, status, revision_number,
+           allow_transfer, decisions, previous_status_before_suspend, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ON CONFLICT (id) DO NOTHING RETURNING id`,
+      [
+        s.id,
+        s.applicationId,
+        s.activityId,
+        s.clubId,
+        s.departmentId,
+        s.status,
+        String(s.revisionNumber),
+        s.allowTransfer,
+        JSON.stringify(s.decisions),
+        s.previousStatusBeforeSuspend,
         s.createdAt,
         s.updatedAt,
       ],
     );
+    if (inserted.length === 0) {
+      throw new RecruitmentDomainError('REC_CONFLICT', '部门路径并发更新冲突，请刷新后重试');
+    }
   }
   async loadDepartmentPathsByApplication(applicationId: string): Promise<DepartmentPathSnapshot[]> {
     const rows = await this.db.query<PathRow>(
       this.uow.active,
-      `SELECT id, application_id, activity_id, club_id, department_id, status, allow_transfer,
-              decisions, previous_status_before_suspend, created_at, updated_at
-         FROM department_paths WHERE application_id = $1 ORDER BY updated_at DESC`,
+       `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
+               decisions, previous_status_before_suspend, created_at, updated_at
+          FROM department_paths WHERE application_id = $1 ORDER BY updated_at DESC`,
       [applicationId],
     );
     return rows.map(departmentPathRowToSnapshot);
@@ -371,29 +437,23 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadInterview(id: string): Promise<InterviewRecordSnapshot | null> {
     const rows = await this.db.query<InterviewRow>(
       this.uow.active,
-      `SELECT id, application_id, activity_id, club_id, round_id, applicant_id, status,
-              interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
-              created_at, updated_at
-         FROM interview_records WHERE id = $1`,
+       `SELECT id, application_id, activity_id, club_id, round_id, applicant_id, status, revision_number,
+               interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
+               created_at, updated_at
+          FROM interview_records WHERE id = $1`,
       [id],
     );
     return rows[0] ? interviewRowToSnapshot(rows[0]) : null;
   }
-  async saveInterview(s: InterviewRecordSnapshot): Promise<void> {
-    await this.db.query(
+  async saveInterview(s: InterviewRecordSnapshot, expectedRevision: number): Promise<void> {
+    const updated = await this.db.query<{ id: string }>(
       this.uow.active,
-      `INSERT INTO interview_records
-         (id, application_id, activity_id, club_id, round_id, applicant_id, status,
-          interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
-          created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-       ON CONFLICT (id) DO UPDATE SET
-         application_id = EXCLUDED.application_id, activity_id = EXCLUDED.activity_id,
-         club_id = EXCLUDED.club_id, round_id = EXCLUDED.round_id, applicant_id = EXCLUDED.applicant_id,
-         status = EXCLUDED.status, interviewer_id = EXCLUDED.interviewer_id,
-         scheduled_at = EXCLUDED.scheduled_at, location = EXCLUDED.location,
-         skip_reason = EXCLUDED.skip_reason, hold_until = EXCLUDED.hold_until,
-         evaluations = EXCLUDED.evaluations, updated_at = EXCLUDED.updated_at`,
+      `UPDATE interview_records SET
+          application_id = $2, activity_id = $3, club_id = $4, round_id = $5, applicant_id = $6,
+          status = $7, interviewer_id = $8, scheduled_at = $9, location = $10, skip_reason = $11,
+          hold_until = $12, evaluations = $13, updated_at = $14
+        WHERE id = $1 AND revision_number = $15::text
+        RETURNING id`,
       [
         s.id,
         s.applicationId,
@@ -408,18 +468,49 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.skipReason,
         s.holdUntil,
         JSON.stringify(s.evaluations),
+        s.updatedAt,
+        String(expectedRevision),
+      ],
+    );
+    if (updated.length > 0) return;
+    const inserted = await this.db.query<{ id: string }>(
+      this.uow.active,
+      `INSERT INTO interview_records
+          (id, application_id, activity_id, club_id, round_id, applicant_id, status, revision_number,
+           interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
+           created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        ON CONFLICT (id) DO NOTHING RETURNING id`,
+      [
+        s.id,
+        s.applicationId,
+        s.activityId,
+        s.clubId,
+        s.roundId,
+        s.applicantId,
+        s.status,
+        String(s.revisionNumber),
+        s.interviewerId,
+        s.scheduledAt,
+        s.location,
+        s.skipReason,
+        s.holdUntil,
+        JSON.stringify(s.evaluations),
         s.createdAt,
         s.updatedAt,
       ],
     );
+    if (inserted.length === 0) {
+      throw new RecruitmentDomainError('REC_CONFLICT', '面试记录并发更新冲突，请刷新后重试');
+    }
   }
   async loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]> {
     const rows = await this.db.query<InterviewRow>(
       this.uow.active,
-      `SELECT id, application_id, activity_id, club_id, round_id, applicant_id, status,
-              interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
-              created_at, updated_at
-         FROM interview_records WHERE round_id = $1 ORDER BY updated_at DESC`,
+       `SELECT id, application_id, activity_id, club_id, round_id, applicant_id, status, revision_number,
+               interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
+               created_at, updated_at
+          FROM interview_records WHERE round_id = $1 ORDER BY updated_at DESC`,
       [roundId],
     );
     return rows.map(interviewRowToSnapshot);

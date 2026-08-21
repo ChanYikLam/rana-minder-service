@@ -31,6 +31,7 @@ export interface DepartmentPathSnapshot {
   readonly previousStatusBeforeSuspend: DepartmentPathStatus | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly revisionNumber: number;
 }
 
 export class DepartmentPath {
@@ -61,6 +62,7 @@ export class DepartmentPath {
       previousStatusBeforeSuspend: null,
       createdAt: input.now,
       updatedAt: input.now,
+      revisionNumber: 0,
     });
   }
 
@@ -99,6 +101,7 @@ export class DepartmentPath {
       status: result.nextState,
       decisions: [...this.snapshot.decisions, record],
       updatedAt: now,
+      revisionNumber: this.snapshot.revisionNumber + 1,
     };
     return true;
   }
@@ -114,6 +117,7 @@ export class DepartmentPath {
       previousStatusBeforeSuspend: this.snapshot.status,
       status: result.nextState,
       updatedAt: now,
+      revisionNumber: this.snapshot.revisionNumber + 1,
     };
     return true;
   }
@@ -129,6 +133,7 @@ export class DepartmentPath {
       status: previous,
       previousStatusBeforeSuspend: null,
       updatedAt: now,
+      revisionNumber: this.snapshot.revisionNumber + 1,
     };
   }
 }

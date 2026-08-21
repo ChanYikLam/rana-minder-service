@@ -34,6 +34,7 @@ export interface InterviewRecordSnapshot {
   readonly evaluations: readonly InterviewEvaluation[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly revisionNumber: number;
 }
 
 export class InterviewRecord {
@@ -68,6 +69,7 @@ export class InterviewRecord {
       evaluations: [],
       createdAt: input.now,
       updatedAt: input.now,
+      revisionNumber: 0,
     });
   }
 
@@ -190,7 +192,12 @@ export class InterviewRecord {
     if (!result.allowed) {
       return false;
     }
-    this.snapshot = { ...this.snapshot, status: result.nextState, updatedAt: now };
+    this.snapshot = {
+      ...this.snapshot,
+      status: result.nextState,
+      updatedAt: now,
+      revisionNumber: this.snapshot.revisionNumber + 1,
+    };
     return true;
   }
 }

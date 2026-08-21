@@ -5,7 +5,7 @@
  * 不泄露内部细节。
  */
 
-import { RecruitmentError } from '../../application/errors';
+import { RecruitmentDomainError } from '../../domain/errors';
 import { generateTraceId } from '../../../../platform/observability/domain/services/trace-id.generator';
 
 export interface ApiErrorResult {
@@ -24,7 +24,7 @@ const RECRUITMENT_ERROR_HTTP_STATUS: Record<string, number> = {
 
 export function toApiError(error: unknown): ApiErrorResult {
   const supportId = generateTraceId();
-  if (error instanceof RecruitmentError) {
+  if (error instanceof RecruitmentDomainError) {
     return {
       ok: false,
       status: RECRUITMENT_ERROR_HTTP_STATUS[error.code] ?? 500,

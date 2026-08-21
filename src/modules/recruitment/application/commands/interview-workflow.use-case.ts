@@ -83,7 +83,7 @@ export class InterviewWorkflowUseCase {
           throw recruitmentErrors.preconditionFailed('面试重排失败');
         }
         record.reassign(input.interviewerId, input.scheduledAt, input.location, input.now);
-        await this.repository.saveInterview(record.toSnapshot());
+        await this.repository.saveInterview(record.toSnapshot(), existing.revisionNumber);
         return { interviewId: record.id, status: record.status };
       }
       if (existing.status === 'CANCELLED') {
@@ -112,7 +112,7 @@ export class InterviewWorkflowUseCase {
     ) {
       throw recruitmentErrors.preconditionFailed('面试记录调度失败');
     }
-    await this.repository.saveInterview(record.toSnapshot());
+    await this.repository.saveInterview(record.toSnapshot(), -1);
     return { interviewId: id, status: record.status };
   }
 
@@ -129,11 +129,11 @@ export class InterviewWorkflowUseCase {
     return this.managedTransition(input, (record, machine, now) => record.cancel(machine, now), '面试取消失败');
   }
   async skip(input: SkipInterviewInput): Promise<InterviewWorkflowResult> {
-    const record = await this.loadManaged(input.interviewId, input.actor);
+    const { record, expectedRevision } = await this.loadManaged(input.interviewId, input.actor);
     if (!record.skip(new DefaultInterviewRecordStateMachine(), input.reason, input.now)) {
       throw recruitmentErrors.preconditionFailed('面试跳轮/免试失败');
     }
-    await this.repository.saveInterview(record.toSnapshot());
+    await this.repository.saveInterview(record.toSnapshot(), expectedRevision);
     return { interviewId: record.id, status: record.status };
   }
   async hold(input: HoldInterviewInput): Promise<InterviewWorkflowResult> {
@@ -163,15 +163,15 @@ export class InterviewWorkflowUseCase {
     if (!record.hold(new DefaultInterviewRecordStateMachine(), input.until, input.now)) {
       throw recruitmentErrors.preconditionFailed('面试暂缓失败');
     }
-    await this.repository.saveInterview(record.toSnapshot());
+    await this.repository.saveInterview(record.toSnapshot(), snapshot.revisionNumber);
     return { interviewId: record.id, status: record.status };
   }
   async resume(input: InterviewRefInput): Promise<InterviewWorkflowResult> {
-    const record = await this.loadManaged(input.interviewId, input.actor);
+    const { record, expectedRevision } = await this.loadManaged(input.interviewId, input.actor);
     if (!record.resume(input.now)) {
       throw recruitmentErrors.preconditionFailed('面试恢复失败');
     }
-    await this.repository.saveInterview(record.toSnapshot());
+    await this.repository.saveInterview(record.toSnapshot(), expectedRevision);
     return { interviewId: record.id, status: record.status };
   }
 
@@ -193,11 +193,14 @@ export class InterviewWorkflowUseCase {
     }
     const record = InterviewRecord.fromSnapshot(snapshot);
     record.recordEvaluation(input.actor, input.values, input.now);
-    await this.repository.saveInterview(record.toSnapshot());
+    await this.repository.saveInterview(record.toSnapshot(), snapshot.revisionNumber);
     return { interviewId: record.id, status: record.status };
   }
 
-  private async loadManaged(interviewId: string, actor: string): Promise<InterviewRecord> {
+  private async loadManaged(
+    interviewId: string,
+    actor: string,
+  ): Promise<{ record: InterviewRecord; expectedRevision: number }> {
     const snapshot = await this.repository.loadInterview(interviewId);
     if (snapshot === null) {
       throw recruitmentErrors.notFound('面试记录');
@@ -211,7 +214,7 @@ export class InterviewWorkflowUseCase {
     ) {
       throw recruitmentErrors.forbidden('仅负责人/人事可操作面试记录');
     }
-    return InterviewRecord.fromSnapshot(snapshot);
+    return { record: InterviewRecord.fromSnapshot(snapshot), expectedRevision: snapshot.revisionNumber };
   }
 
   private async managedTransition(
@@ -219,11 +222,11 @@ export class InterviewWorkflowUseCase {
     fn: (record: InterviewRecord, machine: DefaultInterviewRecordStateMachine, now: Date) => boolean,
     message: string,
   ): Promise<InterviewWorkflowResult> {
-    const record = await this.loadManaged(input.interviewId, input.actor);
+    const { record, expectedRevision } = await this.loadManaged(input.interviewId, input.actor);
     if (!fn(record, new DefaultInterviewRecordStateMachine(), input.now)) {
       throw recruitmentErrors.preconditionFailed(message);
     }
-    await this.repository.saveInterview(record.toSnapshot());
+    await this.repository.saveInterview(record.toSnapshot(), expectedRevision);
     return { interviewId: record.id, status: record.status };
   }
 }

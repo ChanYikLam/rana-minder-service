@@ -73,7 +73,14 @@ describe('recruitment application layer (REC-001~004)', () => {
 
     const channelId = 'ch-1';
     const openChannel = new DefaultOpenApplicationChannelUseCase(repo, auth);
-    const opened = await openChannel.execute({ activityId, actor: ACTOR, now: NOW, id: channelId });
+    const opened = await openChannel.execute({
+      activityId,
+      minChoices: 1,
+      maxChoices: 3,
+      actor: ACTOR,
+      now: NOW,
+      id: channelId,
+    });
     assert.strictEqual(opened.channelId, channelId);
 
     form.seed({ id: 'sub-1', status: 'SUBMITTED', submittedBy: APPLICANT });
@@ -85,8 +92,6 @@ describe('recruitment application layer (REC-001~004)', () => {
       applicantId: APPLICANT,
       departmentChoices: ['dept-a', 'dept-b'],
       formRef: { formId: FORM_ID, submissionId: 'sub-1', versionNumber: 1 },
-      minChoices: 1,
-      maxChoices: 2,
       actor: APPLICANT,
       now: NOW,
     });
@@ -101,8 +106,6 @@ describe('recruitment application layer (REC-001~004)', () => {
           channelId,
           applicantId: APPLICANT,
           departmentChoices: ['dept-a'],
-          minChoices: 1,
-          maxChoices: 2,
           actor: APPLICANT,
           now: NOW,
         }),
@@ -156,8 +159,6 @@ describe('recruitment application layer (REC-001~004)', () => {
       applicantId: APPLICANT,
       departmentChoices: ['dept-a'],
       formRef: { formId: FORM_ID, submissionId: 'sub-2', versionNumber: 1 },
-      minChoices: 1,
-      maxChoices: 1,
       actor: APPLICANT,
       now: NOW,
       id: appId,

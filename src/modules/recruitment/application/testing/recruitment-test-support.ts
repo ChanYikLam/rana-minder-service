@@ -15,6 +15,7 @@ import type { DepartmentPathSnapshot } from '../../domain/models/department-path
 import type { InterviewRecordSnapshot } from '../../domain/models/interview-record';
 import type { RecruitmentAuthorizationPort } from '../ports/recruitment-authorization.port';
 import { StubRecruitmentForm } from '../ports/recruitment-form.port';
+import { RecruitmentDomainError } from '../../domain/errors';
 
 export class InMemoryRecruitmentRepository implements RecruitmentRepository {
   private readonly activities = new Map<string, RecruitmentActivitySnapshot>();
@@ -43,7 +44,11 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
   async loadApplication(id: string): Promise<ApplicationSnapshot | null> {
     return this.applications.get(id) ?? null;
   }
-  async saveApplication(snapshot: ApplicationSnapshot): Promise<void> {
+  async saveApplication(snapshot: ApplicationSnapshot, expectedRevision: number): Promise<void> {
+    const existing = this.applications.get(snapshot.id);
+    if (existing !== undefined && existing.revisionNumber !== expectedRevision) {
+      throw new RecruitmentDomainError('REC_CONFLICT', '申请并发更新冲突，请刷新后重试');
+    }
     this.applications.set(snapshot.id, snapshot);
   }
   async loadApplicationByApplicantAndChannel(
@@ -63,7 +68,11 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
   async loadDepartmentPath(id: string): Promise<DepartmentPathSnapshot | null> {
     return this.paths.get(id) ?? null;
   }
-  async saveDepartmentPath(snapshot: DepartmentPathSnapshot): Promise<void> {
+  async saveDepartmentPath(snapshot: DepartmentPathSnapshot, expectedRevision: number): Promise<void> {
+    const existing = this.paths.get(snapshot.id);
+    if (existing !== undefined && existing.revisionNumber !== expectedRevision) {
+      throw new RecruitmentDomainError('REC_CONFLICT', '部门路径并发更新冲突，请刷新后重试');
+    }
     this.paths.set(snapshot.id, snapshot);
   }
   async loadDepartmentPathsByApplication(applicationId: string): Promise<DepartmentPathSnapshot[]> {
@@ -73,7 +82,11 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
   async loadInterview(id: string): Promise<InterviewRecordSnapshot | null> {
     return this.interviews.get(id) ?? null;
   }
-  async saveInterview(snapshot: InterviewRecordSnapshot): Promise<void> {
+  async saveInterview(snapshot: InterviewRecordSnapshot, expectedRevision: number): Promise<void> {
+    const existing = this.interviews.get(snapshot.id);
+    if (existing !== undefined && existing.revisionNumber !== expectedRevision) {
+      throw new RecruitmentDomainError('REC_CONFLICT', '面试记录并发更新冲突，请刷新后重试');
+    }
     this.interviews.set(snapshot.id, snapshot);
   }
   async loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]> {
