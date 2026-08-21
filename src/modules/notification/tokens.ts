@@ -28,3 +28,11 @@ export const NOTIFICATION_AUTH_SESSION_PROVIDER = 'NotificationAuthSessionProvid
 export const EMAIL_CONFIG_STORE = 'EmailConfigStore';
 /** 通知偏好存储端口（§7，按用户真实落库） */
 export const PREFERENCES_STORE = 'NotificationPreferencesStore';
+/** 发信密钥加密端口（NTF-006：密钥不明文存储/回显） */
+export const EMAIL_SECRET_CIPHER = 'EmailSecretCipher';
+/** 社团邮件策略存储端口（NTF-004：按活动或类型关闭邮件） */
+export const CLUB_EMAIL_POLICY_STORE = 'ClubEmailPolicyStore';
+/** 平台级邮件停用目录存储端口（超管统一停用某类邮件） */
+export const PLATFORM_EMAIL_SUSPENSION_STORE = 'PlatformEmailSuspensionStore';
+/** 邮件模板存储端口（NTF-005：平台默认＋社团自定义＋版本回滚） */
+export const EMAIL_TEMPLATE_STORE = 'EmailTemplateStore';

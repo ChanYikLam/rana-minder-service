@@ -70,6 +70,7 @@ export class ManualResendCommand {
       attemptId: `manual-resend-${factId}-${Date.now()}`,
       factId,
       snapshotId: snapshot?.snapshotId ?? null,
+      recipientId: snapshot?.recipientId ?? null,
       channel: 'EMAIL',
       channelMessageId: null,
       attemptNumber: 1,

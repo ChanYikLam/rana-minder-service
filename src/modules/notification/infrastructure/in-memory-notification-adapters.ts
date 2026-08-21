@@ -6,18 +6,26 @@
 
 import type {
   ChannelDeliveryAttemptModel,
+  ClubEmailPolicy,
   CreateNotificationFactInput,
+  EmailTemplateModel,
+  EmailTemplateScope,
+  EmailTemplateVersion,
   InboxPresentationModel,
   InboxPresentationStatus,
   KillSwitchScope,
   KillSwitchStateModel,
   NotificationFactModel,
+  PlatformEmailSuspension,
   RecipientSnapshot,
 } from '../domain';
+import type { NotificationKind } from '../../../common/contracts/notifications.contracts';
 import type {
   ChannelDeliveryAttemptRepository,
+  ClubEmailPolicyStore,
   EmailConfigRecord,
   EmailConfigStore,
+  EmailTemplateStore,
   InboxListFilter,
   InboxAdapter,
   EmailAdapter,
@@ -26,6 +34,7 @@ import type {
   KillSwitchRepository,
   NotificationPreferencesStore,
   NotificationRepository,
+  PlatformEmailSuspensionStore,
   PrivilegedAuditEntry,
   PrivilegedAuditWriter,
   TemplateSnapshotService,
@@ -332,6 +341,13 @@ export class InMemoryChannelDeliveryAttemptRepository implements ChannelDelivery
   async findAttemptById(attemptId: string): Promise<ChannelDeliveryAttemptModel | null> {
     return this.attemptStore.get(attemptId) ?? null;
   }
+
+  async findRecentEmailAttempts(limit: number): Promise<readonly ChannelDeliveryAttemptModel[]> {
+    return [...this.attemptStore.values()]
+      .filter((a) => a.channel === 'EMAIL')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -435,5 +451,222 @@ export class InMemoryNotificationPreferencesStore implements NotificationPrefere
     const savedAt = new Date().toISOString();
     this.store.set(userId, { preferences: { ...preferences }, savedAt });
     return { savedAt };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ClubEmailPolicyStore（NTF-004：社团按活动或类型关闭邮件；默认开启）
+// ---------------------------------------------------------------------------
+
+export class InMemoryClubEmailPolicyStore implements ClubEmailPolicyStore {
+  private readonly store = new Map<string, ClubEmailPolicy>();
+
+  async findByClub(clubId: string): Promise<ClubEmailPolicy | null> {
+    return this.store.get(clubId) ?? null;
+  }
+
+  async save(policy: ClubEmailPolicy): Promise<ClubEmailPolicy> {
+    this.store.set(policy.clubId, policy);
+    return policy;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PlatformEmailSuspensionStore（NTF-004：超管统一停用某类邮件）
+// ---------------------------------------------------------------------------
+
+export class InMemoryPlatformEmailSuspensionStore implements PlatformEmailSuspensionStore {
+  private suspension: PlatformEmailSuspension = {};
+
+  async get(): Promise<PlatformEmailSuspension> {
+    return this.suspension;
+  }
+
+  async set(suspension: PlatformEmailSuspension): Promise<void> {
+    this.suspension = { ...suspension };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// EmailTemplateStore（NTF-005：平台默认模板＋社团自定义＋版本与回滚）
+// ---------------------------------------------------------------------------
+
+/** 平台安全默认模板（超管可维护；此处为内置种子） */
+export const PLATFORM_DEFAULT_EMAIL_TEMPLATES: Readonly<
+  Record<NotificationKind, { subject: string; htmlBody: string }>
+> = {
+  application: {
+    subject: '【{{platformName}}】报名补充提醒',
+    htmlBody:
+      '<p>{{studentName}} 同学你好：</p><p>你在「{{activityName}}」的报名有待补充事项，请登录后查看。</p>',
+  },
+  interview: {
+    subject: '【{{clubName}}】面试安排通知',
+    htmlBody:
+      '<p>{{studentName}} 同学你好：</p><p>你已获得「{{activityName}}」面试资格，时间 {{interviewTime}}，地点 {{interviewPlace}}。</p>',
+  },
+  invitation: {
+    subject: '【{{clubName}}】入社邀请',
+    htmlBody:
+      '<p>{{studentName}} 同学你好：</p><p>「{{clubName}}」邀请你加入{{departmentName}}{{positionName}}，请在截止时间 {{deadline}} 前登录确认。</p>',
+  },
+  conclusion: {
+    subject: '【{{clubName}}】招新结果通知',
+    htmlBody:
+      '<p>{{studentName}} 同学你好：</p><p>你在「{{activityName}}」的招新结论为：{{conclusion}}。</p>',
+  },
+  system: {
+    subject: '【{{platformName}}】系统通知',
+    htmlBody: '<p>{{studentName}} 同学你好：</p><p>有一条系统通知请登录查看。</p>',
+  },
+  member: {
+    subject: '【{{clubName}}】成员变动通知',
+    htmlBody: '<p>{{studentName}} 同学你好：</p><p>你的成员状态有更新，请登录查看。</p>',
+  },
+  transition: {
+    subject: '【{{clubName}}】职位变动通知',
+    htmlBody:
+      '<p>{{studentName}} 同学你好：</p><p>你的部门职位有更新（{{departmentName}} {{positionName}}），请登录查看。</p>',
+  },
+  correction: {
+    subject: '【{{platformName}}】权益纠错通知',
+    htmlBody: '<p>{{studentName}} 同学你好：</p><p>你的权益纠错申请有进展，请登录查看。</p>',
+  },
+};
+
+export class InMemoryEmailTemplateStore implements EmailTemplateStore {
+  private readonly templates = new Map<string, EmailTemplateModel>();
+  private readonly versions = new Map<string, EmailTemplateVersion[]>();
+  private seq = 0;
+
+  constructor() {
+    // 种子平台默认模板（每个 kind 一条 PLATFORM 活跃模板）
+    for (const [kind, content] of Object.entries(PLATFORM_DEFAULT_EMAIL_TEMPLATES)) {
+      const templateId = 'tpl-platform-' + kind;
+      const now = new Date(0).toISOString();
+      this.templates.set(this.key({ type: 'PLATFORM' }, kind as NotificationKind), {
+        templateId,
+        kind: kind as NotificationKind,
+        scope: { type: 'PLATFORM' },
+        subject: content.subject,
+        htmlBody: content.htmlBody,
+        activeVersion: 1,
+        updatedBy: 'system',
+        updatedAt: now,
+      });
+      this.versions.set(templateId, [
+        {
+          templateId,
+          version: 1,
+          subject: content.subject,
+          htmlBody: content.htmlBody,
+          createdBy: 'system',
+          createdAt: now,
+          note: '平台内置安全默认模板',
+        },
+      ]);
+    }
+  }
+
+  private key(scope: EmailTemplateScope, kind: NotificationKind): string {
+    return scope.type === 'PLATFORM' ? 'PLATFORM::' + kind : 'CLUB:' + scope.clubId + '::' + kind;
+  }
+
+  async findActive(
+    scope: EmailTemplateScope,
+    kind: NotificationKind,
+  ): Promise<EmailTemplateModel | null> {
+    return this.templates.get(this.key(scope, kind)) ?? null;
+  }
+
+  async saveVersion(
+    scope: EmailTemplateScope,
+    kind: NotificationKind,
+    subject: string,
+    htmlBody: string,
+    savedBy: string,
+    note: string,
+  ): Promise<EmailTemplateModel> {
+    const key = this.key(scope, kind);
+    const existing = this.templates.get(key);
+    const templateId =
+      existing?.templateId ?? 'tpl-' + key.replace(/[:]+/g, '-') + '-' + ++this.seq;
+    const nextVersion = (existing?.activeVersion ?? 0) + 1;
+    const now = new Date().toISOString();
+    const model: EmailTemplateModel = {
+      templateId,
+      kind,
+      scope,
+      subject,
+      htmlBody,
+      activeVersion: nextVersion,
+      updatedBy: savedBy,
+      updatedAt: now,
+    };
+    this.templates.set(key, model);
+    const history = this.versions.get(templateId) ?? [];
+    history.unshift({
+      templateId,
+      version: nextVersion,
+      subject,
+      htmlBody,
+      createdBy: savedBy,
+      createdAt: now,
+      note,
+    });
+    this.versions.set(templateId, history);
+    return model;
+  }
+
+  async listVersions(templateId: string): Promise<readonly EmailTemplateVersion[]> {
+    return this.versions.get(templateId) ?? [];
+  }
+
+  async rollbackToVersion(
+    templateId: string,
+    version: number,
+    rolledBackBy: string,
+  ): Promise<EmailTemplateModel> {
+    const history = this.versions.get(templateId);
+    if (!history) throw new Error('模板不存在: ' + templateId);
+    const target = history.find((v) => v.version === version);
+    if (!target) throw new Error('模板版本不存在: ' + templateId + '@' + version);
+
+    for (const [key, model] of this.templates) {
+      if (model.templateId === templateId) {
+        const nextVersion = model.activeVersion + 1;
+        const now = new Date().toISOString();
+        const rolled: EmailTemplateModel = {
+          ...model,
+          subject: target.subject,
+          htmlBody: target.htmlBody,
+          activeVersion: nextVersion,
+          updatedBy: rolledBackBy,
+          updatedAt: now,
+        };
+        this.templates.set(key, rolled);
+        const h = this.versions.get(templateId) ?? [];
+        h.unshift({
+          templateId,
+          version: nextVersion,
+          subject: target.subject,
+          htmlBody: target.htmlBody,
+          createdBy: rolledBackBy,
+          createdAt: now,
+          note: '回滚到版本 ' + version,
+        });
+        this.versions.set(templateId, h);
+        return rolled;
+      }
+    }
+    throw new Error('模板不存在: ' + templateId);
+  }
+
+  async deleteClubTemplate(clubId: string, kind: NotificationKind): Promise<boolean> {
+    const key = this.key({ type: 'CLUB', clubId }, kind);
+    const model = this.templates.get(key);
+    if (!model) return false;
+    this.templates.delete(key);
+    return true;
   }
 }

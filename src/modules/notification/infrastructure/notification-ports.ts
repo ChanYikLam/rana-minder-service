@@ -11,14 +11,20 @@
 
 import type {
   ChannelDeliveryAttemptModel,
+  ClubEmailPolicy,
   CreateNotificationFactInput,
+  EmailTemplateModel,
+  EmailTemplateScope,
+  EmailTemplateVersion,
   InboxPresentationModel,
   InboxPresentationStatus,
   KillSwitchScope,
   KillSwitchStateModel,
   NotificationFactModel,
+  PlatformEmailSuspension,
   RecipientSnapshot,
 } from '../domain';
+import type { NotificationKind } from '../../../common/contracts/notifications.contracts';
 
 /** 通知事实事务保存结果 */
 export interface NotificationFactTransactionResult {
@@ -169,6 +175,13 @@ export interface EmailSendInput {
   readonly body: string;
   readonly senderIdentity: string;
   readonly templateVersionId: string | null;
+  /**
+   * 实际发信账号（NTF-008/009）。适配器必须以其作为信封 From，
+   * 且 Reply-To 固定为同一地址；模板不得覆盖发件人身份。
+   */
+  readonly fromAddress?: string | null;
+  /** 回复地址：领域层保证等于 fromAddress；适配器不得接受其他值 */
+  readonly replyTo?: string | null;
 }
 
 /** 邮件发送结果 */
@@ -204,6 +217,13 @@ export interface ChannelDeliveryAttemptRepository {
    * 按尝试标识查询（重试时直接定位指定尝试，不依赖队首顺序）。
    */
   findAttemptById(attemptId: string): Promise<ChannelDeliveryAttemptModel | null>;
+
+  /**
+   * 查询最近的邮件渠道尝试（平台管理端邮件外发箱只读查询，
+   * 接口清单 §15.9 GET /api/admin/notifications/email-outbox）。
+   * 按创建时间倒序；只读，不暴露密钥或完整收件人敏感信息以外的内容。
+   */
+  findRecentEmailAttempts(limit: number): Promise<readonly ChannelDeliveryAttemptModel[]>;
 }
 
 /**
@@ -275,6 +295,13 @@ export interface EmailConfigRecord {
   readonly smtpUser: string;
   readonly fromName: string;
   readonly encryption: 'ssl' | 'tls' | 'none';
+  /**
+   * 发信密钥密文（AES-256-GCM；NTF-006 密钥不明文存储、不明文回显）。
+   * 视图（EmailConfigView）永不返回本字段；只能重填或轮换。
+   */
+  readonly secretCiphertext: string | null;
+  /** 密钥指纹（SHA-256 前 12 位；用于识别"已配置/已变更"，不泄露密钥） */
+  readonly secretFingerprint: string | null;
   readonly verified: boolean;
   readonly lastTestPassedAt: string | null;
   readonly keyRotatedAt: string | null;
@@ -293,4 +320,61 @@ export interface NotificationPreferencesStore {
   /** 读取用户偏好；未落库返回 null */
   get(userId: string): Promise<{ preferences: Record<string, boolean>; savedAt: string } | null>;
   set(userId: string, preferences: Record<string, boolean>): Promise<{ savedAt: string }>;
+}
+
+/**
+ * 发信密钥加密端口（NTF-006）。
+ * 密钥落库前加密（AES-256-GCM），读取后解密使用；
+ * 任何路径不得明文回显，只能重填或轮换。
+ */
+export interface EmailSecretCipher {
+  /** 明文 → 密文（含随机 IV 与认证标签） */
+  encrypt(plaintext: string): string;
+  /** 密文 → 明文；篡改或密钥不匹配时抛出异常 */
+  decrypt(ciphertext: string): string;
+  /** 密钥指纹：识别"已配置/已变更"，不泄露密钥内容 */
+  fingerprint(plaintext: string): string;
+}
+
+/**
+ * 社团邮件策略存储端口（NTF-004：按活动或类型关闭本社团邮件）。
+ */
+export interface ClubEmailPolicyStore {
+  findByClub(clubId: string): Promise<ClubEmailPolicy | null>;
+  save(policy: ClubEmailPolicy): Promise<ClubEmailPolicy>;
+}
+
+/** 平台级邮件停用目录存储端口（超管统一停用某类邮件；NTF-004.3） */
+export interface PlatformEmailSuspensionStore {
+  get(): Promise<PlatformEmailSuspension>;
+  set(suspension: PlatformEmailSuspension): Promise<void>;
+}
+
+/**
+ * 邮件模板存储端口（NTF-005）。
+ * 平台默认模板由超管维护；社团自定义模板基于默认模板改文字；
+ * 版本保存与回滚以版本快照实现。
+ */
+export interface EmailTemplateStore {
+  /** 查询活跃模板（平台或社团作用域）；不存在返回 null */
+  findActive(scope: EmailTemplateScope, kind: NotificationKind): Promise<EmailTemplateModel | null>;
+  /** 保存新版本并激活（安全校验通过后调用） */
+  saveVersion(
+    scope: EmailTemplateScope,
+    kind: NotificationKind,
+    subject: string,
+    htmlBody: string,
+    savedBy: string,
+    note: string,
+  ): Promise<EmailTemplateModel>;
+  /** 查询指定模板的全部版本（新→旧） */
+  listVersions(templateId: string): Promise<readonly EmailTemplateVersion[]>;
+  /** 回滚到指定版本（版本必须存在） */
+  rollbackToVersion(
+    templateId: string,
+    version: number,
+    rolledBackBy: string,
+  ): Promise<EmailTemplateModel>;
+  /** 删除社团自定义模板（回退平台默认的显式途径之一） */
+  deleteClubTemplate(clubId: string, kind: NotificationKind): Promise<boolean>;
 }

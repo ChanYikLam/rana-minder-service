@@ -61,6 +61,14 @@ export class CreateEmailAttemptCommand {
     readonly emailVerified: boolean;
     readonly senderAccountValid: boolean;
     readonly eventType: string;
+    /** 渲染后的邮件主题（4.3.3 模板管道；缺省回退最少摘要截断） */
+    readonly emailSubject?: string;
+    /** 渲染后的邮件正文（4.3.3 模板管道；缺省回退最少摘要） */
+    readonly emailBody?: string;
+    /** 发件人展示名（NTF-008：平台名或社团名；缺省回退作用域标识） */
+    readonly senderDisplayName?: string;
+    /** 实际发信账号（NTF-008/009；回复地址固定为该账号） */
+    readonly senderFromAddress?: string;
   }): Promise<ChannelDeliveryAttemptModel | null> {
     const eligibility = evaluateEmailEligibility({
       eventAllowsEmail: input.eventAllowsEmail,
@@ -102,16 +110,22 @@ export class CreateEmailAttemptCommand {
       attemptId: `email-attempt-${input.factId}-${input.recipientId}-${Date.now()}`,
       factId: input.factId,
       snapshotId: snapshot.snapshotId,
+      recipientId: input.recipientId,
       channel: 'EMAIL',
       channelMessageId: null,
       attemptNumber: 1,
       status: 'PENDING',
       targetAddress: input.recipientEmail,
       templateVersionId,
-      senderIdentity: fact.scope.type === 'CLUB' ? fact.scope.clubId : 'platform',
-      // 内容快照（NTF-002 最少摘要）：重试时复用，避免空邮件
-      emailSubject: fact.summary.slice(0, 100),
-      emailBody: fact.summary,
+      // 发件身份快照（NTF-008）：展示名＋实际发信账号；历史投递保留原身份
+      senderIdentity: input.senderDisplayName
+        ? input.senderDisplayName + ' <' + (input.senderFromAddress ?? 'unknown') + '>'
+        : fact.scope.type === 'CLUB'
+          ? fact.scope.clubId
+          : 'platform',
+      // 内容快照（NTF-002 最少摘要 / NTF-005 模板渲染结果）：重试时复用，避免空邮件
+      emailSubject: input.emailSubject ?? fact.summary.slice(0, 100),
+      emailBody: input.emailBody ?? fact.summary,
       firstFailedAt: null,
       responseCategory: null,
       sanitizedError: null,
@@ -131,6 +145,9 @@ export class CreateEmailAttemptCommand {
         body: attempt.emailBody ?? fact.summary,
         senderIdentity: attempt.senderIdentity ?? '',
         templateVersionId,
+        // 回复地址固定为实际发信账号（NTF-009）
+        fromAddress: input.senderFromAddress ?? null,
+        replyTo: input.senderFromAddress ?? null,
       });
 
       if (result.status === 'SENT') {
