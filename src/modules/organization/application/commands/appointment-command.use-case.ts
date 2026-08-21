@@ -178,11 +178,17 @@ export class AppointmentCommandUseCase {
 
   async reconfirm(input: {
     commandId: string;
+    clubId: string;
     actor: string;
     newExecTime?: string;
     now: Date;
   }): Promise<AppointmentCommand> {
     const command = await this.requireCommand(input.commandId);
+    if (input.clubId !== command.clubId) {
+      throw orgError.scopeMismatch(
+        `URL 社团作用域 ${input.clubId} 与预约命令实际社团 ${command.clubId} 不一致（IFC-ERR-004）`,
+      );
+    }
     const actorAuthorized = await this.isAuthorizedForCommand(input.actor, command);
     const preconditions = await this.evaluatePreconditions(command);
     const result = this.stateMachine.transition({
@@ -213,11 +219,17 @@ export class AppointmentCommandUseCase {
 
   async cancel(input: {
     commandId: string;
+    clubId: string;
     actor: string;
     reason: string;
     now: Date;
   }): Promise<AppointmentCommand> {
     const command = await this.requireCommand(input.commandId);
+    if (input.clubId !== command.clubId) {
+      throw orgError.scopeMismatch(
+        `URL 社团作用域 ${input.clubId} 与预约命令实际社团 ${command.clubId} 不一致（IFC-ERR-004）`,
+      );
+    }
     const actorAuthorized = await this.isAuthorizedForCommand(input.actor, command);
     const result = this.stateMachine.transition({
       command,

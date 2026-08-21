@@ -155,7 +155,6 @@ import { OrgWorkspaceController } from './interfaces/controllers/org-workspace.c
       useFactory: () =>
         new MemoryCurrentPermissionsPort({
           superAdminUsers: ['u_root'],
-          userId: 'u_root',
           clubPermissions: new Map([['club-acm-1', ['club:member:manage']]]),
           positionGroupMemberships: new Map([
             [

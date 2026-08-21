@@ -238,6 +238,7 @@ describe('AppointmentCommandUseCase', () => {
     const cmd = await h.useCase.create(baseCreate);
     const cancelled = await h.useCase.cancel({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'u_b',
       reason: '流程调整',
       now: new Date('2026-08-02T00:00:00.000Z'),
@@ -277,6 +278,7 @@ describe('AppointmentCommandUseCase', () => {
     });
     await h.relations.systemConfirmReadback({
       commandId: rel.id,
+      clubId: cmd.clubId,
       now: new Date('2026-08-10T00:01:00.000Z'),
     });
 
@@ -303,6 +305,7 @@ describe('AppointmentCommandUseCase', () => {
     ];
     const reconfirmed = await h.useCase.reconfirm({
       commandId: cmd.id,
+      clubId: cmd.clubId,
       actor: 'u_b',
       newExecTime: '2026-08-11T00:00:00.000Z',
       now: new Date('2026-08-10T01:00:00.000Z'),
