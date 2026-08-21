@@ -6,11 +6,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  InMemoryInboxAdapter,
-  InMemoryNotificationRepository,
-  resetNotificationStores,
-} from '../../infrastructure';
+import { InMemoryInboxAdapter, InMemoryNotificationRepository } from '../../infrastructure';
 import { NotificationQueryService } from './notification-query.service';
 import { DeliverInboxCommand } from '../commands/deliver-inbox.command';
 import type { CreateNotificationFactInput, RecipientSnapshot } from '../../domain';
@@ -26,7 +22,6 @@ describe('NotificationQueryService（NTF-003）', () => {
 
   beforeEach(() => {
     seq += 1;
-    resetNotificationStores();
     repo = new InMemoryNotificationRepository();
     inbox = new InMemoryInboxAdapter();
     deliver = new DeliverInboxCommand(repo, inbox);

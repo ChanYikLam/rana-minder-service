@@ -20,7 +20,6 @@ import {
   InMemoryKillSwitchRepository,
   InMemoryNotificationRepository,
   InMemoryPrivilegedAuditWriter,
-  resetNotificationStores,
 } from '../../infrastructure';
 import { ApplyKillSwitchCommand } from './apply-kill-switch.command';
 import { ResumeKillSwitchCommand } from './resume-kill-switch.command';
@@ -79,7 +78,6 @@ describe('ApplyKillSwitchCommand（SRS-FAIL-009：紧急关闭）', () => {
 
   beforeEach(() => {
     seq += 1;
-    resetNotificationStores();
     repo = new InMemoryNotificationRepository();
     killSwitches = new InMemoryKillSwitchRepository();
     audit = new InMemoryPrivilegedAuditWriter();
@@ -336,7 +334,6 @@ describe('ResumeKillSwitchCommand（IFC-NTF-001：恢复补投）', () => {
 
   beforeEach(() => {
     seq += 1;
-    resetNotificationStores();
     repo = new InMemoryNotificationRepository();
     killSwitches = new InMemoryKillSwitchRepository();
     audit = new InMemoryPrivilegedAuditWriter();

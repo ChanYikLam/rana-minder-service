@@ -89,8 +89,22 @@ export function validateNotificationFactInput(input: CreateNotificationFactInput
   if (!input.eventTime) return '事件时间不能为空';
   if (!input.summary) return '摘要不能为空';
   if (!input.scope) return '作用域不能为空';
-  // 摘要不得包含敏感标记检测（简单校验）
-  if (input.summary.includes('password') || input.summary.includes('token'))
-    return '摘要不得包含敏感信息';
+  // 摘要不得包含常见敏感标记（最低限度检测；生产环境由模板变量白名单 + 脱敏规则保证）
+  if (hasSensitivePattern(input.summary)) return '摘要不得包含敏感信息';
   return null;
+}
+
+/** 敏感信息检测模式（需求发现 08：正文不得包含密码、令牌、邮箱、手机号等） */
+const SENSITIVE_PATTERNS = [
+  /password/i,
+  /token/i,
+  /secret/i,
+  /key\s*[:=]/i,
+  /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/,
+  /1[3-9]\d{9}/,
+  /\b\d{3}[-.]?\d{4}[-.]?\d{4}\b/,
+];
+
+function hasSensitivePattern(summary: string): boolean {
+  return SENSITIVE_PATTERNS.some((pattern) => pattern.test(summary));
 }

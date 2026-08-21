@@ -29,35 +29,18 @@ import type {
 } from './notification-ports';
 
 // ---------------------------------------------------------------------------
-// 内存存储
-// ---------------------------------------------------------------------------
-
-const factStore = new Map<string, NotificationFactModel>();
-const snapshotStore = new Map<string, RecipientSnapshot>();
-const presentationStore = new Map<string, InboxPresentationModel>();
-const attemptStore = new Map<string, ChannelDeliveryAttemptModel>();
-const killSwitchStore = new Map<string, KillSwitchStateModel>();
-const auditStore = new Map<string, PrivilegedAuditEntry>();
-let auditSeq = 0;
-
-/**
- * 清空全部内存存储（仅测试辅助；生产替换为 PostgreSQL 后移除）。
- */
-export function resetNotificationStores(): void {
-  factStore.clear();
-  snapshotStore.clear();
-  presentationStore.clear();
-  attemptStore.clear();
-  killSwitchStore.clear();
-  auditStore.clear();
-  auditSeq = 0;
-}
-
-// ---------------------------------------------------------------------------
 // NotificationRepository
 // ---------------------------------------------------------------------------
 
 export class InMemoryNotificationRepository implements NotificationRepository {
+  /**
+   * 实例级存储：每个适配器实例持有自己的内存数据，
+   * 避免模块级单例 Map 在测试用例间共享状态导致相互污染。
+   * 生产环境替换为 PostgreSQL 实现后移除。
+   */
+  private readonly factStore = new Map<string, NotificationFactModel>();
+  private readonly snapshotStore = new Map<string, RecipientSnapshot>();
+
   async saveFactWithSnapshots(
     input: CreateNotificationFactInput,
     snapshots: readonly RecipientSnapshot[],
@@ -82,7 +65,7 @@ export class InMemoryNotificationRepository implements NotificationRepository {
       version: 1,
     };
 
-    factStore.set(factId, fact);
+    this.factStore.set(factId, fact);
 
     const savedSnapshots: RecipientSnapshot[] = [];
     for (const snapshot of snapshots) {
@@ -93,7 +76,7 @@ export class InMemoryNotificationRepository implements NotificationRepository {
         factId,
         createdAt: now,
       };
-      snapshotStore.set(snapshotId, saved);
+      this.snapshotStore.set(snapshotId, saved);
       savedSnapshots.push(saved);
     }
 
@@ -102,16 +85,16 @@ export class InMemoryNotificationRepository implements NotificationRepository {
 
   async findFactByDedupKey(_dedupKey: string): Promise<NotificationFactModel | null> {
     // 简化实现：遍历收件人快照匹配去重键
-    for (const snap of snapshotStore.values()) {
+    for (const snap of this.snapshotStore.values()) {
       if (snap.dedupKey === _dedupKey) {
-        return factStore.get(snap.factId) ?? null;
+        return this.factStore.get(snap.factId) ?? null;
       }
     }
     return null;
   }
 
   async findFactById(factId: string): Promise<NotificationFactModel | null> {
-    return factStore.get(factId) ?? null;
+    return this.factStore.get(factId) ?? null;
   }
 
   async updateFactStatus(
@@ -119,17 +102,17 @@ export class InMemoryNotificationRepository implements NotificationRepository {
     status: NotificationFactModel['status'],
     expectedVersion: number,
   ): Promise<NotificationFactModel> {
-    const fact = factStore.get(factId);
+    const fact = this.factStore.get(factId);
     if (!fact) throw new Error(`通知事实不存在: ${factId}`);
     if (fact.version !== expectedVersion)
       throw new Error(`版本冲突: 期望 ${expectedVersion}, 实际 ${fact.version}`);
     const updated: NotificationFactModel = { ...fact, status, version: fact.version + 1 };
-    factStore.set(factId, updated);
+    this.factStore.set(factId, updated);
     return updated;
   }
 
   async findFactsPendingDelivery(limit: number): Promise<readonly NotificationFactModel[]> {
-    return [...factStore.values()]
+    return [...this.factStore.values()]
       .filter((f) => f.status === 'CREATED_PENDING_DELIVERY')
       .slice(0, limit);
   }
@@ -161,12 +144,12 @@ export class InMemoryNotificationRepository implements NotificationRepository {
   }
 
   async findSnapshotsByFactId(factId: string): Promise<readonly RecipientSnapshot[]> {
-    return [...snapshotStore.values()].filter((s) => s.factId === factId);
+    return [...this.snapshotStore.values()].filter((s) => s.factId === factId);
   }
 
   /** 按紧急关闭范围筛选事实：平台范围匹配全部作用域，社团范围只匹配该社团 */
   private scopedFacts(scope: KillSwitchScope, clubId: string | null): NotificationFactModel[] {
-    const all = [...factStore.values()];
+    const all = [...this.factStore.values()];
     if (scope === 'PLATFORM') return all;
     return all.filter((f) => f.scope.type === 'CLUB' && f.scope.clubId === clubId);
   }
@@ -177,12 +160,14 @@ export class InMemoryNotificationRepository implements NotificationRepository {
 // ---------------------------------------------------------------------------
 
 export class InMemoryInboxAdapter implements InboxAdapter {
+  private readonly presentationStore = new Map<string, InboxPresentationModel>();
+
   async createOrConfirmPresentation(
     fact: NotificationFactModel,
     snapshot: RecipientSnapshot,
   ): Promise<InboxPresentationModel> {
     // 去重：同一逻辑事件＋收件人只对应一条站内信 (NTF-003)
-    for (const existing of presentationStore.values()) {
+    for (const existing of this.presentationStore.values()) {
       if (existing.factId === fact.factId && existing.recipientId === snapshot.recipientId) {
         return existing;
       }
@@ -208,7 +193,7 @@ export class InMemoryInboxAdapter implements InboxAdapter {
       version: 1,
     };
 
-    presentationStore.set(presentation.presentationId, presentation);
+    this.presentationStore.set(presentation.presentationId, presentation);
     return presentation;
   }
 
@@ -217,7 +202,7 @@ export class InMemoryInboxAdapter implements InboxAdapter {
     status: InboxPresentationStatus,
     expectedVersion: number,
   ): Promise<InboxPresentationModel> {
-    const pres = presentationStore.get(presentationId);
+    const pres = this.presentationStore.get(presentationId);
     if (!pres) throw new Error(`呈现实体不存在: ${presentationId}`);
     if (pres.version !== expectedVersion)
       throw new Error(`版本冲突: 期望 ${expectedVersion}, 实际 ${pres.version}`);
@@ -232,16 +217,16 @@ export class InMemoryInboxAdapter implements InboxAdapter {
       deadlineStatus: status === 'PROCESSED' ? 'PROCESSED' : pres.deadlineStatus,
       version: pres.version + 1,
     };
-    presentationStore.set(presentationId, updated);
+    this.presentationStore.set(presentationId, updated);
     return updated;
   }
 
   async markAllRead(recipientId: string): Promise<number> {
     const now = new Date().toISOString();
     let updated = 0;
-    for (const [id, pres] of presentationStore) {
+    for (const [id, pres] of this.presentationStore) {
       if (pres.recipientId === recipientId && pres.status === 'UNREAD') {
-        presentationStore.set(id, {
+        this.presentationStore.set(id, {
           ...pres,
           status: 'READ',
           readAt: pres.readAt ?? now,
@@ -259,7 +244,7 @@ export class InMemoryInboxAdapter implements InboxAdapter {
     cursor: string | null,
     limit: number,
   ): Promise<readonly InboxPresentationModel[]> {
-    const all = [...presentationStore.values()]
+    const all = [...this.presentationStore.values()]
       .filter((p) => p.recipientId === recipientId)
       .filter((p) => (filter.includeHidden ? true : p.status !== 'HIDDEN'))
       .filter((p) => (filter.kind ? p.eventType === filter.kind : true))
@@ -274,13 +259,13 @@ export class InMemoryInboxAdapter implements InboxAdapter {
   }
 
   async countUnread(recipientId: string): Promise<number> {
-    return [...presentationStore.values()].filter(
+    return [...this.presentationStore.values()].filter(
       (p) => p.recipientId === recipientId && p.status === 'UNREAD',
     ).length;
   }
 
   async findPresentation(presentationId: string): Promise<InboxPresentationModel | null> {
-    return presentationStore.get(presentationId) ?? null;
+    return this.presentationStore.get(presentationId) ?? null;
   }
 }
 
@@ -304,8 +289,10 @@ export class InMemoryEmailAdapter implements EmailAdapter {
 // ---------------------------------------------------------------------------
 
 export class InMemoryChannelDeliveryAttemptRepository implements ChannelDeliveryAttemptRepository {
+  private readonly attemptStore = new Map<string, ChannelDeliveryAttemptModel>();
+
   async saveAttempt(attempt: ChannelDeliveryAttemptModel): Promise<ChannelDeliveryAttemptModel> {
-    attemptStore.set(attempt.attemptId, attempt);
+    this.attemptStore.set(attempt.attemptId, attempt);
     return attempt;
   }
 
@@ -313,15 +300,17 @@ export class InMemoryChannelDeliveryAttemptRepository implements ChannelDelivery
     attemptId: string,
     patch: Partial<ChannelDeliveryAttemptModel>,
   ): Promise<ChannelDeliveryAttemptModel> {
-    const existing = attemptStore.get(attemptId);
+    const existing = this.attemptStore.get(attemptId);
     if (!existing) throw new Error(`尝试不存在: ${attemptId}`);
     const updated: ChannelDeliveryAttemptModel = { ...existing, ...patch };
-    attemptStore.set(attemptId, updated);
+    this.attemptStore.set(attemptId, updated);
     return updated;
   }
 
   async findRetryableAttempts(limit: number): Promise<readonly ChannelDeliveryAttemptModel[]> {
-    return [...attemptStore.values()].filter((a) => a.status === 'FAILED_RETRY').slice(0, limit);
+    return [...this.attemptStore.values()]
+      .filter((a) => a.status === 'FAILED_RETRY')
+      .slice(0, limit);
   }
 }
 
@@ -340,14 +329,16 @@ export class InMemoryTemplateSnapshotService implements TemplateSnapshotService 
 // ---------------------------------------------------------------------------
 
 export class InMemoryKillSwitchRepository implements KillSwitchRepository {
+  private readonly killSwitchStore = new Map<string, KillSwitchStateModel>();
+
   async save(state: KillSwitchStateModel): Promise<KillSwitchStateModel> {
     // 同一范围只保留一条记录（幂等关闭/恢复复用），避免 findByScope 读到旧记录
-    for (const [id, existing] of killSwitchStore) {
+    for (const [id, existing] of this.killSwitchStore) {
       if (existing.scope === state.scope && existing.clubId === state.clubId) {
-        killSwitchStore.delete(id);
+        this.killSwitchStore.delete(id);
       }
     }
-    killSwitchStore.set(state.switchId, state);
+    this.killSwitchStore.set(state.switchId, state);
     return state;
   }
 
@@ -355,14 +346,14 @@ export class InMemoryKillSwitchRepository implements KillSwitchRepository {
     scope: KillSwitchScope,
     clubId: string | null,
   ): Promise<KillSwitchStateModel | null> {
-    for (const state of killSwitchStore.values()) {
+    for (const state of this.killSwitchStore.values()) {
       if (state.scope === scope && state.clubId === clubId) return state;
     }
     return null;
   }
 
   async findById(switchId: string): Promise<KillSwitchStateModel | null> {
-    return killSwitchStore.get(switchId) ?? null;
+    return this.killSwitchStore.get(switchId) ?? null;
   }
 }
 
@@ -371,15 +362,18 @@ export class InMemoryKillSwitchRepository implements KillSwitchRepository {
 // ---------------------------------------------------------------------------
 
 export class InMemoryPrivilegedAuditWriter implements PrivilegedAuditWriter {
+  private readonly auditStore = new Map<string, PrivilegedAuditEntry>();
+  private auditSeq = 0;
+
   async write(entry: PrivilegedAuditEntry): Promise<string> {
-    auditSeq += 1;
-    const auditRef = `audit-${entry.action}-${auditSeq}`;
-    auditStore.set(auditRef, entry);
+    this.auditSeq += 1;
+    const auditRef = `audit-${entry.action}-${this.auditSeq}`;
+    this.auditStore.set(auditRef, entry);
     return auditRef;
   }
 
   /** 测试辅助：读取最近写入的审计记录 */
   list(): readonly PrivilegedAuditEntry[] {
-    return [...auditStore.values()];
+    return [...this.auditStore.values()];
   }
 }
