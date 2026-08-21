@@ -15,8 +15,8 @@ const loc: ObjectLocation = {
 };
 
 describe('LogOnlyCleanupReferenceGuard（FORM-009 引用复核占位）', () => {
-  it('占位实现默认无活动引用（开发期放行物理删除）', async () => {
+  it('占位 fail-closed：未接入真实引用核对前视为仍被引用（拒绝物理删除）', async () => {
     const guard = new LogOnlyCleanupReferenceGuard();
-    assert.equal(await guard.hasActiveReference(loc), false);
+    assert.equal(await guard.hasActiveReference(loc), true, '占位期保守判定为仍被引用');
   });
 });

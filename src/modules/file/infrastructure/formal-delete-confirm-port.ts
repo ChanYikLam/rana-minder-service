@@ -25,17 +25,20 @@ export interface FormalDeleteConfirmPort {
 /**
  * 占位实现：审计/二次确认签发方接入前的过渡实现。
  *
- * 生产接入前必须替换为真实签发方核验（一次性令牌存证 + 比对 + 作废），
- * 否则二次确认仅停留在"非空/长度"校验层面，无法真正落地 AUD-008。
+ * 生产接入前必须替换为真实签发方核验（一次性令牌存证 + 比对 + 作废）。
+ * 占位期**默认 fail-closed（拒绝放行）**：占位实现无法向签发方确认真实有效，
+ * 若仅凭"非空/长度"放行，则 AUD-008 的"独立二次确认"可被任意 6 位字符串绕过，
+ * 故在未接入真实核验前一律视为核验不通过，杜绝越权删除风险。
  */
 @Injectable()
 export class LogOnlyFormalDeleteConfirm implements FormalDeleteConfirmPort {
   private readonly logger = new Logger(LogOnlyFormalDeleteConfirm.name);
 
   async verify(confirmationCode: string): Promise<boolean> {
-    // 占位：不泄露完整凭据（GOV-008 脱敏口径），仅记录核验事件，
-    // 并在占位期要求凭据满足最小强度作为最低防线。
-    this.logger.log(`正式删除二次确认核验（占位）：len=${confirmationCode.length}`);
-    return confirmationCode.length >= 6;
+    // 占位：不泄露完整凭据（GOV-008 脱敏口径），仅记录核验事件并**拒绝放行**。
+    // 真实签发方接入前，二次确认永远视为核验不通过（fail-closed），
+    // 强制在接入真实核验后才能执行正式删除（AUD-007~009 防绕过纵深防御）。
+    this.logger.log(`正式删除二次确认核验（占位 fail-closed）：len=${confirmationCode.length}`);
+    return false;
   }
 }

@@ -158,6 +158,19 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     );
   });
 
+  it('终态文件移除：无论 removable 取值均返回"已是终态"（终态判断优先于可移除校验）', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    // 已清理终态 + removable:false → 应报"已是终态"而非误导性的"草稿不可移除"
+    const cleaned = { ...file, state: FileState.CLEANED };
+    await rig.repo.save(cleaned);
+    await assert.rejects(rig.remove.execute({ fileId: file.fileId, removable: false }), /已是终态/);
+    // 已正式删除终态 + removable:true → 同样报"已是终态"，不得进入清理
+    const deleted = { ...file, state: FileState.FORMALLY_DELETED };
+    await rig.repo.save(deleted);
+    await assert.rejects(rig.remove.execute({ fileId: file.fileId, removable: true }), /已是终态/);
+  });
+
   it('孤儿清理：逐项删除并回读核验 → 已清理终态', async () => {
     const rig = makeRig();
     const file = await makeAvailableFile(rig.repo, rig.store);

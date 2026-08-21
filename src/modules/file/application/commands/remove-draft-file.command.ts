@@ -44,12 +44,14 @@ export class RemoveDraftFileCommand {
     if (file.state === FileState.BOUND_TO_SUBMISSION) {
       throw new RemoveDraftFileError('IFC-ERR-006', '已正式提交的附件不允许普通用户物理删除');
     }
+    // 终态检查前置：对已清理/已正式删除的文件，无论 removable 取值如何，
+    // 都应返回"文件已是终态"而非误导性的"当前草稿不可移除"，便于调用方准确识别终态。
+    if (file.state === FileState.CLEANED || file.state === FileState.FORMALLY_DELETED) {
+      throw new RemoveDraftFileError('IFC-ERR-006', '文件已是终态');
+    }
     // 草稿不可移除（业务未开放该草稿移除）时拒绝
     if (!input.removable) {
       throw new RemoveDraftFileError('IFC-ERR-006', '当前草稿不可移除');
-    }
-    if (file.state === FileState.CLEANED || file.state === FileState.FORMALLY_DELETED) {
-      throw new RemoveDraftFileError('IFC-ERR-006', '文件已是终态');
     }
     if (file.state === FileState.PENDING_CLEANUP) {
       return file; // 幂等：已在待清理
