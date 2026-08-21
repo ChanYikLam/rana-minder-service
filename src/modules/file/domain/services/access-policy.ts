@@ -16,16 +16,33 @@ export type FileAccessAction = (typeof FileAccessAction)[keyof typeof FileAccess
  * 访问实时上下文（FORM-008：附件每次访问重新检查当前角色、社团、部门、
  * 任务、联合关系和业务状态——由服务端入口在每个请求时重新构造，不缓存）。
  */
+/** 目标对象所属作用域（服务端入口在鉴权时提供；用于领域层最小作用域校验）。
+ * 与 `FileAccessContext` 中当前主体的作用域逐项比对，防止仅凭 roles 数组误放行。 */
+export interface ObjectScope {
+  /** 目标对象所属社团 */
+  readonly clubId?: string;
+  /** 目标对象所属部门 */
+  readonly departmentId?: string;
+  /** 目标对象所属任务 */
+  readonly taskRef?: string;
+  /** 目标对象所属联合关系 */
+  readonly unionId?: string;
+}
+
+/** 访问实时上下文（FORM-008：附件每次访问重新检查当前角色、社团、部门、
+ * 任务、联合关系和业务状态——由服务端入口在每个请求时重新构造，不缓存）。
+ */
 export interface FileAccessContext {
   readonly principalId: string | null;
   /**
    * 当前角色（每次访问重新获取）。
    *
    * 职责边界：领域层只做**最小作用域校验**（至少一个有效业务角色才可访问非本人/非
-   * ownerOnly 附件）；角色与目标对象的**对象级匹配关系**（社团/部门/任务/联合关系
-   * 等是否真正覆盖该附件所属业务对象）由**服务端入口**在构造本上下文时逐项判定并
-   * 收敛进 roles——调用方必须据此正确构造 roles，领域层不再重复判定对象级授权。
-   * 若 roles 为空 = 无权（保守拒绝）。
+   * ownerOnly 附件，且当前主体作用域须覆盖目标对象作用域）；角色与目标对象的
+   * **对象级匹配关系**（社团/部门/任务/联合关系等是否真正覆盖该附件所属业务对象）
+   * 由**服务端入口**在构造本上下文时逐项判定并收敛进 roles——调用方必须据此正确
+   * 构造 roles，领域层同时复核作用域是否匹配（双保险）。若 roles 为空 = 无权
+   * （保守拒绝）。
    */
   readonly roles: readonly string[];
   /** 当前社团 */
@@ -66,6 +83,8 @@ export interface FileAccessRequest {
   readonly uploaderId: string;
   /** 目标业务对象（本人历史访问时校验"仍有权查看对应历史提交"） */
   readonly target: { objectType: string; objectId: string; fieldKey: string } | null;
+  /** 目标对象所属作用域（领域层最小作用域校验：当前主体作用域须覆盖目标对象） */
+  readonly objectScope?: ObjectScope;
   /** 字段级限制（预览/下载；只能收紧不能扩大） */
   readonly fieldRestrictions: {
     previewable: boolean;
@@ -130,12 +149,40 @@ export class AccessPolicy {
       return { allowed: false, errorCode: 'IFC-ERR-003' };
     }
     // 业务角色访问：角色/社团/部门/任务/联合关系的**对象级匹配**由服务端入口逐项判定
-    // 后收敛进 roles（见 FileAccessContext.roles 职责边界说明）；领域层在此仅做最小
-    // 作用域校验——要求至少一个有效业务角色（角色为空 = 无权，保守拒绝）
+    // 后收敛进 roles（见 FileAccessContext.roles 职责边界说明）；领域层在此做最小
+    // 作用域校验——要求至少一个有效业务角色，且当前主体作用域覆盖目标对象作用域。
+    // 即便调用方误构造了 roles，只要作用域不匹配也会被拒绝（双保险，防越权）。
     if (context.roles.length === 0) {
       return { allowed: false, errorCode: 'IFC-ERR-003' };
     }
+    if (!this.withinObjectScope(context, request.objectScope)) {
+      return { allowed: false, errorCode: 'IFC-ERR-003' };
+    }
     return this.checkFieldAccess(request, action);
+  }
+
+  /**
+   * 最小作用域校验：当目标对象声明了所属作用域（社团/部门/任务/联合关系）时，
+   * 要求当前主体的对应作用域与之**一致**；目标对象未声明作用域（全局/无绑定）
+   * 时放行（由 roles 与字段限制把关）。
+   */
+  private withinObjectScope(context: FileAccessContext, scope: ObjectScope | undefined): boolean {
+    if (!scope) {
+      return true;
+    }
+    if (scope.clubId !== undefined && context.clubId !== scope.clubId) {
+      return false;
+    }
+    if (scope.departmentId !== undefined && context.departmentId !== scope.departmentId) {
+      return false;
+    }
+    if (scope.taskRef !== undefined && context.taskRef !== scope.taskRef) {
+      return false;
+    }
+    if (scope.unionId !== undefined && context.unionId !== scope.unionId) {
+      return false;
+    }
+    return true;
   }
 
   /** 字段级限制（可进一步限制预览/下载但不能扩大权限） */

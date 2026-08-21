@@ -29,20 +29,38 @@ export interface SignedUrlProvider {
     action: FileAccessAction,
     opts?: { ttlMs?: number; watermarkContent?: string },
   ): Promise<ShortLivedAccess>;
+  /** 校验并消费一次性访问令牌（到期/已用/未知均拒绝） */
+  verify(token: string): Promise<TokenVerification>;
+}
+
+/** 一次性令牌校验结果 */
+export interface TokenVerification {
+  readonly valid: boolean;
+  /** 无效原因（仅 valid=false 时有值） */
+  readonly reason?: 'EXPIRED' | 'USED' | 'UNKNOWN';
+  /** 通过校验时返回关联的访问能力（供消费侧读取最小范围信息） */
+  readonly access?: ShortLivedAccess;
 }
 
 /**
- * 默认短时地址提供者（**占位实现**：令牌短时有效，默认 5 分钟）。
+ * 默认短时地址提供者：令牌短时有效，默认 5 分钟。
  *
- * ⚠️ 生产适配须知：当前 token 由 `randomUUID()` 生成，**无后端状态关联**，
- * 不校验到期/重放/一次性。正式环境接入存储（如 Redis）时，必须严格兑现
- * “短时失效”（到期即拒）与“一次性语义”（消费后作废）承诺（IFC-FIL-005）。
+ * 通过**内存状态关联**严格兑现“短时失效”（到期即拒）与“一次性语义”（消费后作废）
+ * 承诺（IFC-FIL-005）：签发时记录 token 状态，`verify` 在到期后或已被消费时拒绝。
+ * 当前实现为进程内内存 Map，仅适合单实例/开发环境；正式环境应替换为 Redis 等共享
+ * 存储并设置对应 TTL，以支持多实例一致性。
  */
 @Injectable()
 export class DefaultSignedUrlProvider implements SignedUrlProvider {
   static readonly DEFAULT_TTL_MS = 5 * 60_000;
   /** 短时地址最大有效期（避免误传大值破坏“短时地址”承诺） */
   static readonly MAX_TTL_MS = 30 * 60_000;
+
+  /** token -> 状态（到期时间 + 是否已消费），仅保留在途短时令牌 */
+  private readonly store = new Map<
+    string,
+    { expiresAt: number; consumed: boolean; access: ShortLivedAccess }
+  >();
 
   async issue(
     fileId: string,
@@ -52,12 +70,37 @@ export class DefaultSignedUrlProvider implements SignedUrlProvider {
     // TTL 做上限约束：默认 5 分钟，超过最大有效期则截断为最大有效期
     const requested = opts?.ttlMs ?? DefaultSignedUrlProvider.DEFAULT_TTL_MS;
     const ttl = Math.min(Math.max(0, requested), DefaultSignedUrlProvider.MAX_TTL_MS);
-    return {
+    const access: ShortLivedAccess = {
       token: randomUUID(),
       fileId,
       action,
       expiresAt: new Date(Date.now() + ttl).toISOString(),
       watermarkContent: opts?.watermarkContent,
     };
+    // 记录状态关联（一次性 + 到期）；服务端入口/生产适配可据此校验与作废
+    this.store.set(access.token, {
+      expiresAt: Date.now() + ttl,
+      consumed: false,
+      access,
+    });
+    return access;
+  }
+
+  async verify(token: string): Promise<TokenVerification> {
+    const state = this.store.get(token);
+    if (!state) {
+      return { valid: false, reason: 'UNKNOWN' };
+    }
+    if (state.consumed) {
+      return { valid: false, reason: 'USED' };
+    }
+    if (Date.now() > state.expiresAt) {
+      // 过期即作废，清理状态，避免内存累积
+      this.store.delete(token);
+      return { valid: false, reason: 'EXPIRED' };
+    }
+    // 一次性语义：消费后作废
+    state.consumed = true;
+    return { valid: true, access: state.access };
   }
 }

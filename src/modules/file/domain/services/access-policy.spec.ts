@@ -130,4 +130,63 @@ describe('AccessPolicy（FORM-008 每次实时鉴权，旧链接不得继续访�
     );
     assert.equal(d.allowed, true);
   });
+
+  it('目标对象作用域不匹配（即使有角色）→ 拒绝（防误构造 roles 越权）', () => {
+    // 目标对象属于 club-a，但当前主体在 club-b
+    const d = policy.check(
+      ctx({ roles: ['CLUB_ADMIN'], clubId: 'club-b' }),
+      req({ ownerOnly: false, objectScope: { clubId: 'club-a' } }),
+      FileAccessAction.DOWNLOAD,
+      false,
+    );
+    assert.equal(d.allowed, false);
+    assert.equal(d.errorCode, 'IFC-ERR-003');
+  });
+
+  it('目标对象作用域匹配（有角色且社团一致）→ 放行', () => {
+    const d = policy.check(
+      ctx({ roles: ['CLUB_ADMIN'], clubId: 'club-a' }),
+      req({ ownerOnly: false, objectScope: { clubId: 'club-a' } }),
+      FileAccessAction.DOWNLOAD,
+      false,
+    );
+    assert.equal(d.allowed, true);
+  });
+
+  it('目标对象作用域：部门/任务/联合关系不匹配任一 → 拒绝', () => {
+    // 部门不匹配
+    const byDept = policy.check(
+      ctx({ roles: ['MEMBER'], departmentId: 'dept-2' }),
+      req({ ownerOnly: false, objectScope: { departmentId: 'dept-1' } }),
+      FileAccessAction.DOWNLOAD,
+      false,
+    );
+    assert.equal(byDept.allowed, false);
+    // 任务不匹配
+    const byTask = policy.check(
+      ctx({ roles: ['MEMBER'], taskRef: 'task-2' }),
+      req({ ownerOnly: false, objectScope: { taskRef: 'task-1' } }),
+      FileAccessAction.DOWNLOAD,
+      false,
+    );
+    assert.equal(byTask.allowed, false);
+    // 联合关系不匹配
+    const byUnion = policy.check(
+      ctx({ roles: ['MEMBER'], unionId: 'union-2' }),
+      req({ ownerOnly: false, objectScope: { unionId: 'union-1' } }),
+      FileAccessAction.DOWNLOAD,
+      false,
+    );
+    assert.equal(byUnion.allowed, false);
+  });
+
+  it('目标对象未声明作用域（全局/无绑定）→ 仅按 roles 与字段放行', () => {
+    const d = policy.check(
+      ctx({ roles: ['RECRUITMENT_REVIEWER'], clubId: 'club-x' }),
+      req({ ownerOnly: false }), // 未传 objectScope
+      FileAccessAction.PREVIEW,
+      false,
+    );
+    assert.equal(d.allowed, true);
+  });
 });
