@@ -189,4 +189,41 @@ describe('AccessPolicy（FORM-008 每次实时鉴权，旧链接不得继续访�
     );
     assert.equal(d.allowed, true);
   });
+
+  // —— 契约测试：未声明作用域的对象，其授权正确性依赖服务端入口正确构造 roles ——
+  it('契约：未声明作用域的对象，roles 为空即拒绝（入口必须正确构造 roles 才能放行）', () => {
+    // 领域层无法自行判定“未声明作用域”对象的对象级匹配关系，只能依赖入口收敛进 roles；
+    // 此处固定契约：roles 为空 → 保守拒绝，即使入口漏传也不会被静默放行。
+    const d = policy.check(
+      ctx({ roles: [], clubId: 'club-x' }),
+      req({ ownerOnly: false }),
+      FileAccessAction.DOWNLOAD,
+      false,
+    );
+    assert.equal(d.allowed, false);
+    assert.equal(d.errorCode, 'IFC-ERR-003');
+  });
+
+  it('契约：未声明作用域的对象，有 roles 且字段允许 → 放行（入口负责对象级匹配）', () => {
+    // 对象未声明作用域（全局/无绑定）时，领域层不做作用域比对，放行与否完全取决于
+    // 入口是否把对象级匹配关系正确收敛进 roles；此测试锁定“有合法 roles 即放行”的契约。
+    const d = policy.check(
+      ctx({ roles: ['RECRUITMENT_REVIEWER'] }),
+      req({ ownerOnly: false, fieldRestrictions: { previewable: true, downloadable: false } }),
+      FileAccessAction.PREVIEW,
+      false,
+    );
+    assert.equal(d.allowed, true);
+  });
+
+  it('契约：声明了部分作用域的对象，未声明维度不约束（仅比对已声明维度）', () => {
+    // 目标对象只声明 clubId，未声明 taskRef → 仅当 clubId 匹配时放行，taskRef 不参与约束
+    const matched = policy.check(
+      ctx({ roles: ['MEMBER'], clubId: 'club-a' }),
+      req({ ownerOnly: false, objectScope: { clubId: 'club-a' } }),
+      FileAccessAction.DOWNLOAD,
+      false,
+    );
+    assert.equal(matched.allowed, true);
+  });
 });

@@ -49,6 +49,11 @@ export interface TokenVerification {
  * 承诺（IFC-FIL-005）：签发时记录 token 状态，`verify` 在到期后或已被消费时拒绝。
  * 当前实现为进程内内存 Map，仅适合单实例/开发环境；正式环境应替换为 Redis 等共享
  * 存储并设置对应 TTL，以支持多实例一致性。
+ *
+ * ⚠️ 一次性消费语义的生产适配须知（评审 warning）：当前内存 Map 为单线程无竞态；
+ * 若改用 Redis 等共享存储，`verify` 的「读取 → 判状态 → 置已消费」三步必须用**原子操作**
+ * 实现（如 `SET NX PX` 签发 + Lua 脚本 / `GETDEL` 消费），否则多实例并发消费同一令牌会
+ * 产生 TOCTOU 竞态，导致一次性令牌可被重复使用（越权）。
  */
 @Injectable()
 export class DefaultSignedUrlProvider implements SignedUrlProvider {
@@ -62,16 +67,30 @@ export class DefaultSignedUrlProvider implements SignedUrlProvider {
     { expiresAt: number; consumed: boolean; access: ShortLivedAccess }
   >();
 
+  /** 距上次全量清理的最小间隔，避免高频签发时每次都 O(n) 遍历（评审建议） */
+  private static readonly PRUNE_INTERVAL_MS = 30_000;
+
+  /** 上次执行全量清理的时间戳（惰性/节流清理用） */
+  private lastPrunedAt = 0;
+
   async issue(
     fileId: string,
     action: FileAccessAction,
     opts?: { ttlMs?: number; watermarkContent?: string },
   ): Promise<ShortLivedAccess> {
-    // 每次签发顺带清理已过期但从未被 verify 的残留令牌，防止内存不可收敛地增长（评审发现）
-    this.pruneExpired();
-    // TTL 做上限约束：默认 5 分钟，超过最大有效期则截断为最大有效期
+    // 惰性/节流清理：距上次清理超过间隔才执行一次 O(n) 遍历，高频签发不再每次全量扫描
+    // （过期但从未被 verify 的残留令牌最迟在 PRUNE_INTERVAL_MS 后清理，内存仍可收敛）
+    const now = Date.now();
+    if (now - this.lastPrunedAt >= DefaultSignedUrlProvider.PRUNE_INTERVAL_MS) {
+      this.pruneExpired();
+      this.lastPrunedAt = now;
+    }
+    // TTL 做上限约束：默认 5 分钟，超过最大有效期则截断为最大有效期；
+    // 用 Number.isFinite 兜底非有限值（NaN/±Infinity），否则 new Date(NaN).toISOString() 会抛 RangeError 崩溃
     const requested = opts?.ttlMs ?? DefaultSignedUrlProvider.DEFAULT_TTL_MS;
-    const ttl = Math.min(Math.max(0, requested), DefaultSignedUrlProvider.MAX_TTL_MS);
+    const ttl = Number.isFinite(requested)
+      ? Math.min(Math.max(0, requested), DefaultSignedUrlProvider.MAX_TTL_MS)
+      : DefaultSignedUrlProvider.DEFAULT_TTL_MS;
     const access: ShortLivedAccess = {
       token: randomUUID(),
       fileId,
