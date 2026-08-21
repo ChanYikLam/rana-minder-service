@@ -207,6 +207,9 @@ export class InterviewWorkflowUseCase {
     ) {
       throw recruitmentErrors.forbidden('仅面试官本人或负责人/人事可记录评价');
     }
+    if (snapshot.status !== 'IN_PROGRESS' && snapshot.status !== 'COMPLETED') {
+      throw recruitmentErrors.preconditionFailed('仅进行中或已完成面试可记录评价');
+    }
     const record = InterviewRecord.fromSnapshot(snapshot);
     record.recordEvaluation(input.actor, input.values, input.now);
     await this.repository.saveInterview(record.toSnapshot(), snapshot.revisionNumber);

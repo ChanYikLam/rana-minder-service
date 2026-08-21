@@ -11,6 +11,7 @@ import {
   InterviewRecordEvent,
   DefaultInterviewRecordStateMachine,
 } from '../state-machines/interview-record.state-machine';
+import { RecruitmentDomainError } from '../errors';
 
 export interface InterviewEvaluation {
   readonly interviewerId: string;
@@ -110,7 +111,10 @@ export class InterviewRecord {
   /** 作废后重排到 SCHEDULED 时重新分配面试官/时间/地点（不切换状态） */
   reassign(interviewerId: string, scheduledAt: Date, location: string | null, now: Date): void {
     if (this.snapshot.status !== InterviewRecordStatus.SCHEDULED) {
-      throw new Error('仅已重排至 SCHEDULED 的面试记录可重新分配');
+      throw new RecruitmentDomainError(
+        'REC_PRECONDITION',
+        '仅已重排至 SCHEDULED 的面试记录可重新分配',
+      );
     }
     this.snapshot = {
       ...this.snapshot,
@@ -173,7 +177,7 @@ export class InterviewRecord {
       this.snapshot.status !== InterviewRecordStatus.IN_PROGRESS &&
       this.snapshot.status !== InterviewRecordStatus.COMPLETED
     ) {
-      throw new Error('仅进行中或已完成面试可记录评价');
+      throw new RecruitmentDomainError('REC_PRECONDITION', '仅进行中或已完成面试可记录评价');
     }
     const evaluation: InterviewEvaluation = { interviewerId, values, decidedAt: now };
     this.snapshot = {

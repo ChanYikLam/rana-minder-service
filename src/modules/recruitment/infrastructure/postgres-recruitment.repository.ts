@@ -289,7 +289,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
           (id, activity_id, channel_id, club_id, applicant_id, status, department_choices,
            form_ref, qualify_snapshot, revision_number, revisions, supplement_due_at, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-         ON CONFLICT (id) DO NOTHING RETURNING id`,
+         ON CONFLICT DO NOTHING RETURNING id`,
         [
           s.id,
           s.activityId,
@@ -389,7 +389,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
           (id, application_id, activity_id, club_id, department_id, status, revision_number,
            allow_transfer, decisions, previous_status_before_suspend, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         ON CONFLICT (id) DO NOTHING RETURNING id`,
+         ON CONFLICT DO NOTHING RETURNING id`,
         [
           s.id,
           s.applicationId,
@@ -470,7 +470,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
            interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
            created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-         ON CONFLICT (id) DO NOTHING RETURNING id`,
+         ON CONFLICT DO NOTHING RETURNING id`,
         [
           s.id,
           s.applicationId,

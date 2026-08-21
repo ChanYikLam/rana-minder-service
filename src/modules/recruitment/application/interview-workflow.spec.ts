@@ -107,6 +107,28 @@ describe('recruitment interview workflow (REC-005)', () => {
     assert.strictEqual(evaluated.status, 'COMPLETED');
   });
 
+  it('未开始/未完成的面试不可记录评价（REC_PRECONDITION）', async () => {
+    const scheduled = await workflow.schedule({
+      applicationId,
+      roundId: 'round-1',
+      interviewerId: INTERVIEWER,
+      scheduledAt: NOW,
+      location: null,
+      actor: MANAGER,
+      now: NOW,
+    });
+    await assert.rejects(
+      () =>
+        workflow.recordEvaluation({
+          interviewId: scheduled.interviewId,
+          values: { score: 5 },
+          actor: INTERVIEWER,
+          now: NOW,
+        }),
+      { code: 'REC_PRECONDITION' },
+    );
+  });
+
   it('同一申请同轮次重复调度冲突', async () => {
     await workflow.schedule({
       applicationId,
