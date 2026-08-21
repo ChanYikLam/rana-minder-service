@@ -8,9 +8,17 @@
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { InboxAdapter, NotificationRepository } from '../../infrastructure';
-import { NotificationStateMachine } from '../../domain';
-import { INBOX_ADAPTER, NOTIFICATION_REPOSITORY } from '../../tokens';
+import type {
+  ChannelDeliveryAttemptRepository,
+  InboxAdapter,
+  NotificationRepository,
+} from '../../infrastructure';
+import {
+  type ChannelDeliveryAttemptModel,
+  type RecipientSnapshot,
+  NotificationStateMachine,
+} from '../../domain';
+import { INBOX_ADAPTER, NOTIFICATION_REPOSITORY, CHANNEL_DELIVERY_ATTEMPT_REPOSITORY } from '../../tokens';
 
 @Injectable()
 export class DeliverInboxCommand {
@@ -22,6 +30,8 @@ export class DeliverInboxCommand {
     private readonly repository: NotificationRepository,
     @Inject(INBOX_ADAPTER)
     private readonly inboxAdapter: InboxAdapter,
+    @Inject(CHANNEL_DELIVERY_ATTEMPT_REPOSITORY)
+    private readonly attemptRepository: ChannelDeliveryAttemptRepository,
   ) {}
 
   /**
@@ -51,16 +61,65 @@ export class DeliverInboxCommand {
       return { presentationCount: 0 };
     }
 
-    // 按收件人快照创建/确认唯一站内信呈现（逻辑事件＋收件人唯一，NTF-003）
-    const snapshots = await this.repository.findSnapshotsByFactId(factId);
-    for (const snapshot of snapshots) {
-      await this.inboxAdapter.createOrConfirmPresentation(fact, snapshot);
-    }
+    try {
+      // 按收件人快照创建/确认唯一站内信呈现（逻辑事件＋收件人唯一，NTF-003）
+      const snapshots = await this.repository.findSnapshotsByFactId(factId);
+      for (const snapshot of snapshots) {
+        await this.inboxAdapter.createOrConfirmPresentation(fact, snapshot);
+      }
 
-    // 呈现创建成功后推进事实状态；版本冲突或适配器错误向上抛出，
-    // 由任务管道进入失败重试，不静默吞掉（IFC-TX-005、IFC-ERR-008）
-    await this.repository.updateFactStatus(factId, 'DELIVERED', expectedVersion);
-    this.logger.log(`站内信投递成功: factId=${factId}, 呈现=${snapshots.length} 条`);
-    return { presentationCount: snapshots.length };
+      await this.repository.updateFactStatus(factId, 'DELIVERED', expectedVersion);
+      this.logger.log(`站内信投递成功: factId=${factId}, 呈现=${snapshots.length} 条`);
+      return { presentationCount: snapshots.length };
+    } catch (error) {
+      // 临时失败：记录失败重试尝试，接入重试队列；不回滚业务（NTF-001、IFC-TX-005）
+      const snapshots = await this.repository
+        .findSnapshotsByFactId(factId)
+        .catch(() => [] as readonly RecipientSnapshot[]);
+      const now = new Date().toISOString();
+      for (const snapshot of snapshots) {
+        await this.recordInboxFailure(factId, snapshot, (error as Error).message, now);
+      }
+      this.logger.error(`站内信投递临时失败: factId=${factId}, error=${(error as Error).message}`);
+      return { presentationCount: 0 };
+    }
+  }
+
+  /**
+   * 记录站内信投递失败尝试，供重试队列拉取（NTF-007、IFC-TX-005）。
+   */
+  private async recordInboxFailure(
+    factId: string,
+    snapshot: RecipientSnapshot,
+    error: string,
+    now: string,
+  ): Promise<void> {
+    const attempt: ChannelDeliveryAttemptModel = {
+      attemptId: `inbox-attempt-${factId}-${snapshot.recipientId}-${Date.now()}`,
+      factId,
+      snapshotId: snapshot.snapshotId,
+      channel: 'INBOX',
+      channelMessageId: null,
+      attemptNumber: 1,
+      status: 'FAILED_RETRY',
+      targetAddress: null,
+      templateVersionId: null,
+      senderIdentity: null,
+      emailSubject: null,
+      emailBody: null,
+      firstFailedAt: now,
+      responseCategory: 'TEMPORARY_FAILURE',
+      sanitizedError: error,
+      nextRetryAt: this.calculateNextRetry(1),
+      createdAt: now,
+      completedAt: null,
+      version: 1,
+    };
+    await this.attemptRepository.saveAttempt(attempt);
+  }
+
+  private calculateNextRetry(attemptNumber: number): string {
+    const minutes = Math.min(2 ** attemptNumber, 60 * 6); // 指数退避，最多 6 小时
+    return new Date(Date.now() + minutes * 60 * 1000).toISOString();
   }
 }

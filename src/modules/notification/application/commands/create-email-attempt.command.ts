@@ -124,6 +124,7 @@ export class CreateEmailAttemptCommand {
     await this.attemptRepository.saveAttempt(attempt);
 
     // 发送邮件
+    let latestAttempt: ChannelDeliveryAttemptModel = attempt;
     try {
       const result = await this.emailAdapter.send({
         to: input.recipientEmail,
@@ -134,15 +135,15 @@ export class CreateEmailAttemptCommand {
       });
 
       if (result.status === 'SENT') {
-        await this.attemptRepository.updateAttempt(attempt.attemptId, {
+        latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
           status: 'DELIVERED',
           channelMessageId: result.channelMessageId,
           completedAt: new Date().toISOString(),
         });
       } else if (result.status === 'TEMPORARY_FAILURE') {
-        await this.failAttempt(attempt.attemptId, now, result.sanitizedError);
+        latestAttempt = await this.failAttempt(attempt.attemptId, now, result.sanitizedError);
       } else if (result.status === 'BOUNCE') {
-        await this.attemptRepository.updateAttempt(attempt.attemptId, {
+        latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
           status: 'PERMANENT_FAILURE',
           responseCategory: 'BOUNCE',
           sanitizedError: result.sanitizedError,
@@ -150,14 +151,14 @@ export class CreateEmailAttemptCommand {
         });
       } else {
         // UNCERTAIN：等待回读
-        await this.failAttempt(attempt.attemptId, now, '结果不确定，等待回读', 'UNCERTAIN');
+        latestAttempt = await this.failAttempt(attempt.attemptId, now, '结果不确定，等待回读', 'UNCERTAIN');
       }
     } catch (error) {
       // 临时失败：进入重试（NTF-007），记录首次失败时间
-      await this.failAttempt(attempt.attemptId, now, (error as Error).message);
+      latestAttempt = await this.failAttempt(attempt.attemptId, now, (error as Error).message);
     }
 
-    return attempt;
+    return latestAttempt;
   }
 
   /** 进入失败重试：记录首次失败时间并计算退避（NTF-007） */
@@ -166,8 +167,8 @@ export class CreateEmailAttemptCommand {
     now: string,
     sanitizedError: string | null,
     responseCategory: 'TEMPORARY_FAILURE' | 'UNCERTAIN' = 'TEMPORARY_FAILURE',
-  ): Promise<void> {
-    await this.attemptRepository.updateAttempt(attemptId, {
+  ): Promise<ChannelDeliveryAttemptModel> {
+    return this.attemptRepository.updateAttempt(attemptId, {
       status: 'FAILED_RETRY',
       firstFailedAt: now,
       responseCategory,

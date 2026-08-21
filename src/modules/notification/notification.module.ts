@@ -138,6 +138,7 @@ import {
   exports: [
     CreateNotificationFactCommand,
     DeliverInboxCommand,
+    RetryChannelDeliveryCommand,
     CreateEmailAttemptCommand,
     RetryChannelDeliveryCommand,
     MarkPresentationStatusCommand,

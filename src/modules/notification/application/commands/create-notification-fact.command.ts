@@ -67,6 +67,7 @@ export class CreateNotificationFactCommand {
 
     // 解析收件人（NTF-002：收件人名单在业务事件发生时形成快照）
     const resolveResult = this.resolver.resolve({
+      logicalEventId: input.logicalEventId,
       eventType: input.eventType,
       sourceObjectId: input.sourceObjectId,
       scope: { type: input.scope.type, clubId: input.scope.clubId },

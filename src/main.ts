@@ -17,8 +17,9 @@
  *
  * 受控状态：
  * - 启动骨架已就绪，ConfigurationModule 已挂入；HTTP 端口与监听地址来自配置。
- * - `AppModule` 已接入 read-model 等平台支撑模块；实际 API 绑定待接口契约评审
- *   与 API-Q 关闭后接入，详见 `docs/specification/接口实现规格-v1.0.md` §15。
+ * - `AppModule` 已接入 read-model 平台支撑与 identity 领域模块；identity 端点
+ *   （/api/auth/profile、/api/auth/session 等）已注册路由，会话认证链路接入前
+ *   由 AuthGuard 统一 401 IFC-ERR-001（失败关闭），见 src/modules/identity。
  * - 应用可运行门槛：首批技术验证通过、真实数据技术启用门保持关闭；当前仅作
  *   "代码可编译、可启动"的工程脚手架验证。
  */

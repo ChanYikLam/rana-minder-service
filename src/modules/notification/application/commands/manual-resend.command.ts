@@ -101,11 +101,13 @@ export class ManualResendCommand {
       });
 
       if (result.status === 'SENT') {
-        await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+        const delivered = await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
           status: 'DELIVERED',
           channelMessageId: result.channelMessageId,
           completedAt: new Date().toISOString(),
         });
+        this.logger.log(`人工补发完成: factId=${factId}, targetEmail=${targetEmail}`);
+        return delivered;
       } else if (result.status === 'BOUNCE') {
         await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
           status: 'PERMANENT_FAILURE',

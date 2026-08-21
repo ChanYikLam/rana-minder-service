@@ -35,7 +35,7 @@ describe('NotificationDeliveryHandler（评审 #1：后台投递链路生效）'
     inbox = new InMemoryInboxAdapter();
     attempts = new InMemoryChannelDeliveryAttemptRepository();
     handler = new NotificationDeliveryHandler(
-      new DeliverInboxCommand(repo, inbox),
+      new DeliverInboxCommand(repo, inbox, attempts),
       new RetryChannelDeliveryCommand(attempts, new InMemoryEmailAdapter()),
     );
   });

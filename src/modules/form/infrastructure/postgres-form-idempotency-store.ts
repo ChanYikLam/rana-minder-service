@@ -72,4 +72,13 @@ export class PostgresFormIdempotencyStore implements FormIdempotencyStore {
     );
     return rows[0]?.result ?? null;
   }
+
+  async release(scopeKey: string, idempotencyKey: string): Promise<void> {
+    await this.db.query(
+      this.uow.active,
+      `DELETE FROM form_idempotency
+        WHERE scope_key = $1 AND idempotency_key = $2`,
+      [scopeKey, idempotencyKey],
+    );
+  }
 }

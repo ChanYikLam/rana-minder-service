@@ -259,4 +259,23 @@ describe('PostgresFormIdempotencyStore（IFC-GEN-006 两阶段）', () => {
       assert.equal(result, null);
     });
   });
+
+  it('release 释放占位后：同键重新 claim 为新占位（避免卡死 PROCESSING）', async () => {
+    const h = createHarness();
+    await h.uow.run({ kind: 'single', subjectId: 'leader-1' }, async () => {
+      await h.idempotency.claim({
+        scopeKey: 'create-draft:club:club-1',
+        idempotencyKey: 'k-4',
+        semanticHash: 'hash-a',
+      });
+      await h.idempotency.release('create-draft:club:club-1', 'k-4');
+      const again = await h.idempotency.claim({
+        scopeKey: 'create-draft:club:club-1',
+        idempotencyKey: 'k-4',
+        semanticHash: 'hash-b',
+      });
+      assert.equal(again.inserted, true);
+      assert.equal(again.existingHash, null);
+    });
+  });
 });

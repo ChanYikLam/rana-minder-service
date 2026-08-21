@@ -131,6 +131,7 @@ describe('收件人快照解析 (NTF-002)', () => {
 
   it('权益事件通知学生本人', () => {
     const result = resolver.resolve({
+      logicalEventId: 'evt-001',
       eventType: 'invitation',
       sourceObjectId: 'inv-001',
       scope: { type: 'CLUB', clubId: 'club-001' },
@@ -144,6 +145,7 @@ describe('收件人快照解析 (NTF-002)', () => {
 
   it('无目标学生的权益事件 → 收件人为空', () => {
     const result = resolver.resolve({
+      logicalEventId: 'evt-002',
       eventType: 'invitation',
       sourceObjectId: 'inv-002',
       scope: { type: 'CLUB', clubId: 'club-001' },
@@ -154,6 +156,7 @@ describe('收件人快照解析 (NTF-002)', () => {
 
   it('管理事件不通知学生本人', () => {
     const result = resolver.resolve({
+      logicalEventId: 'evt-003',
       eventType: 'system',
       sourceObjectId: 'obj-001',
       scope: { type: 'PLATFORM', clubId: null },
@@ -165,6 +168,7 @@ describe('收件人快照解析 (NTF-002)', () => {
 
   it('收件人快照去重键由命令层以 逻辑事件＋收件人 生成（NTF-003、DATA-NTF-001）', () => {
     const result = resolver.resolve({
+      logicalEventId: 'evt-004',
       eventType: 'conclusion',
       sourceObjectId: 'rec-001',
       scope: { type: 'CLUB', clubId: 'club-001' },

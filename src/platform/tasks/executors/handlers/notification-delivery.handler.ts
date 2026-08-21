@@ -1,8 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { TaskHandler, TaskRecord } from '../../contracts';
 import { TaskType } from '../../contracts';
-import { DeliverInboxCommand } from '../../../../modules/notification/application/commands/deliver-inbox.command';
-import { RetryChannelDeliveryCommand } from '../../../../modules/notification/application/commands/retry-channel-delivery.command';
+import {
+  DeliverInboxCommand,
+  RetryChannelDeliveryCommand,
+} from '../../../../modules/notification/application/commands';
 
 /**
  * 通知投递后台任务处理器。
@@ -21,34 +23,48 @@ export class NotificationDeliveryHandler implements TaskHandler {
   private readonly logger = new Logger(NotificationDeliveryHandler.name);
 
   constructor(
-    private readonly deliverInbox: DeliverInboxCommand,
-    private readonly retryChannel: RetryChannelDeliveryCommand,
+    @Optional()
+    private readonly deliverInbox?: DeliverInboxCommand,
+    @Optional()
+    private readonly retryChannel?: RetryChannelDeliveryCommand,
   ) {}
 
   async handle(task: TaskRecord): Promise<void> {
     this.logger.log(`NotificationDeliveryHandler 开始处理通知投递任务：taskId=${task.taskId}`);
 
-    // 根据任务意图选择投递或重试
-    // 任务 payload 携带 factId 或 attemptId 及版本信息
+    if (!this.deliverInbox && !this.retryChannel) {
+      this.logger.warn(
+        `NotificationDeliveryHandler 待接入 notification 模块投递命令：taskId=${task.taskId}`,
+      );
+      return;
+    }
+
     const payload = task.payload as
       | { intent: 'deliver_inbox'; factId: string; expectedVersion: number }
       | { intent: 'retry_channel'; attemptId: string }
       | undefined;
 
-    if (payload?.intent === 'deliver_inbox') {
-      const result = await this.deliverInbox.execute(payload.factId, payload.expectedVersion);
-      this.logger.log(
-        `通知投递任务处理完成: taskId=${task.taskId}, 站内信呈现=${result.presentationCount} 条`,
+    try {
+      if (payload?.intent === 'deliver_inbox' && this.deliverInbox) {
+        const result = await this.deliverInbox.execute(payload.factId, payload.expectedVersion);
+        this.logger.log(
+          `通知投递任务处理完成: taskId=${task.taskId}, 站内信呈现=${result.presentationCount} 条`,
+        );
+      } else if (payload?.intent === 'retry_channel' && this.retryChannel) {
+        await this.retryChannel.execute(payload.attemptId);
+        this.logger.log(
+          `通知重试任务处理完成: taskId=${task.taskId}, attemptId=${payload.attemptId}`,
+        );
+      } else {
+        this.logger.warn(
+          `NotificationDeliveryHandler 未知任务意图或命令未就绪: taskId=${task.taskId}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `通知投递任务处理失败: taskId=${task.taskId}, error=${(error as Error).message}`,
       );
-    } else if (payload?.intent === 'retry_channel') {
-      await this.retryChannel.execute(payload.attemptId);
-      this.logger.log(
-        `通知重试任务处理完成: taskId=${task.taskId}, attemptId=${payload.attemptId}`,
-      );
-    } else {
-      this.logger.warn(
-        `NotificationDeliveryHandler 未知任务意图: taskId=${task.taskId}, payload=${JSON.stringify(payload)}`,
-      );
+      throw error;
     }
   }
 }

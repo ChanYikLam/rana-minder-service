@@ -291,7 +291,6 @@ export class InMemoryInboxAdapter implements InboxAdapter {
 
 export class InMemoryEmailAdapter implements EmailAdapter {
   async send(_input: EmailSendInput): Promise<EmailSendResult> {
-    // 开发阶段总是返回成功
     return {
       status: 'SENT',
       channelMessageId: `email-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
