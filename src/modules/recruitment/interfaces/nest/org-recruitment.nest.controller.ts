@@ -222,6 +222,24 @@ export class OrgRecruitmentNestController {
     return toHttpResponse(await this.controller.listApplications(this.actor(request), activityId));
   }
 
+  @Post('applications/:applicationId/invitations')
+  async sendInvitation(
+    @Param('clubId') _clubId: string,
+    @Param('applicationId') applicationId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    return toHttpResponse(await this.controller.sendInvitation(this.actor(request), applicationId));
+  }
+
+  @Post('applications/:applicationId/accept')
+  async acceptInvitation(
+    @Param('clubId') _clubId: string,
+    @Param('applicationId') applicationId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    return toHttpResponse(await this.controller.acceptInvitation(this.actor(request), applicationId));
+  }
+
   @Get('rounds/:roundId/interviews')
   async listInterviews(
     @Param('clubId') _clubId: string,

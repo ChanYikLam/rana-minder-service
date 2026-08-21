@@ -201,6 +201,26 @@ export class Application {
     );
   }
 
+  /** 发送录取邀请（REC-043；负责人/人事基于部门 ADMIT 发 offer） */
+  sendAdmissionInvitation(now: Date): boolean {
+    return this.transitionTo(
+      new DefaultApplicationStateMachine(),
+      ApplicationEvent.SEND_INVITATION,
+      now,
+      null,
+    );
+  }
+
+  /** 接受录取（申请人本人；进入 ACCEPTED，成员生效由 4.5 衔接） */
+  acceptInvitation(now: Date): boolean {
+    return this.transitionTo(
+      new DefaultApplicationStateMachine(),
+      ApplicationEvent.ACCEPT_INVITATION,
+      now,
+      null,
+    );
+  }
+
   /** 补充窗口：标记截止（不切换主状态，FORM-011） */
   openSupplement(dueAt: Date, now: Date): void {
     if (this.snapshot.status !== ApplicationStatus.SUBMITTED) {

@@ -14,6 +14,8 @@ export const ApplicationStatus = {
   EXITED: 'EXITED',
   IDENTITY_EXCEPTION: 'IDENTITY_EXCEPTION',
   FINAL_REJECTED: 'FINAL_REJECTED',
+  ADMITTED: 'ADMITTED',
+  ACCEPTED: 'ACCEPTED',
 } as const;
 export type ApplicationStatus = (typeof ApplicationStatus)[keyof typeof ApplicationStatus];
 
@@ -25,6 +27,8 @@ export const ApplicationEvent = {
   MARK_IDENTITY_EXCEPTION: 'MARK_IDENTITY_EXCEPTION',
   RESTORE_IDENTITY: 'RESTORE_IDENTITY',
   FINAL_REJECT: 'FINAL_REJECT',
+  SEND_INVITATION: 'SEND_INVITATION',
+  ACCEPT_INVITATION: 'ACCEPT_INVITATION',
 } as const;
 export type ApplicationEvent = (typeof ApplicationEvent)[keyof typeof ApplicationEvent];
 
@@ -50,12 +54,19 @@ export class DefaultApplicationStateMachine implements ApplicationStateMachine {
       EXIT: ApplicationStatus.EXITED,
       MARK_IDENTITY_EXCEPTION: ApplicationStatus.IDENTITY_EXCEPTION,
       FINAL_REJECT: ApplicationStatus.FINAL_REJECTED,
+      SEND_INVITATION: ApplicationStatus.ADMITTED,
     },
     WITHDRAWN: {
       RESUBMIT: ApplicationStatus.SUBMITTED,
       EXIT: ApplicationStatus.EXITED,
     },
     IDENTITY_EXCEPTION: { RESTORE_IDENTITY: ApplicationStatus.SUBMITTED },
+    ADMITTED: {
+      ACCEPT_INVITATION: ApplicationStatus.ACCEPTED,
+      EXIT: ApplicationStatus.EXITED,
+      FINAL_REJECT: ApplicationStatus.FINAL_REJECTED,
+    },
+    ACCEPTED: {},
   };
 
   transition(input: {

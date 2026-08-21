@@ -161,4 +161,35 @@ describe('Application (REC-003)', () => {
     app.closeSupplement(NOW);
     assert.equal(app.supplementDueAt, null);
   });
+
+  it('录取邀请与接受（REC-043/044）：SUBMITTED → ADMITTED → 终态', () => {
+    const app = draft();
+    app.submit(MACHINE, NOW, {
+      departmentChoices: choices('d1'),
+      formRef: null,
+      qualifySnapshot: null,
+      minChoices: 1,
+      maxChoices: 3,
+    });
+    assert.equal(app.sendAdmissionInvitation(NOW), true);
+    assert.equal(app.status, 'ADMITTED');
+    assert.equal(app.finalReject(NOW), true);
+    assert.equal(app.status, 'FINAL_REJECTED');
+  });
+
+  it('接受录取须先进入 ADMITTED', () => {
+    const app = draft();
+    app.submit(MACHINE, NOW, {
+      departmentChoices: choices('d1'),
+      formRef: null,
+      qualifySnapshot: null,
+      minChoices: 1,
+      maxChoices: 3,
+    });
+    assert.equal(app.acceptInvitation(NOW), false);
+    assert.equal(app.status, 'SUBMITTED');
+    assert.equal(app.sendAdmissionInvitation(NOW), true);
+    assert.equal(app.acceptInvitation(NOW), true);
+    assert.equal(app.status, 'ACCEPTED');
+  });
 });

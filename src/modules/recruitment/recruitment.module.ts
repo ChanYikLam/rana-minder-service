@@ -27,6 +27,8 @@ import {
   SUBMIT_APPLICATION_USE_CASE,
   RECORD_DEPARTMENT_DECISION_USE_CASE,
   INTERVIEW_WORKFLOW_USE_CASE,
+  SEND_ADMISSION_INVITATION_USE_CASE,
+  ACCEPT_ADMISSION_INVITATION_USE_CASE,
   LIST_ACTIVITIES_QUERY,
   LIST_APPLICATIONS_QUERY,
   LIST_INTERVIEWS_QUERY,
@@ -42,6 +44,7 @@ import { DefaultOpenApplicationChannelUseCase } from './application/commands/ope
 import { DefaultSubmitApplicationUseCase } from './application/commands/submit-application.use-case';
 import { DefaultRecordDepartmentDecisionUseCase } from './application/commands/record-department-decision.use-case';
 import { InterviewWorkflowUseCase } from './application/commands/interview-workflow.use-case';
+import { SendAdmissionInvitationUseCase, AcceptAdmissionInvitationUseCase } from './application/commands/admission.use-case';
 import { DefaultListActivitiesQuery } from './application/queries/list-activities.query';
 import { DefaultListApplicationsQuery } from './application/queries/list-applications.query';
 import { DefaultListInterviewsQuery } from './application/queries/list-interviews.query';
@@ -115,11 +118,33 @@ import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.
       useFactory: (repo, auth) => new InterviewWorkflowUseCase(repo, auth),
       inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
     },
+    {
+      provide: SEND_ADMISSION_INVITATION_USE_CASE,
+      useFactory: (repo, auth) => new SendAdmissionInvitationUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: ACCEPT_ADMISSION_INVITATION_USE_CASE,
+      useFactory: (repo, auth) => new AcceptAdmissionInvitationUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
     // ----- 传输中立控制器 -----
     {
       provide: RECRUITMENT_CONTROLLER,
-      useFactory: (uow, create, open, submit, decide, interview, listA, listApp, listInt) =>
-        new RecruitmentController(uow, create, open, submit, decide, interview, listA, listApp, listInt),
+      useFactory: (uow, create, open, submit, decide, interview, listA, listApp, listInt, send, accept) =>
+        new RecruitmentController(
+          uow,
+          create,
+          open,
+          submit,
+          decide,
+          interview,
+          listA,
+          listApp,
+          listInt,
+          send,
+          accept,
+        ),
       inject: [
         RecruitmentUnitOfWork,
         CREATE_RECRUITMENT_ACTIVITY_USE_CASE,
@@ -130,6 +155,8 @@ import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.
         LIST_ACTIVITIES_QUERY,
         LIST_APPLICATIONS_QUERY,
         LIST_INTERVIEWS_QUERY,
+        SEND_ADMISSION_INVITATION_USE_CASE,
+        ACCEPT_ADMISSION_INVITATION_USE_CASE,
       ],
     },
   ],

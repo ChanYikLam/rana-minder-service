@@ -17,6 +17,7 @@ import type { InterviewWorkflowUseCase } from '../../application/commands/interv
 import type { ListActivitiesQuery } from '../../application/queries/list-activities.query';
 import type { ListApplicationsQuery } from '../../application/queries/list-applications.query';
 import type { ListInterviewsQuery } from '../../application/queries/list-interviews.query';
+import type { SendAdmissionInvitationUseCase, AcceptAdmissionInvitationUseCase } from '../../application/commands/admission.use-case';
 
 type ControllerResult<T> = { readonly ok: true; readonly value: T } | ApiErrorResult;
 
@@ -31,6 +32,8 @@ export class RecruitmentController {
     private readonly listActivitiesQuery: ListActivitiesQuery,
     private readonly listApplicationsQuery: ListApplicationsQuery,
     private readonly listInterviewsQuery: ListInterviewsQuery,
+    private readonly sendInvitationUseCase: SendAdmissionInvitationUseCase,
+    private readonly acceptInvitationUseCase: AcceptAdmissionInvitationUseCase,
   ) {}
 
   private run<T>(actor: ActorContext, fn: () => Promise<T>): Promise<ControllerResult<T>> {
@@ -172,5 +175,17 @@ export class RecruitmentController {
 
   listInterviews(actor: ActorContext, roundId: string): Promise<ControllerResult<unknown>> {
     return this.run(actor, () => this.listInterviewsQuery.execute({ roundId }));
+  }
+
+  sendInvitation(actor: ActorContext, applicationId: string): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.sendInvitationUseCase.execute({ applicationId, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  acceptInvitation(actor: ActorContext, applicationId: string): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.acceptInvitationUseCase.execute({ applicationId, actor: actor.subjectId, now: actor.now }),
+    );
   }
 }
