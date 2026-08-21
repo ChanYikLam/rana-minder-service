@@ -4,9 +4,11 @@
  * 安全策略：
  * - `x-actor-id` 请求头可被任意客户端伪造，因此**绝对禁止**在任何非显式开启的
  *   开发环境以外信任该头。
- * - 生产环境（NODE_ENV=production）一律 fail-closed：拒绝直接信任请求头，必须由
- *   身份模块提供已认证主体。
- * - 本地开发/集成测试须显式设置 `ORG_DEV_ACTOR_HEADER=1` 才放行
+ * - 采用**反白名单**（fail-closed）：仅当 `NODE_ENV` 显式为 `development` 或 `test`
+ *   且同时显式设置 `ORG_DEV_ACTOR_HEADER=1` 时才放行；其余任何环境
+ *   （生产、staging、未设置 NODE_ENV 等）一律拒绝信任请求头，必须由身份模块
+ *   提供已认证主体。
+ * - 本地开发/集成测试须同时满足上述两个条件才放行
  *   （与 observability status-page 桩口径一致：「可配置放行」）。
  */
 
@@ -42,6 +44,9 @@ export function resolveActorFromHeaders(
 }
 
 function isDevActorHeaderEnabled(env: NodeJS.ProcessEnv): boolean {
-  if (env['NODE_ENV'] === 'production') return false;
+  // 反白名单：仅显式声明为开发/测试环境才可能放行，避免生产漏设 NODE_ENV
+  // 或值不标准时误信任可伪造的请求头（fail-closed）。
+  const nodeEnv = env['NODE_ENV'];
+  if (nodeEnv !== 'development' && nodeEnv !== 'test') return false;
   return env['ORG_DEV_ACTOR_HEADER'] === '1';
 }

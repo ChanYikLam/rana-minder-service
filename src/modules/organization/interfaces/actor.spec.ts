@@ -16,6 +16,24 @@ describe('Actor 请求头解析（生产环境 fail-closed，IFC-ERR-001）', ()
     );
   });
 
+  it('未设置 NODE_ENV（如生产漏配）即使开启 ORG_DEV_ACTOR_HEADER：拒绝', () => {
+    assert.throws(
+      () => resolveActorFromHeaders({ 'x-actor-id': 'u_root' }, { ORG_DEV_ACTOR_HEADER: '1' }),
+      (err: unknown) => err instanceof OrgDomainError && err.code === 'IFC-ERR-FORBIDDEN',
+    );
+  });
+
+  it('非开发/测试环境（如 NODE_ENV=staging）即使开启 ORG_DEV_ACTOR_HEADER：拒绝', () => {
+    assert.throws(
+      () =>
+        resolveActorFromHeaders(
+          { 'x-actor-id': 'u_root' },
+          { NODE_ENV: 'staging', ORG_DEV_ACTOR_HEADER: '1' },
+        ),
+      (err: unknown) => err instanceof OrgDomainError && err.code === 'IFC-ERR-FORBIDDEN',
+    );
+  });
+
   it('开发环境未显式开启 ORG_DEV_ACTOR_HEADER：拒绝', () => {
     assert.throws(
       () => resolveActorFromHeaders({ 'x-actor-id': 'u_root' }, DEV_DISABLED_ENV),
