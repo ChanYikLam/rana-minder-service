@@ -109,6 +109,18 @@ export class PostgresTaskRepository implements TaskRepository {
     return this.withTx(async (tx) => {
       const taskId = deriveTrackingNumber(intent.intentId, intent.taskType);
       const createdAt = intent.createdAt;
+      // 幂等去重：同一 idempotency_key 已登记时直接返回既有任务，避免触发
+      // uq_job_tasks_idempotency_key 唯一约束报错（DATA-CON-003 / 与 intent_id 幂等口径一致）。
+      // 在同一事务 tx 内查询，避免嵌套开启新事务/新连接。
+      const byKey = await this.db.query<JobTaskRow>(
+        tx,
+        `SELECT task_id, task_type, status, intent_id, idempotency_key, scope, source,
+                payload, lease_worker_id, lease_version, lease_until, leased_at,
+                attempts, max_attempts, not_before, failure, result_ref, created_at, updated_at
+           FROM public.job_tasks WHERE idempotency_key = $1`,
+        [intent.idempotencyKey],
+      );
+      if (byKey[0] !== undefined) return rowToRecord(byKey[0]);
       await this.db.query(
         tx,
         `INSERT INTO public.job_tasks
@@ -209,7 +221,7 @@ export class PostgresTaskRepository implements TaskRepository {
             SET status = $2,
                 lease_worker_id = $3,
                 lease_until = $4,
-                lease_version = $5,
+                lease_version = COALESCE(lease_version, 0) + 1,
                 leased_at = $6,
                 updated_at = $6
           WHERE task_id = $1
@@ -220,7 +232,9 @@ export class PostgresTaskRepository implements TaskRepository {
           RETURNING task_id, task_type, status, intent_id, idempotency_key, scope, source,
                 payload, lease_worker_id, lease_version, lease_until, leased_at,
                 attempts, max_attempts, not_before, failure, result_ref, created_at, updated_at`,
-        [taskId, TaskStatus.LEASED, workerId, leaseUntil, leaseVersion, nowIso],
+        // 注：lease_version 由 SQL 原子计算（COALESCE(lease_version,0)+1），
+        // 不信任调用方基于预读的旧版本号，避免版本回退削弱 SEC-VER-011 旧令牌守卫。
+        [taskId, TaskStatus.LEASED, workerId, leaseUntil, nowIso],
       );
       if (rows[0] !== undefined) {
         return { claimed: true, task: rowToRecord(rows[0]) };
