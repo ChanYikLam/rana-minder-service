@@ -14,6 +14,7 @@ import { Module } from '@nestjs/common';
 
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
+import { APP_LOGGER } from '../../platform/observability/logging/tokens';
 import { DB_ADAPTER, CASDOOR_ADAPTER, MAIL_CHANNEL_ADAPTER } from '../../adapters/tokens';
 
 import {
@@ -109,8 +110,8 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     // ----- 工作单元（ambient 事务 + RLS 单目标上下文）-----
     {
       provide: IdentityUnitOfWork,
-      useFactory: (db) => new IdentityUnitOfWork(db),
-      inject: [DB_ADAPTER],
+      useFactory: (db, logger) => new IdentityUnitOfWork(db, logger),
+      inject: [DB_ADAPTER, APP_LOGGER],
     },
     // ----- PostgreSQL 仓储与审计（事务外读写失败关闭）-----
     {

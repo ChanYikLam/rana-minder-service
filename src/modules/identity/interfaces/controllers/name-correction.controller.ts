@@ -46,9 +46,8 @@ export class NameCorrectionController {
     private readonly uow: IdentityUnitOfWork,
   ) {}
 
-  /** 单主体 RLS 事务边界：全部请求在事务内执行（仓储读写经 ambient 事务） */
-  private run<T>(actor: ActorContext, fn: () => Promise<T>): Promise<T> {
-    const scope: RlsScope = { kind: 'single', subjectId: actor.subjectId };
+  /** 事务边界：全部请求在 RLS 单目标上下文内执行（仓储读写经 ambient 事务） */
+  private run<T>(scope: RlsScope, fn: () => Promise<T>): Promise<T> {
     return this.uow.run(scope, fn);
   }
 
@@ -57,7 +56,8 @@ export class NameCorrectionController {
     actor: ActorContext,
     body: unknown,
   ): Promise<NameCorrectionControllerResult<SubmitNameCorrectionResponse>> {
-    return this.run(actor, async () => {
+    // 本人提交申请：RLS 单主体作用域即本人（行归属 subject_id = actor.subjectId）
+    return this.run({ kind: 'single', subjectId: actor.subjectId }, async () => {
       try {
         const envelope = parseRequestEnvelope(body);
         const input = envelope.input ?? {};
@@ -99,7 +99,11 @@ export class NameCorrectionController {
     actor: ActorContext,
     body: unknown,
   ): Promise<NameCorrectionControllerResult<ReviewNameCorrectionResponse>> {
-    return this.run(actor, async () => {
+    // 超管裁决访问的申请行归属提交申请的学生（subject_id ≠ 裁决者），且超管可裁决
+    // 任意学生的申请；RLS 单主体（裁决者本人）作用域将读不到他人申请，故用
+    // 平台级 unprotected 作用域，权限由 SuperAdminVerifierPort + HighRiskCommandGuard
+    // 在用例层失败关闭地判定（CAS-REC-003 / ORG-029）。
+    return this.run({ kind: 'unprotected' }, async () => {
       try {
         const envelope = parseRequestEnvelope(body);
         const input = envelope.input ?? {};

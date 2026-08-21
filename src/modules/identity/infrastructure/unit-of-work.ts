@@ -8,12 +8,17 @@
  */
 
 import type { DbAdapter, RlsScope, TransactionContext } from '../../../shared/db-adapter';
+import type { AppLogger } from '../../../platform/observability/logging/app-logger';
 
 export class IdentityUnitOfWork {
   private current: TransactionContext | null = null;
   private afterCommitCallbacks: Array<() => Promise<void>> = [];
 
-  constructor(private readonly db: DbAdapter) {}
+  constructor(
+    private readonly db: DbAdapter,
+    /** 运行日志写入器（observability APP_LOGGER；缺省时退化为无输出，兼容测试直构） */
+    private readonly logger: AppLogger | null = null,
+  ) {}
 
   /** 当前事务（用例执行期间有效；缺失即失败关闭，防止无事务提交） */
   get active(): TransactionContext {
@@ -62,7 +67,12 @@ export class IdentityUnitOfWork {
         await callback();
       } catch (error) {
         // 外部动作失败不改变已提交的业务事实（ADR-004 §2.7），仅记录
-        console.error('[IdentityUnitOfWork] after-commit 外部动作执行失败', error);
+        if (this.logger !== null) {
+          this.logger.error({
+            message: '[IdentityUnitOfWork] after-commit 外部动作执行失败',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
   }

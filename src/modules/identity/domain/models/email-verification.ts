@@ -5,7 +5,7 @@
  * 新请求使旧请求按安全策略失效或保持不可重复使用；过期与成功竞争只一个成功。
  */
 
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, scryptSync } from 'node:crypto';
 
 export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -100,8 +100,16 @@ export class EmailVerification {
   }
 }
 
+/**
+ * 令牌哈希：用 scrypt（内存硬 KDF）取代裸 SHA-256，作为纵深防御（纵深防御建议）。
+ * 令牌本身为 32 字节高熵随机值，且单次消费，暴力破解/彩虹表本不构成现实威胁；
+ * scrypt 在此强化"库中哈希被拖库后的逐次猜测成本"。salt 用项目级常量即可：
+ * 令牌唯一且高熵，无同盐碰撞彩虹表风险，且不引入按行存储 salt 的 schema 变更。
+ */
+const TOKEN_HASH_SALT = 'ranaminder-email-verification-v1';
+
 function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
+  return scryptSync(token, TOKEN_HASH_SALT, 32).toString('hex');
 }
 
 function timingSafeEqualHex(a: string, b: string): boolean {

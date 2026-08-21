@@ -31,8 +31,10 @@ export class JobTaskPoller implements OnApplicationBootstrap, OnApplicationShutd
 
   async onApplicationBootstrap(): Promise<void> {
     await this.tick('启动首轮');
+    // 不用 .unref()：本轮询器是 worker 进程自身的保活定时器，须持有事件循环引用以
+    // 保证任务领取循环持续运行（否则首轮后进程可能退出、任务静默停止）。与
+    // TasksWorker 的 setInterval 行为保持一致；退出经 onApplicationShutdown 清理。
     this.timer = setInterval(() => void this.tick('周期轮询'), this.config.job.schedulerIntervalMs);
-    this.timer.unref();
   }
 
   onApplicationShutdown(): void {
