@@ -105,7 +105,10 @@ describe('PostgresFormSubmissionRepository（FakeDbAdapter 全链路）', () => 
     const h = createHarness();
     await h.uow.run({ kind: 'single', subjectId: 'u-1' }, async () => {
       await h.repository.insert(createSubmission('s-1'));
-      await assert.rejects(h.repository.insert(createSubmission('s-1')), /提交记录已存在，请勿重复提交/);
+      await assert.rejects(
+        h.repository.insert(createSubmission('s-1')),
+        /提交记录已存在，请勿重复提交/,
+      );
     });
   });
 });
