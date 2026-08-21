@@ -65,6 +65,15 @@ export class InMemoryObjectStore implements ObjectStorePort {
   ): Promise<ObjectOpResult> {
     const bytes = await this.read(source);
     if (bytes === null) {
+      // 源对象缺失的两种情形需区分处理：
+      // 1) 前次晋升已成功写入权威原件区并删除隔离源（copy-then-delete），但数据库在
+      //    持久化前失败，调用方重试晋升——此时权威原件区已存在正确副本，应视为幂等成功，
+      //    否则会因源缺失而永久卡在 CHECKING，无法收敛到 AVAILABLE（IFC-FIL-002 恢复能力）；
+      // 2) 源对象真不存在且目标也缺失——确属异常，返回失败。
+      const existing = await this.read(target);
+      if (existing !== null && this.sha256Hex(existing) === expectedSha256) {
+        return { ok: true };
+      }
       return { ok: false, reason: '源对象缺失' };
     }
     // 可信摘要必须非空：空摘要视为失败（不得跳过核验，DATA-FIL-003）
