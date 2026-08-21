@@ -282,14 +282,44 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     return rows[0] ? applicationRowToSnapshot(rows[0]) : null;
   }
   async saveApplication(s: ApplicationSnapshot, expectedRevision: number): Promise<void> {
+    if (expectedRevision === -1) {
+      const inserted = await this.db.query<{ id: string }>(
+        this.uow.active,
+        `INSERT INTO applications
+          (id, activity_id, channel_id, club_id, applicant_id, status, department_choices,
+           form_ref, qualify_snapshot, revision_number, revisions, supplement_due_at, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         ON CONFLICT (id) DO NOTHING RETURNING id`,
+        [
+          s.id,
+          s.activityId,
+          s.channelId,
+          s.clubId,
+          s.applicantId,
+          s.status,
+          JSON.stringify(s.departmentChoices),
+          s.formRef === null ? null : JSON.stringify(s.formRef),
+          JSON.stringify(s.qualifySnapshot),
+          s.revisionNumber,
+          JSON.stringify(s.revisions),
+          s.supplementDueAt,
+          s.createdAt,
+          s.updatedAt,
+        ],
+      );
+      if (inserted.length === 0) {
+        throw new RecruitmentDomainError('REC_CONFLICT', '申请并发冲突，请刷新后重试');
+      }
+      return;
+    }
     const updated = await this.db.query<{ id: string }>(
       this.uow.active,
       `UPDATE applications SET
-          activity_id = $2, channel_id = $3, club_id = $4, applicant_id = $5, status = $6,
-          department_choices = $7, form_ref = $8, qualify_snapshot = $9, revision_number = $10,
-          revisions = $11, supplement_due_at = $12, updated_at = $13
-        WHERE id = $1 AND revision_number = $14::text
-        RETURNING id`,
+        activity_id = $2, channel_id = $3, club_id = $4, applicant_id = $5, status = $6,
+        department_choices = $7, form_ref = $8, qualify_snapshot = $9, revision_number = $10,
+        revisions = $11, supplement_due_at = $12, updated_at = $13
+      WHERE id = $1 AND revision_number = $14
+      RETURNING id`,
       [
         s.id,
         s.activityId,
@@ -304,36 +334,14 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         JSON.stringify(s.revisions),
         s.supplementDueAt,
         s.updatedAt,
-        String(expectedRevision),
+        expectedRevision,
       ],
     );
-    if (updated.length > 0) return;
-    const inserted = await this.db.query<{ id: string }>(
-      this.uow.active,
-      `INSERT INTO applications
-          (id, activity_id, channel_id, club_id, applicant_id, status, department_choices,
-           form_ref, qualify_snapshot, revision_number, revisions, supplement_due_at, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-        ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [
-        s.id,
-        s.activityId,
-        s.channelId,
-        s.clubId,
-        s.applicantId,
-        s.status,
-        JSON.stringify(s.departmentChoices),
-        s.formRef === null ? null : JSON.stringify(s.formRef),
-        JSON.stringify(s.qualifySnapshot),
-        s.revisionNumber,
-        JSON.stringify(s.revisions),
-        s.supplementDueAt,
-        s.createdAt,
-        s.updatedAt,
-      ],
-    );
-    if (inserted.length === 0) {
-      throw new RecruitmentDomainError('REC_CONFLICT', '申请并发更新冲突，请刷新后重试');
+    if (updated.length === 0) {
+      throw new RecruitmentDomainError(
+        'REC_CONFLICT',
+        '申请并发冲突（修订号守卫未命中），请刷新后重试',
+      );
     }
   }
   async loadApplicationByApplicantAndChannel(
@@ -374,13 +382,41 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     return rows[0] ? departmentPathRowToSnapshot(rows[0]) : null;
   }
   async saveDepartmentPath(s: DepartmentPathSnapshot, expectedRevision: number): Promise<void> {
+    if (expectedRevision === -1) {
+      const inserted = await this.db.query<{ id: string }>(
+        this.uow.active,
+        `INSERT INTO department_paths
+          (id, application_id, activity_id, club_id, department_id, status, revision_number,
+           allow_transfer, decisions, previous_status_before_suspend, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         ON CONFLICT (id) DO NOTHING RETURNING id`,
+        [
+          s.id,
+          s.applicationId,
+          s.activityId,
+          s.clubId,
+          s.departmentId,
+          s.status,
+          s.revisionNumber,
+          s.allowTransfer,
+          JSON.stringify(s.decisions),
+          s.previousStatusBeforeSuspend,
+          s.createdAt,
+          s.updatedAt,
+        ],
+      );
+      if (inserted.length === 0) {
+        throw new RecruitmentDomainError('REC_CONFLICT', '部门路径并发冲突，请刷新后重试');
+      }
+      return;
+    }
     const updated = await this.db.query<{ id: string }>(
       this.uow.active,
       `UPDATE department_paths SET
-          application_id = $2, activity_id = $3, club_id = $4, department_id = $5, status = $6,
-          allow_transfer = $7, decisions = $8, previous_status_before_suspend = $9, updated_at = $10
-        WHERE id = $1 AND revision_number = $11::text
-        RETURNING id`,
+        application_id = $2, activity_id = $3, club_id = $4, department_id = $5, status = $6,
+        allow_transfer = $7, decisions = $8, previous_status_before_suspend = $9, updated_at = $10
+      WHERE id = $1 AND revision_number = $11
+      RETURNING id`,
       [
         s.id,
         s.applicationId,
@@ -392,34 +428,14 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         JSON.stringify(s.decisions),
         s.previousStatusBeforeSuspend,
         s.updatedAt,
-        String(expectedRevision),
+        expectedRevision,
       ],
     );
-    if (updated.length > 0) return;
-    const inserted = await this.db.query<{ id: string }>(
-      this.uow.active,
-      `INSERT INTO department_paths
-          (id, application_id, activity_id, club_id, department_id, status, revision_number,
-           allow_transfer, decisions, previous_status_before_suspend, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-        ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [
-        s.id,
-        s.applicationId,
-        s.activityId,
-        s.clubId,
-        s.departmentId,
-        s.status,
-        String(s.revisionNumber),
-        s.allowTransfer,
-        JSON.stringify(s.decisions),
-        s.previousStatusBeforeSuspend,
-        s.createdAt,
-        s.updatedAt,
-      ],
-    );
-    if (inserted.length === 0) {
-      throw new RecruitmentDomainError('REC_CONFLICT', '部门路径并发更新冲突，请刷新后重试');
+    if (updated.length === 0) {
+      throw new RecruitmentDomainError(
+        'REC_CONFLICT',
+        '部门路径并发冲突（修订号守卫未命中），请刷新后重试',
+      );
     }
   }
   async loadDepartmentPathsByApplication(applicationId: string): Promise<DepartmentPathSnapshot[]> {
@@ -446,41 +462,47 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     return rows[0] ? interviewRowToSnapshot(rows[0]) : null;
   }
   async saveInterview(s: InterviewRecordSnapshot, expectedRevision: number): Promise<void> {
-    const updated = await this.db.query<{ id: string }>(
-      this.uow.active,
-      `UPDATE interview_records SET
-          application_id = $2, activity_id = $3, club_id = $4, round_id = $5, applicant_id = $6,
-          status = $7, interviewer_id = $8, scheduled_at = $9, location = $10, skip_reason = $11,
-          hold_until = $12, evaluations = $13, updated_at = $14
-        WHERE id = $1 AND revision_number = $15::text
-        RETURNING id`,
-      [
-        s.id,
-        s.applicationId,
-        s.activityId,
-        s.clubId,
-        s.roundId,
-        s.applicantId,
-        s.status,
-        s.interviewerId,
-        s.scheduledAt,
-        s.location,
-        s.skipReason,
-        s.holdUntil,
-        JSON.stringify(s.evaluations),
-        s.updatedAt,
-        String(expectedRevision),
-      ],
-    );
-    if (updated.length > 0) return;
-    const inserted = await this.db.query<{ id: string }>(
-      this.uow.active,
-      `INSERT INTO interview_records
+    if (expectedRevision === -1) {
+      const inserted = await this.db.query<{ id: string }>(
+        this.uow.active,
+        `INSERT INTO interview_records
           (id, application_id, activity_id, club_id, round_id, applicant_id, status, revision_number,
            interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
            created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-        ON CONFLICT (id) DO NOTHING RETURNING id`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         ON CONFLICT (id) DO NOTHING RETURNING id`,
+        [
+          s.id,
+          s.applicationId,
+          s.activityId,
+          s.clubId,
+          s.roundId,
+          s.applicantId,
+          s.status,
+          s.revisionNumber,
+          s.interviewerId,
+          s.scheduledAt,
+          s.location,
+          s.skipReason,
+          s.holdUntil,
+          JSON.stringify(s.evaluations),
+          s.createdAt,
+          s.updatedAt,
+        ],
+      );
+      if (inserted.length === 0) {
+        throw new RecruitmentDomainError('REC_CONFLICT', '面试记录并发冲突，请刷新后重试');
+      }
+      return;
+    }
+    const updated = await this.db.query<{ id: string }>(
+      this.uow.active,
+      `UPDATE interview_records SET
+        application_id = $2, activity_id = $3, club_id = $4, round_id = $5, applicant_id = $6,
+        status = $7, interviewer_id = $8, scheduled_at = $9, location = $10, skip_reason = $11,
+        hold_until = $12, evaluations = $13, updated_at = $14
+      WHERE id = $1 AND revision_number = $15
+      RETURNING id`,
       [
         s.id,
         s.applicationId,
@@ -489,19 +511,21 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.roundId,
         s.applicantId,
         s.status,
-        String(s.revisionNumber),
         s.interviewerId,
         s.scheduledAt,
         s.location,
         s.skipReason,
         s.holdUntil,
         JSON.stringify(s.evaluations),
-        s.createdAt,
         s.updatedAt,
+        expectedRevision,
       ],
     );
-    if (inserted.length === 0) {
-      throw new RecruitmentDomainError('REC_CONFLICT', '面试记录并发更新冲突，请刷新后重试');
+    if (updated.length === 0) {
+      throw new RecruitmentDomainError(
+        'REC_CONFLICT',
+        '面试记录并发冲突（修订号守卫未命中），请刷新后重试',
+      );
     }
   }
   async loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]> {

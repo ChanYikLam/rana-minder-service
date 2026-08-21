@@ -80,7 +80,6 @@ export class OrgRecruitmentNestController {
     const env = parseRecruitmentRequestEnvelope(body);
     const input = env.input as {
       activityId: string;
-      applicantId: string;
       channelId: string;
       departmentChoices: string[];
       formRef?: { formId: string; submissionId: string; versionNumber: number } | null;
@@ -89,7 +88,7 @@ export class OrgRecruitmentNestController {
     return toHttpResponse(
       await this.controller.submitApplication(this.actor(request), {
         activityId: input.activityId,
-        applicantId: input.applicantId,
+        applicantId: this.actor(request).subjectId,
         channelId: input.channelId,
         departmentChoices: input.departmentChoices,
         formRef: input.formRef ?? null,

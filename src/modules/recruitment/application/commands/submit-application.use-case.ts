@@ -76,7 +76,7 @@ export class DefaultSubmitApplicationUseCase implements SubmitApplicationUseCase
       if (submission === null) {
         throw recruitmentErrors.validation('关联的表单提交不存在', input.formRef);
       }
-      if (submission.submittedBy !== input.applicantId) {
+      if (submission.submittedBy !== input.actor) {
         throw recruitmentErrors.forbidden('表单提交非本人填写');
       }
       if (submission.status !== 'SUBMITTED') {
@@ -84,7 +84,7 @@ export class DefaultSubmitApplicationUseCase implements SubmitApplicationUseCase
       }
     }
     const existing = await this.repository.loadApplicationByApplicantAndChannel(
-      input.applicantId,
+      input.actor,
       input.channelId,
     );
     if (existing !== null) {
@@ -96,7 +96,7 @@ export class DefaultSubmitApplicationUseCase implements SubmitApplicationUseCase
       activityId: activity.id,
       channelId: channel.id,
       clubId: activity.clubId,
-      applicantId: input.applicantId,
+      applicantId: input.actor,
       now: input.now,
     });
     const departmentChoices = input.departmentChoices.map((departmentId, index) => ({

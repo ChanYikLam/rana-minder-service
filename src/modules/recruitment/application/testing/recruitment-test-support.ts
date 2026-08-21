@@ -45,9 +45,19 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
     return this.applications.get(id) ?? null;
   }
   async saveApplication(snapshot: ApplicationSnapshot, expectedRevision: number): Promise<void> {
+    if (expectedRevision === -1) {
+      if (this.applications.has(snapshot.id)) {
+        throw new RecruitmentDomainError('REC_CONFLICT', '申请并发冲突，请刷新后重试');
+      }
+      this.applications.set(snapshot.id, snapshot);
+      return;
+    }
     const existing = this.applications.get(snapshot.id);
-    if (existing !== undefined && existing.revisionNumber !== expectedRevision) {
-      throw new RecruitmentDomainError('REC_CONFLICT', '申请并发更新冲突，请刷新后重试');
+    if (existing === undefined || existing.revisionNumber !== expectedRevision) {
+      throw new RecruitmentDomainError(
+        'REC_CONFLICT',
+        '申请并发冲突（修订号守卫未命中），请刷新后重试',
+      );
     }
     this.applications.set(snapshot.id, snapshot);
   }
@@ -72,9 +82,19 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
     snapshot: DepartmentPathSnapshot,
     expectedRevision: number,
   ): Promise<void> {
+    if (expectedRevision === -1) {
+      if (this.paths.has(snapshot.id)) {
+        throw new RecruitmentDomainError('REC_CONFLICT', '部门路径并发冲突，请刷新后重试');
+      }
+      this.paths.set(snapshot.id, snapshot);
+      return;
+    }
     const existing = this.paths.get(snapshot.id);
-    if (existing !== undefined && existing.revisionNumber !== expectedRevision) {
-      throw new RecruitmentDomainError('REC_CONFLICT', '部门路径并发更新冲突，请刷新后重试');
+    if (existing === undefined || existing.revisionNumber !== expectedRevision) {
+      throw new RecruitmentDomainError(
+        'REC_CONFLICT',
+        '部门路径并发冲突（修订号守卫未命中），请刷新后重试',
+      );
     }
     this.paths.set(snapshot.id, snapshot);
   }
@@ -86,9 +106,19 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
     return this.interviews.get(id) ?? null;
   }
   async saveInterview(snapshot: InterviewRecordSnapshot, expectedRevision: number): Promise<void> {
+    if (expectedRevision === -1) {
+      if (this.interviews.has(snapshot.id)) {
+        throw new RecruitmentDomainError('REC_CONFLICT', '面试记录并发冲突，请刷新后重试');
+      }
+      this.interviews.set(snapshot.id, snapshot);
+      return;
+    }
     const existing = this.interviews.get(snapshot.id);
-    if (existing !== undefined && existing.revisionNumber !== expectedRevision) {
-      throw new RecruitmentDomainError('REC_CONFLICT', '面试记录并发更新冲突，请刷新后重试');
+    if (existing === undefined || existing.revisionNumber !== expectedRevision) {
+      throw new RecruitmentDomainError(
+        'REC_CONFLICT',
+        '面试记录并发冲突（修订号守卫未命中），请刷新后重试',
+      );
     }
     this.interviews.set(snapshot.id, snapshot);
   }

@@ -5,7 +5,6 @@
  * 路径不存在时按志愿归属（或调剂授权）自动建立。
  */
 
-import { randomUUID } from 'node:crypto';
 import { DepartmentPath } from '../../domain/models/department-path';
 import {
   DefaultDepartmentPathStateMachine,
@@ -63,7 +62,7 @@ export class DefaultRecordDepartmentDecisionUseCase implements RecordDepartmentD
     const expectedRevision = snapshot === null ? -1 : snapshot.revisionNumber;
     if (snapshot === null) {
       snapshot = DepartmentPath.createFromChoice({
-        id: input.id ?? randomUUID(),
+        id: input.id ?? `path:${input.applicationId}:${input.departmentId}`,
         applicationId: application.id,
         activityId: application.activityId,
         clubId: application.clubId,

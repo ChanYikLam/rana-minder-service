@@ -75,7 +75,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       updated_at       timestamptz NOT NULL DEFAULT now(),
       CONSTRAINT ck_applications_status
         CHECK (status IN ('DRAFT','SUBMITTED','WITHDRAWN','EXITED',
-                          'IDENTITY_EXCEPTION','FINAL_REJECTED')),
+                          'IDENTITY_EXCEPTION','FINAL_REJECTED','ADMITTED','ACCEPTED')),
       CONSTRAINT uq_applications_applicant_channel
         UNIQUE (applicant_id, channel_id)
     )
