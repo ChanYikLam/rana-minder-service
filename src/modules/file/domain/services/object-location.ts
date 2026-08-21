@@ -9,6 +9,8 @@ import type { ObjectLocation } from '../models/file-model';
  * 存储端以 bucket 分桶，各 bucket 内键无需携带角色前缀；本工具用于跨 bucket
  * 的元数据去重，故必须含 bucketRole。
  */
-export function locationKeyOf(loc: Pick<ObjectLocation, 'bucketRole' | 'keyVersion' | 'objectKind' | 'randomKey'>): string {
+export function locationKeyOf(
+  loc: Pick<ObjectLocation, 'bucketRole' | 'keyVersion' | 'objectKind' | 'randomKey'>,
+): string {
   return `${loc.bucketRole}/${loc.keyVersion}/${loc.objectKind}/${loc.randomKey}`;
 }
