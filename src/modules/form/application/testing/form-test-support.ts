@@ -226,6 +226,10 @@ export class InMemoryFormIdempotencyStore implements FormIdempotencyStore {
   async readResult(scopeKey: string, idempotencyKey: string): Promise<unknown | null> {
     return this.records.get(`${scopeKey}:${idempotencyKey}`)?.result ?? null;
   }
+
+  async release(scopeKey: string, idempotencyKey: string): Promise<void> {
+    this.records.delete(`${scopeKey}:${idempotencyKey}`);
+  }
 }
 
 export class StubProfileFieldDirectory implements FormProfileFieldDirectoryPort {

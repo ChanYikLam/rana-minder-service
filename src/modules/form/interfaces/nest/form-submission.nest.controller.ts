@@ -19,6 +19,7 @@ import { toHttpResponse, actorFromRequest } from './form-response-mapper';
 import { parseFormRequestEnvelope } from '../http/form-envelope';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 import { formScopeOf } from '../../domain/models/form-scope';
+import { FormCommandError, FormErrorCode } from '../../application/errors';
 
 @UseGuards(FormAuthGuard)
 @Controller('api/org/:clubId')
@@ -47,10 +48,17 @@ export class FormSubmissionNestController {
   ): Promise<ApiSuccess<unknown>> {
     const envelope = parseFormRequestEnvelope(body);
     const input = envelope.input ?? {};
+    const versionNumber = Number(input.versionNumber);
+    if (!Number.isInteger(versionNumber) || versionNumber <= 0) {
+      // 版本号缺失/非法的 NaN 显式校验为 400，避免被误映射为 404（版本不存在）
+      throw new FormCommandError(FormErrorCode.BAD_REQUEST, 'versionNumber 必须是正整数', {
+        fieldErrors: { versionNumber: ['必须是正整数'] },
+      });
+    }
     return toHttpResponse(
       await this.controller.submit(this.actor(request), this.scope(clubId), {
         formId,
-        versionNumber: Number(input.versionNumber),
+        versionNumber,
         values: (input.values ?? {}) as Record<string, unknown>,
         idempotencyKey: envelope.idempotencyKey,
       }),

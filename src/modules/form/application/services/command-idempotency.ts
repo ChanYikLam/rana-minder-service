@@ -56,4 +56,12 @@ export class CommandIdempotencyGate {
       result,
     });
   }
+
+  /** 业务执行失败时释放占位，使同幂等键可重试（避免卡死 PROCESSING） */
+  async fail(): Promise<void> {
+    if (this.idempotencyKey === undefined) {
+      return;
+    }
+    await this.store.release(this.scopeKey, this.idempotencyKey);
+  }
 }

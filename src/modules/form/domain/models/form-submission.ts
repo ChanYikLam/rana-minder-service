@@ -146,9 +146,14 @@ export class FormSubmission {
     return result.allowed;
   }
 
-  /** 修订（SUBMITTED 下追加修订快照，状态不变） */
-  revise(newValues: Record<string, FormAnswerValue>, revisedBy: string, now: Date): boolean {
-    if (!this.canRevise(new DefaultFormSubmissionStateMachine())) {
+  /** 修订（SUBMITTED 下追加修订快照，状态不变）；状态机默认用实现，可由调用方注入保持一致 */
+  revise(
+    newValues: Record<string, FormAnswerValue>,
+    revisedBy: string,
+    now: Date,
+    machine: FormSubmissionStateMachine = new DefaultFormSubmissionStateMachine(),
+  ): boolean {
+    if (!this.canRevise(machine)) {
       return false;
     }
     const nextRevision = this.snapshot.revisionNumber + 1;

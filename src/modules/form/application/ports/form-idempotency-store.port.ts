@@ -34,4 +34,6 @@ export interface FormIdempotencyStore {
   claim(input: FormIdempotencyClaim): Promise<FormIdempotencyClaimOutcome>;
   complete(input: FormIdempotencyCompletion): Promise<void>;
   readResult(scopeKey: string, idempotencyKey: string): Promise<unknown | null>;
+  /** 释放一次失败的占位（删除 claim 记录），使同幂等键可重试 */
+  release(scopeKey: string, idempotencyKey: string): Promise<void>;
 }

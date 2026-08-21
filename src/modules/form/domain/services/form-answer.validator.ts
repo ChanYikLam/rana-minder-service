@@ -15,6 +15,47 @@ import type { FormAnswerRow } from '../models/form-submission';
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
+/**
+ * 剔除版本定义中 hidden 字段的值（含子表行内 hidden 字段）。
+ * 校验器不接收 hidden 字段提交值，但客户端仍可能注入这些字段，落库前必须清理，
+ * 防止隐藏字段被服务端忽略校验后写入提交记录（DATA-FRM-003 数据完整性）。
+ */
+export function stripHiddenFieldValues(
+  fields: FormFieldSet,
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const hiddenIds = new Set(fields.filter((f) => f.permission === 'hidden').map((f) => f.id));
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (hiddenIds.has(key)) {
+      continue;
+    }
+    const field = fields.find((f) => f.id === key);
+    if (field?.type === FormFieldType.ARRAY && Array.isArray(value)) {
+      result[key] = stripHiddenFromRows(field, value as FormAnswerRow[]);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+function stripHiddenFromRows(field: FormFieldDefinition, rows: FormAnswerRow[]): FormAnswerRow[] {
+  const itemHidden = new Set(
+    (field.items ?? []).filter((i) => i.permission === 'hidden').map((i) => i.id),
+  );
+  return rows.map((row) => {
+    const cleaned: Record<string, unknown> = {};
+    for (const [itemId, itemValue] of Object.entries(row)) {
+      if (itemHidden.has(itemId)) {
+        continue;
+      }
+      cleaned[itemId] = itemValue;
+    }
+    return cleaned as FormAnswerRow;
+  });
+}
+
 export function validateFormAnswer(fields: FormFieldSet, values: Record<string, unknown>): void {
   const errors: Record<string, string[]> = {};
   for (const field of fields) {

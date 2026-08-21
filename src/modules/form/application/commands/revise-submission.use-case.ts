@@ -7,7 +7,10 @@
 
 import { FormSubmission, type FormAnswerValue } from '../../domain/models/form-submission';
 import { DefaultFormSubmissionStateMachine } from '../../domain/state-machines/form-submission.state-machine';
-import { validateFormAnswer } from '../../domain/services/form-answer.validator';
+import {
+  validateFormAnswer,
+  stripHiddenFieldValues,
+} from '../../domain/services/form-answer.validator';
 import { FormVersionState } from '../../domain/state-machines/form-version.state-machine';
 import type { FormDefinitionRepository } from '../ports/form-definition-repository.port';
 import type { FormSubmissionRepository } from '../ports/form-submission-repository.port';
@@ -74,15 +77,19 @@ export class DefaultReviseSubmissionUseCase implements ReviseSubmissionUseCase {
     }
 
     validateFormAnswer(version.fields, input.values);
+    // 落库前剔除 hidden 字段值，防止客户端注入服务端隐藏字段（DATA-FRM-003）
+    const sanitized = stripHiddenFieldValues(version.fields, input.values);
 
-    if (!submission.canRevise(new DefaultFormSubmissionStateMachine())) {
+    const machine = new DefaultFormSubmissionStateMachine();
+    if (!submission.canRevise(machine)) {
       throw formErrors.preconditionFailed('仅已提交记录可修订');
     }
     const expectedRevision = submission.revisionNumber;
     const revised = submission.revise(
-      input.values as Record<string, FormAnswerValue>,
+      sanitized as Record<string, FormAnswerValue>,
       input.actor,
       input.now,
+      machine,
     );
     if (!revised) {
       throw formErrors.preconditionFailed('修订失败（状态不允许）');
