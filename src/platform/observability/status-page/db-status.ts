@@ -15,6 +15,8 @@
  * 任何依赖（DEP-Q-001 锁定）。
  */
 
+import type { DbAdapter } from '../../../shared/db-adapter';
+
 export type DbPingResult =
   | { readonly ok: true; readonly latencyMs: number }
   | { readonly ok: false; readonly error: string };
@@ -27,4 +29,42 @@ export class NotWiredDbStatusPort implements DbStatusPort {
   async ping(): Promise<DbPingResult> {
     return { ok: false, error: 'db-status port not wired (DEP-Q-001 pending)' };
   }
+}
+
+/**
+ * 真实 DB 连通性端口（T4）。
+ *
+ * 基于 DbAdapter 执行一次只读探测（SELECT 1），测量往返时延；
+ * 出错时降级为 ok=false 并给出最小错误信息（ADR-011：状态页不向用户暴露
+ * 内部异常；来源过期/不可用显示"未知"）。
+ */
+export class PostgresDbStatusPort implements DbStatusPort {
+  constructor(private readonly db: DbAdapter) {}
+
+  async ping(): Promise<DbPingResult> {
+    const started = Date.now();
+    try {
+      const tx = await this.db.beginTransaction();
+      await this.db.setRlsContext(tx, { kind: 'unprotected' });
+      try {
+        await this.db.query<{ one: number }>(tx, 'SELECT 1 AS one', []);
+        await this.db.commit(tx);
+        return { ok: true, latencyMs: Date.now() - started };
+      } catch (err) {
+        await this.db.rollback(tx);
+        return { ok: false, error: toMinimalError(err) };
+      } finally {
+        await this.db.clearRlsContext(tx);
+      }
+    } catch (err) {
+      return { ok: false, error: toMinimalError(err) };
+    }
+  }
+}
+
+function toMinimalError(err: unknown): string {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return 'db connectivity check failed';
 }
