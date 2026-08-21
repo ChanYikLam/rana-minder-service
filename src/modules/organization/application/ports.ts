@@ -194,6 +194,8 @@ export interface CurrentPermissionsPort {
   effectiveForClub(userId: string, clubId: string): Promise<readonly string[]>;
   /** 主体是否平台超级管理员（ORG-029） */
   isPlatformSuperAdmin(userId: string): Promise<boolean>;
+  /** 主体在某社团的主角色（职位 Group 名），无则空串（GOV-007：角色由 Group 名派生仅限内存桩） */
+  primaryRoleAt(userId: string, clubId: string): Promise<string>;
 }
 
 // --------------------------------------------------------------------------

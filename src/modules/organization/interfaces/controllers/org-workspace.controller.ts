@@ -74,9 +74,21 @@ export class OrgWorkspaceController {
 
   @Post(':clubId/relation-commands/:commandId/readback')
   @HttpCode(200)
-  async readback(@Actor() _actor: RequestActor, @Param('commandId') _commandId: string) {
-    // 回读收口由系统/对账任务驱动；此处通过内存 Casdoor 桩仿真一次写后回读
-    throw orgError.forbidden('回读收口应经系统关系任务驱动，不对普通请求开放（ORG-027）');
+  async readback(
+    @Actor() actor: RequestActor,
+    @Param('clubId') _clubId: string,
+    @Param('commandId') commandId: string,
+  ) {
+    // 回读收口由系统/对账任务驱动（ORG-027 写后回读确认）：仅平台超管可经此端点
+    // 触发（worker / 对账任务以平台超管身份调用），普通用户请求被拒
+    const isSystemActor = await this.permissions.isPlatformSuperAdmin(actor.userId);
+    if (!isSystemActor) {
+      throw orgError.forbidden('回读收口应经系统关系任务驱动，不对普通请求开放（ORG-027）');
+    }
+    return this.relationCommands.systemConfirmReadback({
+      commandId,
+      now: new Date(),
+    });
   }
 
   @Post(':clubId/members/transition/retry')
@@ -123,7 +135,7 @@ export class OrgWorkspaceController {
       },
       plannedAt: dto.plannedAt,
       initiator: actor.userId,
-      initiatorRoleAtCreate: actor.userId,
+      initiatorRoleAtCreate: await this.permissions.primaryRoleAt(actor.userId, clubId),
       now: new Date(),
     });
   }

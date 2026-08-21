@@ -224,7 +224,14 @@ export class ClubLifecycleUseCase {
   }): Promise<ClubSpace> {
     const club = await this.requireClub(input.clubId);
     if (!input.confirmed) throw orgError.reauth('解除接入需二次确认（ORG-008/009）');
-    const hasHistory = club.syncEvents.length > 0 || club.status === 'pending_reaccess';
+    // 不可变业务历史权威信号：boundAt（已启用绑定过）、mappingHistory（曾经有过映射版本变更）、
+    // importedCount（已导入成员）或 pending_reaccess 状态。syncEvents 不构成"历史"
+    // （一次"启用但无任何异常"不会产生 syncEvent，但已有不可恢复的业务，ORG-008/009）。
+    const hasHistory =
+      club.boundAt !== null ||
+      club.mappingHistory.length > 0 ||
+      club.importedCount > 0 ||
+      club.status === 'pending_reaccess';
     const result = this.stateMachine.transition({
       club,
       event: 'disconnect',
@@ -269,10 +276,7 @@ export class ClubLifecycleUseCase {
     return club;
   }
 
-  private async assertNewGroupBindable(
-    ref: GroupStableRef,
-    clubId: string,
-  ): Promise<void> {
+  private async assertNewGroupBindable(ref: GroupStableRef, clubId: string): Promise<void> {
     const info = await this.casdoor.getGroupByRef(ref);
     if (info === null || info.deleted || !info.readable) {
       throw orgError.notVisible(`重新绑定的 Group 不存在或不可读（${ref.owner}/${ref.name}）`);

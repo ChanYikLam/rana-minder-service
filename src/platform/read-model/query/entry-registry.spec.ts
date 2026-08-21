@@ -6,7 +6,6 @@ import { PERSONAL_CENTER_ENTRY } from './me-query';
 import { CLUB_WORKBENCH_ENTRY } from './workbench-query';
 
 const clubScope = { kind: 'CLUB', clubId: 'c1' } as const;
-const subjectScope = { kind: 'SUBJECT', subjectId: 'u1' } as const;
 
 const makeRegistry = () => {
   const registry = new QueryEntryRegistry();

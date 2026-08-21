@@ -33,6 +33,7 @@ import { ConfigurationModule } from './config';
 import { DatabaseModule } from './database/database.module';
 import { ObservabilityModule } from './platform/observability/module';
 import { ReadModelModule } from './platform/read-model/module';
+import { CasdoorModule } from './platform/casdoor/module';
 import { OrganizationModule } from './modules/organization/module';
 import { TasksModule } from './platform/tasks/module';
 
@@ -43,6 +44,7 @@ import { TasksModule } from './platform/tasks/module';
     DatabaseModule,
     ObservabilityModule,
     ReadModelModule,
+    CasdoorModule,
     OrganizationModule,
     TasksModule,
   ],

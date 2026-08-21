@@ -16,6 +16,7 @@ import type { CurrentPermissionsPort } from '../ports';
 
 class MutablePermissions implements CurrentPermissionsPort {
   perms: string[] = ['club:appointment:manage', 'club:member:manage'];
+  role = 'club-acm/负责人组';
 
   async effectiveForClub(): Promise<string[]> {
     return [...this.perms];
@@ -23,6 +24,10 @@ class MutablePermissions implements CurrentPermissionsPort {
 
   async isPlatformSuperAdmin(): Promise<boolean> {
     return false;
+  }
+
+  async primaryRoleAt(): Promise<string> {
+    return this.role;
   }
 }
 

@@ -144,7 +144,7 @@ export class AppointmentCommandUseCase {
     });
 
     if (result.command.status === 'executing') {
-      await this.createRelationExecution(result.command);
+      await this.createRelationExecution(result.command, input.now);
     }
     await this.store.save(result.command);
     return result.command;
@@ -173,7 +173,7 @@ export class AppointmentCommandUseCase {
     await this.store.save(result.command);
     if (result.command.status === 'reconfirmed_pending_execution' && input.newExecTime) {
       await this.scheduler.enqueue({
-        taskId: `tsk-appt-re-${command.id}`,
+        taskId: `tsk-appt-${command.id}`,
         kind: 'appointment_due',
         refId: command.id,
         scheduleType: 'at',
@@ -257,12 +257,12 @@ export class AppointmentCommandUseCase {
       actor: input.actor,
       facts: { confirmerAuthorized: actorAuthorized },
     });
-    await this.createRelationExecution(result.command);
+    await this.createRelationExecution(result.command, input.now);
     await this.store.save(result.command);
     return result.command;
   }
 
-  private async createRelationExecution(command: AppointmentCommand): Promise<void> {
+  private async createRelationExecution(command: AppointmentCommand, now: Date): Promise<void> {
     const content = command.content as unknown as AppointmentContent;
     const targetGroups: Array<{
       ref: { owner: string; name: string };
@@ -291,7 +291,7 @@ export class AppointmentCommandUseCase {
         idempotencyKey: `appointment:${command.id}:v${command.scheduleVersion}`,
         submittedBy: command.initiator,
       },
-      new Date(command.createdAt),
+      now,
     );
     // 关联关系命令（回读收口由关系命令侧驱动并回调 settleExecution）
     command.relationCommandId = rel.id;

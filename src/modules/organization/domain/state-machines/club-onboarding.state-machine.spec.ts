@@ -247,7 +247,11 @@ describe('ClubOnboardingStateMachine', () => {
       event: 'rebind',
       actor: 'u_root',
       now: new Date('2026-08-01T06:00:00.000Z'),
-      facts: { confirmed: true, leaderContinuityOk: true, newGroupRef: { owner: 'club-acm', name: '新社团组' } },
+      facts: {
+        confirmed: true,
+        leaderContinuityOk: true,
+        newGroupRef: { owner: 'club-acm', name: '新社团组' },
+      },
     });
     assert.equal(r.club.status, 'suspended');
     assert.equal(r.club.leaderGroup, null);

@@ -223,6 +223,18 @@ export class RelationCommandUseCase {
     return result.command;
   }
 
+  /**
+   * 系统入口：调度/对账任务驱动回读收口（ORG-027 写后回读确认）。
+   * 由调度器或对账任务以系统身份调用，读取目标 Group 实况并交由 handleReadback
+   * 推进状态机；不允许普通用户经 HTTP 触发。
+   */
+  async systemConfirmReadback(input: { commandId: string; now: Date }): Promise<RelationCommand> {
+    const command = await this.requireCommand(input.commandId);
+    const refs = command.targetRelation.map((s) => s.targetGroup);
+    const readback = await this.casdoor.readback(refs);
+    return this.handleReadback({ commandId: command.id, now: input.now }, readback);
+  }
+
   async manualRetry(input: {
     commandId: string;
     actor: string;

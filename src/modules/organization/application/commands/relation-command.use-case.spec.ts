@@ -22,6 +22,10 @@ class MutablePermissions implements CurrentPermissionsPort {
   async isPlatformSuperAdmin(): Promise<boolean> {
     return false;
   }
+
+  async primaryRoleAt(): Promise<string> {
+    return 'club-acm/人事组';
+  }
 }
 
 function buildHarness() {

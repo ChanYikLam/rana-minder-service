@@ -70,7 +70,8 @@ export class InMemoryClubStore implements ClubStore {
 
   async findByGroupRef(ref: GroupStableRef): Promise<ClubSpace | null> {
     for (const club of this.byId.values()) {
-      if (club.clubGroup?.owner === ref.owner && club.clubGroup.name === ref.name) return structuredClone(club);
+      if (club.clubGroup?.owner === ref.owner && club.clubGroup.name === ref.name)
+        return structuredClone(club);
     }
     return null;
   }
@@ -495,6 +496,12 @@ export class MemoryCurrentPermissionsPort implements CurrentPermissionsPort {
 
   async isPlatformSuperAdmin(userId: string): Promise<boolean> {
     return this.config.superAdminUsers.includes(userId);
+  }
+
+  async primaryRoleAt(userId: string, clubId: string): Promise<string> {
+    const memberships = this.config.positionGroupMemberships.get(userId) ?? [];
+    const first = memberships.find((m) => m.clubId === clubId);
+    return first === undefined ? '' : `${first.group.owner}/${first.group.name}`;
   }
 
   private positionPermissions(userId: string): Array<{ clubId: string; permission: string }> {

@@ -108,6 +108,14 @@ export class OnboardingUseCase {
     const leaderRef = toStableRef(input.leaderGroupId, input.name);
     await this.assertGroupAvailable(leaderRef);
 
+    // 部门/职位 Group 选择：与社团 Group 形成后代/直属关系（ORG-012/018）
+    const departmentGroups = (input.departmentGroupIds ?? []).map((id) =>
+      toStableRef(id, input.name),
+    );
+    const positionGroups = (input.positionGroupIds ?? []).map((id) => toStableRef(id, input.name));
+    for (const dep of departmentGroups) await this.assertDescendant(dep, clubRef);
+    for (const pos of positionGroups) await this.assertDescendant(pos, clubRef);
+
     const club = createClubSpace({
       id: newId(IdPrefix.CLUB),
       name: input.name,
@@ -116,8 +124,10 @@ export class OnboardingUseCase {
       actor: input.actor,
       now,
     });
-    // 持久化已校验的负责人组选择，避免后续步骤丢失（ORG-024 负责人连续性依赖它）
+    // 持久化已校验的 Group 选择：负责人 + 部门 + 职位（ORG-011/012/014/017/018）
     club.leaderGroup = leaderRef;
+    club.departmentGroups = departmentGroups;
+    club.positionGroups = positionGroups;
     const draft = this.stateMachine.transition({
       club,
       event: 'wizard_save_step',

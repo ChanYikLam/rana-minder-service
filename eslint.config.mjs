@@ -25,8 +25,9 @@ export default tseslint.config(
       // 项目代码含大量中文注释与纯规则模块，采用宽松配置以适配现有代码基线
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-empty-object-type': 'off',
+      // P2-bug：升级为 error 门禁，杜绝死代码/未使用 import 长期累积（CI 门禁收紧）
       '@typescript-eslint/no-unused-vars': [
-        'warn',
+        'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       'no-console': ['warn', { allow: ['warn', 'error'] }],

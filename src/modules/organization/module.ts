@@ -19,13 +19,12 @@ import { appointmentCommandProvider } from './application/commands/appointment-c
 import { onboardingProvider } from './application/commands/onboard-club.use-case';
 import { clubLifecycleProvider } from './application/commands/club-lifecycle.use-case';
 import { relationCommandProvider } from './application/commands/relation-command.use-case';
-import { ControlledBatchSkeleton } from './application/commands/controlled-batch.use-case';
+import { controlledBatchProvider } from './application/commands/controlled-batch.use-case';
 
 import {
   CASDOOR_GROUP_PORT,
   CLOCK,
   CLUB_STORE,
-  CONTROLLED_BATCH_PORT,
   CURRENT_PERMISSIONS_PORT,
   JOB_SCHEDULER,
   NOTIFICATION_PORT,
@@ -195,10 +194,7 @@ import { OrgWorkspaceController } from './interfaces/controllers/org-workspace.c
     clubLifecycleProvider,
     relationCommandProvider,
     appointmentCommandProvider,
-    {
-      provide: CONTROLLED_BATCH_PORT,
-      useFactory: () => new ControlledBatchSkeleton({ execute: async () => ({ ok: true }) }),
-    },
+    controlledBatchProvider,
     {
       provide: ADMIN_CLUBS_QUERY,
       useFactory: (clubs: ClubStore, registry: GroupMappingRegistry, casdoor: CasdoorGroupPort) =>
