@@ -23,6 +23,7 @@ import {
   RECRUITMENT_AUTH_SESSION_PROVIDER,
   RECRUITMENT_CONTROLLER,
   CREATE_RECRUITMENT_ACTIVITY_USE_CASE,
+  PUBLISH_RECRUITMENT_ACTIVITY_USE_CASE,
   OPEN_APPLICATION_CHANNEL_USE_CASE,
   SUBMIT_APPLICATION_USE_CASE,
   RECORD_DEPARTMENT_DECISION_USE_CASE,
@@ -40,6 +41,7 @@ import { NotWiredRecruitmentAuthorization } from './application/ports/recruitmen
 import { StubRecruitmentForm } from './application/ports/recruitment-form.port';
 
 import { DefaultCreateRecruitmentActivityUseCase } from './application/commands/create-recruitment-activity.use-case';
+import { DefaultPublishRecruitmentActivityUseCase } from './application/commands/publish-recruitment-activity.use-case';
 import { DefaultOpenApplicationChannelUseCase } from './application/commands/open-application-channel.use-case';
 import { DefaultSubmitApplicationUseCase } from './application/commands/submit-application.use-case';
 import { DefaultRecordDepartmentDecisionUseCase } from './application/commands/record-department-decision.use-case';
@@ -95,6 +97,11 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
       inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
     },
     {
+      provide: PUBLISH_RECRUITMENT_ACTIVITY_USE_CASE,
+      useFactory: (repo, auth) => new DefaultPublishRecruitmentActivityUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
       provide: SUBMIT_APPLICATION_USE_CASE,
       useFactory: (repo, auth, form) => new DefaultSubmitApplicationUseCase(repo, auth, form),
       inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION, RECRUITMENT_FORM_PORT],
@@ -141,6 +148,7 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
       useFactory: (
         uow,
         create,
+        publish,
         open,
         submit,
         decide,
@@ -154,6 +162,7 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
         new RecruitmentController(
           uow,
           create,
+          publish,
           open,
           submit,
           decide,
@@ -167,6 +176,7 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
       inject: [
         RecruitmentUnitOfWork,
         CREATE_RECRUITMENT_ACTIVITY_USE_CASE,
+        PUBLISH_RECRUITMENT_ACTIVITY_USE_CASE,
         OPEN_APPLICATION_CHANNEL_USE_CASE,
         SUBMIT_APPLICATION_USE_CASE,
         RECORD_DEPARTMENT_DECISION_USE_CASE,

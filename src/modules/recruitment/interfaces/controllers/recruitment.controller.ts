@@ -10,6 +10,7 @@ import type { RlsScope } from '../../../../shared/db-adapter';
 import type { ActorContext } from './actor-context';
 import { toApiError, type ApiErrorResult } from '../http/recruitment-error-http';
 import type { CreateRecruitmentActivityUseCase } from '../../application/commands/create-recruitment-activity.use-case';
+import type { PublishRecruitmentActivityUseCase } from '../../application/commands/publish-recruitment-activity.use-case';
 import type { OpenApplicationChannelUseCase } from '../../application/commands/open-application-channel.use-case';
 import type {
   SubmitApplicationUseCase,
@@ -34,6 +35,7 @@ export class RecruitmentController {
   constructor(
     private readonly uow: RecruitmentUnitOfWork,
     private readonly createActivityUseCase: CreateRecruitmentActivityUseCase,
+    private readonly publishActivityUseCase: PublishRecruitmentActivityUseCase,
     private readonly openChannelUseCase: OpenApplicationChannelUseCase,
     private readonly submitApplicationUseCase: SubmitApplicationUseCase,
     private readonly recordDecisionUseCase: RecordDepartmentDecisionUseCase,
@@ -77,9 +79,32 @@ export class RecruitmentController {
     );
   }
 
-  openChannel(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
+  publishActivity(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.openChannelUseCase.execute({ activityId, actor: actor.subjectId, now: actor.now }),
+      this.publishActivityUseCase.execute({
+        activityId,
+        actor: actor.subjectId,
+        now: actor.now,
+      }),
+    );
+  }
+
+  openChannel(
+    actor: ActorContext,
+    activityId: string,
+    input: {
+      readonly minChoices?: number;
+      readonly maxChoices?: number;
+    },
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.openChannelUseCase.execute({
+        activityId,
+        minChoices: input.minChoices,
+        maxChoices: input.maxChoices,
+        actor: actor.subjectId,
+        now: actor.now,
+      }),
     );
   }
 

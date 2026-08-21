@@ -11,6 +11,7 @@ import {
   StubRecruitmentForm,
 } from './testing/recruitment-test-support';
 import { DefaultCreateRecruitmentActivityUseCase } from './commands/create-recruitment-activity.use-case';
+import { DefaultPublishRecruitmentActivityUseCase } from './commands/publish-recruitment-activity.use-case';
 import { DefaultOpenApplicationChannelUseCase } from './commands/open-application-channel.use-case';
 import { DefaultSubmitApplicationUseCase } from './commands/submit-application.use-case';
 import { DefaultRecordDepartmentDecisionUseCase } from './commands/record-department-decision.use-case';
@@ -177,6 +178,75 @@ describe('recruitment application layer (REC-001~004)', () => {
           now: NOW,
         }),
       { code: 'REC_FORBIDDEN' },
+    );
+  });
+
+  it('发布活动（DRAFT → OPEN）后即可开放报名通道', async () => {
+    auth.manageAllowed = true;
+    const activityId = 'act-pub';
+    const create = new DefaultCreateRecruitmentActivityUseCase(repo, auth);
+    await create.execute({
+      clubId: CLUB_ID,
+      title: '秋招',
+      description: null,
+      actor: ACTOR,
+      now: NOW,
+      id: activityId,
+    });
+
+    // 创建后为 DRAFT，此时开通道应失败
+    await assert.rejects(
+      () =>
+        new DefaultOpenApplicationChannelUseCase(repo, auth).execute({
+          activityId,
+          actor: ACTOR,
+          now: NOW,
+        }),
+      { code: 'REC_PRECONDITION' },
+    );
+
+    // 发布后进入 OPEN
+    const publish = new DefaultPublishRecruitmentActivityUseCase(repo, auth);
+    const published = await publish.execute({ activityId, actor: ACTOR, now: NOW });
+    assert.strictEqual(published.status, 'OPEN');
+    const snapshot = await repo.loadActivity(activityId);
+    assert.strictEqual(snapshot?.status, 'OPEN');
+
+    // 发布后开通道成功
+    const opened = await new DefaultOpenApplicationChannelUseCase(repo, auth).execute({
+      activityId,
+      minChoices: 1,
+      maxChoices: 3,
+      actor: ACTOR,
+      now: NOW,
+    });
+    assert.ok(opened.channelId);
+  });
+
+  it('开放报名通道校验志愿上下限', async () => {
+    auth.manageAllowed = true;
+    const activityId = 'act-chan';
+    const create = new DefaultCreateRecruitmentActivityUseCase(repo, auth);
+    await create.execute({
+      clubId: CLUB_ID,
+      title: '秋招',
+      description: null,
+      actor: ACTOR,
+      now: NOW,
+      id: activityId,
+    });
+    const activity = RecruitmentActivity.fromSnapshot((await repo.loadActivity(activityId))!);
+    assert.ok(activity.open(new DefaultRecruitmentActivityStateMachine(), NOW));
+    await repo.saveActivity(activity.toSnapshot());
+
+    const openChannel = new DefaultOpenApplicationChannelUseCase(repo, auth);
+    await assert.rejects(
+      () => openChannel.execute({ activityId, minChoices: 3, maxChoices: 1, actor: ACTOR, now: NOW }),
+      { code: 'REC_VALIDATION' },
+    );
+    await assert.rejects(
+      () => openChannel.execute({ activityId, minChoices: 0, maxChoices: 3, actor: ACTOR, now: NOW }),
+      { code: 'REC_VALIDATION' },
     );
   });
 });

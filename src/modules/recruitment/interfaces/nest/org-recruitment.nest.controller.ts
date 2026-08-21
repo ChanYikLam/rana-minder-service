@@ -3,6 +3,7 @@
  *
  * 路由（作用域由路径 clubId 冻结）：
  * - POST /api/org/:clubId/recruitment/activities                      创建招新活动
+ * - POST /api/org/:clubId/recruitment/activities/:activityId/publish  发布招新活动
  * - POST /api/org/:clubId/recruitment/activities/:activityId/channels 开放报名通道
  * - POST /api/org/:clubId/recruitment/applications                    提交招新申请
  * - POST /api/org/:clubId/recruitment/applications/:applicationId/decisions  记录部门决定
@@ -62,13 +63,34 @@ export class OrgRecruitmentNestController {
     );
   }
 
+  @Post('activities/:activityId/publish')
+  async publishActivity(
+    @Param('clubId') _clubId: string,
+    @Param('activityId') activityId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    return toHttpResponse(
+      await this.controller.publishActivity(this.actor(request), activityId),
+    );
+  }
+
   @Post('activities/:activityId/channels')
   async openChannel(
     @Param('clubId') _clubId: string,
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
+    @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.openChannel(this.actor(request), activityId));
+    const input = parseRecruitmentRequestEnvelope(body).input as {
+      minChoices?: number;
+      maxChoices?: number;
+    };
+    return toHttpResponse(
+      await this.controller.openChannel(this.actor(request), activityId, {
+        minChoices: input.minChoices,
+        maxChoices: input.maxChoices,
+      }),
+    );
   }
 
   @Post('applications')

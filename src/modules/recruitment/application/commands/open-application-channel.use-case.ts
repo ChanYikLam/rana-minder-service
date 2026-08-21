@@ -51,13 +51,24 @@ export class DefaultOpenApplicationChannelUseCase implements OpenApplicationChan
     ) {
       throw recruitmentErrors.forbidden('仅社团负责人/人事可配置报名通道');
     }
+    const minChoices = input.minChoices ?? 1;
+    const maxChoices = input.maxChoices ?? 1;
+    if (!Number.isInteger(minChoices) || minChoices < 1) {
+      throw recruitmentErrors.validation('志愿下限须为正整数');
+    }
+    if (!Number.isInteger(maxChoices) || maxChoices < 1) {
+      throw recruitmentErrors.validation('志愿上限须为正整数');
+    }
+    if (minChoices > maxChoices) {
+      throw recruitmentErrors.validation('志愿上限不得小于下限');
+    }
     const id = input.id ?? randomUUID();
     const channel = ApplicationChannel.createClosed({
       id,
       activityId: activity.id,
       clubId: activity.clubId,
-      minChoices: input.minChoices,
-      maxChoices: input.maxChoices,
+      minChoices,
+      maxChoices,
       now: input.now,
     });
     if (!channel.open(new DefaultApplicationChannelStateMachine(), input.now)) {
