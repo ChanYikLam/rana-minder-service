@@ -34,7 +34,6 @@ export class CleanupOrphansCommand {
       throw new Error('IFC-ERR-006: 正式删除清单接管，由删除清单处理');
     }
 
-    const now = new Date().toISOString();
     let allVerified = true;
     const processed = file.cleanupQueue.map(async (item) => {
       if (item.status === 'VERIFIED_DELETED') {

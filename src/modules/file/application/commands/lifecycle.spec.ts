@@ -40,7 +40,7 @@ const makeAvailableFile = async (repo: InMemoryFileRepository, store: InMemoryOb
     target: { objectType: 'FORM_SUBMISSION', objectId: 's1', fieldKey: 'idPhoto' },
   };
   const file = await initiate.execute(input);
-  const completed = await complete.execute({
+  await complete.execute({
     fileId: file.fileId,
     principalId: 'u1',
     sessionId: file.uploadSession!.sessionId,
