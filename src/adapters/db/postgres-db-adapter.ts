@@ -76,6 +76,7 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       password: string;
       ssl: boolean;
       max?: number;
+      connectionTimeoutMillis?: number;
     },
   ) {
     this.pool = new Pool({
@@ -86,6 +87,9 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       password: poolConfig.password,
       ssl: poolConfig.ssl ? { rejectUnauthorized: false } : false,
       max: poolConfig.max ?? 10,
+      // 连接超时：避免 DB 不可达时 pool.connect() 无限挂起（如 CI 集成测试阶段
+      // dind 网络未就绪时静默阻塞直到 Runner 超时强杀）。超时后快速抛错便于定位。
+      connectionTimeoutMillis: poolConfig.connectionTimeoutMillis ?? 10_000,
       // 归还前若发现连接上仍有未收口事务，兜底回滚并告警（污染防护）。
       idleTimeoutMillis: 30_000,
     });
