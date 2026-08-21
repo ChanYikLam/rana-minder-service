@@ -59,7 +59,11 @@ export class PromoteFileCommand {
     // 失败/隔离：检查中 → 隔离/失败（可重试标志按检查结果）
     if (check.status === 'FAILED' || check.status === 'QUARANTINED') {
       const state = this.stateMachine.transition(FileState.CHECKING, FileState.QUARANTINED_FAILED);
-      const updated: FileRecord = { ...file, state, checkRecord: { ...check, retryable: check.retryable } };
+      const updated: FileRecord = {
+        ...file,
+        state,
+        checkRecord: { ...check, retryable: check.retryable },
+      };
       await this.repo.save(updated);
       return updated;
     }
@@ -85,7 +89,12 @@ export class PromoteFileCommand {
       // 晋升失败保持检查中（不开放访问；DATA-FIL-003 源对象变化/目标已存在/核验失败不放行）
       const updated: FileRecord = {
         ...file,
-        checkRecord: { ...check, status: 'UNAVAILABLE', retryable: true, sanitizedResult: `promote-failed:${promoted.reason ?? 'unknown'}` },
+        checkRecord: {
+          ...check,
+          status: 'UNAVAILABLE',
+          retryable: true,
+          sanitizedResult: `promote-failed:${promoted.reason ?? 'unknown'}`,
+        },
       };
       await this.repo.save(updated);
       return updated;

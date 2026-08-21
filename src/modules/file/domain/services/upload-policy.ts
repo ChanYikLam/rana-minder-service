@@ -63,9 +63,7 @@ export class UploadPolicy {
       throw new UploadLimitExceededError(`文件大小必须为正（${category}）`);
     }
     if (declaredSizeBytes > max) {
-      throw new UploadLimitExceededError(
-        `文件大小超过类别 ${category} 硬上限 ${max} 字节`,
-      );
+      throw new UploadLimitExceededError(`文件大小超过类别 ${category} 硬上限 ${max} 字节`);
     }
   }
 
@@ -75,9 +73,7 @@ export class UploadPolicy {
       throw new UploadLimitExceededError('字段附件数量必须为正');
     }
     if (configuredPerField > this.limits.maxFilesPerField) {
-      throw new UploadLimitExceededError(
-        `附件数量超过平台硬上限 ${this.limits.maxFilesPerField}`,
-      );
+      throw new UploadLimitExceededError(`附件数量超过平台硬上限 ${this.limits.maxFilesPerField}`);
     }
   }
 }

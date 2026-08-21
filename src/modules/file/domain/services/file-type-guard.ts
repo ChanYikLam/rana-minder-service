@@ -125,8 +125,7 @@ export class FileTypeGuard {
     if (detectedType === 'application/octet-stream') {
       return { detectedType, matchesDeclaration: false, outcome: FileCheckOutcome.FAILED };
     }
-    const matchesDeclaration =
-      declaredType.length === 0 || declaredType === detectedType;
+    const matchesDeclaration = declaredType.length === 0 || declaredType === detectedType;
     if (!matchesDeclaration) {
       return { detectedType, matchesDeclaration: false, outcome: FileCheckOutcome.FAILED };
     }

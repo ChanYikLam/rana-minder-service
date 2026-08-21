@@ -1,6 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { FileCategory, FileRecord, ObjectLocation, UploadSession, FileVersion } from '../../domain/models/file-model';
+import type {
+  FileCategory,
+  FileRecord,
+  ObjectLocation,
+  UploadSession,
+  FileVersion,
+} from '../../domain/models/file-model';
 import { BucketRole } from '../../domain/models/file-model';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { UploadPolicy } from '../../domain/services/upload-policy';

@@ -13,7 +13,9 @@ import { UploadPolicy } from '../../domain/services/upload-policy';
 import { FileTypeGuard } from '../../domain/services/file-type-guard';
 
 const pngBytes = (): Uint8Array =>
-  new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]);
+  new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  ]);
 
 const exeBytes = (): Uint8Array => new Uint8Array([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00]);
 
@@ -72,14 +74,23 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     assert.ok(stored !== null);
     // 重放同一会话 → 拒绝（状态已离开临时上传，拦截更早）
     await assert.rejects(
-      flow.complete.execute({ fileId: file.fileId, sessionId, bytes: pngBytes(), actualSize: pngBytes().length }),
+      flow.complete.execute({
+        fileId: file.fileId,
+        sessionId,
+        bytes: pngBytes(),
+        actualSize: pngBytes().length,
+      }),
       /不在临时上传状态/,
     );
   });
 
   it('伪造扩展名（声明 png 实为可执行）→ 初检隔离，不开放访问', async () => {
     const flow = makeFlow();
-    const file = await flow.initiate.execute({ ...baseInput, declaredType: 'image/png', declaredSizeBytes: exeBytes().length });
+    const file = await flow.initiate.execute({
+      ...baseInput,
+      declaredType: 'image/png',
+      declaredSizeBytes: exeBytes().length,
+    });
     const completed = await flow.complete.execute({
       fileId: file.fileId,
       sessionId: file.uploadSession!.sessionId,

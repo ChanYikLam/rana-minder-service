@@ -56,8 +56,17 @@ describe('FileTypeGuard（GOV-008 真实类型校验，不信任扩展名）', (
   });
 
   it('JPEG/PDF/MP4 合法类型 → PASSED', () => {
-    assert.equal(guard.check(hex('ffd8ffe000104a4649460001'), 'image/jpeg').outcome, FileCheckOutcome.PASSED);
-    assert.equal(guard.check(hex('255044462d312e34'), 'application/pdf').outcome, FileCheckOutcome.PASSED);
-    assert.equal(guard.check(hex('00000018667479706d703432'), 'video/mp4').outcome, FileCheckOutcome.PASSED);
+    assert.equal(
+      guard.check(hex('ffd8ffe000104a4649460001'), 'image/jpeg').outcome,
+      FileCheckOutcome.PASSED,
+    );
+    assert.equal(
+      guard.check(hex('255044462d312e34'), 'application/pdf').outcome,
+      FileCheckOutcome.PASSED,
+    );
+    assert.equal(
+      guard.check(hex('00000018667479706d703432'), 'video/mp4').outcome,
+      FileCheckOutcome.PASSED,
+    );
   });
 });

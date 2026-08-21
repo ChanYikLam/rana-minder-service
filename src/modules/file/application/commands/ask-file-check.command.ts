@@ -52,9 +52,7 @@ export class AskFileCheckCommand {
     // 幂等：已收口（终态）不重复执行
     if (
       check !== null &&
-      (check.status === 'PASSED' ||
-        check.status === 'FAILED' ||
-        check.status === 'QUARANTINED')
+      (check.status === 'PASSED' || check.status === 'FAILED' || check.status === 'QUARANTINED')
     ) {
       return this.toResult(check.status, check.engineVersion, check.sanitizedResult, false);
     }

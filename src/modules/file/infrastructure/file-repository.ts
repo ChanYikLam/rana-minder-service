@@ -13,7 +13,11 @@ export interface FileRepository {
   save(file: FileRecord): Promise<void>;
   load(fileId: string): Promise<FileRecord | null>;
   /** 按目标对象/字段列出文件（绑定/清理竞争用） */
-  listByTarget(target: { objectType: string; objectId: string; fieldKey: string }): Promise<readonly FileRecord[]>;
+  listByTarget(target: {
+    objectType: string;
+    objectId: string;
+    fieldKey: string;
+  }): Promise<readonly FileRecord[]>;
   /** 下一版本号（不可变版本递增） */
   nextVersionNo(fileId: string): Promise<number>;
 }

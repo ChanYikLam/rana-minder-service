@@ -86,8 +86,7 @@ export class CompleteUploadCommand {
           : 'FAILED';
 
     // 状态转换：临时上传 → 检查中（初检通过）或 隔离/失败（初检拒绝）
-    const to =
-      initialCheck === 'PASSED' ? FileState.CHECKING : FileState.QUARANTINED_FAILED;
+    const to = initialCheck === 'PASSED' ? FileState.CHECKING : FileState.QUARANTINED_FAILED;
     const state = this.stateMachine.transition(FileState.TEMPORARY_UPLOAD, to);
 
     // 对实际字节计算可信 SHA-256 并回填版本（DATA-FIL-003：晋升时按此摘要核验原件；
@@ -109,7 +108,9 @@ export class CompleteUploadCommand {
         engineVersion: 'app-initial-v1',
         status: initialCheck === 'PASSED' ? 'RUNNING' : initialCheck,
         retryable: false,
-        sanitizedResult: sniff.matchesDeclaration ? sniff.detectedType : `declared-mismatch:${sniff.detectedType}`,
+        sanitizedResult: sniff.matchesDeclaration
+          ? sniff.detectedType
+          : `declared-mismatch:${sniff.detectedType}`,
         startedAt: new Date().toISOString(),
       },
     };

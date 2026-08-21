@@ -32,7 +32,10 @@ describe('FileStateMachine（SRS-SM-FILE-001 上传检查相关转换）', () =>
   const sm = new FileStateMachine();
 
   it('合法转换：NEW→临时上传→检查中→可用', () => {
-    assert.equal(sm.transition(FileState.NEW, FileState.TEMPORARY_UPLOAD), FileState.TEMPORARY_UPLOAD);
+    assert.equal(
+      sm.transition(FileState.NEW, FileState.TEMPORARY_UPLOAD),
+      FileState.TEMPORARY_UPLOAD,
+    );
     assert.equal(sm.transition(FileState.TEMPORARY_UPLOAD, FileState.CHECKING), FileState.CHECKING);
     assert.equal(sm.transition(FileState.CHECKING, FileState.AVAILABLE), FileState.AVAILABLE);
   });
@@ -46,7 +49,10 @@ describe('FileStateMachine（SRS-SM-FILE-001 上传检查相关转换）', () =>
 
   it('非法转换：新建→可用 → 拒绝（未检查不得放行）', () => {
     assert.throws(() => sm.transition(FileState.NEW, FileState.AVAILABLE), /IFC-ERR-006/);
-    assert.throws(() => sm.transition(FileState.TEMPORARY_UPLOAD, FileState.AVAILABLE), /IFC-ERR-006/);
+    assert.throws(
+      () => sm.transition(FileState.TEMPORARY_UPLOAD, FileState.AVAILABLE),
+      /IFC-ERR-006/,
+    );
   });
 
   it('未检查状态不可访问（FORM-007）', () => {

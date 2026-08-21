@@ -18,7 +18,11 @@ export class InMemoryFileRepository implements FileRepository {
     return this.files.get(fileId) ?? null;
   }
 
-  async listByTarget(target: { objectType: string; objectId: string; fieldKey: string }): Promise<readonly FileRecord[]> {
+  async listByTarget(target: {
+    objectType: string;
+    objectId: string;
+    fieldKey: string;
+  }): Promise<readonly FileRecord[]> {
     const result: FileRecord[] = [];
     for (const file of this.files.values()) {
       const t = file.target;
