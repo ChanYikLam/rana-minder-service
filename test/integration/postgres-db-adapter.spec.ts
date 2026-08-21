@@ -118,14 +118,20 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
     );
     assert.equal(rows[0].ctx, 'u-1');
     await db.commit(tx);
-    // 提交后上下文失效（新事务不再有该值）
+    // 提交后上下文失效（新事务不再有该值）。
+    // 注意：PG 对自定义 GUC（app.*）在事务提交后会还原为历史值——本会话从未全局 SET 过
+    // 该变量，故还原为 ''（空串）而非 NULL；两者都表示“无 RLS 上下文”，关键是绝不能再
+    // 残留原 subject 'u-1'。
     const tx2 = await db.beginTransaction();
     const rows2 = await db.query<{ ctx: string | null }>(
       tx2,
       "SELECT current_setting('app.subject_id', true) AS ctx",
       [],
     );
-    assert.equal(rows2[0].ctx, null);
+    assert.ok(
+      rows2[0].ctx === null || rows2[0].ctx === '',
+      `RLS 上下文应随事务提交失效，实际仍残留: ${JSON.stringify(rows2[0].ctx)}`,
+    );
     await db.commit(tx2);
   });
 });
