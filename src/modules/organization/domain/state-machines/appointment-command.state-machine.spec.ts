@@ -25,6 +25,7 @@ function run(
   event: AppointmentTransitionInput['event'],
   facts: AppointmentTransitionInput['facts'] = {},
   status: AppointmentCommand['status'] = command.status,
+  actorRole: string = 'personnel',
 ) {
   const machine = new AppointmentCommandStateMachine();
   return machine.transition({
@@ -32,6 +33,7 @@ function run(
     event,
     now: new Date('2026-08-01T01:00:00.000Z'),
     actor: 'u_b',
+    actorRole,
     facts,
   });
 }
@@ -96,10 +98,14 @@ describe('AppointmentCommandStateMachine', () => {
       'reconfirm',
       { confirmerAuthorized: true, newExecTime: '2026-08-03T00:00:00.000Z', preconditions: [] },
       'precondition_invalid_pending_resolution',
+      'admin',
     );
     assert.equal(r.command.status, 'reconfirmed_pending_execution');
     assert.equal(r.command.newExecTime, '2026-08-03T00:00:00.000Z');
     assert.ok(r.requiredSideEffects.includes('invalidate_old_schedule'));
+    assert.equal(r.command.reconfirmations.length, 1);
+    assert.equal(r.command.reconfirmations[0]?.role, 'admin');
+    assert.equal(r.command.reconfirmations[0]?.by, 'u_b');
   });
 
   it('reconfirm：条件未恢复时不得确认', () => {

@@ -22,6 +22,10 @@
  *    config
  * 4. 适配：adapters（casdoor / db / mail / storage）受 DEP-Q-001/002 锁定后接入
  *
+ * 说明：src/adapters 与 src/modules/form 当前仅为占位目录（.gitkeep + 文档），
+ * 尚未提供 NestJS module，因此 app.module.ts 未导入；待对应 ADR 实现后按上述
+ * 顺序接入。
+ *
  * 任何在此处接人的 module 不得越过 ADR-002 的状态机唯一责任与 ADR-003 的本地原子
  * 提交边界。
  */

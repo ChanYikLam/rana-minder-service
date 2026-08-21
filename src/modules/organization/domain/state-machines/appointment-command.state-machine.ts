@@ -31,6 +31,8 @@ export interface AppointmentTransitionInput {
   event: AppointmentEvent;
   now: Date;
   actor: string;
+  /** 操作者在该社团的主角色（GOV-007：仅用于审计，不用于授权） */
+  actorRole: string;
   facts: {
     /** 到达计划/新执行时间（调度幂等） */
     due?: boolean;
@@ -77,7 +79,7 @@ export class AppointmentCommandStateMachine {
   }
 
   transition(input: AppointmentTransitionInput): AppointmentTransitionResult {
-    const { command: original, event, now, actor, facts } = input;
+    const { command: original, event, now, actor, actorRole, facts } = input;
     const stamp = now.toISOString();
 
     if (!this.allowedFrom(event, original.status)) {
@@ -182,7 +184,7 @@ export class AppointmentCommandStateMachine {
         command.scheduleVersion += 1; // 旧调度任务永久失效（ORG-039）
         command.reconfirmations = [
           ...original.reconfirmations,
-          { by: actor, role: actor, at: stamp },
+          { by: actor, role: actorRole, at: stamp },
         ];
         sideEffects = ['save_confirmation', 'invalidate_old_schedule', 'notify_affected'];
         break;

@@ -132,7 +132,10 @@ export class SubmitRelationCommandDto {
 // --------------------------------------------------------------------------
 
 export class CreateAppointmentCommandDto {
-  @IsString() @IsNotEmpty() type!: 'appoint' | 'revoke' | 'transfer';
+  @IsIn(['appoint', 'revoke', 'transfer'])
+  @IsString()
+  @IsNotEmpty()
+  type!: 'appoint' | 'revoke' | 'transfer';
   @IsString() @IsNotEmpty() subjectId!: string;
   @IsString() @IsOptional() departmentGroupId!: string;
   @IsString() @IsOptional() positionGroupId!: string;

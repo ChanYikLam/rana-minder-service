@@ -100,6 +100,7 @@ export class AppointmentCommandUseCase {
       event: 'create',
       now: input.now,
       actor: input.initiator,
+      actorRole: input.initiatorRoleAtCreate,
       facts: {},
     });
     await this.store.save(result.command);
@@ -153,6 +154,7 @@ export class AppointmentCommandUseCase {
         event: 'schedule_execute',
         now: input.now,
         actor: input.actor,
+        actorRole: await this.permissions.primaryRoleAt(input.actor, command.clubId),
         facts: {
           due: true,
           initiatorHasRights,
@@ -184,12 +186,14 @@ export class AppointmentCommandUseCase {
   }): Promise<AppointmentCommand> {
     const command = await this.requireCommand(input.commandId);
     const actorAuthorized = await this.isAuthorizedForCommand(input.actor, command);
+    const actorRole = await this.permissions.primaryRoleAt(input.actor, command.clubId);
     const preconditions = await this.evaluatePreconditions(command);
     const result = this.stateMachine.transition({
       command,
       event: 'reconfirm',
       now: input.now,
       actor: input.actor,
+      actorRole,
       facts: {
         confirmerAuthorized: actorAuthorized,
         preconditions,
@@ -219,11 +223,13 @@ export class AppointmentCommandUseCase {
   }): Promise<AppointmentCommand> {
     const command = await this.requireCommand(input.commandId);
     const actorAuthorized = await this.isAuthorizedForCommand(input.actor, command);
+    const actorRole = await this.permissions.primaryRoleAt(input.actor, command.clubId);
     const result = this.stateMachine.transition({
       command,
       event: 'cancel',
       now: input.now,
       actor: input.actor,
+      actorRole,
       facts: { cancellerAuthorized: actorAuthorized, reason: input.reason },
     });
     await this.store.save(result.command);
@@ -243,6 +249,7 @@ export class AppointmentCommandUseCase {
       event,
       now: input.now,
       actor: 'system',
+      actorRole: 'system',
       facts: { executionResult: input.success ? 'success' : 'failure', reason: input.reason },
     });
     await this.store.save(result.command);
@@ -292,6 +299,7 @@ export class AppointmentCommandUseCase {
         event: 'retry_execute',
         now: input.now,
         actor: input.actor,
+        actorRole: await this.permissions.primaryRoleAt(input.actor, command.clubId),
         facts: { confirmerAuthorized: actorAuthorized },
       });
       await this.createRelationExecution(result.command, input.now);
@@ -305,6 +313,8 @@ export class AppointmentCommandUseCase {
   }
 
   private async createRelationExecution(command: AppointmentCommand, now: Date): Promise<void> {
+    const club = await this.clubs.findById(command.clubId);
+    if (club === null) throw orgError.notVisible(`社团空间不存在（${command.clubId}）`);
     const content = command.content as unknown as AppointmentContent;
     const targetGroups: Array<{
       ref: { owner: string; name: string };
@@ -329,7 +339,7 @@ export class AppointmentCommandUseCase {
               : 'revoke_position',
         subjectId: content.subjectId,
         targetGroups,
-        objectVersion: command.createdVersion,
+        objectVersion: club.version,
         idempotencyKey: `appointment:${command.id}:v${command.scheduleVersion}`,
         submittedBy: command.initiator,
       },

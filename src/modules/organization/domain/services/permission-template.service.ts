@@ -7,6 +7,8 @@
  * - 发布按"草稿 → 已发布不可变版本"走（DATA-CFG-001），失败保留旧发布版本。
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type { PermissionName, PermissionTemplate } from '../models/permission-template';
 import {
   BUILT_IN_TEMPLATES,
@@ -79,7 +81,8 @@ export class PermissionTemplateService {
     newId?: string,
   ): PermissionTemplate {
     const base: PermissionTemplate = existing ?? {
-      id: newId ?? `ptpl-${at}`,
+      id: newId ?? `ptpl-${randomUUID()}`,
+      // `at` 仅保留为可读时间戳，不再用于 ID 兜底，避免同毫秒冲突
       name,
       scopeClass: 'club',
       draft: null,

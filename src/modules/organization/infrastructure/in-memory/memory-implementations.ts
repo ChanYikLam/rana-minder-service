@@ -496,12 +496,18 @@ export interface MemoryPermissionConfig {
 export class MemoryCurrentPermissionsPort implements CurrentPermissionsPort {
   constructor(private readonly config: MemoryPermissionConfig) {
     // 门禁隔离：本桩按 Group 名子串（leader/负责人/personnel/人事/dept…）派生权限，
-    // 违反 GOV-007「Group 名称不得授权」。它仅供开发/单测装配，生产环境一律拒绝
-    // 装配；真实鉴权须由基于 PermissionCalculator（职位 Group → 已发布模板映射 +
-    // 业务临时授权）的适配器实现。
+    // 违反 GOV-007「Group 名称不得授权」。它仅供开发/单测装配，且须显式开启
+    // ORG_DEV_ACTOR_HEADER（与 actor.ts 开发桩口径一致）；生产环境一律拒绝装配。
+    // 真实鉴权须由基于 PermissionCalculator（职位 Group → 已发布模板映射 + 业务临时
+    // 授权）的适配器实现。
     if (process.env['NODE_ENV'] === 'production') {
       throw new Error(
         'MemoryCurrentPermissionsPort 为 Group 名派生的开发桩，违反 GOV-007，禁止用于生产装配',
+      );
+    }
+    if (process.env['ORG_DEV_ACTOR_HEADER'] !== '1') {
+      throw new Error(
+        'MemoryCurrentPermissionsPort 为开发桩，须显式设置 ORG_DEV_ACTOR_HEADER=1 方可装配',
       );
     }
   }
