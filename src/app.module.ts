@@ -47,6 +47,12 @@ import { AdaptersModule } from './adapters/adapters.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
 import { NotificationModule } from './modules/notification';
+import { DB_STATUS_PORT } from './platform/observability/status-page/tokens';
+import {
+  NestOpsTelemetry,
+  OPS_TELEMETRY,
+} from './platform/observability/status-page/ops-telemetry';
+import { SECURITY_LOGGER } from './platform/observability/logging/tokens';
 
 @Module({
   imports: [
@@ -65,6 +71,13 @@ import { NotificationModule } from './modules/notification';
     NotificationModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    {
+      // T7：数据库连通经 OpsTelemetry 汇入脱敏日志（外部依赖结果待 T3 真实适配器）。
+      provide: OPS_TELEMETRY,
+      useFactory: (db, logger) => new NestOpsTelemetry(db, logger),
+      inject: [DB_STATUS_PORT, SECURITY_LOGGER],
+    },
+  ],
 })
 export class AppModule {}
