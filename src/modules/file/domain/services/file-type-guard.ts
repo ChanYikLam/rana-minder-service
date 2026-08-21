@@ -88,7 +88,10 @@ export class FileTypeGuard {
     if (bytes.length >= 8 && b(4) === 0x66 && b(5) === 0x74 && b(6) === 0x79 && b(7) === 0x70) {
       return 'video/mp4';
     }
-    // ZIP 容器（含 .docx/.xlsx；默认按高风险压缩处理）
+    // ZIP 容器（含 .docx/.xlsx 等 OOXML）。
+    // 设计说明：首版按 GOV-008 将 ZIP 容器（含 OOXML 文档）统一视为高风险压缩禁止上传；
+    // 若业务需要支持 Office 文档，需在后续版本对 ZIP 内部结构做 OOXML 白名单校验后放开，
+    // 此处保持默认禁止以降低解压/宏等攻击面。
     if (b(0) === 0x50 && b(1) === 0x4b) return 'application/zip';
     // RAR
     if (b(0) === 0x52 && b(1) === 0x61 && b(2) === 0x72 && b(3) === 0x21) {

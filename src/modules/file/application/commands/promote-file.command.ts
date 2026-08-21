@@ -86,7 +86,8 @@ export class PromoteFileCommand {
       currentVersion.sha256 ?? '',
     );
     if (!promoted.ok) {
-      // 晋升失败保持检查中（不开放访问；DATA-FIL-003 源对象变化/目标已存在/核验失败不放行）
+      // 晋升失败保持检查中（不开放访问；DATA-FIL-003 源对象变化/目标已存在/核验失败不放行）。
+      // UNAVAILABLE 为“未完成可重试”语义：须清除 finishedAt，避免与终态冲突。
       const updated: FileRecord = {
         ...file,
         checkRecord: {
@@ -94,6 +95,7 @@ export class PromoteFileCommand {
           status: 'UNAVAILABLE',
           retryable: true,
           sanitizedResult: `promote-failed:${promoted.reason ?? 'unknown'}`,
+          finishedAt: undefined,
         },
       };
       await this.repo.save(updated);

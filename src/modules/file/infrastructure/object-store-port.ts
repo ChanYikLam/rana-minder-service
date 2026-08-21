@@ -65,7 +65,11 @@ export class InMemoryObjectStore implements ObjectStorePort {
     if (bytes === null) {
       return { ok: false, reason: '源对象缺失' };
     }
-    if (expectedSha256.length > 0 && this.sha256Hex(bytes) !== expectedSha256) {
+    // 可信摘要必须非空：空摘要视为失败（不得跳过核验，DATA-FIL-003）
+    if (expectedSha256.length === 0) {
+      return { ok: false, reason: '缺少可信摘要，拒绝晋升' };
+    }
+    if (this.sha256Hex(bytes) !== expectedSha256) {
       return { ok: false, reason: '内容摘要核验失败' };
     }
     // 只写一次写入权威原件区（与隔离区独立语义，但共享 create-only 防覆盖）

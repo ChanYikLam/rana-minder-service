@@ -11,6 +11,8 @@ import { FileStatusQuery } from '../queries/file-status.query';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { UploadPolicy } from '../../domain/services/upload-policy';
 import { FileTypeGuard } from '../../domain/services/file-type-guard';
+import { MAX_SESSION_TTL_MINUTES } from './initiate-upload.command';
+import type { FileRecord } from '../../domain/models/file-model';
 
 const pngBytes = (): Uint8Array =>
   new Uint8Array([
@@ -142,5 +144,105 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     const view = await flow.status.getStatus(file.fileId, 'u1');
     assert.equal(view.state, FileState.TEMPORARY_UPLOAD);
     await assert.rejects(flow.status.getStatus(file.fileId, 'u2'), /IFC-ERR-003/);
+  });
+
+  it('完成上传：真实 bytes.length 与声明大小不一致时拒绝（防绕过类别硬上限）', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    // actualSize 谎报为声明大小，但真实字节更长 → 必须拒绝
+    await assert.rejects(
+      flow.complete.execute({
+        fileId: file.fileId,
+        sessionId: file.uploadSession!.sessionId,
+        bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0x00]),
+        actualSize: baseInput.declaredSizeBytes,
+      }),
+      /实际大小与声明大小不一致/,
+    );
+  });
+
+  it('初始化上传：会话 TTL 超出上限被拒绝（限时会话，不得近乎无限期）', async () => {
+    const flow = makeFlow();
+    await assert.rejects(
+      flow.initiate.execute({ ...baseInput, sessionTtlMinutes: MAX_SESSION_TTL_MINUTES + 1 }),
+      /上传会话有效期/,
+    );
+    await assert.rejects(
+      flow.initiate.execute({ ...baseInput, sessionTtlMinutes: 0 }),
+      /上传会话有效期/,
+    );
+  });
+
+  it('晋升失败：保持检查中(UNAVAILABLE)，清除 finishedAt，不开放访问', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    await flow.complete.execute({
+      fileId: file.fileId,
+      sessionId: file.uploadSession!.sessionId,
+      bytes: pngBytes(),
+      actualSize: pngBytes().length,
+    });
+    await flow.ask.execute({ fileId: file.fileId, bytes: pngBytes(), declaredType: 'image/png' });
+    // 预占权威原件区目标键（与隔离区同 randomKey，但 objectKind=OBJECT），令晋升 create-only 失败
+    const quarantine = file.versions[0].objectLocation;
+    await flow.store.putQuarantine(
+      { ...quarantine, bucketRole: 'OBJECT', objectKind: 'OBJECT' },
+      new Uint8Array([9, 9, 9]),
+    );
+    const after = await flow.promote.execute({ fileId: file.fileId });
+    assert.equal(after.state, FileState.CHECKING);
+    assert.equal(after.checkRecord?.status, 'UNAVAILABLE');
+    assert.equal(after.checkRecord?.retryable, true);
+    // UNAVAILABLE 为未完成可重试语义，finishedAt 必须清除
+    assert.equal(after.checkRecord?.finishedAt, undefined);
+    const view = await flow.status.getStatus(file.fileId, 'u1');
+    assert.equal(view.accessible, false);
+  });
+
+  it('检查服务不可用：保持检查中，可重试，不得自动放行（GOV-008）', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    const completed = await flow.complete.execute({
+      fileId: file.fileId,
+      sessionId: file.uploadSession!.sessionId,
+      bytes: pngBytes(),
+      actualSize: pngBytes().length,
+    });
+    // 直接置 UNAVAILABLE 检查记录（模拟外部检查服务不可用）
+    const unavailable: FileRecord = {
+      ...completed,
+      checkRecord: {
+        fileVersionNo: completed.versionNo,
+        engineVersion: 'app-initial-v1',
+        status: 'UNAVAILABLE',
+        retryable: true,
+        sanitizedResult: 'service-unavailable',
+        startedAt: new Date().toISOString(),
+      },
+    };
+    flow.repo.save(unavailable);
+    // 收口仍保持检查中（不跳转，不写库，不得放行）
+    const after = await flow.promote.execute({ fileId: file.fileId });
+    assert.equal(after.state, FileState.CHECKING);
+    assert.equal(after.checkRecord?.status, 'UNAVAILABLE');
+    const view = await flow.status.getStatus(file.fileId, 'u1');
+    assert.equal(view.accessible, false);
+  });
+
+  it('会话过期：完成上传被拒绝', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    // 将会话置为已过期
+    const expiredSession = { ...file.uploadSession!, expiresAt: '2000-01-01T00:00:00.000Z' };
+    flow.repo.save({ ...file, uploadSession: expiredSession });
+    await assert.rejects(
+      flow.complete.execute({
+        fileId: file.fileId,
+        sessionId: file.uploadSession!.sessionId,
+        bytes: pngBytes(),
+        actualSize: pngBytes().length,
+      }),
+      /上传会话已过期/,
+    );
   });
 });

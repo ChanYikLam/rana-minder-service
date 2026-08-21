@@ -43,6 +43,9 @@ export class InitiateUploadError extends Error {
 /** 高熵随机定位符（≥128 位有效熵；服务端生成，客户端不得提交/复用对象键；DATA-FIL-002） */
 const randomKey = (): string => `${randomUUID()}${randomUUID()}`;
 
+/** 上传会话有效期上限（分钟；限时会话设计，调用方不得传极大值使之近乎无限期） */
+export const MAX_SESSION_TTL_MINUTES = 120;
+
 /**
  * 初始化上传（IFC-FIL-001，SRS-SM-FILE-001：新建→临时上传）。
  *
@@ -80,13 +83,19 @@ export class InitiateUploadCommand {
       sha256: '',
       storageToken: randomUUID(),
     };
+    const ttlMinutes = input.sessionTtlMinutes ?? 30;
+    if (ttlMinutes <= 0 || ttlMinutes > MAX_SESSION_TTL_MINUTES) {
+      throw new InitiateUploadError(
+        `上传会话有效期需在 1~${MAX_SESSION_TTL_MINUTES} 分钟内（当前 ${ttlMinutes}）`,
+      );
+    }
     const session: UploadSession = {
       sessionId: randomUUID(),
       fileVersionNo: versionNo,
       isolationLocation: quarantine,
       allowedCategory: input.category,
       maxSizeBytes: this.policy.maxSizeFor(input.category),
-      expiresAt: new Date(Date.now() + (input.sessionTtlMinutes ?? 30) * 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + ttlMinutes * 60_000).toISOString(),
       status: 'ACTIVE',
     };
     const version: FileVersion = {

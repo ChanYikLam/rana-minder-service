@@ -3,6 +3,14 @@ import { FileState, FileStateMachine } from '../../domain/state-machines/file-st
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 
+/** 状态查询前置失败（IFC-ERR-006 文件不存在 / IFC-ERR-003 无权） */
+export class FileStatusQueryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FileStatusQueryError';
+  }
+}
+
 /** 检查/晋升状态查询结果（IFC-FIL-003 真实状态，不伪造） */
 export interface FileStatusView {
   readonly fileId: string;
@@ -34,11 +42,11 @@ export class FileStatusQuery {
   async getStatus(fileId: string, principalId: string): Promise<FileStatusView> {
     const file = await this.repo.load(fileId);
     if (file === null) {
-      throw new Error('IFC-ERR-006: 文件不存在');
+      throw new FileStatusQueryError('IFC-ERR-006: 文件不存在');
     }
     if (file.uploaderId !== principalId) {
       // 首版：仅上传者可查；有权业务角色（管理员）接入后扩展
-      throw new Error('IFC-ERR-003: 当前无权查询该文件状态');
+      throw new FileStatusQueryError('IFC-ERR-003: 当前无权查询该文件状态');
     }
     return {
       fileId,

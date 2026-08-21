@@ -65,8 +65,9 @@ export class CompleteUploadCommand {
     if (currentVersion.versionNo !== session.fileVersionNo) {
       throw new CompleteUploadError('上传会话与文件版本不匹配');
     }
-    // 实际字节可读且大小一致（声明大小上限在初始化时已校验）
-    if (input.actualSize <= 0 || input.actualSize !== currentVersion.declaredSize) {
+    // 实际字节可读且大小一致：用真实 bytes.length 复核，不信任客户端 actualSize
+    // （actualSize/declaredSize 均为客户端传入，只校验它们无法防绕过类别硬上限）
+    if (input.bytes.length <= 0 || input.bytes.length !== currentVersion.declaredSize) {
       throw new CompleteUploadError('实际大小与声明大小不一致');
     }
 
@@ -94,7 +95,7 @@ export class CompleteUploadCommand {
     const sha256 = createHash('sha256').update(input.bytes).digest('hex');
     const updatedVersion = {
       ...currentVersion,
-      actualSize: input.actualSize,
+      actualSize: input.bytes.length,
       detectedType: sniff.detectedType,
       sha256,
     };
