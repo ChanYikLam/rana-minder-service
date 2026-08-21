@@ -268,4 +268,89 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
       (e: unknown) => e instanceof ShortLivedAccessRejectedError,
     );
   });
+
+  it('resolveAccess 消费时实时鉴权复核：最新上下文仍有权 → 放行', async () => {
+    const { query } = makeQuery();
+    const issued = await query.issueAccess({
+      fileId: 'f1',
+      context: ctx(),
+      request: req({ uploaderHistoryVisible: true }),
+      principalIsUploader: true,
+      action: FileAccessAction.DOWNLOAD,
+      safeForPreview: false,
+    });
+    const resolved = await query.resolveAccess(issued.access.token, {
+      context: ctx(),
+      request: req({ uploaderHistoryVisible: true }),
+      principalIsUploader: true,
+    });
+    assert.equal(resolved.token, issued.access.token);
+    assert.equal(resolved.action, FileAccessAction.DOWNLOAD);
+  });
+
+  it('resolveAccess 消费时实时鉴权复核：文件已隔离/删除 → 令牌有效但仍拒绝（FORM-008 旧链接不得继续访问）', async () => {
+    const { query } = makeQuery();
+    const issued = await query.issueAccess({
+      fileId: 'f1',
+      context: ctx(),
+      request: req({ uploaderHistoryVisible: true }),
+      principalIsUploader: true,
+      action: FileAccessAction.DOWNLOAD,
+      safeForPreview: false,
+    });
+    // 消费前文件被隔离（状态变 unsafe）——令牌本身有效，但实时鉴权复核拒绝
+    await assert.rejects(
+      query.resolveAccess(issued.access.token, {
+        context: ctx(),
+        request: req({ uploaderHistoryVisible: true, fileState: 'QUARANTINED_FAILED' }),
+        principalIsUploader: true,
+      }),
+      /IFC-ERR-011/,
+      '签发后、消费前文件被隔离，消费时实时鉴权应拒绝',
+    );
+  });
+
+  it('resolveAccess 消费时实时鉴权复核：主体已失权 → 令牌有效但仍拒绝', async () => {
+    const { query } = makeQuery();
+    const issued = await query.issueAccess({
+      fileId: 'f1',
+      context: ctx({ principalId: 'u2' }),
+      request: req({ uploaderId: 'u1' }),
+      principalIsUploader: false,
+      action: FileAccessAction.DOWNLOAD,
+      safeForPreview: false,
+    });
+    // 消费前主体失权：roles 清空 → 实时鉴权复核拒绝
+    await assert.rejects(
+      query.resolveAccess(issued.access.token, {
+        context: ctx({ principalId: 'u2', roles: [] }),
+        request: req({ uploaderId: 'u1' }),
+        principalIsUploader: false,
+      }),
+      /IFC-ERR-003/,
+      '签发后、消费前主体失权，消费时实时鉴权应拒绝',
+    );
+  });
+
+  it('resolveAccess 消费时实时鉴权复核：业务状态关闭 → 令牌有效但仍拒绝', async () => {
+    const { query } = makeQuery();
+    const issued = await query.issueAccess({
+      fileId: 'f1',
+      context: ctx({ principalId: 'u2' }),
+      request: req({ uploaderId: 'u1' }),
+      principalIsUploader: false,
+      action: FileAccessAction.DOWNLOAD,
+      safeForPreview: false,
+    });
+    // 消费前招新窗口关闭（业务状态 SUSPENDED）→ 实时鉴权复核拒绝
+    await assert.rejects(
+      query.resolveAccess(issued.access.token, {
+        context: ctx({ principalId: 'u2', businessState: 'SUSPENDED' }),
+        request: req({ uploaderId: 'u1' }),
+        principalIsUploader: false,
+      }),
+      /IFC-ERR-003/,
+      '签发后、消费前业务关闭，消费时实时鉴权应拒绝',
+    );
+  });
 });

@@ -141,20 +141,47 @@ export class FileAccessQuery {
    * 调用本方法核验并消费令牌——到期（EXPIRED）、已被消费（USED）、未知（UNKNOWN）
    * 一律拒绝，旧链接/复用令牌不得继续访问。
    *
-   * ⚠️ FORM-008 实时鉴权边界（评审提示）：本方法只核验一次性令牌的有效性，**不会**重新
-   * 校验当前文件状态或主体授权。令牌在签发时已通过 `AccessPolicy.check` 实时鉴权，且默认
-   * 有效期仅 5 分钟（`MAX_TTL_MS` 兜底 30 分钟），因此消费窗口被严格收紧；但若消费侧期望
-   * 对“签发后、消费前文件被隔离/删除或主体失权”也严格拦截，应在调用本方法后、真正取字节前
-   * 再按最新文件状态做一次复核（或直接基于最新状态重建访问能力）。
+   * ⚠️ FORM-008 实时鉴权：本方法在核验令牌**之后**，会按传入的**最新**上下文与文件状态
+   * 再次执行 `AccessPolicy.check` 实时鉴权。这样即便令牌在签发时有效，只要“签发后、
+   * 消费前”文件被隔离/删除（状态变 unsafe）或主体失权/业务关闭，消费同样被拒绝，兑现
+   * “旧链接不得继续访问”。消费侧应在真正取字节前用最新状态调用本方法，而非依赖签发时
+   * 的旧授权。
    *
    * @param token 从短时地址中解析出的一次性令牌
-   * @returns 通过校验时返回关联的最小范围访问能力（供消费侧取文件/水印/动作）
+   * @param recheck 消费时实时鉴权复核（可选，但强烈建议服务端入口在取字节前提供）：
+   *   需传入最新构造的 `FileAccessContext`、`FileAccessRequest` 与 `principalIsUploader`，
+   *   与 `issueAccess` 的实时鉴权口径一致；不传则退化为仅核验令牌（旧行为）。
+   * @returns 通过校验与实时鉴权复核时返回关联的最小范围访问能力（供消费侧取文件/水印/动作）
    * @throws ShortLivedAccessRejectedError 令牌无效/已失效时，调用方不得继续取文件
+   * @throws FileAccessDeniedError 令牌有效但消费时实时鉴权复核拒绝（文件已失权/隔离/删除等）
    */
-  async resolveAccess(token: string): Promise<ShortLivedAccess> {
+  async resolveAccess(
+    token: string,
+    recheck?: {
+      context: FileAccessContext;
+      request: FileAccessRequest;
+      principalIsUploader: boolean;
+    },
+  ): Promise<ShortLivedAccess> {
     const verification: TokenVerification = await this.signedUrl.verify(token);
     if (!verification.valid || verification.access === undefined) {
       throw new ShortLivedAccessRejectedError(verification.reason ?? 'UNKNOWN');
+    }
+    // 消费时实时鉴权复核（评审加固）：签发后、消费前文件若被隔离/删除或主体失权，
+    // 即使令牌仍有效也应拒绝——兑现 FORM-008“旧链接不得继续访问”。
+    if (recheck) {
+      const decision = this.policy.check(
+        recheck.context,
+        recheck.request,
+        verification.access.action,
+        recheck.principalIsUploader,
+      );
+      if (!decision.allowed) {
+        throw new FileAccessDeniedError(
+          decision.errorCode ?? 'IFC-ERR-003',
+          '附件访问被拒绝（消费时实时鉴权复核）',
+        );
+      }
     }
     return verification.access;
   }
