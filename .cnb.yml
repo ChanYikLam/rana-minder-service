@@ -90,7 +90,7 @@
               -e POSTGRES_PASSWORD=ci \
               -e POSTGRES_DB=ranaminder_test \
               -p 5432:5432 \
-              postgres:18
+              postgres:18-alpine
             trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
             # 等待 PG18 就绪（最长约 60 秒）
             for i in $(seq 1 30); do
@@ -186,7 +186,7 @@
               -e POSTGRES_PASSWORD=ci \
               -e POSTGRES_DB=ranaminder_test \
               -p 5432:5432 \
-              postgres:18
+              postgres:18-alpine
             trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
             for i in $(seq 1 30); do
               if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then
@@ -271,7 +271,7 @@
               -e POSTGRES_PASSWORD=ci \
               -e POSTGRES_DB=ranaminder_test \
               -p 5432:5432 \
-              postgres:18
+              postgres:18-alpine
             trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
             for i in $(seq 1 30); do
               if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then

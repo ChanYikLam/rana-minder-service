@@ -131,7 +131,7 @@ bash scripts/ci/check-license-registry.sh
 
 ### 7.2 集成测试 L2 的真实 PG18
 
-`CIL-061`：cnb.cool 未提供托管 PostgreSQL 服务，采用"dind 服务 + 容器内运行 PG18"方案：流水线已声明 `services: [docker]`（code-check / release-check），阶段 5 脚本启动 `postgres:18` 容器 `pg18-ci`，等待 `pg_isready` 就绪后创建 `pg_trgm`/`btree_gist` 扩展（与开发环境 `scripts/dev/postgres-init.sql` 一致），再运行 `npm run test:integration`；测试库为 `ranaminder_test`（与开发库 `ranaminder_dev` 隔离），应用连接信息由 `package.json` 的 `test:integration` 脚本按 [配置规格](配置规格-v1.0.md) 草案传入，容器用完即清（trap）。
+`CIL-061`：cnb.cool 未提供托管 PostgreSQL 服务，采用"dind 服务 + 容器内运行 PG18"方案：流水线已声明 `services: [docker]`（code-check / release-check），阶段 5 脚本启动 `postgres:18-alpine` 容器 `pg18-ci`（较 `postgres:18` 全量镜像更小、CI 拉取更快，规避 Runner 10 分钟无输出强杀超时），等待 `pg_isready` 就绪后创建 `pg_trgm`/`btree_gist` 扩展（与开发环境 `scripts/dev/postgres-init.sql` 一致），再运行 `npm run test:integration`；测试库为 `ranaminder_test`（与开发库 `ranaminder_dev` 隔离），应用连接信息由 `package.json` 的 `test:integration` 脚本按 [配置规格](配置规格-v1.0.md) 草案传入，容器用完即清（trap）。
 
 ### 7.3 依赖许可证登记表
 
