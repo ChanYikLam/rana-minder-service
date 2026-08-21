@@ -68,6 +68,36 @@ before(async () => {
   adapter = new PostgresDbAdapter(dbConfig);
   db = adapter;
   repo = new PostgresTaskRepository(db);
+  // CI 未跑迁移：此处按迁移 20260822100000 建表（幂等），保证测试自包含
+  const setup = await db.beginTransaction();
+  await db.query(
+    setup,
+    `CREATE TABLE IF NOT EXISTS public.task_records (
+       task_id           text        PRIMARY KEY,
+       task_type         text        NOT NULL,
+       status            text        NOT NULL DEFAULT 'PENDING',
+       intent_id         text        NOT NULL,
+       idempotency_key   text        NOT NULL,
+       scope             jsonb       NOT NULL DEFAULT '{}'::jsonb,
+       source            jsonb       NOT NULL DEFAULT '{}'::jsonb,
+       payload           jsonb       NOT NULL DEFAULT '{}'::jsonb,
+       lease             jsonb       NULL,
+       attempts          integer     NOT NULL DEFAULT 0,
+       max_attempts      integer     NOT NULL DEFAULT 5,
+       not_before        timestamptz NOT NULL DEFAULT now(),
+       failure           jsonb       NULL,
+       result_ref        text        NULL,
+       created_at        timestamptz NOT NULL DEFAULT now(),
+       updated_at        timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT ck_task_records_status CHECK (status IN
+         ('PENDING', 'LEASED', 'RETRYABLE_FAILED', 'UNCERTAIN',
+          'MANUAL_INTERVENTION', 'COMPLETED')),
+       CONSTRAINT uq_task_records_intent UNIQUE (intent_id),
+       CONSTRAINT uq_task_records_idempotency UNIQUE (idempotency_key)
+     )`,
+    [],
+  );
+  await db.commit(setup);
   // 清理上次残留，确保断言确定性
   const tx = await db.beginTransaction();
   await db.query(tx, 'DELETE FROM task_records', []);

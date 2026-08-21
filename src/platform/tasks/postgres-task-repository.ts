@@ -28,30 +28,29 @@ import type { TaskRecord, TaskRecordPatch, TaskLease, TaskFailure } from './cont
 import type { TaskBacklogSummary, TaskClaimResult, TaskRepository } from './contracts/task-ports';
 import { TaskType } from './contracts/task-type';
 
+// 说明：pg 驱动会将 jsonb 列自动解析为 JS 对象返回（非 JSON 字符串），
+// 因此 TaskRecordRow 中 jsonb 字段（scope/source/payload/lease/failure）
+// 直接以对象形式读取，无需（也不应）再 JSON.parse。
 interface TaskRecordRow {
   task_id: string;
   task_type: string;
   status: string;
   intent_id: string;
   idempotency_key: string;
-  scope: string;
-  source: string;
-  payload: string;
-  lease: string | null;
+  scope: unknown;
+  source: unknown;
+  payload: unknown;
+  lease: unknown | null;
   attempts: number;
   max_attempts: number;
   not_before: string;
-  failure: string | null;
+  failure: unknown | null;
   result_ref: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const RLS_UNPROTECTED: RlsScope = { kind: 'unprotected' };
-
-function parseJson<T>(raw: string): T {
-  return JSON.parse(raw) as T;
-}
 
 function rowToRecord(row: TaskRecordRow): TaskRecord {
   return {
@@ -60,14 +59,14 @@ function rowToRecord(row: TaskRecordRow): TaskRecord {
     status: row.status as TaskStatus,
     intentId: row.intent_id,
     idempotencyKey: row.idempotency_key,
-    scope: parseJson(row.scope),
-    source: parseJson(row.source),
-    payload: parseJson(row.payload),
-    lease: row.lease ? parseJson<TaskLease>(row.lease) : null,
+    scope: row.scope as TaskRecord['scope'],
+    source: row.source as TaskRecord['source'],
+    payload: row.payload as TaskRecord['payload'],
+    lease: (row.lease as TaskLease | null) ?? null,
     attempts: row.attempts,
     maxAttempts: row.max_attempts,
     notBefore: row.not_before,
-    failure: row.failure ? parseJson<TaskFailure>(row.failure) : null,
+    failure: (row.failure as TaskFailure | null) ?? null,
     resultRef: row.result_ref,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -78,6 +77,11 @@ function rowToRecord(row: TaskRecordRow): TaskRecord {
 const RECORD_COLUMNS = `task_id, task_type, status, intent_id, idempotency_key,
   scope, source, payload, lease, attempts, max_attempts, not_before,
   failure, result_ref, created_at, updated_at`;
+
+/** 带表别名 t. 的列清单：用于 UPDATE ... FROM（RETURNING 需消歧义）。 */
+const RECORD_COLUMNS_ALIASED = RECORD_COLUMNS.split(',')
+  .map((col) => `t.${col.trim()}`)
+  .join(', ');
 
 @Injectable()
 export class PostgresTaskRepository implements TaskRepository {
@@ -218,23 +222,22 @@ export class PostgresTaskRepository implements TaskRepository {
       const rows = await this.db.query<TaskRecordRow>(
         tx,
         `UPDATE task_records t
-            SET status = $3,
-                lease = $4::jsonb,
+            SET status = $2,
+                lease = $3::jsonb,
                 attempts = t.attempts,
-                updated_at = $5::timestamptz
+                updated_at = $4::timestamptz
            FROM (
                   SELECT task_id
                     FROM task_records
                    WHERE task_id = $1
-                     AND status IN ('PENDING', 'RETRYABLE_FAILED', 'UNCERTAIN')
-                     AND (lease IS NULL OR (lease->>'leaseUntil')::timestamptz <= $5::timestamptz)
-                     AND not_before <= $5::timestamptz
+                     AND status IN ('PENDING', 'RETRYABLE_FAILED', 'UNCERTAIN', 'LEASED')
+                     AND (lease IS NULL OR (lease->>'leaseUntil')::timestamptz <= $4::timestamptz)
+                     AND not_before <= $4::timestamptz
                 ) c
           WHERE t.task_id = c.task_id
-          RETURNING ${RECORD_COLUMNS}`,
+          RETURNING ${RECORD_COLUMNS_ALIASED}`,
         [
           taskId,
-          '',
           TaskStatus.LEASED,
           JSON.stringify({
             workerId,
