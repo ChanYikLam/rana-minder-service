@@ -118,8 +118,9 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
     }
     try {
       await ctx.client.query('COMMIT');
-      ctx.settled = true;
     } finally {
+      // 无论成败都视为已收口：连接已归还，后续 rollback/clearRlsContext 不得再触碰。
+      ctx.settled = true;
       ctx.client.release();
     }
   }
@@ -131,8 +132,9 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
     }
     try {
       await ctx.client.query('ROLLBACK');
-      ctx.settled = true;
     } finally {
+      // 无论成败都视为已收口：连接已归还，后续 clearRlsContext 不得再触碰。
+      ctx.settled = true;
       ctx.client.release();
     }
   }
