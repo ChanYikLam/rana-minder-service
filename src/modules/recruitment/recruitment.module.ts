@@ -26,8 +26,10 @@ import {
   OPEN_APPLICATION_CHANNEL_USE_CASE,
   SUBMIT_APPLICATION_USE_CASE,
   RECORD_DEPARTMENT_DECISION_USE_CASE,
+  INTERVIEW_WORKFLOW_USE_CASE,
   LIST_ACTIVITIES_QUERY,
   LIST_APPLICATIONS_QUERY,
+  LIST_INTERVIEWS_QUERY,
 } from './tokens';
 
 import { RecruitmentUnitOfWork } from './infrastructure/unit-of-work';
@@ -39,8 +41,10 @@ import { DefaultCreateRecruitmentActivityUseCase } from './application/commands/
 import { DefaultOpenApplicationChannelUseCase } from './application/commands/open-application-channel.use-case';
 import { DefaultSubmitApplicationUseCase } from './application/commands/submit-application.use-case';
 import { DefaultRecordDepartmentDecisionUseCase } from './application/commands/record-department-decision.use-case';
+import { InterviewWorkflowUseCase } from './application/commands/interview-workflow.use-case';
 import { DefaultListActivitiesQuery } from './application/queries/list-activities.query';
 import { DefaultListApplicationsQuery } from './application/queries/list-applications.query';
+import { DefaultListInterviewsQuery } from './application/queries/list-interviews.query';
 
 import { RecruitmentController } from './interfaces/controllers/recruitment.controller';
 import { RejectAllRecruitmentAuthSessionProvider } from './interfaces/nest/recruitment-auth-session';
@@ -101,19 +105,31 @@ import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.
       useFactory: (repo) => new DefaultListApplicationsQuery(repo),
       inject: [RECRUITMENT_REPOSITORY],
     },
+    {
+      provide: LIST_INTERVIEWS_QUERY,
+      useFactory: (repo) => new DefaultListInterviewsQuery(repo),
+      inject: [RECRUITMENT_REPOSITORY],
+    },
+    {
+      provide: INTERVIEW_WORKFLOW_USE_CASE,
+      useFactory: (repo, auth) => new InterviewWorkflowUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
     // ----- 传输中立控制器 -----
     {
       provide: RECRUITMENT_CONTROLLER,
-      useFactory: (uow, create, open, submit, decide, listA, listApp) =>
-        new RecruitmentController(uow, create, open, submit, decide, listA, listApp),
+      useFactory: (uow, create, open, submit, decide, interview, listA, listApp, listInt) =>
+        new RecruitmentController(uow, create, open, submit, decide, interview, listA, listApp, listInt),
       inject: [
         RecruitmentUnitOfWork,
         CREATE_RECRUITMENT_ACTIVITY_USE_CASE,
         OPEN_APPLICATION_CHANNEL_USE_CASE,
         SUBMIT_APPLICATION_USE_CASE,
         RECORD_DEPARTMENT_DECISION_USE_CASE,
+        INTERVIEW_WORKFLOW_USE_CASE,
         LIST_ACTIVITIES_QUERY,
         LIST_APPLICATIONS_QUERY,
+        LIST_INTERVIEWS_QUERY,
       ],
     },
   ],

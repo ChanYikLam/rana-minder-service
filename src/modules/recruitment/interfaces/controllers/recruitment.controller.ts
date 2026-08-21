@@ -1,5 +1,5 @@
 /**
- * RecruitmentController（interfaces 层；4.4 招新主链路编排）。
+ * RecruitmentController（interfaces 层；4.4 招新主链路编排，含 REC-005 面试）。
  *
  * 职责：把信封/路径参数组装为用例输入，在单主体 RLS 事务边界内执行，错误经
  * toApiError 映射。作用域由服务端路径 clubId 冻结。
@@ -13,8 +13,10 @@ import type { CreateRecruitmentActivityUseCase } from '../../application/command
 import type { OpenApplicationChannelUseCase } from '../../application/commands/open-application-channel.use-case';
 import type { SubmitApplicationUseCase, SubmitApplicationInput } from '../../application/commands/submit-application.use-case';
 import type { RecordDepartmentDecisionUseCase, RecordDepartmentDecisionInput } from '../../application/commands/record-department-decision.use-case';
+import type { InterviewWorkflowUseCase } from '../../application/commands/interview-workflow.use-case';
 import type { ListActivitiesQuery } from '../../application/queries/list-activities.query';
 import type { ListApplicationsQuery } from '../../application/queries/list-applications.query';
+import type { ListInterviewsQuery } from '../../application/queries/list-interviews.query';
 
 type ControllerResult<T> = { readonly ok: true; readonly value: T } | ApiErrorResult;
 
@@ -25,8 +27,10 @@ export class RecruitmentController {
     private readonly openChannelUseCase: OpenApplicationChannelUseCase,
     private readonly submitApplicationUseCase: SubmitApplicationUseCase,
     private readonly recordDecisionUseCase: RecordDepartmentDecisionUseCase,
+    private readonly interviewWorkflow: InterviewWorkflowUseCase,
     private readonly listActivitiesQuery: ListActivitiesQuery,
     private readonly listApplicationsQuery: ListApplicationsQuery,
+    private readonly listInterviewsQuery: ListInterviewsQuery,
   ) {}
 
   private run<T>(actor: ActorContext, fn: () => Promise<T>): Promise<ControllerResult<T>> {
@@ -86,11 +90,87 @@ export class RecruitmentController {
     );
   }
 
+  scheduleInterview(
+    actor: ActorContext,
+    input: {
+      readonly applicationId: string;
+      readonly roundId: string;
+      readonly interviewerId: string;
+      readonly scheduledAt: Date;
+      readonly location: string | null;
+    },
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.interviewWorkflow.schedule({ ...input, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  startInterview(actor: ActorContext, interviewId: string): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.interviewWorkflow.start({ interviewId, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  completeInterview(actor: ActorContext, interviewId: string): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.interviewWorkflow.complete({ interviewId, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  voidInterview(actor: ActorContext, interviewId: string): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.interviewWorkflow.void({ interviewId, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  cancelInterview(actor: ActorContext, interviewId: string): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.interviewWorkflow.cancel({ interviewId, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  skipInterview(
+    actor: ActorContext,
+    input: { readonly interviewId: string; readonly reason: string },
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.interviewWorkflow.skip({ ...input, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  holdInterview(
+    actor: ActorContext,
+    input: { readonly interviewId: string; readonly until: Date },
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.interviewWorkflow.hold({ ...input, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  resumeInterview(actor: ActorContext, interviewId: string): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.interviewWorkflow.resume({ interviewId, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  recordInterviewEvaluation(
+    actor: ActorContext,
+    input: { readonly interviewId: string; readonly values: Record<string, unknown> },
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.interviewWorkflow.recordEvaluation({ ...input, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
   listActivities(actor: ActorContext, clubId: string): Promise<ControllerResult<unknown>> {
     return this.run(actor, () => this.listActivitiesQuery.execute({ clubId }));
   }
 
   listApplications(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
     return this.run(actor, () => this.listApplicationsQuery.execute({ activityId }));
+  }
+
+  listInterviews(actor: ActorContext, roundId: string): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () => this.listInterviewsQuery.execute({ roundId }));
   }
 }

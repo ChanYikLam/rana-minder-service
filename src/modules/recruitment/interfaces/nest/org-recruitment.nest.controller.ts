@@ -1,13 +1,19 @@
 /**
- * 组织招新端点 Nest 适配控制器（interfaces/nest；4.4）。
+ * 组织招新端点 Nest 适配控制器（interfaces/nest；4.4，含 REC-005 面试）。
  *
  * 路由（作用域由路径 clubId 冻结）：
- * - POST /api/org/:clubId/recruitment/activities            创建招新活动
- * - POST /api/org/:clubId/recruitment/activities/:activityId/channels  开放报名通道
- * - POST /api/org/:clubId/recruitment/applications         提交招新申请
+ * - POST /api/org/:clubId/recruitment/activities                      创建招新活动
+ * - POST /api/org/:clubId/recruitment/activities/:activityId/channels 开放报名通道
+ * - POST /api/org/:clubId/recruitment/applications                    提交招新申请
  * - POST /api/org/:clubId/recruitment/applications/:applicationId/decisions  记录部门决定
- * - GET  /api/org/:clubId/recruitment/activities           列出活动
+ * - POST /api/org/:clubId/recruitment/applications/:applicationId/interviews     调度面试
+ * - POST /api/org/:clubId/recruitment/interviews/:interviewId/start|complete|void|cancel|resume
+ * - POST /api/org/:clubId/recruitment/interviews/:interviewId/skip   { reason }
+ * - POST /api/org/:clubId/recruitment/interviews/:interviewId/hold   { until }
+ * - POST /api/org/:clubId/recruitment/interviews/:interviewId/evaluations  { values }
+ * - GET  /api/org/:clubId/recruitment/activities                     列出活动
  * - GET  /api/org/:clubId/recruitment/activities/:activityId/applications  列出申请
+ * - GET  /api/org/:clubId/recruitment/rounds/:roundId/interviews     按轮次列面试
  */
 
 import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
@@ -85,6 +91,120 @@ export class OrgRecruitmentNestController {
     );
   }
 
+  @Post('applications/:applicationId/interviews')
+  async scheduleInterview(
+    @Param('clubId') _clubId: string,
+    @Param('applicationId') applicationId: string,
+    @Req() request: Record<string, unknown>,
+    @Body() body: unknown,
+  ): Promise<ApiSuccess<unknown>> {
+    const input = parseRecruitmentRequestEnvelope(body).input as {
+      roundId: string;
+      interviewerId: string;
+      scheduledAt: string;
+      location?: string | null;
+    };
+    return toHttpResponse(
+      await this.controller.scheduleInterview(this.actor(request), {
+        applicationId,
+        roundId: input.roundId,
+        interviewerId: input.interviewerId,
+        scheduledAt: new Date(input.scheduledAt),
+        location: input.location ?? null,
+      }),
+    );
+  }
+
+  @Post('interviews/:interviewId/start')
+  async startInterview(
+    @Param('clubId') _clubId: string,
+    @Param('interviewId') interviewId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    return toHttpResponse(await this.controller.startInterview(this.actor(request), interviewId));
+  }
+
+  @Post('interviews/:interviewId/complete')
+  async completeInterview(
+    @Param('clubId') _clubId: string,
+    @Param('interviewId') interviewId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    return toHttpResponse(await this.controller.completeInterview(this.actor(request), interviewId));
+  }
+
+  @Post('interviews/:interviewId/void')
+  async voidInterview(
+    @Param('clubId') _clubId: string,
+    @Param('interviewId') interviewId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    return toHttpResponse(await this.controller.voidInterview(this.actor(request), interviewId));
+  }
+
+  @Post('interviews/:interviewId/cancel')
+  async cancelInterview(
+    @Param('clubId') _clubId: string,
+    @Param('interviewId') interviewId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    return toHttpResponse(await this.controller.cancelInterview(this.actor(request), interviewId));
+  }
+
+  @Post('interviews/:interviewId/skip')
+  async skipInterview(
+    @Param('clubId') _clubId: string,
+    @Param('interviewId') interviewId: string,
+    @Req() request: Record<string, unknown>,
+    @Body() body: unknown,
+  ): Promise<ApiSuccess<unknown>> {
+    const input = parseRecruitmentRequestEnvelope(body).input as { reason: string };
+    return toHttpResponse(
+      await this.controller.skipInterview(this.actor(request), { interviewId, reason: input.reason }),
+    );
+  }
+
+  @Post('interviews/:interviewId/hold')
+  async holdInterview(
+    @Param('clubId') _clubId: string,
+    @Param('interviewId') interviewId: string,
+    @Req() request: Record<string, unknown>,
+    @Body() body: unknown,
+  ): Promise<ApiSuccess<unknown>> {
+    const input = parseRecruitmentRequestEnvelope(body).input as { until: string };
+    return toHttpResponse(
+      await this.controller.holdInterview(this.actor(request), {
+        interviewId,
+        until: new Date(input.until),
+      }),
+    );
+  }
+
+  @Post('interviews/:interviewId/resume')
+  async resumeInterview(
+    @Param('clubId') _clubId: string,
+    @Param('interviewId') interviewId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    return toHttpResponse(await this.controller.resumeInterview(this.actor(request), interviewId));
+  }
+
+  @Post('interviews/:interviewId/evaluations')
+  async recordEvaluation(
+    @Param('clubId') _clubId: string,
+    @Param('interviewId') interviewId: string,
+    @Req() request: Record<string, unknown>,
+    @Body() body: unknown,
+  ): Promise<ApiSuccess<unknown>> {
+    const input = parseRecruitmentRequestEnvelope(body).input as { values: Record<string, unknown> };
+    return toHttpResponse(
+      await this.controller.recordInterviewEvaluation(this.actor(request), {
+        interviewId,
+        values: input.values,
+      }),
+    );
+  }
+
   @Get('activities')
   async listActivities(
     @Param('clubId') clubId: string,
@@ -100,5 +220,14 @@ export class OrgRecruitmentNestController {
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
     return toHttpResponse(await this.controller.listApplications(this.actor(request), activityId));
+  }
+
+  @Get('rounds/:roundId/interviews')
+  async listInterviews(
+    @Param('clubId') _clubId: string,
+    @Param('roundId') roundId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    return toHttpResponse(await this.controller.listInterviews(this.actor(request), roundId));
   }
 }
