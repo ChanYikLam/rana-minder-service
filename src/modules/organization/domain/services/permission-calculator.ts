@@ -11,8 +11,12 @@
  */
 
 import type { GroupStableRef } from '../types';
-import { BUILT_IN_TEMPLATES } from '../models/permission-template';
-import type { PositionTemplateBinding, PermissionName } from '../models/permission-template';
+import {
+  BUILT_IN_TEMPLATES,
+  PermissionCatalog,
+  type PermissionName,
+  type PositionTemplateBinding,
+} from '../models/permission-template';
 
 export interface PermissionSource {
   readonly permission: PermissionName;
@@ -122,11 +126,11 @@ export class PermissionCalculator {
   platformPermissions(ctx: PermissionContext): PermissionName[] {
     if (!ctx.isPlatformSuperAdmin) return [];
     return [
-      'platform:club:manage',
-      'platform:config:manage',
-      'platform:delete:execute',
-      'platform:audit:view',
-      'platform:export:execute',
+      PermissionCatalog.PLATFORM_CLUB_MANAGE,
+      PermissionCatalog.PLATFORM_CONFIG_MANAGE,
+      PermissionCatalog.PLATFORM_DELETE_EXECUTE,
+      PermissionCatalog.PLATFORM_AUDIT_VIEW,
+      PermissionCatalog.PLATFORM_EXPORT_EXECUTE,
     ] as PermissionName[];
   }
 }

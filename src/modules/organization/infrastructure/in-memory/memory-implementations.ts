@@ -11,9 +11,10 @@
 import type { ClubSpace } from '../../domain/models/club-space';
 import type { RelationCommand } from '../../domain/models/relation-command';
 import type { AppointmentCommand } from '../../domain/models/appointment-command';
-import type {
-  PermissionTemplate,
-  PositionTemplateBinding,
+import {
+  PermissionCatalog,
+  type PermissionTemplate,
+  type PositionTemplateBinding,
 } from '../../domain/models/permission-template';
 import type { GroupStableRef } from '../../domain/types';
 import { orgError } from '../../domain/types';
@@ -516,15 +517,15 @@ export class MemoryCurrentPermissionsPort implements CurrentPermissionsPort {
     const out: Array<{ clubId: string; permission: string }> = [];
     for (const m of memberships) {
       if (m.group.name.includes('leader') || m.group.name.includes('负责人')) {
-        out.push({ clubId: m.clubId, permission: 'club:transition:manage' });
-        out.push({ clubId: m.clubId, permission: 'club:config:manage' });
+        out.push({ clubId: m.clubId, permission: PermissionCatalog.CLUB_TRANSITION_MANAGE });
+        out.push({ clubId: m.clubId, permission: PermissionCatalog.CLUB_CONFIG_MANAGE });
       }
       if (m.group.name.includes('personnel') || m.group.name.includes('人事')) {
-        out.push({ clubId: m.clubId, permission: 'club:appointment:manage' });
-        out.push({ clubId: m.clubId, permission: 'club:member:manage' });
+        out.push({ clubId: m.clubId, permission: PermissionCatalog.CLUB_APPOINTMENT_MANAGE });
+        out.push({ clubId: m.clubId, permission: PermissionCatalog.CLUB_MEMBER_MANAGE });
       }
       if (m.group.name.includes('dept') || m.group.name.includes('部门负责人')) {
-        out.push({ clubId: m.clubId, permission: 'club:member:manage' });
+        out.push({ clubId: m.clubId, permission: PermissionCatalog.CLUB_MEMBER_MANAGE });
       }
     }
     return out;

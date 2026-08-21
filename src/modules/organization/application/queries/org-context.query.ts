@@ -9,6 +9,7 @@
  * - 逐请求按服务端当前权限重算，不信任前端角色/作用域（ORG-038）。
  */
 
+import { PermissionCatalog } from '../../domain/models/permission-template';
 import { orgError } from '../../domain/types';
 import {
   CLUB_STORE,
@@ -101,12 +102,15 @@ export class OrgContextQuery {
 }
 
 function resolveRoleLabel(perms: readonly string[]): string {
-  if (perms.includes('platform:club:manage')) return 'super_admin';
-  if (perms.includes('club:transition:manage') && perms.includes('club:config:manage'))
+  if (perms.includes(PermissionCatalog.PLATFORM_CLUB_MANAGE)) return 'super_admin';
+  if (
+    perms.includes(PermissionCatalog.CLUB_TRANSITION_MANAGE) &&
+    perms.includes(PermissionCatalog.CLUB_CONFIG_MANAGE)
+  )
     return 'leader';
-  if (perms.includes('club:member:manage:full')) return 'leader';
-  if (perms.includes('club:appointment:manage')) return 'personnel';
-  if (perms.includes('club:member:manage')) return 'department_head';
+  if (perms.includes(PermissionCatalog.CLUB_MEMBER_MANAGE_FULL)) return 'leader';
+  if (perms.includes(PermissionCatalog.CLUB_APPOINTMENT_MANAGE)) return 'personnel';
+  if (perms.includes(PermissionCatalog.CLUB_MEMBER_MANAGE)) return 'department_head';
   return 'member';
 }
 
