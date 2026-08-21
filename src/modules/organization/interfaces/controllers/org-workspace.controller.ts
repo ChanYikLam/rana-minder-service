@@ -170,6 +170,42 @@ export class OrgWorkspaceController {
     });
   }
 
+  @Post(':clubId/members/appointments/:commandId/execute')
+  @HttpCode(200)
+  async executeAppointment(
+    @Actor() actor: RequestActor,
+    @Param('clubId') _clubId: string,
+    @Param('commandId') commandId: string,
+  ) {
+    // 调度到期执行由系统/调度任务驱动（ORG-039 单执行租约）：仅平台超管可经此
+    // 端点触发（worker / 对账任务以平台超管身份调用），普通用户请求被拒
+    const isSystemActor = await this.permissions.isPlatformSuperAdmin(actor.userId);
+    if (!isSystemActor) {
+      throw orgError.forbidden('调度执行应经系统任务驱动，不对普通请求开放（ORG-039）');
+    }
+    return this.appointments.scheduleExecute({
+      commandId,
+      actor: actor.userId,
+      now: new Date(),
+    });
+  }
+
+  @Post(':clubId/members/appointments/:commandId/retry')
+  @HttpCode(200)
+  async retryAppointment(
+    @Actor() actor: RequestActor,
+    @Param('clubId') _clubId: string,
+    @Param('commandId') commandId: string,
+  ) {
+    // 人工重试（ORG-039）：重试者须当前拥有预约管理权限，用例内重新鉴权并重验
+    // 业务前置条件；单执行租约已持有则 409 拒绝并发重执行
+    return this.appointments.retryExecute({
+      commandId,
+      actor: actor.userId,
+      now: new Date(),
+    });
+  }
+
   private requireNonEmpty(value: string, field: string): void {
     if (value.trim() === '') throw orgError.validation(`字段 ${field} 不能为空`);
   }
