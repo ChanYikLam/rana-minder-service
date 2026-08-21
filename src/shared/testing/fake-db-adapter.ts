@@ -69,6 +69,10 @@ export class FakeDbAdapter implements DbAdapter {
     if (update) {
       return handleUpdate(this.tables, update, sql, params) as unknown as T[];
     }
+    const remove = matchDelete(sql);
+    if (remove) {
+      return handleDelete(this.tables, remove, sql, params) as unknown as T[];
+    }
     const table = matchTable(sql);
     if (!table) {
       return [];
@@ -110,6 +114,10 @@ interface UpdateShape {
   table: string;
 }
 
+interface DeleteShape {
+  table: string;
+}
+
 function matchInsert(sql: string): InsertShape | null {
   const match = /INSERT INTO\s+([a-z_]+)\s*\(([^)]+)\)/i.exec(sql);
   if (!match) {
@@ -123,6 +131,14 @@ function matchInsert(sql: string): InsertShape | null {
 
 function matchUpdate(sql: string): UpdateShape | null {
   const match = /^\s*UPDATE\s+([a-z_]+)\s+SET/i.exec(sql);
+  if (!match) {
+    return null;
+  }
+  return { table: match[1] };
+}
+
+function matchDelete(sql: string): DeleteShape | null {
+  const match = /^\s*DELETE\s+FROM\s+([a-z_]+)/i.exec(sql);
   if (!match) {
     return null;
   }
@@ -201,6 +217,26 @@ function handleUpdate(
     }
   }
   return returning ? [{ [returning[1]]: params[0] }] : [];
+}
+
+function handleDelete(
+  tables: Map<string, FakeRow[]>,
+  remove: DeleteShape,
+  sql: string,
+  params: readonly unknown[],
+): FakeRow[] {
+  const conditions = matchWhere(sql);
+  const rows = tables.get(remove.table) ?? [];
+  // 删除满足全部 WHERE 条件的行（条件为空时全部保留）
+  const remaining = rows.filter((row) =>
+    conditions.some(([column, index, distinct]) =>
+      distinct
+        ? !((row[column] === null && params[index] === null) || row[column] === params[index])
+        : row[column] !== params[index],
+    ),
+  );
+  tables.set(remove.table, remaining);
+  return [];
 }
 
 function matchAssignments(sql: string): Array<[string, number, number]> {
