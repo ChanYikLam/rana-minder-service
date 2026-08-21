@@ -151,7 +151,12 @@ export class CreateEmailAttemptCommand {
         });
       } else {
         // UNCERTAIN：等待回读
-        latestAttempt = await this.failAttempt(attempt.attemptId, now, '结果不确定，等待回读', 'UNCERTAIN');
+        latestAttempt = await this.failAttempt(
+          attempt.attemptId,
+          now,
+          '结果不确定，等待回读',
+          'UNCERTAIN',
+        );
       }
     } catch (error) {
       // 临时失败：进入重试（NTF-007），记录首次失败时间

@@ -6,7 +6,11 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { NotificationRepository } from '../../infrastructure';
-import { InMemoryInboxAdapter, InMemoryNotificationRepository, InMemoryChannelDeliveryAttemptRepository } from '../../infrastructure';
+import {
+  InMemoryInboxAdapter,
+  InMemoryNotificationRepository,
+  InMemoryChannelDeliveryAttemptRepository,
+} from '../../infrastructure';
 import { MarkPresentationStatusCommand } from './mark-presentation-status.command';
 import { MarkAllReadCommand } from './mark-all-read.command';
 import { DeliverInboxCommand } from './deliver-inbox.command';

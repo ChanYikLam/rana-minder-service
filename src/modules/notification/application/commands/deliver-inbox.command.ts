@@ -18,7 +18,11 @@ import {
   type RecipientSnapshot,
   NotificationStateMachine,
 } from '../../domain';
-import { INBOX_ADAPTER, NOTIFICATION_REPOSITORY, CHANNEL_DELIVERY_ATTEMPT_REPOSITORY } from '../../tokens';
+import {
+  INBOX_ADAPTER,
+  NOTIFICATION_REPOSITORY,
+  CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
+} from '../../tokens';
 
 @Injectable()
 export class DeliverInboxCommand {

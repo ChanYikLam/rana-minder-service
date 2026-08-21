@@ -6,7 +6,11 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { InMemoryInboxAdapter, InMemoryNotificationRepository, InMemoryChannelDeliveryAttemptRepository } from '../../infrastructure';
+import {
+  InMemoryInboxAdapter,
+  InMemoryNotificationRepository,
+  InMemoryChannelDeliveryAttemptRepository,
+} from '../../infrastructure';
 import { NotificationQueryService } from './notification-query.service';
 import { DeliverInboxCommand } from '../commands/deliver-inbox.command';
 import type { CreateNotificationFactInput, RecipientSnapshot } from '../../domain';
