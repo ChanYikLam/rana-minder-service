@@ -24,6 +24,11 @@ export async function mapWithConcurrency<T, R>(
   concurrency: number,
   mapper: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
+  // 防御：并发窗口必须 ≥ 1，否则 `Math.min(concurrency, items.length)` 会静默跳过全部
+  // 待处理项（并发 0）或让 `Array.from({ length: 负数 })` 抛出令人困惑的 RangeError。
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new RangeError(`mapWithConcurrency: 并发数必须为 ≥1 的整数，收到 ${concurrency}`);
+  }
   const results = new Array<R>(items.length);
   let next = 0;
 
