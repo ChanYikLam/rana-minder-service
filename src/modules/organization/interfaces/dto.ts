@@ -6,6 +6,7 @@
  */
 
 import {
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsEmail,
@@ -120,6 +121,7 @@ export class SubmitRelationCommandDto {
   type!: string;
   @IsString() @IsNotEmpty() subjectId!: string;
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => TargetGroupDto)
   targetGroups!: TargetGroupDto[];

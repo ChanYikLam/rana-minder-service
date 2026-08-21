@@ -485,7 +485,6 @@ export class InMemoryNotificationPort implements NotificationPort {
 
 export interface MemoryPermissionConfig {
   readonly superAdminUsers: readonly string[];
-  readonly userId: string;
   readonly clubPermissions: Map<string, string[]>;
   readonly positionGroupMemberships: Map<
     string,

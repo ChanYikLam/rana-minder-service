@@ -192,7 +192,7 @@ export class OnboardingUseCase {
       now,
       facts: { confirmed: input.confirmed, leaderContinuityOk },
     });
-    await this.registerMappings(result.club, now);
+    await this.registerMappings(result.club);
     await this.clubs.save(result.club);
     await this.notifications.save({
       kind: 'system',
@@ -241,7 +241,7 @@ export class OnboardingUseCase {
     return updated;
   }
 
-  private async registerMappings(club: ClubSpace, now: Date): Promise<void> {
+  private async registerMappings(club: ClubSpace): Promise<void> {
     if (club.clubGroup === null) throw orgError.precondition('社团未绑定 Group，无法登记映射');
     await this.registry.save({
       ref: club.clubGroup,
@@ -294,7 +294,6 @@ export class OnboardingUseCase {
         mappingVersion: club.mappingVersion,
       });
     }
-    void now;
   }
 
   private async requireClub(clubId: string): Promise<ClubSpace> {

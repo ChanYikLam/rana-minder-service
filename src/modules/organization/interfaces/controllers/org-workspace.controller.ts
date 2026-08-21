@@ -76,7 +76,7 @@ export class OrgWorkspaceController {
   @HttpCode(200)
   async readback(
     @Actor() actor: RequestActor,
-    @Param('clubId') _clubId: string,
+    @Param('clubId') clubId: string,
     @Param('commandId') commandId: string,
   ) {
     // 回读收口由系统/对账任务驱动（ORG-027 写后回读确认）：仅平台超管可经此端点
@@ -85,8 +85,10 @@ export class OrgWorkspaceController {
     if (!isSystemActor) {
       throw orgError.forbidden('回读收口应经系统关系任务驱动，不对普通请求开放（ORG-027）');
     }
+    // URL 社团作用域与命令实际作用域交叉校验（IFC-ERR-004），与 retryRelation 一致
     return this.relationCommands.systemConfirmReadback({
       commandId,
+      clubId,
       now: new Date(),
     });
   }
@@ -119,7 +121,7 @@ export class OrgWorkspaceController {
     if (perms.length === 0) {
       throw orgError.forbidden(`用户 ${actor.userId} 无权查看社团「${club.name}」预约（ORG-038）`);
     }
-    const items = await this.appointments['listForClub'](clubId);
+    const items = await this.appointments.listForClub(clubId);
     return { items };
   }
 
@@ -150,11 +152,13 @@ export class OrgWorkspaceController {
   @HttpCode(200)
   async cancelAppointment(
     @Actor() actor: RequestActor,
+    @Param('clubId') clubId: string,
     @Param('commandId') commandId: string,
     @Body() dto: CancelCommandDto,
   ) {
     return this.appointments.cancel({
       commandId,
+      clubId,
       actor: actor.userId,
       reason: dto.reason,
       now: new Date(),
@@ -165,11 +169,13 @@ export class OrgWorkspaceController {
   @HttpCode(200)
   async reconfirmAppointment(
     @Actor() actor: RequestActor,
+    @Param('clubId') clubId: string,
     @Param('commandId') commandId: string,
     @Body() dto: ReconfirmAppointmentDto,
   ) {
     return this.appointments.reconfirm({
       commandId,
+      clubId,
       actor: actor.userId,
       newExecTime: dto.newExecTime,
       now: new Date(),
