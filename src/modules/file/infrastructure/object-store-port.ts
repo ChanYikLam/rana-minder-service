@@ -84,10 +84,9 @@ export class InMemoryObjectStore implements ObjectStorePort {
 
   async deleteAndVerify(location: ObjectLocation): Promise<ObjectOpResult> {
     const bucket = this.bucket(location.bucketRole);
-    const deleted = bucket.delete(this.keyOf(location));
-    if (!deleted) {
-      return { ok: false, reason: '对象不存在或已删除' };
-    }
+    // 幂等删除：对象不存在（先前已删除/清理重试）也视为删除成功，回读核验读不到即可；
+    // 与 S3 DeleteObject 语义一致（删除不存在的 key 成功），保证清理/正式删除任务可收敛到终态。
+    bucket.delete(this.keyOf(location));
     // 回读核验：删除后读不到
     const stillThere = bucket.has(this.keyOf(location));
     return { ok: !stillThere, reason: stillThere ? '回读核验失败' : undefined };

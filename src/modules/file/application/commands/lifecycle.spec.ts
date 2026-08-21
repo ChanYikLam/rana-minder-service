@@ -215,4 +215,37 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     const done = await rig.repo.load(file.fileId);
     assert.equal(done!.state, FileState.FORMALLY_DELETED);
   });
+
+  it('孤儿清理幂等：已删除对象在重试中视为成功，不因对象不存在而永远 FAILED', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    await rig.remove.execute({ fileId: file.fileId, removable: true });
+    // 模拟：首个对象已在先前清理周期物理删除（后台任务对同一待清理文件重试）
+    const pending = await rig.repo.load(file.fileId);
+    const firstItem = pending!.cleanupQueue[0];
+    await rig.store.deleteAndVerify(firstItem.location);
+    // 重试清理：对象已不存在，deleteAndVerify 应幂等成功，队列全部 VERIFIED_DELETED → 收敛到已清理
+    const cleaned = await rig.cleanup.execute(file.fileId);
+    assert.equal(cleaned.state, FileState.CLEANED);
+    assert.ok(cleaned.cleanupQueue.every((i) => i.status === 'VERIFIED_DELETED'));
+  });
+
+  it('删除清单幂等：已删除对象在重放中视为成功，收口到正式删除终态', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    await rig.queueFormalDelete.execute({
+      fileId: file.fileId,
+      initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
+      reason: '二次确认',
+    });
+    // 模拟：清单首个对象已在先前周期物理删除后重放删除清单
+    const pending = await rig.repo.load(file.fileId);
+    const firstItem = pending!.deletionManifest!.items[0];
+    await rig.store.deleteAndVerify(firstItem.location);
+    const result = await rig.deleteManifest.execute(file.fileId);
+    assert.equal(result.completed, true);
+    assert.equal(result.failed, 0);
+    const done = await rig.repo.load(file.fileId);
+    assert.equal(done!.state, FileState.FORMALLY_DELETED);
+  });
 });
