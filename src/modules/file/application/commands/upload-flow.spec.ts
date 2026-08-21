@@ -114,6 +114,20 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     assert.equal(view.checkStatus, 'PASSED');
   });
 
+  it('晋升成功即删除隔离源字节，避免隔离区残留孤儿对象（FORM-009）', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    const quarantine = file.versions[0].objectLocation; // 晋升前的隔离定位
+    await flow.complete.execute(completeInput(file, pngBytes()));
+    await flow.ask.execute({ fileId: file.fileId, principalId: 'u1' });
+    const promoted = await flow.promote.execute({ fileId: file.fileId, principalId: 'u1' });
+    assert.equal(promoted.state, FileState.AVAILABLE);
+    assert.equal(promoted.versions[0].objectLocation.bucketRole, 'OBJECT');
+    // 权威原件区存在晋升副本，隔离区源字节已删除（copy-then-delete）
+    assert.notEqual(await flow.store.read(promoted.versions[0].objectLocation), null);
+    assert.equal(await flow.store.read(quarantine), null);
+  });
+
   it('检查失败 → 隔离/失败，可重试标志按结果', async () => {
     const flow = makeFlow();
     // 未知类型字节（octet-stream）→ 初检 FAILED → 隔离失败（声明大小与实际一致）

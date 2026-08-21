@@ -75,7 +75,15 @@ export class InMemoryObjectStore implements ObjectStorePort {
       return { ok: false, reason: '内容摘要核验失败' };
     }
     // 只写一次写入权威原件区（与隔离区独立语义，但共享 create-only 防覆盖）
-    return this.putOnce(target, bytes);
+    const result = await this.putOnce(target, bytes);
+    if (!result.ok) {
+      return result;
+    }
+    // 晋升成功后删除隔离源（copy-then-delete 语义，与 S3 晋升后清理一致）：
+    // 晋升即权威原件区已有只写一次副本，隔离区残留字节失去引用，若不删除将
+    // 成为永不清理的孤儿对象（违反 FORM-009 数据生命周期收敛）。
+    this.bucket(source.bucketRole).delete(this.keyOf(source));
+    return { ok: true };
   }
 
   async read(location: ObjectLocation): Promise<Uint8Array | null> {

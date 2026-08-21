@@ -63,7 +63,8 @@ export class QueueFormalDeleteCommand {
     // 先撤权：可用/已绑定提交 → 待清理（访问立即撤销）；
     // 已在待清理（如先前经草稿移除/替换进入，且未被清理任务收口）时保持原状态，避免
     // 状态机非法自转换（IFC-ERR-006：PENDING_CLEANUP -> PENDING_CLEANUP 未定义）。
-    const revoked =
+    // revokedState：撤权后的文件状态（访问已撤销、待系统物理清理）。
+    const revokedState =
       file.state === FileState.PENDING_CLEANUP
         ? FileState.PENDING_CLEANUP
         : this.stateMachine.transition(file.state, FileState.PENDING_CLEANUP);
@@ -87,7 +88,7 @@ export class QueueFormalDeleteCommand {
     };
     const updated: FileRecord = {
       ...file,
-      state: revoked,
+      state: revokedState,
       deletionManifest: manifest,
     };
     await this.repo.save(updated);
