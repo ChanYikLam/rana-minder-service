@@ -113,9 +113,13 @@ export class CompleteUploadCommand {
         engineVersion: ApplicationFileCheck.ENGINE_VERSION,
         status: initialCheck === 'PASSED' ? 'RUNNING' : initialCheck,
         retryable: false,
-        sanitizedResult: sniff.matchesDeclaration
-          ? sniff.detectedType
-          : `declared-mismatch:${sniff.detectedType}`,
+        // 隔离原因按真实语义记录：禁止类型（默认禁止可执行/脚本/高风险压缩）≠ 声明不一致
+        sanitizedResult:
+          sniff.outcome === 'QUARANTINED'
+            ? `forbidden:${sniff.detectedType}`
+            : sniff.matchesDeclaration
+              ? sniff.detectedType
+              : `declared-mismatch:${sniff.detectedType}`,
         startedAt: new Date().toISOString(),
       },
     };

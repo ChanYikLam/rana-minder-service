@@ -32,7 +32,7 @@ const makeFlow = () => {
     store,
     initiate: new InitiateUploadCommand(repo, policy, sm),
     complete: new CompleteUploadCommand(repo, store),
-    ask: new AskFileCheckCommand(repo, checkPort),
+    ask: new AskFileCheckCommand(repo, store, checkPort),
     promote: new PromoteFileCommand(repo, store),
     status: new FileStatusQuery(repo),
   };
@@ -92,6 +92,8 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     });
     const completed = await flow.complete.execute(completeInput(file, exeBytes()));
     assert.equal(completed.state, FileState.QUARANTINED_FAILED);
+    // 隔离原因按真实语义：禁止类型（可执行）→ forbidden:，而非误导性的 declared-mismatch
+    assert.match(completed.checkRecord!.sanitizedResult, /^forbidden:/);
     const view = await flow.status.getStatus(file.fileId, 'u1');
     assert.equal(view.accessible, false);
   });
@@ -103,8 +105,6 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     await flow.ask.execute({
       fileId: file.fileId,
       principalId: 'u1',
-      bytes: pngBytes(),
-      declaredType: 'image/png',
     });
     const promoted = await flow.promote.execute({ fileId: file.fileId, principalId: 'u1' });
     assert.equal(promoted.state, FileState.AVAILABLE);
@@ -145,16 +145,12 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
       flow.ask.execute({
         fileId: file.fileId,
         principalId: 'u2',
-        bytes: pngBytes(),
-        declaredType: 'image/png',
       }),
       /无权请求/,
     );
     await flow.ask.execute({
       fileId: file.fileId,
       principalId: 'u1',
-      bytes: pngBytes(),
-      declaredType: 'image/png',
     });
     // 他者收口晋升 → 拒绝
     await assert.rejects(
@@ -163,6 +159,22 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     );
     const promoted = await flow.promote.execute({ fileId: file.fileId, principalId: 'u1' });
     assert.equal(promoted.state, FileState.AVAILABLE);
+  });
+
+  it('请求检查：字节取自隔离区权威对象并校验可信摘要，调用方不可用任意字节冒充（防绕过）', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    const completed = await flow.complete.execute(completeInput(file, pngBytes()));
+    // 篡改版本记录中的可信 SHA-256 使其与隔离区实际字节不符 → 拒绝执行检查
+    const version = completed.versions[completed.versions.length - 1];
+    flow.repo.save({
+      ...completed,
+      versions: [...completed.versions.slice(0, -1), { ...version, sha256: '0'.repeat(64) }],
+    });
+    await assert.rejects(
+      flow.ask.execute({ fileId: file.fileId, principalId: 'u1' }),
+      /摘要不一致/,
+    );
   });
 
   it('完成上传：真实 bytes.length 与声明大小不一致时拒绝（防绕过类别硬上限）', async () => {
@@ -196,8 +208,6 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     await flow.ask.execute({
       fileId: file.fileId,
       principalId: 'u1',
-      bytes: pngBytes(),
-      declaredType: 'image/png',
     });
     // 预占权威原件区目标键（与隔离区同 randomKey，但 objectKind=OBJECT），令晋升 create-only 失败
     const quarantine = file.versions[0].objectLocation;

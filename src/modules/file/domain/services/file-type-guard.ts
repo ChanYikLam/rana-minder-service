@@ -84,8 +84,17 @@ export class FileTypeGuard {
     if (b(0) === 0x25 && b(1) === 0x50 && b(2) === 0x44 && b(3) === 0x46) {
       return 'application/pdf';
     }
-    // MP4 (ftyp box)；需至少 8 字节，不足不匹配（b 以 0 兜底防越界）
-    if (bytes.length >= 8 && b(4) === 0x66 && b(5) === 0x74 && b(6) === 0x79 && b(7) === 0x70) {
+    // MP4 (ftyp box)；需至少 8 字节，不足不匹配（b 以 0 兜底防越界）。
+    // 校验首 4 字节 box size（大端无符号 32 位）≥ 8（真实 ftyp box 至少 8 字节），
+    // 避免将任意含 "ftyp" 的字节流误判为 MP4（降低误报）。
+    if (
+      bytes.length >= 8 &&
+      b(4) === 0x66 &&
+      b(5) === 0x74 &&
+      b(6) === 0x79 &&
+      b(7) === 0x70 &&
+      this.isReasonableBoxSize(bytes)
+    ) {
       return 'video/mp4';
     }
     // ZIP 容器（含 .docx/.xlsx 等 OOXML）。
@@ -133,6 +142,12 @@ export class FileTypeGuard {
       return { detectedType, matchesDeclaration: false, outcome: FileCheckOutcome.FAILED };
     }
     return { detectedType, matchesDeclaration: true, outcome: FileCheckOutcome.PASSED };
+  }
+
+  /** MP4 ftyp box 首 4 字节 box size（大端无符号 32 位）是否合理：≥ 8（真实 ftyp box 最小长度） */
+  private isReasonableBoxSize(bytes: Uint8Array): boolean {
+    const boxSize = (bytes[0]! << 24) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!;
+    return boxSize >= 8;
   }
 
   private isLikelyText(bytes: Uint8Array): boolean {

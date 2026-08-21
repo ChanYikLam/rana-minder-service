@@ -69,4 +69,9 @@ describe('FileTypeGuard（GOV-008 真实类型校验，不信任扩展名）', (
       FileCheckOutcome.PASSED,
     );
   });
+
+  it('MP4 首 4 字节 box size 异常（< 8）→ 不判为 MP4（降低误报）', () => {
+    // ftyp 魔数位置正确，但 box size=0 不合理 → 不应误判为 MP4
+    assert.notEqual(guard.sniff(hex('000000006674797069736f6d')), 'video/mp4');
+  });
 });
