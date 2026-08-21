@@ -3,6 +3,11 @@ import { InitiateUploadCommand } from './application/commands/initiate-upload.co
 import { CompleteUploadCommand } from './application/commands/complete-upload.command';
 import { AskFileCheckCommand } from './application/commands/ask-file-check.command';
 import { PromoteFileCommand } from './application/commands/promote-file.command';
+import { ReplaceDraftFileCommand } from './application/commands/replace-draft-file.command';
+import { RemoveDraftFileCommand } from './application/commands/remove-draft-file.command';
+import { CleanupOrphansCommand } from './application/commands/cleanup-orphans.command';
+import { QueueFormalDeleteCommand } from './application/commands/queue-formal-delete.command';
+import { DeleteManifestHandler } from './application/commands/delete-manifest.handler';
 import { FileStatusQuery } from './application/queries/file-status.query';
 import { FileAccessQuery } from './application/queries/file-access.query';
 import { FileStateMachine } from './domain/state-machines/file-state-machine';
@@ -54,6 +59,11 @@ import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
     CompleteUploadCommand,
     AskFileCheckCommand,
     PromoteFileCommand,
+    ReplaceDraftFileCommand,
+    RemoveDraftFileCommand,
+    CleanupOrphansCommand,
+    QueueFormalDeleteCommand,
+    DeleteManifestHandler,
     FileStatusQuery,
     FileAccessQuery,
   ],
@@ -62,6 +72,11 @@ import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
     CompleteUploadCommand,
     AskFileCheckCommand,
     PromoteFileCommand,
+    ReplaceDraftFileCommand,
+    RemoveDraftFileCommand,
+    CleanupOrphansCommand,
+    QueueFormalDeleteCommand,
+    DeleteManifestHandler,
     FileStatusQuery,
     FileAccessQuery,
     FILE_REPOSITORY,

@@ -122,6 +122,8 @@ export class InitiateUploadCommand {
       versions: [version],
       uploadSession: session,
       checkRecord: null,
+      cleanupQueue: [],
+      deletionManifest: null,
       createdAt: now,
     };
     // 原子创建：配置数量上限时由仓储在同一同步段内完成"计数+保存"（防 TOCTOU），

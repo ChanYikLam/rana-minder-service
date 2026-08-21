@@ -115,6 +115,39 @@ export interface FileRecord {
   readonly uploadSession: UploadSession | null;
   /** 检查记录（当前版本） */
   readonly checkRecord: CheckRecord | null;
+  /** 受控清理队列（替换/删除后失去当前引用的旧对象；系统稍后安全物理清理，FORM-009/AUD-008） */
+  readonly cleanupQueue: readonly CleanupQueueItem[];
+  /** 正式删除清单（IFC-TX-007：逐项执行与核验；部分失败保持未完成） */
+  readonly deletionManifest: DeleteManifest | null;
   /** 创建时间 */
   readonly createdAt: string;
+}
+
+/** 受控清理登记项（草稿删除/替换后失去最后有效引用的对象；对用户立即不可见） */
+export interface CleanupQueueItem {
+  readonly location: ObjectLocation;
+  /** 清理原因（脱敏：REPLACED/REMOVED/ORPHANED） */
+  readonly reason: 'REPLACED' | 'REMOVED' | 'ORPHANED';
+  readonly queuedAt: string;
+  readonly status: 'PENDING' | 'VERIFIED_DELETED' | 'FAILED';
+}
+
+/** 删除清单项（正式删除/IFC-TX-007：枚举在线对象与派生物） */
+export interface DeleteManifestItem {
+  readonly location: ObjectLocation;
+  /** 副本类别（AUD-008：范围/预览/传播） */
+  readonly kind: 'OBJECT' | 'QUARANTINE' | 'DERIVED' | 'EXPORT';
+  readonly status: 'PENDING' | 'VERIFIED_DELETED' | 'FAILED';
+}
+
+/** 删除清单（IFC-FIL-008：先撤权，再逐项删除并回读核验） */
+export interface DeleteManifest {
+  readonly fileId: string;
+  /** 删除原因（超管二次确认；AUD-008） */
+  readonly reason: string;
+  readonly initiatedBy: string;
+  readonly initiatedAt: string;
+  /** 是否已撤权（先撤权再逐项删除） */
+  readonly accessRevoked: boolean;
+  readonly items: readonly DeleteManifestItem[];
 }
