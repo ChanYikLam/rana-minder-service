@@ -40,7 +40,13 @@ export class CleanupOrphansCommand {
       if (item.status === 'VERIFIED_DELETED') {
         return item;
       }
-      const result = await this.store.deleteAndVerify(item.location);
+      let result;
+      try {
+        result = await this.store.deleteAndVerify(item.location);
+      } catch {
+        allVerified = false;
+        return { ...item, status: 'FAILED' as const };
+      }
       if (!result.ok) {
         allVerified = false;
         return { ...item, status: 'FAILED' as const };

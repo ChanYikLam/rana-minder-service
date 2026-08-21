@@ -53,7 +53,13 @@ export class DeleteManifestHandler {
           verified++;
           return item;
         }
-        const result = await this.store.deleteAndVerify(item.location);
+        let result;
+        try {
+          result = await this.store.deleteAndVerify(item.location);
+        } catch {
+          failed++;
+          return { ...item, status: 'FAILED' as const };
+        }
         if (!result.ok) {
           failed++;
           return { ...item, status: 'FAILED' as const };
@@ -63,7 +69,8 @@ export class DeleteManifestHandler {
       }),
     );
 
-    const completed = failed === 0 && verified === manifest.items.length && manifest.items.length > 0;
+    // 全部项无失败即视为完成：清单为空（无版本对象待删除）时同样完成，避免永远卡在待清理
+    const completed = failed === 0;
     const state = completed
       ? this.stateMachine.transition(FileState.PENDING_CLEANUP, FileState.FORMALLY_DELETED)
       : FileState.PENDING_CLEANUP; // 部分失败：保持未完成，不宣称完成

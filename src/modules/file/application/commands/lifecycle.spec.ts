@@ -118,6 +118,15 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     assert.equal(view.reason, 'REMOVED');
   });
 
+  it('草稿不可移除：业务未开放移除时拒绝，不进入待清理', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    await assert.rejects(
+      rig.remove.execute({ fileId: file.fileId, removable: false }),
+      /当前草稿不可移除/,
+    );
+  });
+
   it('已正式提交的附件：普通用户物理删除拒绝（仅正式删除流程）', async () => {
     const rig = makeRig();
     const file = await makeAvailableFile(rig.repo, rig.store);
