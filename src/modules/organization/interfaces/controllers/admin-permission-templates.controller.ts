@@ -9,8 +9,10 @@ import { Body, Controller, Get, HttpCode, Inject, Param, Post } from '@nestjs/co
 
 import { Actor, type RequestActor } from '../actor';
 import type { PermissionTemplateQuery } from '../../application/queries/permission-template.query';
+import type { PermissionTemplateCommand } from '../../application/commands/permission-template.command';
 import {
   CURRENT_PERMISSIONS_PORT,
+  PERMISSION_TEMPLATE_COMMAND,
   PERMISSION_TEMPLATE_QUERY,
   type CurrentPermissionsPort,
 } from '../../application/ports';
@@ -21,6 +23,7 @@ import { TemplateCreateDto, TemplatePublishDto, TemplateSaveDraftDto } from '../
 export class AdminPermissionTemplatesController {
   constructor(
     @Inject(PERMISSION_TEMPLATE_QUERY) private readonly query: PermissionTemplateQuery,
+    @Inject(PERMISSION_TEMPLATE_COMMAND) private readonly command: PermissionTemplateCommand,
     @Inject(CURRENT_PERMISSIONS_PORT) private readonly permissions: CurrentPermissionsPort,
   ) {}
 
@@ -43,7 +46,7 @@ export class AdminPermissionTemplatesController {
   @HttpCode(201)
   async create(@Actor() actor: RequestActor, @Body() dto: TemplateCreateDto) {
     await this.assertPlatformConfigManage(actor);
-    return this.query.create({ name: dto.name, permissions: dto.permissions });
+    return this.command.create({ name: dto.name, permissions: dto.permissions });
   }
 
   @Post(':templateId/save')
@@ -54,7 +57,7 @@ export class AdminPermissionTemplatesController {
     @Body() dto: TemplateSaveDraftDto,
   ) {
     await this.assertPlatformConfigManage(actor);
-    return this.query.saveDraft({ templateId, name: dto.name, permissions: dto.permissions });
+    return this.command.saveDraft({ templateId, name: dto.name, permissions: dto.permissions });
   }
 
   @Get(':templateId/diff')
@@ -71,7 +74,7 @@ export class AdminPermissionTemplatesController {
     @Body() dto: TemplatePublishDto,
   ) {
     await this.assertPlatformConfigManage(actor);
-    return this.query.publish({
+    return this.command.publish({
       templateId,
       reauthProof: dto.reauthProof,
       previewVersion: dto.previewVersion,

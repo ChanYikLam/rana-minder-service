@@ -19,6 +19,7 @@ import { appointmentCommandProvider } from './application/commands/appointment-c
 import { onboardingProvider } from './application/commands/onboard-club.use-case';
 import { clubLifecycleProvider } from './application/commands/club-lifecycle.use-case';
 import { relationCommandProvider } from './application/commands/relation-command.use-case';
+import { permissionTemplateCommandProvider } from './application/commands/permission-template.command';
 import { controlledBatchProvider } from './application/commands/controlled-batch.use-case';
 
 import {
@@ -194,6 +195,7 @@ import { OrgWorkspaceController } from './interfaces/controllers/org-workspace.c
     clubLifecycleProvider,
     relationCommandProvider,
     appointmentCommandProvider,
+    permissionTemplateCommandProvider,
     controlledBatchProvider,
     {
       provide: ADMIN_CLUBS_QUERY,

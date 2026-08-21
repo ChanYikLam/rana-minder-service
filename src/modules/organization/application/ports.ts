@@ -93,6 +93,7 @@ export interface RelationCommandStore {
 export interface AppointmentCommandStore {
   save(command: AppointmentCommand): Promise<void>;
   findById(id: string): Promise<AppointmentCommand | null>;
+  findByRelationCommandId(relationCommandId: string): Promise<AppointmentCommand | null>;
   listByClub(clubId: string): Promise<AppointmentCommand[]>;
 }
 
@@ -232,6 +233,7 @@ export const APPOINTMENT_COMMAND_USE_CASE = Symbol('ORG_APPOINTMENT_COMMAND_USE_
 export const ADMIN_CLUBS_QUERY = Symbol('ORG_ADMIN_CLUBS_QUERY');
 export const GROUP_DIRECTORY_QUERY = Symbol('ORG_GROUP_DIRECTORY_QUERY');
 export const PERMISSION_TEMPLATE_QUERY = Symbol('ORG_PERMISSION_TEMPLATE_QUERY');
+export const PERMISSION_TEMPLATE_COMMAND = Symbol('ORG_PERMISSION_TEMPLATE_COMMAND');
 export const ORG_CONTEXT_QUERY = Symbol('ORG_ORG_CONTEXT_QUERY');
 
 // 事件类型（跨组件消费；后续 notification/audit 模块订阅）

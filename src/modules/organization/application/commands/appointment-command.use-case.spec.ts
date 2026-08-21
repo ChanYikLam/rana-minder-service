@@ -2,6 +2,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createClubSpace } from '../../domain/models/club-space';
+import { PermissionCatalog } from '../../domain/models/permission-template';
 import { AppointmentCommandUseCase } from './appointment-command.use-case';
 import { RelationCommandUseCase } from './relation-command.use-case';
 import {
@@ -15,7 +16,10 @@ import {
 import type { CurrentPermissionsPort } from '../ports';
 
 class MutablePermissions implements CurrentPermissionsPort {
-  perms: string[] = ['club:appointment:manage', 'club:member:manage'];
+  perms: string[] = [
+    PermissionCatalog.CLUB_APPOINTMENT_MANAGE,
+    PermissionCatalog.CLUB_MEMBER_MANAGE,
+  ];
   role = 'club-acm/负责人组';
 
   async effectiveForClub(): Promise<string[]> {
@@ -84,7 +88,17 @@ function buildHarness() {
   club.readonly = false;
   club.clubGroup = { owner: 'club-acm', name: 'ACM社团' };
 
-  return { clubs, casdoor, apptStore, relationStore, scheduler, useCase, club, permissions };
+  return {
+    clubs,
+    casdoor,
+    apptStore,
+    relationStore,
+    scheduler,
+    useCase,
+    club,
+    permissions,
+    relations,
+  };
 }
 
 describe('AppointmentCommandUseCase', () => {
@@ -222,5 +236,92 @@ describe('AppointmentCommandUseCase', () => {
         }),
       (e: Error) => (e as { code?: string }).code === 'IFC-ERR-007',
     );
+  });
+
+  it('关系命令回读确认 → 预约命令自动收口生效（settleExecution 回调链路）', async () => {
+    const cmd = await h.useCase.create(baseCreate);
+    const executing = await h.useCase.scheduleExecute({
+      commandId: cmd.id,
+      actor: 'system',
+      now: new Date('2026-08-10T00:00:20.000Z'),
+    });
+    assert.equal(executing.status, 'executing');
+    const rel = await h.relationStore.findByProcessingForSubject(cmd.clubId, 'u_d');
+    assert.ok(rel);
+
+    // 写入目标职位 Group 后回读确认，触发关系命令 → 预约命令收口
+    await h.casdoor.writeMembership({
+      ref: { owner: 'club-acm', name: '宣传部' },
+      subjectId: 'u_d',
+      action: 'add',
+      requestId: 'req-confirm',
+    });
+    await h.relations.systemConfirmReadback({
+      commandId: rel.id,
+      now: new Date('2026-08-10T00:01:00.000Z'),
+    });
+
+    const settled = await h.apptStore.findById(cmd.id);
+    assert.equal(settled?.status, 'effective');
+    assert.ok(settled?.actualEffectiveAt);
+  });
+
+  it('scheduleExecute 暂停后释放租约：reconfirm 后仍可重新执行（ORG-039 不阻塞）', async () => {
+    const cmd = await h.useCase.create(baseCreate);
+    h.permissions.perms = [];
+    const paused = await h.useCase.scheduleExecute({
+      commandId: cmd.id,
+      actor: 'system',
+      now: new Date('2026-08-10T00:00:20.000Z'),
+    });
+    assert.equal(paused.status, 'initiator_revoked_pending_reconfirm');
+
+    // 恢复权限并重新确认新执行时间
+    h.permissions.perms = [
+      PermissionCatalog.CLUB_APPOINTMENT_MANAGE,
+      PermissionCatalog.CLUB_MEMBER_MANAGE,
+    ];
+    const reconfirmed = await h.useCase.reconfirm({
+      commandId: cmd.id,
+      actor: 'u_b',
+      newExecTime: '2026-08-11T00:00:00.000Z',
+      now: new Date('2026-08-10T01:00:00.000Z'),
+    });
+    assert.equal(reconfirmed.status, 'reconfirmed_pending_execution');
+
+    // 租约已释放，重新执行不被永久阻塞
+    const executing = await h.useCase.scheduleExecute({
+      commandId: cmd.id,
+      actor: 'system',
+      now: new Date('2026-08-11T00:00:20.000Z'),
+    });
+    assert.equal(executing.status, 'executing');
+  });
+
+  it('关系命令失败收口 → 释放租约供人工重试（ORG-039 不阻塞）', async () => {
+    const cmd = await h.useCase.create(baseCreate);
+    await h.useCase.scheduleExecute({
+      commandId: cmd.id,
+      actor: 'system',
+      now: new Date('2026-08-10T00:00:20.000Z'),
+    });
+    const rel = await h.relationStore.findByProcessingForSubject(cmd.clubId, 'u_d');
+    assert.ok(rel);
+
+    // 回读空集合（未写入）→ final_failure → 预约命令收口为待重试
+    await h.relations.handleReadback(
+      { commandId: rel.id, now: new Date('2026-08-10T00:01:00.000Z') },
+      { membersByGroup: {} },
+    );
+    const settled = await h.apptStore.findById(cmd.id);
+    assert.equal(settled?.status, 'exec_failed_pending_retry');
+
+    // 失败收口已释放租约：人工重试可重新取得租约（不被 system 租约阻塞）
+    const retried = await h.useCase.retryExecute({
+      commandId: cmd.id,
+      actor: 'u_b',
+      now: new Date('2026-08-10T00:02:00.000Z'),
+    });
+    assert.equal(retried.status, 'executing');
   });
 });

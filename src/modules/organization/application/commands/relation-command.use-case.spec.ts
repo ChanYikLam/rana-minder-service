@@ -2,6 +2,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createClubSpace } from '../../domain/models/club-space';
+import { PermissionCatalog } from '../../domain/models/permission-template';
 import { RelationCommandUseCase } from './relation-command.use-case';
 import {
   InMemoryCasdoorPort,
@@ -13,7 +14,7 @@ import {
 import type { CurrentPermissionsPort } from '../ports';
 
 class MutablePermissions implements CurrentPermissionsPort {
-  perms = new Map<string, string[]>([['club-acm-1', ['club:member:manage']]]);
+  perms = new Map<string, string[]>([['club-acm-1', [PermissionCatalog.CLUB_MEMBER_MANAGE]]]);
 
   async effectiveForClub(userId: string, clubId: string): Promise<string[]> {
     return this.perms.get(clubId) ?? [];

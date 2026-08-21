@@ -13,6 +13,7 @@ import {
   GROUP_DIRECTORY_QUERY,
   ONBOARDING_USE_CASE,
   ORG_CONTEXT_QUERY,
+  PERMISSION_TEMPLATE_COMMAND,
   PERMISSION_TEMPLATE_QUERY,
 } from './application/ports';
 
@@ -27,6 +28,7 @@ describe('OrganizationModule', () => {
     assert.ok(moduleRef.get(ADMIN_CLUBS_QUERY));
     assert.ok(moduleRef.get(GROUP_DIRECTORY_QUERY));
     assert.ok(moduleRef.get(PERMISSION_TEMPLATE_QUERY));
+    assert.ok(moduleRef.get(PERMISSION_TEMPLATE_COMMAND));
     assert.ok(moduleRef.get(ORG_CONTEXT_QUERY));
     assert.ok(moduleRef.get(CONTROLLED_BATCH_PORT));
     await moduleRef.close();

@@ -275,14 +275,15 @@ export class OnboardingUseCase {
   }
 }
 
-function toStableRef(ownerOrName: string, other: string): GroupStableRef {
-  // 骨架阶段约定：groupId 直接承载 owner+name 定位元组（CAS-MAP-003）
-  const isComposite = ownerOrName.includes('/');
+function toStableRef(groupId: string, fallbackOwner: string): GroupStableRef {
+  // 骨架阶段约定：groupId 直接承载 owner+name 定位元组（CAS-MAP-003）。
+  // 复合形如 "owner/name"；非复合仅承载 name，owner 退回调用方提供的 fallbackOwner。
+  const isComposite = groupId.includes('/');
   if (isComposite) {
-    const [owner, name] = ownerOrName.split('/');
+    const [owner, name] = groupId.split('/');
     return { owner, name };
   }
-  return { owner: other, name: ownerOrName };
+  return { owner: fallbackOwner, name: groupId };
 }
 
 function newId(prefix: IdPrefix): string {

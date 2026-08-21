@@ -158,6 +158,13 @@ export class InMemoryAppointmentCommandStore implements AppointmentCommandStore 
     return this.byId.get(id) ?? null;
   }
 
+  async findByRelationCommandId(relationCommandId: string): Promise<AppointmentCommand | null> {
+    for (const cmd of this.byId.values()) {
+      if (cmd.relationCommandId === relationCommandId) return cmd;
+    }
+    return null;
+  }
+
   async listByClub(clubId: string): Promise<AppointmentCommand[]> {
     return this.byClub.get(clubId) ?? [];
   }

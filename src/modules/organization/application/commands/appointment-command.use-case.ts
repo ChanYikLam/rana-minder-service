@@ -16,6 +16,8 @@ import { randomUUID } from 'node:crypto';
 
 import type { AppointmentCommand } from '../../domain/models/appointment-command';
 import { createAppointmentCommand } from '../../domain/models/appointment-command';
+import { PermissionCatalog } from '../../domain/models/permission-template';
+import type { RelationCommand } from '../../domain/models/relation-command';
 import { AppointmentCommandStateMachine } from '../../domain/state-machines/appointment-command.state-machine';
 import type { AppointmentCommandType } from '../../domain/types';
 import { IdPrefix, orgError } from '../../domain/types';
@@ -55,7 +57,10 @@ export class AppointmentCommandUseCase {
     private readonly scheduler: JobSchedulerPort,
     private readonly notifications: NotificationPort,
     private readonly casdoor: CasdoorGroupPort,
-  ) {}
+  ) {
+    // 关系命令回读收口回调：关系命令确认/失败后推进预约命令状态机（executing → effective / exec_failed_pending_retry）
+    this.relationCommands.setReadbackSink((rel) => this.settleFromRelationCommand(rel));
+  }
 
   async create(input: {
     clubId: string;
@@ -76,7 +81,7 @@ export class AppointmentCommandUseCase {
     }
     // 权限校验：发起人须有预约管理权限（ORG-039）
     const perms = await this.permissions.effectiveForClub(input.initiator, input.clubId);
-    if (!perms.includes('club:appointment:manage')) {
+    if (!perms.includes(PermissionCatalog.CLUB_APPOINTMENT_MANAGE)) {
       throw orgError.forbidden('发起人无预约管理权限（ORG-039）');
     }
 
@@ -116,38 +121,45 @@ export class AppointmentCommandUseCase {
     now: Date;
   }): Promise<AppointmentCommand> {
     const command = await this.requireCommand(input.commandId);
-    const leased = await this.scheduler.acquireLease(
-      `tsk-appt-${command.id}`,
-      input.actor,
-      input.now,
-    );
+    const taskId = `tsk-appt-${command.id}`;
+    const leased = await this.scheduler.acquireLease(taskId, input.actor, input.now);
     if (!leased) {
       throw orgError.stateConflict('调度器已取得执行租约，禁止重复执行（单执行租约，ORG-039）');
     }
 
-    const initiatorHasRights = await this.permissions
-      .effectiveForClub(command.initiator, command.clubId)
-      .then((p) => p.includes('club:appointment:manage'));
+    try {
+      const initiatorHasRights = await this.permissions
+        .effectiveForClub(command.initiator, command.clubId)
+        .then((p) => p.includes(PermissionCatalog.CLUB_APPOINTMENT_MANAGE));
 
-    const preconditions = await this.evaluatePreconditions(command);
+      const preconditions = await this.evaluatePreconditions(command);
 
-    const result = this.stateMachine.transition({
-      command,
-      event: 'schedule_execute',
-      now: input.now,
-      actor: input.actor,
-      facts: {
-        due: true,
-        initiatorHasRights,
-        preconditions,
-      },
-    });
+      const result = this.stateMachine.transition({
+        command,
+        event: 'schedule_execute',
+        now: input.now,
+        actor: input.actor,
+        facts: {
+          due: true,
+          initiatorHasRights,
+          preconditions,
+        },
+      });
 
-    if (result.command.status === 'executing') {
-      await this.createRelationExecution(result.command, input.now);
+      if (result.command.status === 'executing') {
+        await this.createRelationExecution(result.command, input.now);
+      } else {
+        // 未进入执行（发起人失权/前置条件失效暂停）：任务已完成本轮使命，释放租约
+        // 避免旧任务租约残留阻塞 reconfirm 后的人工/调度再执行（ORG-039 单执行租约）
+        await this.scheduler.complete(taskId);
+      }
+      await this.store.save(result.command);
+      return result.command;
+    } catch (err) {
+      // 执行过程中异常：释放租约以便后续重试，不让租约永久滞留（ORG-039）
+      await this.scheduler.fail(taskId, err instanceof Error ? err.message : String(err));
+      throw err;
     }
-    await this.store.save(result.command);
-    return result.command;
   }
 
   async reconfirm(input: {
@@ -220,6 +232,13 @@ export class AppointmentCommandUseCase {
       facts: { executionResult: input.success ? 'success' : 'failure', reason: input.reason },
     });
     await this.store.save(result.command);
+    // 收口后释放单执行租约：成功移除任务，失败释放租约（保留任务供人工重试再次竞争）
+    const taskId = `tsk-appt-${command.id}`;
+    if (result.command.status === 'effective') {
+      await this.scheduler.complete(taskId);
+    } else {
+      await this.scheduler.fail(taskId, input.reason);
+    }
     return result.command;
   }
 
@@ -230,36 +249,39 @@ export class AppointmentCommandUseCase {
   }): Promise<AppointmentCommand> {
     const command = await this.requireCommand(input.commandId);
     // 人工重试同样遵循单执行租约（ORG-039）：已取得租约则禁止并发重执行
-    const leased = await this.scheduler.acquireLease(
-      `tsk-appt-${command.id}`,
-      input.actor,
-      input.now,
-    );
+    const taskId = `tsk-appt-${command.id}`;
+    const leased = await this.scheduler.acquireLease(taskId, input.actor, input.now);
     if (!leased) {
       throw orgError.stateConflict('调度器已取得执行租约，禁止重复执行（单执行租约，ORG-039）');
     }
-    const actorAuthorized = await this.isAuthorizedForCommand(input.actor, command);
-    if (!actorAuthorized) {
-      throw orgError.forbidden('人工重试前须重新鉴权（ORG-039）');
+    try {
+      const actorAuthorized = await this.isAuthorizedForCommand(input.actor, command);
+      if (!actorAuthorized) {
+        throw orgError.forbidden('人工重试前须重新鉴权（ORG-039）');
+      }
+      // 重试前重验业务前置条件：条件未恢复不得自动重试（ORG-039）
+      const preconditions = await this.evaluatePreconditions(command);
+      if (!preconditions.every((p) => p.ok)) {
+        throw orgError.precondition(
+          '重试前置条件未满足，请先恢复条件再重试（ORG-039）',
+          JSON.stringify(preconditions),
+        );
+      }
+      const result = this.stateMachine.transition({
+        command,
+        event: 'retry_execute',
+        now: input.now,
+        actor: input.actor,
+        facts: { confirmerAuthorized: actorAuthorized },
+      });
+      await this.createRelationExecution(result.command, input.now);
+      await this.store.save(result.command);
+      return result.command;
+    } catch (err) {
+      // 鉴权/前置条件/执行异常：释放租约，避免人工重试被永久阻塞（ORG-039）
+      await this.scheduler.fail(taskId, err instanceof Error ? err.message : String(err));
+      throw err;
     }
-    // 重试前重验业务前置条件：条件未恢复不得自动重试（ORG-039）
-    const preconditions = await this.evaluatePreconditions(command);
-    if (!preconditions.every((p) => p.ok)) {
-      throw orgError.precondition(
-        '重试前置条件未满足，请先恢复条件再重试（ORG-039）',
-        JSON.stringify(preconditions),
-      );
-    }
-    const result = this.stateMachine.transition({
-      command,
-      event: 'retry_execute',
-      now: input.now,
-      actor: input.actor,
-      facts: { confirmerAuthorized: actorAuthorized },
-    });
-    await this.createRelationExecution(result.command, input.now);
-    await this.store.save(result.command);
-    return result.command;
   }
 
   private async createRelationExecution(command: AppointmentCommand, now: Date): Promise<void> {
@@ -312,7 +334,23 @@ export class AppointmentCommandUseCase {
     command: AppointmentCommand,
   ): Promise<boolean> {
     const perms = await this.permissions.effectiveForClub(actor, command.clubId);
-    return perms.includes('club:appointment:manage');
+    return perms.includes(PermissionCatalog.CLUB_APPOINTMENT_MANAGE);
+  }
+
+  /** 关系命令回读收口回调：推进预约命令状态机（ORG-027 写后回读 → ORG-039 生效收口） */
+  private async settleFromRelationCommand(rel: RelationCommand): Promise<void> {
+    const appt = await this.store.findByRelationCommandId(rel.id);
+    if (appt === null || appt.status !== 'executing') return;
+    const success = rel.status === 'readback_confirmed';
+    const now = rel.confirmedAt !== null ? new Date(rel.confirmedAt) : new Date();
+    await this.settleExecution({
+      commandId: appt.id,
+      success,
+      reason: success
+        ? '关系命令回读确认生效'
+        : (rel.failureReason ?? '关系命令失败，原关系保持有效'),
+      now,
+    });
   }
 
   private async evaluatePreconditions(

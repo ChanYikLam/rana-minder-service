@@ -1,7 +1,8 @@
 /**
- * 查询：权限模板（§15.3 GET/POST /api/admin/config/permission-templates*）。
+ * 查询：权限模板（§15.3 GET /api/admin/config/permission-templates*）。
  *
- * 只读查询 + 模板草稿/发布操作委托 PermissionTemplateService 规则校验。
+ * 只读查询（列表 + 草稿差异预览）；写操作（新建/保存草稿/发布）见
+ * commands/permission-template.command.ts（CQRS：查询只读，命令承载变更）。
  */
 
 import type { PermissionTemplate } from '../../domain/models/permission-template';
@@ -23,7 +24,7 @@ export interface TemplateView {
   scopeClass: PermissionTemplate['scopeClass'];
 }
 
-function toView(t: PermissionTemplate): TemplateView {
+export function toView(t: PermissionTemplate): TemplateView {
   return {
     id: t.id,
     name: t.name,
@@ -41,39 +42,6 @@ export class PermissionTemplateQuery {
   async list(): Promise<TemplateView[]> {
     const templates = await this.store.list();
     return templates.map(toView);
-  }
-
-  async create(input: { name: string; permissions: string[] }): Promise<TemplateView> {
-    if (input.name.trim() === '' || input.permissions.length === 0) {
-      throw orgError.validation('名称与权限不能为空');
-    }
-    const at = new Date().toISOString();
-    const draft = PermissionTemplateService.createTemplateDraft(
-      null,
-      input.name,
-      PermissionTemplateService.validateDraftPermissions('club', input.permissions),
-      at,
-    );
-    draft.id = `${draft.id}-${Date.now().toString(36)}`;
-    await this.store.save(draft);
-    return toView(draft);
-  }
-
-  async saveDraft(input: {
-    templateId: string;
-    name: string;
-    permissions: string[];
-  }): Promise<TemplateView> {
-    const existing = await this.requireTemplate(input.templateId);
-    const at = new Date().toISOString();
-    const updated = PermissionTemplateService.createTemplateDraft(
-      existing,
-      input.name,
-      PermissionTemplateService.validateDraftPermissions(existing.scopeClass, input.permissions),
-      at,
-    );
-    await this.store.save(updated);
-    return toView(updated);
   }
 
   async diff(input: { templateId: string }): Promise<{
@@ -100,35 +68,6 @@ export class PermissionTemplateQuery {
       affectedMembers: 0,
       previewVersion: (template.draft?.version ?? 0) + 1,
     };
-  }
-
-  async publish(input: {
-    templateId: string;
-    reauthProof: string;
-    previewVersion: number;
-    reason: string;
-  }): Promise<TemplateView> {
-    if (input.reauthProof === undefined) {
-      throw orgError.reauth('发布权限模板为高风控操作，需重新认证（IFC-ERR-002）');
-    }
-    const template = await this.requireTemplate(input.templateId);
-    if (template.draft === null) throw orgError.precondition('仅草稿可发布');
-    if (input.reason.trim() === '') throw orgError.validation('必须填写发布原因');
-    // 预检版本号竞争（IFC-ERR-008）
-    if (input.previewVersion !== (template.draft.version ?? 0) + 1) {
-      throw orgError.versionConflict('previewVersion 与当前草稿版本不符（IFC-ERR-008）');
-    }
-    const published: PermissionTemplate = {
-      ...template,
-      published: {
-        version: template.draft.version,
-        name: template.draft.name,
-        permissions: template.draft.permissions,
-      },
-      draft: null,
-    };
-    await this.store.save(published);
-    return toView(published);
   }
 
   private async requireTemplate(templateId: string): Promise<PermissionTemplate> {

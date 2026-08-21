@@ -49,7 +49,32 @@ export interface EffectivePermissions {
 
 const union = (a: readonly PermissionName[]): PermissionName[] => Array.from(new Set(a));
 
+/** 模板解析器：按模板 id + 版本解析出可授予的权限（内置 + 自定义已发布模板） */
+export type TemplateResolver = (
+  templateId: string,
+  version: number,
+) => { scopeClass: 'club' | 'department'; permissions: readonly PermissionName[] } | null;
+
+function resolveBuiltInTemplate(
+  templateId: string,
+  _version: number,
+): { scopeClass: 'club' | 'department'; permissions: readonly PermissionName[] } | null {
+  const builtIn = Object.values(BUILT_IN_TEMPLATES).find((t) => t.id === templateId);
+  if (builtIn) return { scopeClass: builtIn.scopeClass, permissions: builtIn.permissions };
+  return null;
+}
+
 export class PermissionCalculator {
+  /**
+   * 模板解析器默认只解析内置模板；接入方注入自定义模板解析（含已发布自定义模板）
+   * 后即可解析任意模板绑定（GOV-007：未映射已发布模板不授权）。
+   */
+  private readonly resolveTemplate: TemplateResolver;
+
+  constructor(resolveTemplate: TemplateResolver = resolveBuiltInTemplate) {
+    this.resolveTemplate = resolveTemplate;
+  }
+
   /**
    * 计算用户在某社团的当前有效权限（跨社团隔离：只计算传入 clubId 内）。
    * platform 权限独立通道返回，不随社团混入。
@@ -66,7 +91,7 @@ export class PermissionCalculator {
           b.positionGroup.name === pos.group.name,
       );
       if (!binding) continue; // 职位 Group 未映射已发布模板不授权（GOV-007）
-      const template = resolveTemplate(binding.templateId, binding.templateVersion);
+      const template = this.resolveTemplate(binding.templateId, binding.templateVersion);
       if (template === null) continue;
       for (const permission of template.permissions) {
         const scope: 'club' | 'department' =
@@ -104,13 +129,4 @@ export class PermissionCalculator {
       'platform:export:execute',
     ] as PermissionName[];
   }
-}
-
-function resolveTemplate(
-  templateId: string,
-  _version: number,
-): { scopeClass: 'club' | 'department'; permissions: readonly PermissionName[] } | null {
-  const builtIn = Object.values(BUILT_IN_TEMPLATES).find((t) => t.id === templateId);
-  if (builtIn) return { scopeClass: builtIn.scopeClass, permissions: builtIn.permissions };
-  return null;
 }

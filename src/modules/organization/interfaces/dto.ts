@@ -9,11 +9,15 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsIn,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 // --------------------------------------------------------------------------
 // 社团接入（§15.1）
@@ -90,10 +94,18 @@ export class TemplatePublishDto {
 // 关系命令（org 域）
 // --------------------------------------------------------------------------
 
+export class TargetGroupDto {
+  @IsObject() ref!: { owner: string; name: string };
+  @IsIn(['add', 'remove']) kind!: 'add' | 'remove';
+}
+
 export class SubmitRelationCommandDto {
   @IsString() @IsNotEmpty() type!: string;
   @IsString() @IsNotEmpty() subjectId!: string;
-  @IsArray() targetGroups!: Array<{ ref: { owner: string; name: string }; kind: 'add' | 'remove' }>;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TargetGroupDto)
+  targetGroups!: TargetGroupDto[];
   @Min(0) objectVersion!: number;
   @IsString() @IsNotEmpty() idempotencyKey!: string;
 }

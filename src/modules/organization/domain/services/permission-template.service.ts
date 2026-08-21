@@ -76,9 +76,10 @@ export class PermissionTemplateService {
     name: string,
     permissions: readonly PermissionName[],
     at: string,
+    newId?: string,
   ): PermissionTemplate {
     const base: PermissionTemplate = existing ?? {
-      id: `ptpl-${at}`,
+      id: newId ?? `ptpl-${at}`,
       name,
       scopeClass: 'club',
       draft: null,

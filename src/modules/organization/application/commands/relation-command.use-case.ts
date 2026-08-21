@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { RelationCommand } from '../../domain/models/relation-command';
 import { createRelationCommand } from '../../domain/models/relation-command';
+import { PermissionCatalog } from '../../domain/models/permission-template';
 import { RelationCommandStateMachine } from '../../domain/state-machines/relation-command.state-machine';
 import type { RelationCommandType, RelationWriteStep } from '../../domain/types';
 import { IdPrefix, orgError } from '../../domain/types';
@@ -47,6 +48,8 @@ export interface SubmitRelationCommandInput {
 
 export class RelationCommandUseCase {
   private readonly stateMachine = new RelationCommandStateMachine();
+  /** 回读收口回调（预约命令侧订阅：关系命令确认/失败后推进预约状态机） */
+  private readbackSink: ((command: RelationCommand) => Promise<void>) | null = null;
 
   constructor(
     private readonly store: RelationCommandStore,
@@ -57,6 +60,11 @@ export class RelationCommandUseCase {
     private readonly permissions: CurrentPermissionsPort,
   ) {}
 
+  /** 订阅回读收口回调（ORG-027 写后回读确认 → 上游命令收口） */
+  setReadbackSink(sink: (command: RelationCommand) => Promise<void>): void {
+    this.readbackSink = sink;
+  }
+
   async submit(input: SubmitRelationCommandInput, now: Date): Promise<RelationCommand> {
     const club = await this.clubs.findById(input.clubId);
     if (club === null) throw orgError.notVisible(`社团空间不存在（${input.clubId}）`);
@@ -66,7 +74,7 @@ export class RelationCommandUseCase {
 
     // 权限校验：提交者须有成员/关系管理权限（ORG-027 提交行）
     const perms = await this.permissions.effectiveForClub(input.submittedBy, input.clubId);
-    if (!perms.includes('club:member:manage')) {
+    if (!perms.includes(PermissionCatalog.CLUB_MEMBER_MANAGE)) {
       throw orgError.forbidden('提交者无成员关系管理权限（ORG-027）');
     }
 
@@ -220,6 +228,13 @@ export class RelationCommandUseCase {
         dedupKey: `relation-confirmed:${command.id}`,
       });
     }
+    // 收口通知：确认生效 / 失败保持原关系均推进上游（预约命令 settleExecution 收口）
+    if (
+      result.command.status === 'readback_confirmed' ||
+      result.command.status === 'failed_original_preserved'
+    ) {
+      await this.readbackSink?.(result.command);
+    }
     return result.command;
   }
 
@@ -286,7 +301,7 @@ export class RelationCommandUseCase {
   private async isVisibleAndAuthorized(actor: string, command: RelationCommand): Promise<boolean> {
     // 关系变更属成员管理：重试者须在当前社团拥有成员管理权限（ORG-027 人工重试行）
     const perms = await this.permissions.effectiveForClub(actor, command.clubId);
-    return perms.includes('club:member:manage');
+    return perms.includes(PermissionCatalog.CLUB_MEMBER_MANAGE);
   }
 }
 
