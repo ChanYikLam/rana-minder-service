@@ -414,8 +414,9 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
       this.uow.active,
       `UPDATE department_paths SET
         application_id = $2, activity_id = $3, club_id = $4, department_id = $5, status = $6,
-        allow_transfer = $7, decisions = $8, previous_status_before_suspend = $9, updated_at = $10
-      WHERE id = $1 AND revision_number = $11
+        allow_transfer = $7, decisions = $8, previous_status_before_suspend = $9,
+        revision_number = $10, updated_at = $11
+      WHERE id = $1 AND revision_number = $12
       RETURNING id`,
       [
         s.id,
@@ -427,6 +428,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.allowTransfer,
         JSON.stringify(s.decisions),
         s.previousStatusBeforeSuspend,
+        s.revisionNumber,
         s.updatedAt,
         expectedRevision,
       ],
@@ -500,8 +502,8 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
       `UPDATE interview_records SET
         application_id = $2, activity_id = $3, club_id = $4, round_id = $5, applicant_id = $6,
         status = $7, interviewer_id = $8, scheduled_at = $9, location = $10, skip_reason = $11,
-        hold_until = $12, evaluations = $13, updated_at = $14
-      WHERE id = $1 AND revision_number = $15
+        hold_until = $12, evaluations = $13, revision_number = $14, updated_at = $15
+      WHERE id = $1 AND revision_number = $16
       RETURNING id`,
       [
         s.id,
@@ -517,6 +519,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.skipReason,
         s.holdUntil,
         JSON.stringify(s.evaluations),
+        s.revisionNumber,
         s.updatedAt,
         expectedRevision,
       ],

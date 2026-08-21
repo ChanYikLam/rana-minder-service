@@ -208,15 +208,21 @@ export class RecruitmentController {
   }
 
   listActivities(actor: ActorContext, clubId: string): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.listActivitiesQuery.execute({ clubId }));
+    return this.run(actor, () =>
+      this.listActivitiesQuery.execute({ clubId, actor: actor.subjectId }),
+    );
   }
 
   listApplications(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.listApplicationsQuery.execute({ activityId }));
+    return this.run(actor, () =>
+      this.listApplicationsQuery.execute({ activityId, actor: actor.subjectId }),
+    );
   }
 
   listInterviews(actor: ActorContext, roundId: string): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.listInterviewsQuery.execute({ roundId }));
+    return this.run(actor, () =>
+      this.listInterviewsQuery.execute({ roundId, actor: actor.subjectId }),
+    );
   }
 
   sendInvitation(

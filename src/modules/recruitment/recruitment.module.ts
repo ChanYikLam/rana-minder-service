@@ -114,18 +114,18 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
     // ----- 应用查询 -----
     {
       provide: LIST_ACTIVITIES_QUERY,
-      useFactory: (repo) => new DefaultListActivitiesQuery(repo),
-      inject: [RECRUITMENT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultListActivitiesQuery(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
     },
     {
       provide: LIST_APPLICATIONS_QUERY,
-      useFactory: (repo) => new DefaultListApplicationsQuery(repo),
-      inject: [RECRUITMENT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultListApplicationsQuery(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
     },
     {
       provide: LIST_INTERVIEWS_QUERY,
-      useFactory: (repo) => new DefaultListInterviewsQuery(repo),
-      inject: [RECRUITMENT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultListInterviewsQuery(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
     },
     {
       provide: INTERVIEW_WORKFLOW_USE_CASE,

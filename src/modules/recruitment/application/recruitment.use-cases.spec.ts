@@ -125,9 +125,10 @@ describe('recruitment application layer (REC-001~004)', () => {
     });
     assert.strictEqual(decision.status, 'ADMITTED');
 
-    // 列表校验
-    const listApps = new DefaultListApplicationsQuery(repo);
-    const apps = await listApps.execute({ activityId });
+    // 列表校验（负责人可查看）
+    auth.manageAllowed = true;
+    const listApps = new DefaultListApplicationsQuery(repo, auth);
+    const apps = await listApps.execute({ activityId, actor: ACTOR });
     assert.strictEqual(apps.length, 1);
   });
 
