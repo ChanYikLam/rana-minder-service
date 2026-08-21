@@ -27,12 +27,15 @@ const req = (overrides: Partial<FileAccessRequest> = {}): FileAccessRequest => (
 });
 
 const makeQuery = () => {
-  const auditEvents: string[] = [];
+  const auditEvents: { action: string; sensitive: boolean }[] = [];
   const query = new FileAccessQuery(
     new AccessPolicy(new FileStateMachine()),
     new WatermarkPolicy(),
     new DefaultSignedUrlProvider(),
-    { report: async (e: { action: string }) => void auditEvents.push(e.action) },
+    {
+      report: async (e: { action: string; sensitive: boolean }) =>
+        void auditEvents.push({ action: e.action, sensitive: e.sensitive }),
+    },
   );
   return { query, auditEvents };
 };
@@ -188,7 +191,8 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
       action: FileAccessAction.DOWNLOAD,
       safeForPreview: false,
     });
-    assert.deepEqual(auditEvents, ['DOWNLOAD']);
+    // 下载 → 审计（req 默认 category=PHOTO，即便未显式标记也按敏感存证）
+    assert.deepEqual(auditEvents, [{ action: 'DOWNLOAD', sensitive: true }]);
     // 敏感预览 → 审计
     await query.issueAccess({
       fileId: 'f1',
@@ -198,7 +202,10 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
       action: FileAccessAction.PREVIEW,
       safeForPreview: true,
     });
-    assert.deepEqual(auditEvents, ['DOWNLOAD', 'PREVIEW']);
+    assert.deepEqual(auditEvents, [
+      { action: 'DOWNLOAD', sensitive: true },
+      { action: 'PREVIEW', sensitive: true },
+    ]);
   });
 
   it('类别敏感（PHOTO）预览即使未显式标记 sensitive 也须审计（与 WatermarkPolicy 口径一致）', async () => {
@@ -211,7 +218,8 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
       action: FileAccessAction.PREVIEW,
       safeForPreview: true,
     });
-    assert.deepEqual(auditEvents, ['PREVIEW']);
+    // 类别敏感（PHOTO）→ 预览按敏感留痕，sensitive 存证为 true（与 WatermarkPolicy 口径一致）
+    assert.deepEqual(auditEvents, [{ action: 'PREVIEW', sensitive: true }]);
   });
 
   it('本人历史访问：上传者本人 → 放行并签发', async () => {

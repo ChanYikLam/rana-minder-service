@@ -126,7 +126,9 @@ export class FileAccessQuery {
         action: effectiveAction,
         principalId: input.context.principalId ?? '',
         fileId: input.fileId,
-        sensitive: input.request.sensitive,
+        // 生效敏感度与 WatermarkPolicy 口径一致：显式标记或类别/字段键触发的敏感
+        // 均按敏感留痕，避免审计事件把“敏感附件”误记为非敏感（AUD-004 存证准确性）
+        sensitive: input.request.sensitive || watermark.required,
         token: access.token,
         occurredAt: now,
       });

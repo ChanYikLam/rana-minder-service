@@ -12,10 +12,6 @@ export const FileAccessAction = {
 
 export type FileAccessAction = (typeof FileAccessAction)[keyof typeof FileAccessAction];
 
-/**
- * 访问实时上下文（FORM-008：附件每次访问重新检查当前角色、社团、部门、
- * 任务、联合关系和业务状态——由服务端入口在每个请求时重新构造，不缓存）。
- */
 /** 目标对象所属作用域（服务端入口在鉴权时提供；用于领域层最小作用域校验）。
  * 与 `FileAccessContext` 中当前主体的作用域逐项比对，防止仅凭 roles 数组误放行。 */
 export interface ObjectScope {
