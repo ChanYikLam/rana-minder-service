@@ -51,6 +51,16 @@ export class ReplaceDraftFileCommand {
     private readonly stateMachine: FileStateMachine = new FileStateMachine(),
   ) {}
 
+  /** 对象键（cleanupQueue 去重用；按 bucketRole/keyVersion/objectKind/randomKey 唯一） */
+  private keyOf(loc: {
+    bucketRole: string;
+    keyVersion: string;
+    objectKind: string;
+    randomKey: string;
+  }): string {
+    return `${loc.bucketRole}/${loc.keyVersion}/${loc.objectKind}/${loc.randomKey}`;
+  }
+
   async execute(input: ReplaceDraftFileInput): Promise<FileRecord> {
     if (!input.editable) {
       throw new ReplaceDraftFileError('已提交表单已锁定，只能走事实纠错');
@@ -110,12 +120,22 @@ export class ReplaceDraftFileCommand {
     };
 
     // 旧版本进入受控清理（失去最后有效引用；不覆盖已检查原件）
-    const cleanupItem: CleanupQueueItem = {
-      location: oldVersion.objectLocation,
-      reason: 'REPLACED',
-      queuedAt: now,
-      status: 'PENDING',
-    };
+    // 按 location 去重：同一对象（如先前替换/删除已入队）不得重复登记，避免清理队列
+    // 出现重复项导致同一对象被删除两次/元数据冗余。
+    const alreadyQueued = file.cleanupQueue.some(
+      (i) => this.keyOf(i.location) === this.keyOf(oldVersion.objectLocation),
+    );
+    const cleanupQueue: readonly CleanupQueueItem[] = alreadyQueued
+      ? file.cleanupQueue
+      : [
+          ...file.cleanupQueue,
+          {
+            location: oldVersion.objectLocation,
+            reason: 'REPLACED',
+            queuedAt: now,
+            status: 'PENDING',
+          },
+        ];
 
     const state = this.stateMachine.transition(FileState.AVAILABLE, FileState.TEMPORARY_UPLOAD);
     const updated: FileRecord = {
@@ -125,7 +145,7 @@ export class ReplaceDraftFileCommand {
       versions: [...file.versions, newVersion],
       uploadSession: session,
       checkRecord: null,
-      cleanupQueue: [...file.cleanupQueue, cleanupItem],
+      cleanupQueue,
     };
     await this.repo.save(updated);
     return updated;

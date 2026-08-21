@@ -5,6 +5,7 @@ import type {
   DeleteManifest,
   DeleteManifestItem,
   FileRecord,
+  ObjectLocation,
 } from '../../domain/models/file-model';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
@@ -16,6 +17,11 @@ export interface QueueFormalDeleteInput {
   readonly initiator: { principalId: string; roles: readonly string[] };
   /** 删除原因（超管二次确认；AUD-008） */
   readonly reason: string;
+  /**
+   * 独立二次确认凭据（AUD-008：超管删除需显式独立确认，不能仅凭任意原因字符串触发）。
+   * 由审计/前台二次确认流程签发的一次性确认码或审计令牌；与 reason 分离存证。
+   */
+  readonly confirmationCode: string;
 }
 
 /** 正式删除前置失败（IFC-ERR-003 当前无权 / IFC-ERR-006 前置条件失败） */
@@ -49,6 +55,9 @@ export class QueueFormalDeleteCommand {
     if (input.reason.trim().length === 0) {
       throw new FormalDeleteError('IFC-ERR-006', '正式删除需要二次确认原因');
     }
+    if (input.confirmationCode.trim().length === 0) {
+      throw new FormalDeleteError('IFC-ERR-006', '正式删除缺少独立二次确认凭据');
+    }
     const file = await this.repo.load(input.fileId);
     if (file === null) {
       throw new FormalDeleteError('IFC-ERR-006', '文件不存在');
@@ -70,25 +79,49 @@ export class QueueFormalDeleteCommand {
         : this.stateMachine.transition(file.state, FileState.PENDING_CLEANUP);
     const now = new Date().toISOString();
 
-    // 删除清单：枚举全部版本对象（权威原件 + 隔离副本）；派生物/导出由审计模块
-    // 按 AUD-008 传播范围补充（本模块模型未持有派生物定位时留空，接入后枚举）
-    const items: readonly DeleteManifestItem[] = file.versions.map((v) => ({
-      location: v.objectLocation,
-      kind: v.objectLocation.bucketRole === BucketRole.OBJECT ? 'OBJECT' : 'QUARANTINE',
-      status: 'PENDING' as const,
-    }));
+    // 删除清单：枚举全部版本对象（权威原件 + 隔离副本），并合并受控清理队列中
+    // 未删除对象（先经草稿删除/替换进入 PENDING_CLEANUP 时 cleanupQueue 已登记对象，
+    // 若遗漏会与清单重复枚举同一对象且元数据残留 PENDING）。按 location 去重。
+    // 派生物/导出由审计模块按 AUD-008 传播范围补充（本模块模型未持有派生物定位时留空）。
+    const manifestItems = new Map<string, DeleteManifestItem>();
+    const keyOf = (loc: ObjectLocation): string =>
+      `${loc.bucketRole}/${loc.keyVersion}/${loc.objectKind}/${loc.randomKey}`;
+    const addItem = (loc: ObjectLocation): void => {
+      const key = keyOf(loc);
+      if (!manifestItems.has(key)) {
+        manifestItems.set(key, {
+          location: loc,
+          kind: loc.bucketRole === BucketRole.OBJECT ? 'OBJECT' : 'QUARANTINE',
+          status: 'PENDING' as const,
+        });
+      }
+    };
+    for (const v of file.versions) {
+      addItem(v.objectLocation);
+    }
+    // cleanupQueue 中已 VERIFIED_DELETED 的对象物理已删，无需再入清单
+    for (const q of file.cleanupQueue) {
+      if (q.status !== 'VERIFIED_DELETED') {
+        addItem(q.location);
+      }
+    }
+    const items: readonly DeleteManifestItem[] = [...manifestItems.values()];
 
     const manifest: DeleteManifest = {
       fileId: file.fileId,
       reason: input.reason,
+      confirmationCode: input.confirmationCode,
       initiatedBy: input.initiator.principalId,
       initiatedAt: now,
       accessRevoked: true,
       items,
     };
+    // 正式删除接管后，物理删除统一由 deletionManifest 逐项执行并回读核验；
+    // 清空 cleanupQueue，避免同一对象被两套机制重复管理/元数据残留 PENDING。
     const updated: FileRecord = {
       ...file,
       state: revokedState,
+      cleanupQueue: [],
       deletionManifest: manifest,
     };
     await this.repo.save(updated);

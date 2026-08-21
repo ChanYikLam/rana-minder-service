@@ -162,16 +162,29 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
         fileId: file.fileId,
         initiator: { principalId: 'u1', roles: ['CLUB_ADMIN'] },
         reason: '数据违规',
+        confirmationCode: 'CONF-001',
       }),
       /仅超级管理员/,
     );
-    // 超管 + 二次确认原因 → 撤权 + 清单
+    // 超管但缺少独立二次确认凭据 → 拒绝（不能仅凭原因字符串触发）
+    await assert.rejects(
+      rig.queueFormalDelete.execute({
+        fileId: file.fileId,
+        initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
+        reason: '数据违规，二次确认',
+        confirmationCode: '',
+      }),
+      /缺少独立二次确认凭据/,
+    );
+    // 超管 + 二次确认原因 + 独立确认凭据 → 撤权 + 清单（凭据入审计存证）
     const manifest = await rig.queueFormalDelete.execute({
       fileId: file.fileId,
       initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
       reason: '数据违规，二次确认',
+      confirmationCode: 'CONF-001',
     });
     assert.equal(manifest.accessRevoked, true);
+    assert.equal(manifest.confirmationCode, 'CONF-001');
     assert.ok(manifest.items.length >= 1);
     const after = await rig.repo.load(file.fileId);
     assert.equal(after!.state, FileState.PENDING_CLEANUP);
@@ -184,6 +197,7 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
       fileId: file.fileId,
       initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
       reason: '二次确认',
+      confirmationCode: 'CONF-002',
     });
     const result = await rig.deleteManifest.execute(file.fileId);
     assert.equal(result.completed, true);
@@ -204,11 +218,18 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
       fileId: file.fileId,
       initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
       reason: '数据违规，二次确认接管',
+      confirmationCode: 'CONF-003',
     });
     assert.ok(manifest.items.length >= 1);
     const after = await rig.repo.load(file.fileId);
     assert.equal(after!.state, FileState.PENDING_CLEANUP);
     assert.equal(after!.deletionManifest!.accessRevoked, true);
+    // 清单接管后：cleanupQueue 已并入清单并清空，物理删除由清单统一管理，
+    // 避免同一对象被两套机制重复管理/元数据残留 PENDING（IFC-FIL-008 接管语义）
+    assert.equal(after!.cleanupQueue.length, 0);
+    // 清单去重后 items 唯一（与接管前 cleanupQueue 对象不重复枚举）
+    const keys = manifest.items.map((i) => i.location.randomKey);
+    assert.equal(new Set(keys).size, keys.length);
     // 清单接管后执行仍可收口到正式删除终态
     const result = await rig.deleteManifest.execute(file.fileId);
     assert.equal(result.completed, true);
@@ -237,6 +258,7 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
       fileId: file.fileId,
       initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
       reason: '二次确认',
+      confirmationCode: 'CONF-004',
     });
     // 模拟：清单首个对象已在先前周期物理删除后重放删除清单
     const pending = await rig.repo.load(file.fileId);
@@ -245,6 +267,58 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     const result = await rig.deleteManifest.execute(file.fileId);
     assert.equal(result.completed, true);
     assert.equal(result.failed, 0);
+    const done = await rig.repo.load(file.fileId);
+    assert.equal(done!.state, FileState.FORMALLY_DELETED);
+  });
+
+  it('替换后清理队列不重复登记同一对象（cleanupQueue 去重，FORM-009）', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    const oldKey = file.versions[0].objectLocation.randomKey;
+    // 第一次替换：旧版本（v1 原件）入清理队列
+    const replaced = await rig.replace.execute({
+      fileId: file.fileId,
+      editable: true,
+      declaredSizeBytes: pngBytes().length,
+    });
+    assert.equal(replaced.cleanupQueue.length, 1);
+    // 新版本尚未晋升即被移除：remove 会把 versions 全部登记，但 v1 已在队列中
+    // → 不得重复登记同一对象，否则清理队列出现重复项/对象被删除两次
+    const removed = await rig.remove.execute({ fileId: file.fileId, removable: true });
+    const keys = removed.cleanupQueue.map((i) => i.location.randomKey);
+    assert.equal(new Set(keys).size, keys.length, 'cleanupQueue 不得包含重复对象');
+    assert.equal(keys.filter((k) => k === oldKey).length, 1, 'v1 原件仅登记一次');
+    // 清理仍可收敛到已清理终态（去重后不残留重复项）
+    const cleaned = await rig.cleanup.execute(file.fileId);
+    assert.equal(cleaned.state, FileState.CLEANED);
+    assert.ok(cleaned.cleanupQueue.every((i) => i.status === 'VERIFIED_DELETED'));
+  });
+
+  it('正式删除接管清理队列：清单合并去重且不重复枚举已删除对象（IFC-FIL-008）', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    // 先替换：旧版本（v1）入清理队列，文件进入 TEMPORARY_UPLOAD
+    const replaced = await rig.replace.execute({
+      fileId: file.fileId,
+      editable: true,
+      declaredSizeBytes: pngBytes().length,
+    });
+    assert.equal(replaced.cleanupQueue.length, 1);
+    // 超管对该待清理文件发起正式删除：清单应合并 v1（cleanupQueue）+ 在线版本，按 location 去重
+    const manifest = await rig.queueFormalDelete.execute({
+      fileId: file.fileId,
+      initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
+      reason: '数据违规，二次确认接管',
+      confirmationCode: 'CONF-005',
+    });
+    const keys = manifest.items.map((i) => i.location.randomKey);
+    assert.equal(new Set(keys).size, keys.length, '清单内不得重复枚举同一对象');
+    // 原 cleanupQueue 中的 v1 原件已被清单接管，cleanupQueue 清空
+    const after = await rig.repo.load(file.fileId);
+    assert.equal(after!.cleanupQueue.length, 0);
+    // 清单执行仍可收口到正式删除终态
+    const result = await rig.deleteManifest.execute(file.fileId);
+    assert.equal(result.completed, true);
     const done = await rig.repo.load(file.fileId);
     assert.equal(done!.state, FileState.FORMALLY_DELETED);
   });

@@ -145,6 +145,8 @@ export interface DeleteManifest {
   readonly fileId: string;
   /** 删除原因（超管二次确认；AUD-008） */
   readonly reason: string;
+  /** 独立二次确认凭据（AUD-008：超管删除需独立确认码/审计令牌，审计存证） */
+  readonly confirmationCode: string;
   readonly initiatedBy: string;
   readonly initiatedAt: string;
   /** 是否已撤权（先撤权再逐项删除） */

@@ -36,6 +36,16 @@ export class RemoveDraftFileCommand {
     private readonly stateMachine: FileStateMachine = new FileStateMachine(),
   ) {}
 
+  /** 对象键（cleanupQueue 去重用；按 bucketRole/keyVersion/objectKind/randomKey 唯一） */
+  private keyOf(loc: {
+    bucketRole: string;
+    keyVersion: string;
+    objectKind: string;
+    randomKey: string;
+  }): string {
+    return `${loc.bucketRole}/${loc.keyVersion}/${loc.objectKind}/${loc.randomKey}`;
+  }
+
   async execute(input: RemoveDraftFileInput): Promise<FileRecord> {
     const file = await this.repo.load(input.fileId);
     if (file === null) {
@@ -62,12 +72,17 @@ export class RemoveDraftFileCommand {
     // 全部版本对象进入受控清理（对用户不可见后由系统稍后物理清理）；
     // 含隔离区版本：替换后新版本尚未晋升即被移除时，其隔离字节同样失去引用，
     // 若排除将造成隔离区对象泄漏（不得跳过，FORM-009）。
-    const newQueue: readonly CleanupQueueItem[] = file.versions.map((v) => ({
-      location: v.objectLocation,
-      reason: 'REMOVED' as const,
-      queuedAt: now,
-      status: 'PENDING' as const,
-    }));
+    // 按 location 去重：同一对象（如替换后已入队旧版本）不得重复登记，避免清理队列
+    // 出现重复项导致同一对象被删除两次/元数据冗余。
+    const alreadyQueued = new Set(file.cleanupQueue.map((i) => this.keyOf(i.location)));
+    const newQueue: readonly CleanupQueueItem[] = file.versions
+      .filter((v) => !alreadyQueued.has(this.keyOf(v.objectLocation)))
+      .map((v) => ({
+        location: v.objectLocation,
+        reason: 'REMOVED' as const,
+        queuedAt: now,
+        status: 'PENDING' as const,
+      }));
 
     const updated: FileRecord = {
       ...file,
