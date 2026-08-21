@@ -5,6 +5,7 @@ import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 import { OBJECT_STORE_PORT } from '../../infrastructure/object-store-port';
 import type { ObjectStorePort } from '../../infrastructure/object-store-port';
+import { mapWithConcurrency } from './async-batch';
 
 /** 删除清单执行结果 */
 export interface DeleteManifestResult {
@@ -13,6 +14,14 @@ export interface DeleteManifestResult {
   readonly completed: boolean;
   readonly verified: number;
   readonly failed: number;
+}
+
+/** 删除清单前置失败（IFC-ERR-006 前置条件失败） */
+export class DeleteManifestError extends Error {
+  constructor(message: string) {
+    super(`IFC-ERR-006: ${message}`);
+    this.name = 'DeleteManifestError';
+  }
 }
 
 /**
@@ -35,32 +44,31 @@ export class DeleteManifestHandler {
   async execute(fileId: string): Promise<DeleteManifestResult> {
     const file = await this.repo.load(fileId);
     if (file === null) {
-      throw new Error('IFC-ERR-006: 文件不存在');
+      throw new DeleteManifestError('文件不存在');
     }
     const manifest = file.deletionManifest;
     if (manifest === null) {
-      throw new Error('IFC-ERR-006: 不存在删除清单');
+      throw new DeleteManifestError('不存在删除清单');
     }
     if (file.state !== FileState.PENDING_CLEANUP) {
-      throw new Error(`IFC-ERR-006: 文件不在待清理状态（当前 ${file.state}）`);
+      throw new DeleteManifestError(`文件不在待清理状态（当前 ${file.state}）`);
     }
 
-    const items = await Promise.all(
-      manifest.items.map(async (item) => {
-        if (item.status === 'VERIFIED_DELETED') {
-          return item;
-        }
-        try {
-          const result = await this.store.deleteAndVerify(item.location);
-          if (!result.ok) {
-            return { ...item, status: 'FAILED' as const };
-          }
-        } catch {
+    // 有界并发逐项删除+回读核验（避免对对象存储无界突发请求；保持输入顺序）
+    const items = await mapWithConcurrency(manifest.items, 8, async (item) => {
+      if (item.status === 'VERIFIED_DELETED') {
+        return item;
+      }
+      try {
+        const result = await this.store.deleteAndVerify(item.location);
+        if (!result.ok) {
           return { ...item, status: 'FAILED' as const };
         }
-        return { ...item, status: 'VERIFIED_DELETED' as const };
-      }),
-    );
+      } catch {
+        return { ...item, status: 'FAILED' as const };
+      }
+      return { ...item, status: 'VERIFIED_DELETED' as const };
+    });
 
     // 从结果推导计数，避免在并发回调中递增共享可变状态
     const verified = items.filter((item) => item.status === 'VERIFIED_DELETED').length;

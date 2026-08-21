@@ -5,6 +5,15 @@ import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 import { OBJECT_STORE_PORT } from '../../infrastructure/object-store-port';
 import type { ObjectStorePort } from '../../infrastructure/object-store-port';
+import { mapWithConcurrency } from './async-batch';
+
+/** 孤儿/受控清理前置失败（IFC-ERR-006 前置条件失败） */
+export class CleanupOrphansError extends Error {
+  constructor(message: string) {
+    super(`IFC-ERR-006: ${message}`);
+    this.name = 'CleanupOrphansError';
+  }
+}
 
 /**
  * 孤儿与受控清理任务（FORM-009、AUD-008）。
@@ -25,16 +34,17 @@ export class CleanupOrphansCommand {
   async execute(fileId: string): Promise<FileRecord> {
     const file = await this.repo.load(fileId);
     if (file === null) {
-      throw new Error('IFC-ERR-006: 文件不存在');
+      throw new CleanupOrphansError('文件不存在');
     }
     if (file.state !== FileState.PENDING_CLEANUP) {
-      throw new Error(`IFC-ERR-006: 文件不在待清理状态（当前 ${file.state}）`);
+      throw new CleanupOrphansError(`文件不在待清理状态（当前 ${file.state}）`);
     }
     if (file.deletionManifest !== null) {
-      throw new Error('IFC-ERR-006: 正式删除清单接管，由删除清单处理');
+      throw new CleanupOrphansError('正式删除清单接管，由删除清单处理');
     }
 
-    const processed = file.cleanupQueue.map(async (item) => {
+    // 有界并发逐项删除+回读核验（避免对对象存储无界突发请求；保持输入顺序）
+    const queue = await mapWithConcurrency(file.cleanupQueue, 8, async (item) => {
       if (item.status === 'VERIFIED_DELETED') {
         return item;
       }
@@ -48,7 +58,6 @@ export class CleanupOrphansCommand {
       }
       return { ...item, status: 'VERIFIED_DELETED' as const };
     });
-    const queue = await Promise.all(processed);
 
     // 从结果推导，避免在并发回调中修改共享可变状态；任一 FAILED 则保持待清理并持续重试
     const allVerified = queue.every((item) => item.status === 'VERIFIED_DELETED');
