@@ -47,6 +47,10 @@ import { AdaptersModule } from './adapters/adapters.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
 import { NotificationModule } from './modules/notification';
+import { TASK_SUMMARY_PORT } from './platform/observability/status-page/tokens';
+import { PostgresTaskSummaryPort } from './platform/observability/status-page/task-summary';
+import { TASK_REPOSITORY } from './platform/tasks/contracts';
+import type { TaskRepository } from './platform/tasks/contracts';
 
 @Module({
   imports: [
@@ -65,6 +69,13 @@ import { NotificationModule } from './modules/notification';
     NotificationModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    {
+      // T6：状态页任务积压区接线。聚合 TASK_REPOSITORY 的 backlogSummary，只读展示。
+      provide: TASK_SUMMARY_PORT,
+      useFactory: (repo: TaskRepository) => new PostgresTaskSummaryPort(repo),
+      inject: [TASK_REPOSITORY],
+    },
+  ],
 })
 export class AppModule {}

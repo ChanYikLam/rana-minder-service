@@ -252,6 +252,7 @@ const DB_STATUS_PORT_PROVIDER: Provider = {
 
 const TASK_SUMMARY_PORT_PROVIDER: Provider = {
   provide: TASK_SUMMARY_PORT,
+  // 默认保持 NotWired 桩（fail-closed）。真实积压在 AppModule 组合根按需覆盖（T6）。
   useFactory: () => new NotWiredTaskSummaryPort(),
 };
 

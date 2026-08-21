@@ -41,3 +41,50 @@ export class NotWiredTaskSummaryPort implements TaskSummaryPort {
     return { recentFailures: [] };
   }
 }
+
+/**
+ * 任务积压端口（T6）。
+ *
+ * 委托 platform/tasks 的 TASK_REPOSITORY.backlogSummary() 聚合任务积压
+ * （pending/leased/retryableFailed/uncertain/manualIntervention/completed），
+ * 映射为状态页的 byKind 视图。只读，不改任务状态（ADR-011 §2.1 第 1 条）。
+ */
+export interface TaskBacklogLike {
+  readonly pending: number;
+  readonly leased: number;
+  readonly retryableFailed: number;
+  readonly uncertain: number;
+  readonly manualIntervention: number;
+  readonly completed: number;
+}
+
+export interface TaskSummaryPortLike {
+  backlogSummary(): Promise<TaskBacklogLike>;
+}
+
+export class PostgresTaskSummaryPort implements TaskSummaryPort {
+  constructor(private readonly repo: TaskSummaryPortLike) {}
+
+  async summarize(): Promise<TaskSummarySnapshot> {
+    try {
+      const b = await this.repo.backlogSummary();
+      return {
+        backlog: {
+          byKind: {
+            pending: b.pending,
+            leased: b.leased,
+            retryableFailed: b.retryableFailed,
+            uncertain: b.uncertain,
+            manualIntervention: b.manualIntervention,
+            completed: b.completed,
+          },
+          capturedAt: new Date(),
+        },
+        recentFailures: [],
+      };
+    } catch {
+      // 积压不可读时按"未知"处理（ADR-011 §2.1 第 2 条），不伪造成功。
+      return { recentFailures: [] };
+    }
+  }
+}
