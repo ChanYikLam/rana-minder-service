@@ -589,6 +589,11 @@ type ∈ application | interview | invitation | conclusion | system | member | t
 **Body input**：`input: { scheduledAt?: string }`
 **响应 data**：`{ id, status: 'reconfirmed' }`
 
+#### POST /api/org/:clubId/members/appointments/:commandId/retry
+**说明**：人工重试执行失败的预约命令（exec_failed → executing）
+**响应 data**：`{ id, status: 'executing' }`
+**错误/备注**：重试者须当前拥有 `club:appointment:manage`（重新鉴权并重验业务前置条件）；单执行租约已持有则 409
+
 ### 10.3 部门关系申请（join/leave/transfer，SM-MEM-003）
 
 #### GET /api/org/:clubId/members/department-apply

@@ -43,13 +43,21 @@ import {
   LIST_TEMPLATE_PUBLICATIONS_QUERY,
   FORM_DESIGN_CONTROLLER,
   FORM_AUTH_SESSION_PROVIDER,
+  FORM_SUBMISSION_REPOSITORY,
+  FORM_FILL_PERMISSION,
+  SUBMIT_FORM_USE_CASE,
+  REVISE_SUBMISSION_USE_CASE,
+  LIST_SUBMISSIONS_QUERY,
+  FORM_SUBMISSION_CONTROLLER,
 } from './tokens';
 
 import { FormUnitOfWork } from './infrastructure/unit-of-work';
 import { PostgresFormDefinitionRepository } from './infrastructure/postgres-form-definition.repository';
 import { PostgresFormAudit } from './infrastructure/postgres-form-audit';
 import { PostgresFormIdempotencyStore } from './infrastructure/postgres-form-idempotency-store';
+import { PostgresFormSubmissionRepository } from './infrastructure/postgres-form-submission.repository';
 import { NotWiredFormDesignPermission } from './infrastructure/not-wired-form-design-permission';
+import { NotWiredFormFillPermission } from './infrastructure/not-wired-form-fill-permission';
 import { StaticProfileFieldDirectory } from './infrastructure/static-profile-field-directory';
 
 import { DefaultFormVersionStateMachine } from './domain/state-machines/form-version.state-machine';
@@ -70,17 +78,22 @@ import { DefaultGetFormDefinitionQuery } from './application/queries/get-form-de
 import { DefaultGetFormDesignerStateQuery } from './application/queries/get-form-designer-state.query';
 import { DefaultListPlatformTemplatesQuery } from './application/queries/list-platform-templates.query';
 import { DefaultListTemplatePublicationsQuery } from './application/queries/list-template-publications.query';
+import { DefaultSubmitFormUseCase } from './application/commands/submit-form.use-case';
+import { DefaultReviseSubmissionUseCase } from './application/commands/revise-submission.use-case';
+import { DefaultListSubmissionsQuery } from './application/queries/list-submissions.query';
 
 import { FormDesignController } from './interfaces/controllers/form-design.controller';
+import { FormSubmissionController } from './interfaces/controllers/form-submission.controller';
 
 import { RejectAllFormAuthSessionProvider } from './interfaces/nest/form-auth-session';
 import { FormAuthGuard } from './interfaces/nest/form-auth.guard';
 import { OrgFormsNestController } from './interfaces/nest/org-forms.nest.controller';
 import { AdminFormsNestController } from './interfaces/nest/admin-forms.nest.controller';
+import { FormSubmissionNestController } from './interfaces/nest/form-submission.nest.controller';
 
 @Module({
   imports: [AdaptersModule, ObservabilityModule],
-  controllers: [OrgFormsNestController, AdminFormsNestController],
+  controllers: [OrgFormsNestController, AdminFormsNestController, FormSubmissionNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
     { provide: FORM_AUTH_SESSION_PROVIDER, useClass: RejectAllFormAuthSessionProvider },
@@ -256,6 +269,52 @@ import { AdminFormsNestController } from './interfaces/nest/admin-forms.nest.con
       provide: LIST_TEMPLATE_PUBLICATIONS_QUERY,
       useFactory: (repo, permission) => new DefaultListTemplatePublicationsQuery(repo, permission),
       inject: [FORM_DEFINITION_REPOSITORY, FORM_DESIGN_PERMISSION],
+    },
+    // ----- FORM-002 提交/修订/列表（权限失败关闭桩）-----
+    {
+      provide: FORM_SUBMISSION_REPOSITORY,
+      useFactory: (db, uow) => new PostgresFormSubmissionRepository(db, uow),
+      inject: [DB_ADAPTER, FormUnitOfWork],
+    },
+    { provide: FORM_FILL_PERMISSION, useClass: NotWiredFormFillPermission },
+    {
+      provide: SUBMIT_FORM_USE_CASE,
+      useFactory: (repo, definitions, permission, audit, idempotency) =>
+        new DefaultSubmitFormUseCase(repo, definitions, permission, audit, idempotency),
+      inject: [
+        FORM_SUBMISSION_REPOSITORY,
+        FORM_DEFINITION_REPOSITORY,
+        FORM_FILL_PERMISSION,
+        FORM_AUDIT_PORT,
+        FORM_IDEMPOTENCY_STORE,
+      ],
+    },
+    {
+      provide: REVISE_SUBMISSION_USE_CASE,
+      useFactory: (repo, definitions, permission, audit) =>
+        new DefaultReviseSubmissionUseCase(repo, definitions, permission, audit),
+      inject: [
+        FORM_SUBMISSION_REPOSITORY,
+        FORM_DEFINITION_REPOSITORY,
+        FORM_FILL_PERMISSION,
+        FORM_AUDIT_PORT,
+      ],
+    },
+    {
+      provide: LIST_SUBMISSIONS_QUERY,
+      useFactory: (repo) => new DefaultListSubmissionsQuery(repo),
+      inject: [FORM_SUBMISSION_REPOSITORY],
+    },
+    {
+      provide: FORM_SUBMISSION_CONTROLLER,
+      useFactory: (uow, submit, revise, list) =>
+        new FormSubmissionController(uow, submit, revise, list),
+      inject: [
+        FormUnitOfWork,
+        SUBMIT_FORM_USE_CASE,
+        REVISE_SUBMISSION_USE_CASE,
+        LIST_SUBMISSIONS_QUERY,
+      ],
     },
     // ----- 传输中立控制器 -----
     {
