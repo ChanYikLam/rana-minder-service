@@ -7,7 +7,10 @@
 
 import { FormSubmission, type FormAnswerValue } from '../../domain/models/form-submission';
 import { DefaultFormSubmissionStateMachine } from '../../domain/state-machines/form-submission.state-machine';
-import { validateFormAnswer } from '../../domain/services/form-answer.validator';
+import {
+  validateFormAnswer,
+  stripHiddenFieldValues,
+} from '../../domain/services/form-answer.validator';
 import { FormVersionState } from '../../domain/state-machines/form-version.state-machine';
 import type { FormDefinitionRepository } from '../ports/form-definition-repository.port';
 import type { FormSubmissionRepository } from '../ports/form-submission-repository.port';
@@ -59,20 +62,34 @@ export class DefaultReviseSubmissionUseCase implements ReviseSubmissionUseCase {
     }
 
     const version = await this.definitions.loadVersion(submission.formId, submission.versionNumber);
-    if (version === null || version.status !== FormVersionState.PUBLISHED) {
-      throw formErrors.preconditionFailed('目标表单版本不可提交');
+    if (version === null) {
+      // 修订需要按原版本字段重验答案；版本定义缺失则无法校验
+      throw formErrors.notFound('表单版本');
+    }
+    // 修订是对既有已提交内容的纠错，不因版本后续停用而追溯性剥夺
+    // （DEPRECATED 只阻止新提交，既有提交与附件保留）；DRAFT/PREVIEW_TESTING
+    // 表示该版本从未正式发布过，不存在可修订的历史提交。
+    if (
+      version.status !== FormVersionState.PUBLISHED &&
+      version.status !== FormVersionState.DEPRECATED
+    ) {
+      throw formErrors.preconditionFailed('目标表单版本不可修订');
     }
 
     validateFormAnswer(version.fields, input.values);
+    // 落库前剔除 hidden 字段值，防止客户端注入服务端隐藏字段（DATA-FRM-003）
+    const sanitized = stripHiddenFieldValues(version.fields, input.values);
 
-    if (!submission.canRevise(new DefaultFormSubmissionStateMachine())) {
+    const machine = new DefaultFormSubmissionStateMachine();
+    if (!submission.canRevise(machine)) {
       throw formErrors.preconditionFailed('仅已提交记录可修订');
     }
     const expectedRevision = submission.revisionNumber;
     const revised = submission.revise(
-      input.values as Record<string, FormAnswerValue>,
+      sanitized as Record<string, FormAnswerValue>,
       input.actor,
       input.now,
+      machine,
     );
     if (!revised) {
       throw formErrors.preconditionFailed('修订失败（状态不允许）');

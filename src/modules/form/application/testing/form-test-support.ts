@@ -226,6 +226,10 @@ export class InMemoryFormIdempotencyStore implements FormIdempotencyStore {
   async readResult(scopeKey: string, idempotencyKey: string): Promise<unknown | null> {
     return this.records.get(`${scopeKey}:${idempotencyKey}`)?.result ?? null;
   }
+
+  async release(scopeKey: string, idempotencyKey: string): Promise<void> {
+    this.records.delete(`${scopeKey}:${idempotencyKey}`);
+  }
 }
 
 export class StubProfileFieldDirectory implements FormProfileFieldDirectoryPort {
@@ -269,8 +273,13 @@ export class InMemoryFormSubmissionRepository implements FormSubmissionRepositor
     );
   }
 
-  async listByForm(formId: string): Promise<FormSubmissionSnapshot[]> {
-    return this.submissions.filter((submission) => submission.formId === formId);
+  async listByForm(formId: string, scope: FormScope): Promise<FormSubmissionSnapshot[]> {
+    return this.submissions.filter(
+      (submission) =>
+        submission.formId === formId &&
+        submission.scope.kind === scope.kind &&
+        submission.scope.ownerId === scope.ownerId,
+    );
   }
 
   async insert(snapshot: FormSubmissionSnapshot): Promise<void> {

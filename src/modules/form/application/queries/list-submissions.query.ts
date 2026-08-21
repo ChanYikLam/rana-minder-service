@@ -23,11 +23,8 @@ export class DefaultListSubmissionsQuery implements ListSubmissionsQuery {
 
   async execute(input: ListSubmissionsInput): Promise<readonly FormSubmissionSnapshot[]> {
     if (input.formId !== undefined) {
-      return (await this.submissions.listByForm(input.formId)).filter(
-        (submission) =>
-          submission.scope.kind === input.scope.kind &&
-          submission.scope.ownerId === input.scope.ownerId,
-      );
+      // 作用域过滤已下沉到存储层 SQL，避免跨 owner 数据进内存
+      return this.submissions.listByForm(input.formId, input.scope);
     }
     return this.submissions.listByScope(input.scope);
   }

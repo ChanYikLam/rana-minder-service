@@ -34,7 +34,7 @@ function buildHarness() {
   const submit = new DefaultSubmitFormUseCase(submissions, definitions, fill, audit, idempotency);
   const revise = new DefaultReviseSubmissionUseCase(submissions, definitions, fill, audit);
   const list = new DefaultListSubmissionsQuery(submissions);
-  return { definitions, submissions, fill, audit, submit, revise, list };
+  return { definitions, submissions, fill, audit, submit, revise, list, idempotency };
 }
 
 function seedPublished(
@@ -162,8 +162,77 @@ describe('SubmitFormUseCase（FORM-002）', () => {
         actor: 'u-1',
         now: NOW,
       }),
-      (err: Error) => err.message.includes('请勿重复提交'),
+      (err: Error) => err.message.includes('已提交过当前版本'),
     );
+  });
+
+  it('hidden 字段值被剔除，不落库（防客户端注入）', async () => {
+    const h = buildHarness();
+    h.fill.allowed = true;
+    // 版本含 hidden 字段 serverToken（服务端维护，客户端不得写入）
+    const version = FormVersion.createPublished({
+      id: 'v-f-hide-1',
+      formId: 'f-hide',
+      versionNumber: 1,
+      fields: [
+        { id: 'name', title: '姓名', type: 'text', required: true, permission: 'read_write' },
+        { id: 'serverToken', title: '令牌', type: 'text', required: false, permission: 'hidden' },
+      ],
+      sourceFormId: null,
+      sourceVersion: null,
+      publishedBy: 'admin',
+      now: NOW,
+    });
+    h.definitions.versions.push(version.toSnapshot());
+    const result = await h.submit.execute({
+      formId: 'f-hide',
+      versionNumber: 1,
+      scope: SCOPE,
+      submittedBy: 'u-1',
+      values: { name: '张三', serverToken: 'EVIL' },
+      actor: 'u-1',
+      now: NOW,
+    });
+    const saved = await h.submissions.load(result.submissionId);
+    assert.equal(saved?.values.serverToken, undefined);
+    assert.equal(saved?.values.name, '张三');
+  });
+
+  it('幂等占位在业务失败后被释放，同键可重试恢复', async () => {
+    const h = buildHarness();
+    h.fill.allowed = true;
+    seedPublished(h.definitions, 'f-1', 1);
+    // 首次提交成功后，同一提交者携带新幂等键再次提交会命中重复提交业务拒绝；
+    // 该键是新占位（begin 成功），此前会卡死在 PROCESSING，现应被 release 释放。
+    await h.submit.execute({
+      formId: 'f-1',
+      versionNumber: 1,
+      scope: SCOPE,
+      submittedBy: 'u-1',
+      values: { name: '张三' },
+      actor: 'u-1',
+      now: NOW,
+    });
+    await assert.rejects(
+      h.submit.execute({
+        formId: 'f-1',
+        versionNumber: 1,
+        scope: SCOPE,
+        submittedBy: 'u-1',
+        values: { name: '李四' },
+        actor: 'u-1',
+        now: NOW,
+        idempotencyKey: 'k-retry',
+      }),
+      (err: Error) => err.message.includes('已提交过当前版本'),
+    );
+    // 幂等记录已释放：同键重提应重新占位（inserted=true）而非返回 PROCESSING
+    const claim = await h.idempotency.claim({
+      scopeKey: 'submit:club:club-1:f-1:1:u-1',
+      idempotencyKey: 'k-retry',
+      semanticHash: 'any-hash',
+    });
+    assert.equal(claim.inserted, true);
   });
 });
 

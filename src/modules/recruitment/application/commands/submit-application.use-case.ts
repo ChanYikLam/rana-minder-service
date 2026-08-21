@@ -47,6 +47,10 @@ export class DefaultSubmitApplicationUseCase implements SubmitApplicationUseCase
   ) {}
 
   async execute(input: SubmitApplicationInput): Promise<SubmitApplicationResult> {
+    if (input.applicantId !== input.actor) {
+      // 申请归属必须绑定认证主体，防止冒充他人提交（AUT 分面）
+      throw recruitmentErrors.forbidden('申请归属须为当前认证账号');
+    }
     const activity = await this.repository.loadActivity(input.activityId);
     if (activity === null) {
       throw recruitmentErrors.notFound('招新活动');

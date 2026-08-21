@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { DepartmentPath } from '../../domain/models/department-path';
 import {
   DefaultDepartmentPathStateMachine,
-  type DepartmentDecision,
+  DepartmentDecision,
 } from '../../domain/state-machines/department-path.state-machine';
 import type { RecruitmentRepository } from '../ports/recruitment-repository.port';
 import type { RecruitmentAuthorizationPort } from '../ports/recruitment-authorization.port';
@@ -55,6 +55,9 @@ export class DefaultRecordDepartmentDecisionUseCase implements RecordDepartmentD
     ) {
       throw recruitmentErrors.forbidden('仅负责人/人事可记录部门考察决定');
     }
+    if (!isValidDepartmentDecision(input.decision)) {
+      throw recruitmentErrors.validation('非法的部门考察决定', { decision: input.decision });
+    }
     const paths = await this.repository.loadDepartmentPathsByApplication(application.id);
     let snapshot = paths.find((p) => p.departmentId === input.departmentId) ?? null;
     const expectedRevision = snapshot === null ? -1 : snapshot.revisionNumber;
@@ -83,4 +86,8 @@ export class DefaultRecordDepartmentDecisionUseCase implements RecordDepartmentD
     await this.repository.saveDepartmentPath(path.toSnapshot(), expectedRevision);
     return { pathId: path.id, status: path.status };
   }
+}
+
+function isValidDepartmentDecision(value: string): value is DepartmentDecision {
+  return Object.values(DepartmentDecision).includes(value as DepartmentDecision);
 }

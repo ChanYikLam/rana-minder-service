@@ -72,13 +72,28 @@ describe('PostgresFormSubmissionRepository（FakeDbAdapter 全链路）', () => 
     });
   });
 
+  it('listByForm：按表单+作用域过滤（跨 owner 不外泄）', async () => {
+    const h = createHarness();
+    await h.uow.run({ kind: 'single', subjectId: 'u-1' }, async () => {
+      await h.repository.insert(createSubmission('s-1'));
+      const club = await h.repository.listByForm('f-1', CLUB);
+      assert.equal(club.length, 1);
+      assert.equal(club[0].id, 's-1');
+      const other = await h.repository.listByForm('f-1', {
+        kind: 'club',
+        ownerId: 'club-2',
+      });
+      assert.equal(other.length, 0);
+    });
+  });
+
   it('修订号乐观守卫：期望修订不匹配 → 0 行冲突', async () => {
     const h = createHarness();
     await h.uow.run({ kind: 'single', subjectId: 'u-1' }, async () => {
       const snapshot = createSubmission('s-1');
       await h.repository.insert(snapshot);
       const revised = { ...snapshot, values: { name: '张三丰' }, revisionNumber: 2 };
-      await assert.rejects(h.repository.save(revised, 5), /修订号守卫未命中/);
+      await assert.rejects(h.repository.save(revised, 5), /提交已被他人修订，请刷新后重试/);
       await h.repository.save(revised, 1);
       const loaded = await h.repository.load('s-1');
       assert.equal(loaded?.revisionNumber, 2);
@@ -90,7 +105,10 @@ describe('PostgresFormSubmissionRepository（FakeDbAdapter 全链路）', () => 
     const h = createHarness();
     await h.uow.run({ kind: 'single', subjectId: 'u-1' }, async () => {
       await h.repository.insert(createSubmission('s-1'));
-      await assert.rejects(h.repository.insert(createSubmission('s-1')), /提交 id 冲突/);
+      await assert.rejects(
+        h.repository.insert(createSubmission('s-1')),
+        /提交记录已存在，请勿重复提交/,
+      );
     });
   });
 });

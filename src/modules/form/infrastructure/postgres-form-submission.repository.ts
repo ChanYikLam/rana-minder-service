@@ -11,11 +11,11 @@
  */
 
 import type { DbAdapter } from '../../../shared/db-adapter';
-import { FormCommandError, FormErrorCode } from '../application/errors';
 import type { FormUnitOfWork } from './unit-of-work';
 import type { FormSubmissionSnapshot } from '../domain/models/form-submission';
 import type { FormScope } from '../domain/models/form-scope';
 import type { FormSubmissionRepository } from '../application/ports/form-submission-repository.port';
+import { formErrors } from '../application/errors';
 
 interface SubmissionRow {
   id: string;
@@ -79,15 +79,15 @@ export class PostgresFormSubmissionRepository implements FormSubmissionRepositor
     return rows.map((row) => rowToSnapshot(row));
   }
 
-  async listByForm(formId: string): Promise<FormSubmissionSnapshot[]> {
+  async listByForm(formId: string, scope: FormScope): Promise<FormSubmissionSnapshot[]> {
     const rows = await this.db.query<SubmissionRow>(
       this.uow.active,
       `SELECT id, form_id, version_number, scope, owner_id, submitted_by, values,
               status, revision_number, revisions, created_at, updated_at
          FROM form_submissions
-        WHERE form_id = $1
+        WHERE form_id = $1 AND scope = $2 AND owner_id IS NOT DISTINCT FROM $3
         ORDER BY version_number DESC, revision_number DESC`,
-      [formId],
+      [formId, scope.kind, scope.ownerId],
     );
     return rows.map((row) => rowToSnapshot(row));
   }
@@ -117,10 +117,8 @@ export class PostgresFormSubmissionRepository implements FormSubmissionRepositor
       ],
     );
     if (rows.length === 0) {
-      throw new FormCommandError(
-        FormErrorCode.VERSION_CONFLICT,
-        '表单提交 id 冲突，请确认幂等键或刷新后重试',
-      );
+      // 并发重复提交：id 主键冲突 → 409 IFC-ERR-010 资源争用
+      throw formErrors.resourceContention('提交记录已存在，请勿重复提交');
     }
   }
 
@@ -146,10 +144,8 @@ export class PostgresFormSubmissionRepository implements FormSubmissionRepositor
       ],
     );
     if (rows.length === 0) {
-      throw new FormCommandError(
-        FormErrorCode.VERSION_CONFLICT,
-        '表单提交并发更新冲突（修订号守卫未命中），请刷新后重试',
-      );
+      // 并发修订单胜者失败：修订号乐观守卫未命中 → 409 IFC-ERR-010
+      throw formErrors.resourceContention('提交已被他人修订，请刷新后重试');
     }
   }
 }
