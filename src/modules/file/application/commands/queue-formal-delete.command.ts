@@ -95,10 +95,21 @@ export class QueueFormalDeleteCommand {
         });
       }
     };
+    // cleanupQueue 中已 VERIFIED_DELETED 的对象物理已删，无需再入清单；
+    // 这些已删对象同样可能被 file.versions 枚举到（如先前经替换/移除入队后已物理删除），
+    // 因此先建已删集合，枚举版本时一并跳过，避免已物理删除的对象被重复登记为新 PENDING 项。
+    const verifiedDeleted = new Set(
+      file.cleanupQueue
+        .filter((q) => q.status === 'VERIFIED_DELETED')
+        .map((q) => locationKeyOf(q.location)),
+    );
     for (const v of file.versions) {
-      addItem(v.objectLocation);
+      if (!verifiedDeleted.has(locationKeyOf(v.objectLocation))) {
+        addItem(v.objectLocation);
+      }
     }
-    // cleanupQueue 中已 VERIFIED_DELETED 的对象物理已删，无需再入清单
+    // cleanupQueue 中未删除的对象并入清单（先经草稿删除/替换进入 PENDING_CLEANUP 时
+    // cleanupQueue 已登记对象；已删集合已排除，未删对象补入清单，避免元数据残留 PENDING）
     for (const q of file.cleanupQueue) {
       if (q.status !== 'VERIFIED_DELETED') {
         addItem(q.location);

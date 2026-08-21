@@ -10,6 +10,7 @@ import type {
 import { BucketRole } from '../../domain/models/file-model';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { UploadPolicy } from '../../domain/services/upload-policy';
+import { randomObjectKey } from '../../domain/services/object-location';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 
@@ -39,9 +40,6 @@ export class InitiateUploadError extends Error {
     this.name = 'InitiateUploadError';
   }
 }
-
-/** 高熵随机定位符（≥128 位有效熵；服务端生成，客户端不得提交/复用对象键；DATA-FIL-002） */
-const randomKey = (): string => `${randomUUID()}${randomUUID()}`;
 
 /** 上传会话有效期上限（分钟；限时会话设计，调用方不得传极大值使之近乎无限期） */
 export const MAX_SESSION_TTL_MINUTES = 120;
@@ -78,7 +76,7 @@ export class InitiateUploadCommand {
     const quarantine: ObjectLocation = {
       bucketRole: BucketRole.QUARANTINE,
       keyVersion: 'v1',
-      randomKey: randomKey(),
+      randomKey: randomObjectKey(),
       objectKind: 'UPLOAD',
       actualSize: 0,
       sha256: '',

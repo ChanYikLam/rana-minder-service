@@ -1,3 +1,16 @@
+import type { ObjectLocation } from '../../domain/models/file-model';
+
+/** 对象删除结果的结构化形状（避免工具层强依赖基础设施端口，仅取所需字段） */
+export interface DeleteOutcome {
+  readonly ok: boolean;
+}
+
+/** 可核验删除项（清理队列/删除清单共用的最小结构形状） */
+export interface VerifiableDeleteItem {
+  readonly location: ObjectLocation;
+  readonly status: 'PENDING' | 'VERIFIED_DELETED' | 'FAILED';
+}
+
 /**
  * 有界并发工具（对象删除/回读核验等 I/O 批处理用）。
  *
@@ -25,4 +38,30 @@ export async function mapWithConcurrency<T, R>(
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
   await Promise.all(workers);
   return results;
+}
+
+/**
+ * 有界并发逐项删除并回读核验（孤儿清理 / 删除清单共用，消除重复实现）。
+ *
+ * - 保持输入顺序；已 `VERIFIED_DELETED` 的项直接跳过（幂等重试）；
+ * - 删除失败或抛异常 → 置 `FAILED`（不伪装成功，由调用方决定是否保持未完成）；
+ * - 全部删除成功 → 置 `VERIFIED_DELETED`。
+ */
+export async function deleteAndVerifyBatch<T extends VerifiableDeleteItem>(
+  items: readonly T[],
+  concurrency: number,
+  deleteFn: (location: ObjectLocation) => Promise<DeleteOutcome>,
+): Promise<T[]> {
+  return mapWithConcurrency(items, concurrency, async (item) => {
+    if (item.status === 'VERIFIED_DELETED') {
+      return item;
+    }
+    let ok = false;
+    try {
+      ok = (await deleteFn(item.location)).ok;
+    } catch {
+      ok = false;
+    }
+    return { ...item, status: (ok ? 'VERIFIED_DELETED' : 'FAILED') as T['status'] };
+  });
 }

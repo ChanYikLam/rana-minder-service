@@ -5,7 +5,7 @@ import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 import { OBJECT_STORE_PORT } from '../../infrastructure/object-store-port';
 import type { ObjectStorePort } from '../../infrastructure/object-store-port';
-import { mapWithConcurrency } from './async-batch';
+import { deleteAndVerifyBatch } from './async-batch';
 
 /** 孤儿/受控清理前置失败（IFC-ERR-006 前置条件失败） */
 export class CleanupOrphansError extends Error {
@@ -44,20 +44,9 @@ export class CleanupOrphansCommand {
     }
 
     // 有界并发逐项删除+回读核验（避免对对象存储无界突发请求；保持输入顺序）
-    const queue = await mapWithConcurrency(file.cleanupQueue, 8, async (item) => {
-      if (item.status === 'VERIFIED_DELETED') {
-        return item;
-      }
-      try {
-        const result = await this.store.deleteAndVerify(item.location);
-        if (!result.ok) {
-          return { ...item, status: 'FAILED' as const };
-        }
-      } catch {
-        return { ...item, status: 'FAILED' as const };
-      }
-      return { ...item, status: 'VERIFIED_DELETED' as const };
-    });
+    const queue = await deleteAndVerifyBatch(file.cleanupQueue, 8, (location) =>
+      this.store.deleteAndVerify(location),
+    );
 
     // 从结果推导，避免在并发回调中修改共享可变状态；任一 FAILED 则保持待清理并持续重试
     const allVerified = queue.every((item) => item.status === 'VERIFIED_DELETED');

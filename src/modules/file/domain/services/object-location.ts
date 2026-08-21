@@ -1,4 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import type { ObjectLocation } from '../models/file-model';
+
+/**
+ * 高熵随机定位符（≥128 位有效熵；服务端生成，客户端不得提交/复用对象键；DATA-FIL-002）。
+ * 两个 UUID 拼接以保证足够熵，供隔离区/权威原件区对象键使用。
+ */
+export function randomObjectKey(): string {
+  return `${randomUUID()}${randomUUID()}`;
+}
 
 /**
  * 对象定位去重键（DATA-FIL-001：对象定位记录负责定位和核验）。

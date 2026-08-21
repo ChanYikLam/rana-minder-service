@@ -5,7 +5,7 @@ import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 import { OBJECT_STORE_PORT } from '../../infrastructure/object-store-port';
 import type { ObjectStorePort } from '../../infrastructure/object-store-port';
-import { mapWithConcurrency } from './async-batch';
+import { deleteAndVerifyBatch } from './async-batch';
 
 /** 删除清单执行结果 */
 export interface DeleteManifestResult {
@@ -55,20 +55,9 @@ export class DeleteManifestHandler {
     }
 
     // 有界并发逐项删除+回读核验（避免对对象存储无界突发请求；保持输入顺序）
-    const items = await mapWithConcurrency(manifest.items, 8, async (item) => {
-      if (item.status === 'VERIFIED_DELETED') {
-        return item;
-      }
-      try {
-        const result = await this.store.deleteAndVerify(item.location);
-        if (!result.ok) {
-          return { ...item, status: 'FAILED' as const };
-        }
-      } catch {
-        return { ...item, status: 'FAILED' as const };
-      }
-      return { ...item, status: 'VERIFIED_DELETED' as const };
-    });
+    const items = await deleteAndVerifyBatch(manifest.items, 8, (location) =>
+      this.store.deleteAndVerify(location),
+    );
 
     // 从结果推导计数，避免在并发回调中递增共享可变状态
     const verified = items.filter((item) => item.status === 'VERIFIED_DELETED').length;

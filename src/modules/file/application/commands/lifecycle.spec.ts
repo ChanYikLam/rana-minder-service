@@ -205,6 +205,54 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     assert.equal(done!.state, FileState.FORMALLY_DELETED);
   });
 
+  it('删除清单部分失败：保持未完成（待清理），不宣称正式删除完成（IFC-TX-007）', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    await rig.queueFormalDelete.execute({
+      fileId: file.fileId,
+      initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
+      reason: '二次确认',
+      confirmationCode: 'CONF-002',
+    });
+    // 模拟其中一个对象的物理删除失败：对指定 key 的删除返回失败
+    const pending = await rig.repo.load(file.fileId);
+    const failingKey = pending!.deletionManifest!.items[0].location.randomKey;
+    const origDelete = rig.store.deleteAndVerify.bind(rig.store);
+    rig.store.deleteAndVerify = async (loc) => {
+      if (loc.randomKey === failingKey) {
+        return { ok: false, reason: '模拟删除失败' };
+      }
+      return origDelete(loc);
+    };
+    const result = await rig.deleteManifest.execute(file.fileId);
+    assert.equal(result.completed, false, '部分失败不得宣称正式删除完成');
+    assert.equal(result.failed, 1);
+    const after = await rig.repo.load(file.fileId);
+    assert.equal(after!.state, FileState.PENDING_CLEANUP, '部分失败保持待清理，不进入终态');
+    assert.ok(
+      after!.deletionManifest!.items.some((i) => i.status === 'FAILED'),
+      '清单中保留 FAILED 项供后续重试',
+    );
+  });
+
+  it('孤儿清理部分失败：保持待清理并保留 FAILED 项，不收敛到已清理（FORM-009）', async () => {
+    const rig = makeRig();
+    const file = await makeAvailableFile(rig.repo, rig.store);
+    await rig.remove.execute({ fileId: file.fileId, removable: true });
+    const pending = await rig.repo.load(file.fileId);
+    const failingKey = pending!.cleanupQueue[0].location.randomKey;
+    const origDelete = rig.store.deleteAndVerify.bind(rig.store);
+    rig.store.deleteAndVerify = async (loc) => {
+      if (loc.randomKey === failingKey) {
+        return { ok: false, reason: '模拟删除失败' };
+      }
+      return origDelete(loc);
+    };
+    const cleaned = await rig.cleanup.execute(file.fileId);
+    assert.equal(cleaned.state, FileState.PENDING_CLEANUP, '部分失败不得收敛到已清理');
+    assert.ok(cleaned.cleanupQueue.some((i) => i.status === 'FAILED'));
+  });
+
   it('正式删除接管已在待清理状态的文件：不抛非法转换，生成清单并执行（IFC-FIL-008）', async () => {
     const rig = makeRig();
     const file = await makeAvailableFile(rig.repo, rig.store);

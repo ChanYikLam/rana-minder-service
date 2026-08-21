@@ -10,7 +10,7 @@ import type {
   FileVersion,
 } from '../../domain/models/file-model';
 import { UploadPolicy } from '../../domain/services/upload-policy';
-import { locationKeyOf } from '../../domain/services/object-location';
+import { locationKeyOf, randomObjectKey } from '../../domain/services/object-location';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 
@@ -84,7 +84,7 @@ export class ReplaceDraftFileCommand {
     const quarantine: ObjectLocation = {
       bucketRole: BucketRole.QUARANTINE,
       keyVersion: 'v1',
-      randomKey: `${randomUUID()}${randomUUID()}`,
+      randomKey: randomObjectKey(),
       objectKind: 'UPLOAD',
       actualSize: 0,
       sha256: '',
