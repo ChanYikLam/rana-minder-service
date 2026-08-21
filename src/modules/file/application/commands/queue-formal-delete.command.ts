@@ -33,6 +33,9 @@ export class FormalDeleteError extends Error {
   }
 }
 
+/** 独立二次确认凭据最小长度（AUD-008：防任意短字符串绕过二次确认语义） */
+export const MIN_CONFIRMATION_CODE_LENGTH = 6;
+
 /**
  * 正式删除排队（IFC-FIL-008、IFC-TX-007）。
  *
@@ -56,8 +59,17 @@ export class QueueFormalDeleteCommand {
     if (input.reason.trim().length === 0) {
       throw new FormalDeleteError('IFC-ERR-006', '正式删除需要二次确认原因');
     }
-    if (input.confirmationCode.trim().length === 0) {
+    // AUD-008：独立二次确认凭据须由审计/前台二次确认流程签发，命令层校验其具备最小强度
+    // （≥6 位），避免任意短字符串/单个字符轻易绕过"独立二次确认"语义（AUD-007~009）。
+    const confirmationCode = input.confirmationCode.trim();
+    if (confirmationCode.length === 0) {
       throw new FormalDeleteError('IFC-ERR-006', '正式删除缺少独立二次确认凭据');
+    }
+    if (confirmationCode.length < MIN_CONFIRMATION_CODE_LENGTH) {
+      throw new FormalDeleteError(
+        'IFC-ERR-006',
+        `正式删除二次确认凭据长度不足（至少 ${MIN_CONFIRMATION_CODE_LENGTH} 位）`,
+      );
     }
     const file = await this.repo.load(input.fileId);
     if (file === null) {
@@ -126,7 +138,7 @@ export class QueueFormalDeleteCommand {
     const manifest: DeleteManifest = {
       fileId: file.fileId,
       reason: input.reason,
-      confirmationCode: input.confirmationCode,
+      confirmationCode,
       initiatedBy: input.initiator.principalId,
       initiatedAt: now,
       accessRevoked: true,

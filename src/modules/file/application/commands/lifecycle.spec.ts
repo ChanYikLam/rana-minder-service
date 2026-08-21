@@ -176,6 +176,16 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
       }),
       /缺少独立二次确认凭据/,
     );
+    // 超管但二次确认凭据长度不足 → 拒绝（防任意短字符串绕过独立二次确认，AUD-008）
+    await assert.rejects(
+      rig.queueFormalDelete.execute({
+        fileId: file.fileId,
+        initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
+        reason: '数据违规，二次确认',
+        confirmationCode: 'ab',
+      }),
+      /二次确认凭据长度不足/,
+    );
     // 超管 + 二次确认原因 + 独立确认凭据 → 撤权 + 清单（凭据入审计存证）
     const manifest = await rig.queueFormalDelete.execute({
       fileId: file.fileId,

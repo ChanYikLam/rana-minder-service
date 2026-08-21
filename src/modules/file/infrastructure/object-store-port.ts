@@ -74,7 +74,12 @@ export class InMemoryObjectStore implements ObjectStorePort {
       if (existing !== null && this.sha256Hex(existing) === expectedSha256) {
         return { ok: true };
       }
-      return { ok: false, reason: '源对象缺失' };
+      // 源缺失且目标摘要不匹配（目标已被污染/异常）或源与目标均缺失——均不得伪装成功。
+      // 区分原因便于排障：目标存在但内容不符属异常状态；两者均缺失才是真正的源缺失。
+      return {
+        ok: false,
+        reason: existing !== null ? '目标对象摘要不匹配（晋升异常）' : '源对象缺失',
+      };
     }
     // 可信摘要必须非空：空摘要视为失败（不得跳过核验，DATA-FIL-003）
     if (expectedSha256.length === 0) {
