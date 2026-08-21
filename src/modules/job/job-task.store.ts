@@ -107,14 +107,18 @@ export class PostgresJobTaskStore implements JobTaskStore {
           RETURNING t.id, t.type, t.subject_id, t.payload, t.attempts`,
         [batchSize, new Date(now.getTime() + leaseMs), now],
       );
-      await session.close(true);
-      return rows.map((row) => ({
+      // 先在事务内完成 payload 解析：若某行 payload 损坏导致 JSON.parse 抛错，
+      // 会在 catch 中对本次领取整体回滚（任务保持 pending，可被再次领取），
+      // 避免"已提交但 payload 不可用"的悬空 running 任务。
+      const claimed = rows.map((row) => ({
         id: row.id,
         type: row.type,
         subjectId: row.subject_id,
         payload: JSON.parse(row.payload) as Record<string, unknown>,
         attempts: row.attempts,
       }));
+      await session.close(true);
+      return claimed;
     } catch (error) {
       await session.close(false);
       throw error;

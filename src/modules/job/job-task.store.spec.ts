@@ -240,6 +240,24 @@ describe('PostgresJobTaskStore（ADR-004 租约领取/结算）', () => {
     ]);
   });
 
+  it('claim：payload 损坏时整体回滚，不留下已提交但不可用的 running 任务', async () => {
+    const db = new FakeJobTaskDb();
+    db.seed(task({ id: 't-bad', payload: '{not-json' }));
+    const store = new PostgresJobTaskStore(db);
+
+    // payload 非法 JSON，claim 必须抛出而非返回，且事务走回滚（不 commit）
+    await assert.rejects(() => store.claim(10, now, minute), /JSON/);
+
+    const txId = db.events[0].slice('begin:'.length);
+    assert.deepEqual(db.events, [
+      `begin:${txId}`,
+      `set-rls:${txId}:unprotected`,
+      `query:${txId}`,
+      `rollback:${txId}`,
+      `clear-rls:${txId}`,
+    ]);
+  });
+
   it('complete/retry/fail 仅对持租约（running）任务生效', async () => {
     const db = new FakeJobTaskDb();
     const store = new PostgresJobTaskStore(db);

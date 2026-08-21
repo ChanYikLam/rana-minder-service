@@ -27,6 +27,7 @@
  *    config
  * 4. 适配：adapters（casdoor / db / mail / storage）受 DEP-Q-001/002 锁定后接入
  *
+ * 当前已接入：OrganizationModule、TasksModule、FileModule、AdaptersModule、FormModule。
  * 任何在此处接人的 module 不得越过 ADR-002 的状态机唯一责任与 ADR-003 的本地原子
  * 提交边界。
  */
@@ -39,7 +40,9 @@ import { DatabaseModule } from './database/database.module';
 import { ObservabilityModule } from './platform/observability/module';
 import { ReadModelModule } from './platform/read-model/module';
 import { CasdoorModule } from './platform/casdoor/module';
+import { OrganizationModule } from './modules/organization/module';
 import { TasksModule } from './platform/tasks/module';
+import { FileModule } from './modules/file/module';
 import { AdaptersModule } from './adapters/adapters.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
@@ -52,7 +55,9 @@ import { FormModule } from './modules/form/form.module';
     ObservabilityModule,
     ReadModelModule,
     CasdoorModule,
+    OrganizationModule,
     TasksModule,
+    FileModule,
     AdaptersModule,
     IdentityModule,
     FormModule,
