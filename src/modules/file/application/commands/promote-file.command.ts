@@ -49,12 +49,11 @@ export class PromoteFileCommand {
       throw new PromoteFileError('检查尚未收口');
     }
 
-    // 服务不可用：保持检查中（可重试），不得放行
+    // 服务不可用：保持检查中（可重试），不得放行。
+    // 状态未变且 retryable 已在此前收口置为 true，无需重复写库。
     if (check.status === 'UNAVAILABLE') {
-      const kept = this.stateMachine.onCheckUnavailable(file.state);
-      const updated: FileRecord = { ...file, state: kept, checkRecord: { ...check, retryable: true } };
-      await this.repo.save(updated);
-      return updated;
+      this.stateMachine.onCheckUnavailable(file.state);
+      return file;
     }
 
     // 失败/隔离：检查中 → 隔离/失败（可重试标志按检查结果）

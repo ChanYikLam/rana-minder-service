@@ -6,6 +6,14 @@ import type { FileRepository } from '../../infrastructure/file-repository';
 import { FILE_CHECK_PORT } from '../../infrastructure/file-check-port';
 import type { FileCheckPort, FileCheckResult } from '../../infrastructure/file-check-port';
 
+/** 请求检查失败（IFC-ERR-006：文件不存在/状态不符等前置失败） */
+export class AskFileCheckError extends Error {
+  constructor(message: string) {
+    super(`IFC-ERR-006: ${message}`);
+    this.name = 'AskFileCheckError';
+  }
+}
+
 /** 请求检查输入（AskFileCheckCommand；job 模块编排，稳定回调/轮询收口） */
 export interface AskFileCheckInput {
   readonly fileId: string;
@@ -35,10 +43,10 @@ export class AskFileCheckCommand {
   async execute(input: AskFileCheckInput): Promise<FileCheckResult> {
     const file = await this.repo.load(input.fileId);
     if (file === null) {
-      throw new Error('IFC-ERR-006: 文件不存在');
+      throw new AskFileCheckError('文件不存在');
     }
     if (file.state !== FileState.CHECKING) {
-      throw new Error(`IFC-ERR-006: 文件不在检查中状态（当前 ${file.state}）`);
+      throw new AskFileCheckError(`文件不在检查中状态（当前 ${file.state}）`);
     }
     const check = file.checkRecord;
     // 幂等：已收口（终态）不重复执行

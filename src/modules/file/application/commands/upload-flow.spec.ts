@@ -94,7 +94,7 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
   it('检查通过收口：晋升到权威原件区 → 可用（可访问）', async () => {
     const flow = makeFlow();
     const file = await flow.initiate.execute(baseInput);
-    const completed = await flow.complete.execute({
+    await flow.complete.execute({
       fileId: file.fileId,
       sessionId: file.uploadSession!.sessionId,
       bytes: pngBytes(),

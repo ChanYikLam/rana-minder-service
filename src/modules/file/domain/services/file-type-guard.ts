@@ -59,6 +59,8 @@ export class FileTypeGuard {
     if (bytes.length < 4) {
       return 'application/octet-stream';
     }
+    // 逐字节读取器：不足长度处以 0 兜底，避免越界；所有魔数匹配都要求
+    // 字节长度足够（首尾 4 字节或 MP4 的 8 字节），杜绝误判短输入。
     const b = (i: number): number => bytes[i] ?? 0;
     // 可执行/PE (MZ)
     if (b(0) === 0x4d && b(1) === 0x5a) return 'application/x-msdownload';
@@ -82,8 +84,8 @@ export class FileTypeGuard {
     if (b(0) === 0x25 && b(1) === 0x50 && b(2) === 0x44 && b(3) === 0x46) {
       return 'application/pdf';
     }
-    // MP4 (ftyp box)
-    if (b(4) === 0x66 && b(5) === 0x74 && b(6) === 0x79 && b(7) === 0x70) {
+    // MP4 (ftyp box)；需至少 8 字节，不足不匹配（b 以 0 兜底防越界）
+    if (bytes.length >= 8 && b(4) === 0x66 && b(5) === 0x74 && b(6) === 0x79 && b(7) === 0x70) {
       return 'video/mp4';
     }
     // ZIP 容器（含 .docx/.xlsx；默认按高风险压缩处理）

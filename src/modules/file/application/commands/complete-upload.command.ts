@@ -1,7 +1,7 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { FileTypeGuard } from '../../domain/services/file-type-guard';
-import { BucketRole } from '../../domain/models/file-model';
 import type { FileRecord } from '../../domain/models/file-model';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
@@ -90,10 +90,14 @@ export class CompleteUploadCommand {
       initialCheck === 'PASSED' ? FileState.CHECKING : FileState.QUARANTINED_FAILED;
     const state = this.stateMachine.transition(FileState.TEMPORARY_UPLOAD, to);
 
+    // 对实际字节计算可信 SHA-256 并回填版本（DATA-FIL-003：晋升时按此摘要核验原件；
+    // 不得在晋升处以空串跳过摘要核验）
+    const sha256 = createHash('sha256').update(input.bytes).digest('hex');
     const updatedVersion = {
       ...currentVersion,
       actualSize: input.actualSize,
       detectedType: sniff.detectedType,
+      sha256,
     };
     const updated: FileRecord = {
       ...file,

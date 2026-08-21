@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { ObjectLocation } from '../domain/models/file-model';
 
@@ -52,13 +53,7 @@ export class InMemoryObjectStore implements ObjectStorePort {
   }
 
   async putQuarantine(location: ObjectLocation, bytes: Uint8Array): Promise<ObjectOpResult> {
-    const key = this.keyOf(location);
-    const bucket = this.bucket(location.bucketRole);
-    if (bucket.has(key)) {
-      return { ok: false, reason: '对象键已存在（只写一次）' };
-    }
-    bucket.set(key, bytes);
-    return { ok: true };
+    return this.putOnce(location, bytes);
   }
 
   async promoteToObject(
@@ -73,7 +68,8 @@ export class InMemoryObjectStore implements ObjectStorePort {
     if (expectedSha256.length > 0 && this.sha256Hex(bytes) !== expectedSha256) {
       return { ok: false, reason: '内容摘要核验失败' };
     }
-    return this.putQuarantine(target, bytes); // 占位复用只写一次语义
+    // 只写一次写入权威原件区（与隔离区独立语义，但共享 create-only 防覆盖）
+    return this.putOnce(target, bytes);
   }
 
   async read(location: ObjectLocation): Promise<Uint8Array | null> {
@@ -91,12 +87,22 @@ export class InMemoryObjectStore implements ObjectStorePort {
     return { ok: !stillThere, reason: stillThere ? '回读核验失败' : undefined };
   }
 
+  /** 只写一次写入（create-only/防覆盖；DATA-FIL-002），隔离区与原件区共用 */
+  private async putOnce(location: ObjectLocation, bytes: Uint8Array): Promise<ObjectOpResult> {
+    const key = this.keyOf(location);
+    const bucket = this.bucket(location.bucketRole);
+    if (bucket.has(key)) {
+      return { ok: false, reason: '对象键已存在（只写一次）' };
+    }
+    bucket.set(key, bytes);
+    return { ok: true };
+  }
+
   private keyOf(location: ObjectLocation): string {
     return `${location.keyVersion}/${location.objectKind}/${location.randomKey}`;
   }
 
   private sha256Hex(bytes: Uint8Array): string {
-    // 占位：开发期不做真实摘要（生产由检查/处理流程计算可信 SHA-256）
-    return `sha256-${bytes.length}`;
+    return createHash('sha256').update(bytes).digest('hex');
   }
 }
