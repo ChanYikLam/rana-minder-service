@@ -9,6 +9,7 @@ import type {
 } from '../../domain/models/file-model';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
+import { locationKeyOf } from '../../domain/services/object-location';
 
 /** 正式删除输入（IFC-FIL-008/IFC-TX-007：仅超管；范围/二次确认/传播） */
 export interface QueueFormalDeleteInput {
@@ -84,10 +85,8 @@ export class QueueFormalDeleteCommand {
     // 若遗漏会与清单重复枚举同一对象且元数据残留 PENDING）。按 location 去重。
     // 派生物/导出由审计模块按 AUD-008 传播范围补充（本模块模型未持有派生物定位时留空）。
     const manifestItems = new Map<string, DeleteManifestItem>();
-    const keyOf = (loc: ObjectLocation): string =>
-      `${loc.bucketRole}/${loc.keyVersion}/${loc.objectKind}/${loc.randomKey}`;
     const addItem = (loc: ObjectLocation): void => {
-      const key = keyOf(loc);
+      const key = locationKeyOf(loc);
       if (!manifestItems.has(key)) {
         manifestItems.set(key, {
           location: loc,

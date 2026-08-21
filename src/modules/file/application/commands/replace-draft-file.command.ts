@@ -10,6 +10,7 @@ import type {
   FileVersion,
 } from '../../domain/models/file-model';
 import { UploadPolicy } from '../../domain/services/upload-policy';
+import { locationKeyOf } from '../../domain/services/object-location';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 
@@ -50,16 +51,6 @@ export class ReplaceDraftFileCommand {
     private readonly policy: UploadPolicy,
     private readonly stateMachine: FileStateMachine = new FileStateMachine(),
   ) {}
-
-  /** 对象键（cleanupQueue 去重用；按 bucketRole/keyVersion/objectKind/randomKey 唯一） */
-  private keyOf(loc: {
-    bucketRole: string;
-    keyVersion: string;
-    objectKind: string;
-    randomKey: string;
-  }): string {
-    return `${loc.bucketRole}/${loc.keyVersion}/${loc.objectKind}/${loc.randomKey}`;
-  }
 
   async execute(input: ReplaceDraftFileInput): Promise<FileRecord> {
     if (!input.editable) {
@@ -123,7 +114,7 @@ export class ReplaceDraftFileCommand {
     // 按 location 去重：同一对象（如先前替换/删除已入队）不得重复登记，避免清理队列
     // 出现重复项导致同一对象被删除两次/元数据冗余。
     const alreadyQueued = file.cleanupQueue.some(
-      (i) => this.keyOf(i.location) === this.keyOf(oldVersion.objectLocation),
+      (i) => locationKeyOf(i.location) === locationKeyOf(oldVersion.objectLocation),
     );
     const cleanupQueue: readonly CleanupQueueItem[] = alreadyQueued
       ? file.cleanupQueue
