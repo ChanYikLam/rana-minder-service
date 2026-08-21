@@ -80,4 +80,53 @@ describe('IdentityUnitOfWork（IFC-TX-001 原子提交边界）', () => {
 
     assert.throws(() => uow.active, /无活动事务/);
   });
+
+  it('afterCommit 回调在提交成功后按序执行（外部投递不纳入原子提交）', async () => {
+    const db = new FakeDbAdapter();
+    const uow = new IdentityUnitOfWork(db);
+    const order: string[] = [];
+
+    await uow.run({ kind: 'single', subjectId: 'user-1' }, async () => {
+      uow.afterCommit(async () => {
+        order.push('after-commit');
+      });
+    });
+
+    // 提交成功后才执行回调
+    const txId = db.events[0].slice('begin:'.length);
+    assert.equal(db.events.includes(`commit:${txId}`), true);
+    assert.deepEqual(order, ['after-commit']);
+  });
+
+  it('事务回滚时 afterCommit 回调不执行（不投递“死令牌”）', async () => {
+    const db = new FakeDbAdapter();
+    const uow = new IdentityUnitOfWork(db);
+    let ran = false;
+
+    await assert.rejects(
+      uow.run({ kind: 'single', subjectId: 'user-1' }, async () => {
+        uow.afterCommit(async () => {
+          ran = true;
+        });
+        throw new Error('boom');
+      }),
+      /boom/,
+    );
+
+    assert.equal(ran, false);
+  });
+
+  it('afterCommit 回调抛错不影响已提交结果，仅吞掉并记录', async () => {
+    const db = new FakeDbAdapter();
+    const uow = new IdentityUnitOfWork(db);
+
+    const result = await uow.run({ kind: 'single', subjectId: 'user-1' }, async () => {
+      uow.afterCommit(async () => {
+        throw new Error('delivery failed');
+      });
+      return 'ok';
+    });
+
+    assert.equal(result, 'ok');
+  });
 });

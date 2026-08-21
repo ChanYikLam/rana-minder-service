@@ -155,7 +155,14 @@ describe('ProfileSyncTaskWriter（事务发件箱）', () => {
 });
 
 describe('MailVerificationChannel（IFC-TX-005）', () => {
-  it('委托渠道投递验证邮件（令牌不落日志/审计）', async () => {
+  const emailInput = {
+    subjectId: 'user-1',
+    toEmail: 'new@example.com',
+    token: 'v-1:secret',
+    expiresAt: new Date(now.getTime() + 86400000),
+  };
+
+  it('委托渠道投递验证邮件，且投递发生在事务提交之后（ADR-004 §2.7）', async () => {
     const received: Parameters<MailChannelAdapter['sendVerificationEmail']>[0][] = [];
     const mail: MailChannelAdapter = {
       async sendVerificationEmail(input) {
@@ -163,18 +170,42 @@ describe('MailVerificationChannel（IFC-TX-005）', () => {
         return externalSuccess(undefined, 'a-1', now);
       },
     };
-    const channel = new MailVerificationChannel(mail);
+    const db = new FakeDbAdapter();
+    const uow = new IdentityUnitOfWork(db);
+    const channel = new MailVerificationChannel(mail, uow);
 
-    await channel.sendVerificationEmail({
-      subjectId: 'user-1',
-      toEmail: 'new@example.com',
-      token: 'v-1:secret',
-      expiresAt: new Date(now.getTime() + 86400000),
+    await uow.run({ kind: 'single', subjectId: 'user-1' }, async () => {
+      await channel.sendVerificationEmail(emailInput);
+      // 事务未提交前不投递，避免“死令牌”
+      assert.equal(received.length, 0);
     });
 
     assert.equal(received.length, 1);
     assert.equal(received[0].toEmail, 'new@example.com');
     assert.equal(received[0].code, 'v-1:secret');
+  });
+
+  it('事务回滚时投递不执行（不投递死令牌）', async () => {
+    let deliveries = 0;
+    const mail: MailChannelAdapter = {
+      async sendVerificationEmail() {
+        deliveries++;
+        return externalSuccess(undefined, 'a-1', now);
+      },
+    };
+    const db = new FakeDbAdapter();
+    const uow = new IdentityUnitOfWork(db);
+    const channel = new MailVerificationChannel(mail, uow);
+
+    await assert.rejects(
+      uow.run({ kind: 'single', subjectId: 'user-1' }, async () => {
+        await channel.sendVerificationEmail(emailInput);
+        throw new Error('boom');
+      }),
+      /boom/,
+    );
+
+    assert.equal(deliveries, 0);
   });
 
   it('投递失败不抛错也不改变业务（XCC-FAIL-007），仅记录结果', async () => {
@@ -193,16 +224,13 @@ describe('MailVerificationChannel（IFC-TX-005）', () => {
         );
       },
     };
-    const channel = new MailVerificationChannel(mail);
+    const db = new FakeDbAdapter();
+    const uow = new IdentityUnitOfWork(db);
+    const channel = new MailVerificationChannel(mail, uow);
 
-    // 不应抛错（投递失败不改变业务与通知事实）
-    await assert.doesNotReject(
-      channel.sendVerificationEmail({
-        subjectId: 'user-1',
-        toEmail: 'new@example.com',
-        token: 'v-1:secret',
-        expiresAt: new Date(now.getTime() + 86400000),
-      }),
-    );
+    // 事务正常提交，投递失败不影响提交结果（不应抛错）
+    await uow.run({ kind: 'single', subjectId: 'user-1' }, async () => {
+      await channel.sendVerificationEmail(emailInput);
+    });
   });
 });

@@ -91,7 +91,8 @@ export class DefaultSaveProfileUseCase implements SaveProfileUseCase {
     for (const field of syncFields) {
       const nextValue = profile.toSnapshot().fields[field];
       const priorValue = snapshot.fields[field] ?? null;
-      if (nextValue === undefined) {
+      // 空目标值（undefined/null）不创建同步意图，避免以空值误登记下游同步
+      if (nextValue === undefined || nextValue === null) {
         continue;
       }
       const intent = ProfileSyncIntent.create({

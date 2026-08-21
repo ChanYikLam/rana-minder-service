@@ -11,6 +11,7 @@ import type { DbAdapter, RlsScope, TransactionContext } from '../../../shared/db
 
 export class IdentityUnitOfWork {
   private current: TransactionContext | null = null;
+  private afterCommitCallbacks: Array<() => Promise<void>> = [];
 
   constructor(private readonly db: DbAdapter) {}
 
@@ -20,6 +21,14 @@ export class IdentityUnitOfWork {
       throw new Error('IdentityUnitOfWork: 无活动事务，禁止脱离事务读写');
     }
     return this.current;
+  }
+
+  /**
+   * 注册事务提交成功后执行的异步动作（外部投递等，ADR-004 §2.7：
+   * 外部依赖不纳入本地原子提交）。事务回滚时回调被丢弃、不会执行。
+   */
+  afterCommit(fn: () => Promise<void>): void {
+    this.afterCommitCallbacks.push(fn);
   }
 
   /** 在单目标 RLS 上下文内执行 fn 并原子收口 */
@@ -33,13 +42,28 @@ export class IdentityUnitOfWork {
       await this.db.setRlsContext(tx, scope);
       const result = await fn();
       await this.db.commit(tx);
+      await this.flushAfterCommit();
       return result;
     } catch (error) {
       await this.db.rollback(tx).catch(() => undefined);
       throw error;
     } finally {
+      this.afterCommitCallbacks = [];
       await this.db.clearRlsContext(tx).catch(() => undefined);
       this.current = null;
+    }
+  }
+
+  private async flushAfterCommit(): Promise<void> {
+    const callbacks = this.afterCommitCallbacks;
+    this.afterCommitCallbacks = [];
+    for (const callback of callbacks) {
+      try {
+        await callback();
+      } catch (error) {
+        // 外部动作失败不改变已提交的业务事实（ADR-004 §2.7），仅记录
+        console.error('[IdentityUnitOfWork] after-commit 外部动作执行失败', error);
+      }
     }
   }
 }

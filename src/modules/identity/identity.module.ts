@@ -161,8 +161,8 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     },
     {
       provide: MAIL_VERIFICATION_PORT,
-      useFactory: (mail) => new MailVerificationChannel(mail),
-      inject: [MAIL_CHANNEL_ADAPTER],
+      useFactory: (mail, uow) => new MailVerificationChannel(mail, uow),
+      inject: [MAIL_CHANNEL_ADAPTER, IdentityUnitOfWork],
     },
     {
       provide: PROFILE_SYNC_TASK_PORT,

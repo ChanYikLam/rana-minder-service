@@ -89,7 +89,9 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       consumed_at     timestamptz NULL,
       request_version bigint      NOT NULL,
       created_at      timestamptz NOT NULL DEFAULT now(),
-      CONSTRAINT ck_email_verification_version_positive CHECK (request_version > 0)
+      CONSTRAINT ck_email_verification_version_positive CHECK (request_version > 0),
+      -- 并发发送时 DB 层保证同主体 request_version 单调不重复，防止版本号竞态
+      CONSTRAINT uq_email_verification_requests_subject_version UNIQUE (subject_id, request_version)
     )
   `);
   await runner.query(`
