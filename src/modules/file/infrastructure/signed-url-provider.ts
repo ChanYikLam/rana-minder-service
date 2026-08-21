@@ -31,7 +31,13 @@ export interface SignedUrlProvider {
   ): Promise<ShortLivedAccess>;
 }
 
-/** 默认短时地址提供者（占位：令牌短时有效，默认 5 分钟） */
+/**
+ * 默认短时地址提供者（**占位实现**：令牌短时有效，默认 5 分钟）。
+ *
+ * ⚠️ 生产适配须知：当前 token 由 `randomUUID()` 生成，**无后端状态关联**，
+ * 不校验到期/重放/一次性。正式环境接入存储（如 Redis）时，必须严格兑现
+ * “短时失效”（到期即拒）与“一次性语义”（消费后作废）承诺（IFC-FIL-005）。
+ */
 @Injectable()
 export class DefaultSignedUrlProvider implements SignedUrlProvider {
   static readonly DEFAULT_TTL_MS = 5 * 60_000;

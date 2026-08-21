@@ -18,7 +18,15 @@ export type FileAccessAction = (typeof FileAccessAction)[keyof typeof FileAccess
  */
 export interface FileAccessContext {
   readonly principalId: string | null;
-  /** 当前角色（每次访问重新获取） */
+  /**
+   * 当前角色（每次访问重新获取）。
+   *
+   * 职责边界：领域层只做**最小作用域校验**（至少一个有效业务角色才可访问非本人/非
+   * ownerOnly 附件）；角色与目标对象的**对象级匹配关系**（社团/部门/任务/联合关系
+   * 等是否真正覆盖该附件所属业务对象）由**服务端入口**在构造本上下文时逐项判定并
+   * 收敛进 roles——调用方必须据此正确构造 roles，领域层不再重复判定对象级授权。
+   * 若 roles 为空 = 无权（保守拒绝）。
+   */
   readonly roles: readonly string[];
   /** 当前社团 */
   readonly clubId?: string;
@@ -121,8 +129,9 @@ export class AccessPolicy {
     if (request.ownerOnly) {
       return { allowed: false, errorCode: 'IFC-ERR-003' };
     }
-    // 业务角色访问：角色/社团/部门/任务/联合关系由服务端入口逐项判定后传入 roles；
-    // 此处要求至少一个有效业务角色（角色为空 = 无权）
+    // 业务角色访问：角色/社团/部门/任务/联合关系的**对象级匹配**由服务端入口逐项判定
+    // 后收敛进 roles（见 FileAccessContext.roles 职责边界说明）；领域层在此仅做最小
+    // 作用域校验——要求至少一个有效业务角色（角色为空 = 无权，保守拒绝）
     if (context.roles.length === 0) {
       return { allowed: false, errorCode: 'IFC-ERR-003' };
     }
