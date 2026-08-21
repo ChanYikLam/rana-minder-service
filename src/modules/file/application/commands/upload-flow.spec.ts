@@ -211,6 +211,22 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     await assert.rejects(flow.initiate.execute(input), /字段附件数量已达上限/);
   });
 
+  it('初始化上传：并发创建不突破字段附件数量上限（防 TOCTOU 竞态）', async () => {
+    const flow = makeFlow();
+    const input = { ...baseInput, configuredPerField: 2 };
+    // 并发 5 个创建同一目标字段，数量上限 2 → 最终成功数不得超过 2
+    const results = await Promise.allSettled(
+      Array.from({ length: 5 }, () => flow.initiate.execute(input)),
+    );
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    assert.ok(fulfilled.length <= 2, `并发创建数 ${fulfilled.length} 超过上限 2`);
+    assert.equal(fulfilled.length + rejected.length, 5);
+    // 仓储内实际保存的目标字段文件数不得超过上限
+    const stored = await flow.repo.listByTarget(input.target);
+    assert.ok(stored.length <= 2, `仓储内文件数 ${stored.length} 超过上限 2`);
+  });
+
   it('晋升通过：权威原件定位记录 actualSize 使用版本真实大小（非隔离区固定 0）', async () => {
     const flow = makeFlow();
     const file = await flow.initiate.execute(baseInput);

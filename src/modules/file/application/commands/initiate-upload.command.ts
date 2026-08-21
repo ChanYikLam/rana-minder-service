@@ -65,16 +65,11 @@ export class InitiateUploadCommand {
     // 平台硬上限：单文件声明大小（类别维度）
     this.policy.assertDeclaredSizeWithinLimit(input.category, input.declaredSizeBytes);
     // 字段附件数量硬上限：真正执行（IFC-FIL-001），不得仅靠表单侧维护计数
+    let configuredPerField: number | undefined;
     if (input.configuredPerField !== undefined) {
       // 配置数不得超过平台硬上限
       this.policy.assertCountWithinLimit(input.configuredPerField);
-      // 统计该目标字段已有文件数，校验 已有数 + 1 ≤ 配置上限（超量即拒绝创建）
-      const existing = await this.repo.listByTarget(input.target);
-      if (existing.length + 1 > input.configuredPerField) {
-        throw new InitiateUploadError(
-          `字段附件数量已达上限（${input.configuredPerField}），无法继续上传`,
-        );
-      }
+      configuredPerField = input.configuredPerField;
     }
 
     const now = new Date().toISOString();
@@ -129,7 +124,22 @@ export class InitiateUploadCommand {
       checkRecord: null,
       createdAt: now,
     };
-    await this.repo.save(file);
+    // 原子创建：配置数量上限时由仓储在同一同步段内完成"计数+保存"（防 TOCTOU），
+    // 已满返回 false；未配置上限走普通保存。
+    if (configuredPerField !== undefined) {
+      const created = await this.repo.createWithinTargetLimit(
+        input.target,
+        configuredPerField,
+        file,
+      );
+      if (!created) {
+        throw new InitiateUploadError(
+          `字段附件数量已达上限（${configuredPerField}），无法继续上传`,
+        );
+      }
+    } else {
+      await this.repo.save(file);
+    }
     return file;
   }
 }

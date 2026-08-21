@@ -15,6 +15,12 @@ export interface CompleteUploadInput {
   /** 操作主体（归属/权限鉴权；IFC-FIL-003 一致：仅上传者或有权角色） */
   readonly principalId: string;
   readonly sessionId: string;
+  /**
+   * 完整字节（开发期占位：整包 `Uint8Array`，视频类别单文件上限可达 200MB，会整包驻留内存）。
+   * 生产接入分块/流式上传（S3 multipart 等）时，应改为流式接收并落临时文件或直接
+   * 传对象存储，大小/摘要核验在收口阶段对真实落盘字节统一进行，避免强依赖
+   * `bytes.length === declaredSize` 这一全量前置条件（见下方大小校验注释）。
+   */
   readonly bytes: Uint8Array;
 }
 
@@ -71,6 +77,9 @@ export class CompleteUploadCommand {
     }
     // 实际字节可读且大小一致：用真实 bytes.length 复核，不信任客户端传入的声明大小
     // （仅校验客户端自报大小无法防绕过类别硬上限，须以真实字节为准）
+    // 说明：此处要求声明大小与实际字节精确相等属占位实现的防御约定（防谎报/绕过），
+    // 生产改流式/S3 multipart 时，真实字节长度可能因分块边界、重试合并与初始声明不一致，
+    // 应在收口阶段对真实落盘字节统一校验大小与摘要，避免强依赖此全量前置条件。
     if (input.bytes.length <= 0 || input.bytes.length !== currentVersion.declaredSize) {
       throw new CompleteUploadError('实际大小与声明大小不一致');
     }

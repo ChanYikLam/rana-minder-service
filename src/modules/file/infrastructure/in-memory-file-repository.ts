@@ -23,6 +23,35 @@ export class InMemoryFileRepository implements FileRepository {
     objectId: string;
     fieldKey: string;
   }): Promise<readonly FileRecord[]> {
+    return this.listByTargetSync(target);
+  }
+
+  /**
+   * 原子创建：同一同步执行段内完成"已有文件计数 + 保存"，消除并发窗口
+   * （Node 单线程下无 await 让出点，天然原子）。已满时返回 false 拒绝创建。
+   */
+  async createWithinTargetLimit(
+    target: {
+      objectType: string;
+      objectId: string;
+      fieldKey: string;
+    },
+    configuredPerField: number,
+    file: FileRecord,
+  ): Promise<boolean> {
+    if (this.listByTargetSync(target).length >= configuredPerField) {
+      return false;
+    }
+    this.files.set(file.fileId, file);
+    return true;
+  }
+
+  /** 同步计数（仅内部使用，配合原子创建避免 TOCTOU） */
+  private listByTargetSync(target: {
+    objectType: string;
+    objectId: string;
+    fieldKey: string;
+  }): FileRecord[] {
     const result: FileRecord[] = [];
     for (const file of this.files.values()) {
       const t = file.target;
