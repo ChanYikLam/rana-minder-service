@@ -58,9 +58,13 @@ import {
   MarkPresentationStatusCommand,
   ResumeKillSwitchCommand,
 } from '../application/commands';
-import type { KillSwitchRepository } from '../infrastructure';
+import type {
+  KillSwitchRepository,
+  EmailConfigStore,
+  NotificationPreferencesStore,
+} from '../infrastructure';
 import type { KillSwitchScope, KillSwitchStateModel } from '../domain';
-import { KILL_SWITCH_REPOSITORY } from '../tokens';
+import { EMAIL_CONFIG_STORE, KILL_SWITCH_REPOSITORY, PREFERENCES_STORE } from '../tokens';
 import { NotificationAuthGuard, notificationSessionFromRequest } from './notification-auth.guard';
 
 const NOTIFICATION_KINDS = [
@@ -74,6 +78,17 @@ const NOTIFICATION_KINDS = [
   'correction',
 ];
 
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  application: true,
+  interview: true,
+  invitation: true,
+  conclusion: true,
+  system: true,
+  member: true,
+  transition: true,
+  correction: true,
+};
+
 @UseGuards(NotificationAuthGuard)
 @Controller()
 export class NotificationController {
@@ -85,6 +100,10 @@ export class NotificationController {
     private readonly resumeKillSwitch: ResumeKillSwitchCommand,
     @Inject(KILL_SWITCH_REPOSITORY)
     private readonly killSwitches: KillSwitchRepository,
+    @Inject(EMAIL_CONFIG_STORE)
+    private readonly emailConfigs: EmailConfigStore,
+    @Inject(PREFERENCES_STORE)
+    private readonly preferences: NotificationPreferencesStore,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -176,39 +195,33 @@ export class NotificationController {
   // 通知偏好（本人，userId 取自会话）
   // -------------------------------------------------------------------------
 
-  /** GET /api/me/notifications/preferences */
+  /** GET /api/me/notifications/preferences（按会话 userId 真实落库读取） */
   @Get('/api/me/notifications/preferences')
-  async myPreferences(@Req() _request: Request): Promise<MeNotificationPreferencesResult> {
+  async myPreferences(@Req() request: Request): Promise<MeNotificationPreferencesResult> {
+    const { userId } = notificationSessionFromRequest(request);
+    const stored = await this.preferences.get(userId);
     const preferences: NotificationPreferences = {
-      application: true,
-      interview: true,
-      invitation: true,
-      conclusion: true,
-      system: true,
-      member: true,
-      transition: true,
-      correction: true,
+      ...DEFAULT_PREFERENCES,
+      ...(stored?.preferences ?? {}),
     };
-    return { preferences, savedAt: null };
+    return { preferences, savedAt: stored?.savedAt ?? null };
   }
 
-  /** POST /api/me/notifications/preferences */
+  /** POST /api/me/notifications/preferences（按会话 userId 合并并持久化） */
   @Post('/api/me/notifications/preferences')
   async updateMyPreferences(
-    @Req() _request: Request,
+    @Req() request: Request,
     @Body('preferences') preferences: Partial<NotificationPreferences>,
   ): Promise<MeNotificationPreferencesSaved> {
+    const { userId } = notificationSessionFromRequest(request);
+    const stored = await this.preferences.get(userId);
     const full: NotificationPreferences = {
-      application: preferences.application ?? true,
-      interview: preferences.interview ?? true,
-      invitation: preferences.invitation ?? true,
-      conclusion: preferences.conclusion ?? true,
-      system: preferences.system ?? true,
-      member: preferences.member ?? true,
-      transition: preferences.transition ?? true,
-      correction: preferences.correction ?? true,
+      ...DEFAULT_PREFERENCES,
+      ...(stored?.preferences ?? {}),
+      ...preferences,
     };
-    return { preferences: full, savedAt: new Date().toISOString() };
+    const { savedAt } = await this.preferences.set(userId, full);
+    return { preferences: full, savedAt };
   }
 
   // -------------------------------------------------------------------------
@@ -313,43 +326,71 @@ export class NotificationController {
   // 邮件配置
   // -------------------------------------------------------------------------
 
-  /** GET /api/org/:clubId/notifications/email-config */
+  /**
+   * GET /api/org/:clubId/notifications/email-config
+   * 开发桩：内存持久化读取（未接入真实 SMTP；生产替换为配置库 + 密钥环）。
+   */
   @Get('/api/org/:clubId/notifications/email-config')
-  async getEmailConfig(@Param('clubId') _clubId: string): Promise<EmailConfigView> {
+  async getEmailConfig(@Param('clubId') clubId: string): Promise<EmailConfigView> {
+    const config = await this.emailConfigs.findByClub(clubId);
     return {
-      smtpHost: '',
-      smtpPort: 587,
-      smtpUser: '',
-      fromName: '',
-      encryption: 'tls',
-      verified: false,
-      lastTestPassedAt: null,
-      keyRotatedAt: null,
+      smtpHost: config?.smtpHost ?? '',
+      smtpPort: config?.smtpPort ?? 587,
+      smtpUser: config?.smtpUser ?? '',
+      fromName: config?.fromName ?? '',
+      encryption: config?.encryption ?? 'tls',
+      verified: config?.verified ?? false,
+      lastTestPassedAt: config?.lastTestPassedAt ?? null,
+      keyRotatedAt: config?.keyRotatedAt ?? null,
     };
   }
 
-  /** POST /api/org/:clubId/notifications/email-config */
+  /**
+   * POST /api/org/:clubId/notifications/email-config
+   * 开发桩：持久化候选配置（verified 沿用已通过测试的状态，否则为 false）。
+   * 契约要求"未通过测试不可保存（422 IFC-ERR-006）"，待真实 SMTP 接入后
+   * 在测试端点真实验证时执行；当前 dev 阶段允许保存候选以便联调。
+   */
   @Post('/api/org/:clubId/notifications/email-config')
   async saveEmailConfig(
-    @Param('clubId') _clubId: string,
+    @Param('clubId') clubId: string,
     @Body() input: EmailConfigInput,
   ): Promise<EmailConfigSaved> {
-    return {
+    const existing = await this.emailConfigs.findByClub(clubId);
+    const savedAt = new Date().toISOString();
+    const saved = await this.emailConfigs.save({
+      clubId,
       smtpHost: input.smtpHost,
       smtpPort: input.smtpPort ?? 587,
       smtpUser: input.smtpUser,
       fromName: input.fromName,
       encryption: input.encryption ?? 'tls',
-      verified: false,
-      lastTestPassedAt: null,
-      keyRotatedAt: null,
-      savedAt: new Date().toISOString(),
-    };
+      // 主机/用户/端口不变时保留已验证状态；变化即视为未验证
+      verified: Boolean(
+        existing?.verified &&
+        existing.smtpHost === input.smtpHost &&
+        existing.smtpUser === input.smtpUser &&
+        existing.smtpPort === (input.smtpPort ?? 587),
+      ),
+      lastTestPassedAt: existing?.lastTestPassedAt ?? null,
+      keyRotatedAt: existing?.keyRotatedAt ?? null,
+      savedAt,
+    });
+    return { ...saved, savedAt };
   }
 
-  /** POST /api/org/:clubId/notifications/email-config/test */
+  /**
+   * POST /api/org/:clubId/notifications/email-config/test
+   * 开发桩：未接入真实 SMTP 发送，模拟发送成功并将配置标记为已验证
+   * （verified=true），供联调走通"测试通过后启用"流程。
+   */
   @Post('/api/org/:clubId/notifications/email-config/test')
-  async testEmailConfig(@Param('clubId') _clubId: string): Promise<EmailConfigTestResult> {
+  async testEmailConfig(@Param('clubId') clubId: string): Promise<EmailConfigTestResult> {
+    const existing = await this.emailConfigs.findByClub(clubId);
+    if (existing) {
+      const now = new Date().toISOString();
+      await this.emailConfigs.save({ ...existing, verified: true, lastTestPassedAt: now });
+    }
     return {
       status: 'sent',
       sentAt: new Date().toISOString(),
@@ -357,9 +398,17 @@ export class NotificationController {
     };
   }
 
-  /** POST /api/org/:clubId/notifications/email-config/rotate-key */
+  /**
+   * POST /api/org/:clubId/notifications/email-config/rotate-key
+   * 开发桩：轮换后需重新测试（verified=false），真实密钥轮换待接入密钥环。
+   */
   @Post('/api/org/:clubId/notifications/email-config/rotate-key')
-  async rotateKey(@Param('clubId') _clubId: string): Promise<EmailKeyRotated> {
+  async rotateKey(@Param('clubId') clubId: string): Promise<EmailKeyRotated> {
+    const existing = await this.emailConfigs.findByClub(clubId);
+    if (existing) {
+      const now = new Date().toISOString();
+      await this.emailConfigs.save({ ...existing, verified: false, keyRotatedAt: now });
+    }
     return {
       rotated: true,
       rotatedAt: new Date().toISOString(),

@@ -17,6 +17,7 @@ describe('NotificationQueryService（NTF-003）', () => {
   let deliver: DeliverInboxCommand;
   let query: NotificationQueryService;
   let seq = 0;
+  let deliverSeq = 0;
 
   const NOW = '2026-09-10T00:00:00.000Z';
 
@@ -36,11 +37,13 @@ describe('NotificationQueryService（NTF-003）', () => {
       summary?: string;
     } = {},
   ) {
+    const n = deliverSeq++;
     const input: CreateNotificationFactInput = {
-      logicalEventId: `logical-q-${seq}-${recipientId}-${opts.eventType ?? 'conclusion'}`,
-      sourceObjectId: `src-${seq}`,
+      // 每次投递使用唯一逻辑事件标识（NTF-003：同一逻辑事件＋收件人只允许一条）
+      logicalEventId: `logical-q-${seq}-${recipientId}-${opts.eventType ?? 'conclusion'}-${n}`,
+      sourceObjectId: `src-${seq}-${n}`,
       sourceObjectVersion: 1,
-      sourceCommandId: `cmd-${seq}`,
+      sourceCommandId: `cmd-${seq}-${n}`,
       eventType: opts.eventType ?? 'conclusion',
       eventTime: '2026-09-08T00:00:00.000Z',
       summary: opts.summary ?? `通知 ${seq}`,

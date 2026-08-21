@@ -16,12 +16,15 @@ import type {
 } from '../domain';
 import type {
   ChannelDeliveryAttemptRepository,
+  EmailConfigRecord,
+  EmailConfigStore,
   InboxListFilter,
   InboxAdapter,
   EmailAdapter,
   EmailSendInput,
   EmailSendResult,
   KillSwitchRepository,
+  NotificationPreferencesStore,
   NotificationRepository,
   PrivilegedAuditEntry,
   PrivilegedAuditWriter,
@@ -47,6 +50,19 @@ export class InMemoryNotificationRepository implements NotificationRepository {
   ): Promise<{ fact: NotificationFactModel; snapshots: readonly RecipientSnapshot[] }> {
     const now = new Date().toISOString();
     const factId = `fact-${now}-${Math.random().toString(36).slice(2, 10)}`;
+
+    // 原子去重（NTF-003、DATA-NTF-001）：去重键等价于唯一约束，
+    // 与"先查后插"的并发窗口不同，保存时即检测冲突并抛错，
+    // 由调用方决定回滚（IFC-TX-002、IFC-ERR-010 类语义）
+    for (const snapshot of snapshots) {
+      for (const existing of this.snapshotStore.values()) {
+        if (existing.dedupKey === snapshot.dedupKey) {
+          throw new Error(
+            `去重键冲突（同一逻辑事件＋收件人已存在）: dedupKey=${snapshot.dedupKey}`,
+          );
+        }
+      }
+    }
 
     const fact: NotificationFactModel = {
       factId,
@@ -379,5 +395,45 @@ export class InMemoryPrivilegedAuditWriter implements PrivilegedAuditWriter {
   /** 测试辅助：读取最近写入的审计记录 */
   list(): readonly PrivilegedAuditEntry[] {
     return [...this.auditStore.values()];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// EmailConfigStore（§14.4：内存持久化，未接入真实 SMTP 发送）
+// ---------------------------------------------------------------------------
+
+export class InMemoryEmailConfigStore implements EmailConfigStore {
+  private readonly store = new Map<string, EmailConfigRecord>();
+
+  async findByClub(clubId: string): Promise<EmailConfigRecord | null> {
+    return this.store.get(clubId) ?? null;
+  }
+
+  async save(config: EmailConfigRecord): Promise<EmailConfigRecord> {
+    this.store.set(config.clubId, config);
+    return config;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// NotificationPreferencesStore（§7：按用户真实落库）
+// ---------------------------------------------------------------------------
+
+export class InMemoryNotificationPreferencesStore implements NotificationPreferencesStore {
+  private readonly store = new Map<
+    string,
+    { preferences: Record<string, boolean>; savedAt: string }
+  >();
+
+  async get(
+    userId: string,
+  ): Promise<{ preferences: Record<string, boolean>; savedAt: string } | null> {
+    return this.store.get(userId) ?? null;
+  }
+
+  async set(userId: string, preferences: Record<string, boolean>): Promise<{ savedAt: string }> {
+    const savedAt = new Date().toISOString();
+    this.store.set(userId, { preferences: { ...preferences }, savedAt });
+    return { savedAt };
   }
 }

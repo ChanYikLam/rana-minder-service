@@ -2,7 +2,8 @@
  * 人工补发命令（NTF-007、SRS-SM-NTF-001 转换 10）。
  *
  * 人工重发只重发通知，不重执行原业务。
- * 新建关联原通知事实的邮件尝试，旧投递记录保留。
+ * 新建关联原通知事实的邮件尝试，旧投递记录保留；
+ * 尝试保存收件人快照引用与内容快照，失败可重试且不产生空邮件。
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -62,7 +63,7 @@ export class ManualResendCommand {
     const newAttempt: ChannelDeliveryAttemptModel = {
       attemptId: `manual-resend-${factId}-${Date.now()}`,
       factId,
-      snapshotId: '',
+      snapshotId: null,
       channel: 'EMAIL',
       channelMessageId: null,
       attemptNumber: 1,
@@ -70,6 +71,10 @@ export class ManualResendCommand {
       targetAddress: targetEmail,
       templateVersionId,
       senderIdentity: fact.scope.type === 'CLUB' ? fact.scope.clubId : 'platform',
+      // 内容快照（NTF-002 最少摘要）：重试时复用，避免空邮件
+      emailSubject: fact.summary.slice(0, 100),
+      emailBody: fact.summary,
+      firstFailedAt: null,
       responseCategory: null,
       sanitizedError: null,
       nextRetryAt: null,
@@ -83,8 +88,8 @@ export class ManualResendCommand {
     try {
       const result = await this.emailAdapter.send({
         to: targetEmail,
-        subject: fact.summary.slice(0, 100),
-        body: fact.summary,
+        subject: newAttempt.emailSubject ?? fact.summary.slice(0, 100),
+        body: newAttempt.emailBody ?? fact.summary,
         senderIdentity: newAttempt.senderIdentity ?? '',
         templateVersionId,
       });
@@ -99,6 +104,7 @@ export class ManualResendCommand {
     } catch (error) {
       await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
         status: 'FAILED_RETRY',
+        firstFailedAt: now,
         sanitizedError: (error as Error).message,
       });
     }

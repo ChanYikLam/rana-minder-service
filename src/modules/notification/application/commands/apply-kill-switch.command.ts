@@ -98,6 +98,9 @@ export class ApplyKillSwitchCommand {
         PAUSE_BATCH_SIZE,
       );
       if (facts.length === 0) break;
+      // 进度保护：整批无任何事实满足转换时终止，防止不可转换事实
+      // 永久停留在查询集导致死循环（IFC-NTF-001 批次语义）
+      let progressed = false;
       for (const fact of facts) {
         const transition = this.stateMachine.evaluate({
           type: 'KILL_INBOX',
@@ -110,7 +113,9 @@ export class ApplyKillSwitchCommand {
           fact.version,
         );
         pausedFactCount += 1;
+        progressed = true;
       }
+      if (!progressed) break;
     }
 
     const switchId = `ks-${now}-${input.scope.toLowerCase()}-${input.clubId ?? 'platform'}`;

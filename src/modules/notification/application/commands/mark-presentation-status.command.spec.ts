@@ -112,6 +112,7 @@ describe('MarkAllReadCommand（NTF-003：全部标记已读）', () => {
   let deliver: DeliverInboxCommand;
   let allRead: MarkAllReadCommand;
   let seq = 0;
+  let deliverSeq = 0;
 
   beforeEach(() => {
     seq += 1;
@@ -122,11 +123,13 @@ describe('MarkAllReadCommand（NTF-003：全部标记已读）', () => {
   });
 
   async function deliverToUser(recipientId: string) {
+    const n = deliverSeq++;
     const input: CreateNotificationFactInput = {
-      logicalEventId: `logical-all-${seq}-${recipientId}`,
-      sourceObjectId: `src-${seq}`,
+      // 每次投递唯一逻辑事件（NTF-003：同一逻辑事件＋收件人只允许一条）
+      logicalEventId: `logical-all-${seq}-${recipientId}-${n}`,
+      sourceObjectId: `src-${seq}-${n}`,
       sourceObjectVersion: 1,
-      sourceCommandId: `cmd-${seq}`,
+      sourceCommandId: `cmd-${seq}-${n}`,
       eventType: 'interview',
       eventTime: '2026-09-08T00:00:00.000Z',
       summary: `面试通知 ${seq}`,
@@ -139,7 +142,7 @@ describe('MarkAllReadCommand（NTF-003：全部标记已读）', () => {
       recipientId,
       reason: '本人',
       scope: { type: 'PLATFORM', clubId: null },
-      dedupKey: `logical-all-${seq}-${recipientId}`,
+      dedupKey: `logical-all-${seq}-${recipientId}-${n}`,
       createdAt: '',
     };
     const saved = await repo.saveFactWithSnapshots(input, [snapshot]);

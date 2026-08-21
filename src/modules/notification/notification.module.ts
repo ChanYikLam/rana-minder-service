@@ -48,14 +48,18 @@ import {
   InMemoryTemplateSnapshotService,
   InMemoryKillSwitchRepository,
   InMemoryPrivilegedAuditWriter,
+  InMemoryEmailConfigStore,
+  InMemoryNotificationPreferencesStore,
 } from './infrastructure';
 import {
   CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
   EMAIL_ADAPTER,
+  EMAIL_CONFIG_STORE,
   INBOX_ADAPTER,
   KILL_SWITCH_REPOSITORY,
   NOTIFICATION_AUTH_SESSION_PROVIDER,
   NOTIFICATION_REPOSITORY,
+  PREFERENCES_STORE,
   PRIVILEGED_AUDIT_WRITER,
   RECIPIENT_RESOLVER,
   TEMPLATE_SNAPSHOT_SERVICE,
@@ -110,13 +114,22 @@ import {
       provide: PRIVILEGED_AUDIT_WRITER,
       useClass: InMemoryPrivilegedAuditWriter,
     },
+    // 邮件配置与通知偏好（内存持久化；真实 SMTP/偏好库接入后替换实现）
+    {
+      provide: EMAIL_CONFIG_STORE,
+      useClass: InMemoryEmailConfigStore,
+    },
+    {
+      provide: PREFERENCES_STORE,
+      useClass: InMemoryNotificationPreferencesStore,
+    },
     // 领域服务（端口以字符串 Token 注册，接口在运行时被擦除不能作 DI Token）
     {
       provide: RECIPIENT_RESOLVER,
       useClass: DefaultRecipientSnapshotResolver,
     },
-    // 认证会话（fail-closed：Casdoor 会话接入前一律拒绝；开发可临时绑定
-    // HeaderNotificationAuthSessionProvider，仅限可信边界内使用）
+    // 认证会话（fail-closed：Casdoor 会话接入前一律拒绝 401；
+    // 开发联调可在测试/独立配置中绑定可信边界的会话实现）
     {
       provide: NOTIFICATION_AUTH_SESSION_PROVIDER,
       useClass: RejectAllNotificationAuthSessionProvider,

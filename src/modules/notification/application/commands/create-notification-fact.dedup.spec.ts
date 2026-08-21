@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 
 import { InMemoryNotificationRepository, InMemoryKillSwitchRepository } from '../../infrastructure';
 import { buildDedupKey } from '../../domain';
+import type { CreateNotificationFactInput, RecipientSnapshot } from '../../domain';
 import { CreateNotificationFactCommand } from './create-notification-fact.command';
-import type { CreateNotificationFactInput } from '../../domain';
 
 describe('CreateNotificationFactCommand 去重（NTF-003、评审 #5）', () => {
   let repo: InMemoryNotificationRepository;
@@ -79,5 +79,36 @@ describe('CreateNotificationFactCommand 去重（NTF-003、评审 #5）', () => 
     await command.execute(input('logical-a'));
     const other = await command.execute(input('logical-b'));
     assert.equal(other.deduplicated, false);
+  });
+
+  it('持久层原子去重：绕过命令直接保存重复去重键 → 抛错（评审 #4 唯一约束）', async () => {
+    // 第一次直接落库
+    const firstInput = input('logical-atomic');
+    const firstSnapshot: RecipientSnapshot = {
+      snapshotId: '',
+      factId: '',
+      recipientId: 'stu-1',
+      reason: '本人',
+      scope: { type: 'CLUB', clubId: 'club-1' },
+      dedupKey: buildDedupKey('logical-atomic', 'stu-1'),
+      createdAt: '',
+    };
+    await repo.saveFactWithSnapshots(firstInput, [firstSnapshot]);
+
+    // 模拟并发窗口：跳过"先查"，直接再次保存同一去重键 → 唯一约束冲突
+    const dupInput = input('logical-atomic');
+    const dupSnapshot: RecipientSnapshot = {
+      snapshotId: '',
+      factId: '',
+      recipientId: 'stu-1',
+      reason: '本人',
+      scope: { type: 'CLUB', clubId: 'club-1' },
+      dedupKey: buildDedupKey('logical-atomic', 'stu-1'),
+      createdAt: '',
+    };
+    await assert.rejects(repo.saveFactWithSnapshots(dupInput, [dupSnapshot]), /去重键冲突/);
+
+    const pending = await repo.findFactsPendingDelivery(100);
+    assert.equal(pending.length, 1, '冲突写入必须回滚，不产生重复事实');
   });
 });

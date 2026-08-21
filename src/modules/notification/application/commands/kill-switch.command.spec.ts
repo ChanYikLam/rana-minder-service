@@ -317,6 +317,63 @@ describe('ApplyKillSwitchCommand（SRS-FAIL-009：紧急关闭）', () => {
     assert.ok(fact, '关闭期间通知事实仍必须保存');
     assert.equal(fact.status, 'CREATED_PAUSED_DELIVERY');
   });
+
+  it('批量暂停无进展时终止循环，不死循环（评审 #5）', async () => {
+    // 模拟查询集里出现不满足 KILL_INBOX 转换的事实（如已投递），
+    // 且该事实永远无法移出查询集；无进度保护会死循环
+    const stuckRepo = new InMemoryNotificationRepository();
+    const input: CreateNotificationFactInput = {
+      logicalEventId: `logical-stuck-${seq}`,
+      sourceObjectId: `src-stuck-${seq}`,
+      sourceObjectVersion: 1,
+      sourceCommandId: `cmd-stuck-${seq}`,
+      eventType: 'conclusion',
+      eventTime: '2026-09-08T00:00:00.000Z',
+      summary: '无法转换的事实',
+      targetObjectRef: null,
+      scope: { type: 'CLUB', clubId: 'club-1' },
+    };
+    const snapshot = {
+      snapshotId: '',
+      factId: '',
+      recipientId: 'stu-1',
+      reason: '本人',
+      scope: { type: 'CLUB' as const, clubId: 'club-1' },
+      dedupKey: `logical-stuck-${seq}`,
+      createdAt: '',
+    };
+    const saved = await stuckRepo.saveFactWithSnapshots(input, [snapshot]);
+    // 把该事实直接置为已投递（KILL_INBOX 拒绝），并让查询恒返回它
+    await stuckRepo.updateFactStatus(saved.fact.factId, 'DELIVERED', saved.fact.version);
+    (
+      stuckRepo as unknown as {
+        findFactsPendingDeliveryByKillScope: () => Promise<unknown>;
+      }
+    ).findFactsPendingDeliveryByKillScope = async () => {
+      const fact = await stuckRepo.findFactById(saved.fact.factId);
+      return fact ? [fact] : [];
+    };
+
+    const stuckCommand = new ApplyKillSwitchCommand(
+      stuckRepo,
+      killSwitches,
+      new InMemoryPrivilegedAuditWriter(),
+    );
+    const result = await stuckCommand.execute(
+      {
+        scope: 'CLUB',
+        clubId: 'club-1',
+        reason: '维护',
+        operatorId: 'admin-1',
+        operatorName: '超管',
+        expectedRecoveryAt: FUTURE,
+        confirmed: true,
+      },
+      NOW,
+    );
+    // 能正常返回即证明未死循环；不满足转换因此暂停数为 0
+    assert.equal(result.pausedFactCount, 0);
+  });
 });
 
 describe('ResumeKillSwitchCommand（IFC-NTF-001：恢复补投）', () => {
@@ -574,5 +631,61 @@ describe('ResumeKillSwitchCommand（IFC-NTF-001：恢复补投）', () => {
     assert.equal(state.active, true);
     // 查询服务可读出 expectedRecoveryAt，供超管提醒使用
     assert.equal(state.expectedRecoveryAt, FUTURE);
+  });
+
+  it('批量补投无进展时终止循环，不死循环（评审 #5 恢复侧）', async () => {
+    // 关闭 club-1；查询集里出现不满足 RESUME_INBOX 的事实（如已投递），
+    // 且永远无法移出查询集；无进度保护会死循环
+    await apply.execute(
+      {
+        scope: 'CLUB',
+        clubId: 'club-1',
+        reason: '维护',
+        operatorId: 'admin-1',
+        operatorName: '超管',
+        expectedRecoveryAt: FUTURE,
+        confirmed: true,
+      },
+      NOW,
+    );
+    const stuckRepo = new InMemoryNotificationRepository();
+    const input: CreateNotificationFactInput = {
+      logicalEventId: `logical-stuck-resume-${seq}`,
+      sourceObjectId: `src-stuck-r-${seq}`,
+      sourceObjectVersion: 1,
+      sourceCommandId: `cmd-stuck-r-${seq}`,
+      eventType: 'conclusion',
+      eventTime: '2026-09-08T00:00:00.000Z',
+      summary: '恢复期无法转换的事实',
+      targetObjectRef: null,
+      scope: { type: 'CLUB', clubId: 'club-1' },
+    };
+    const snapshot = {
+      snapshotId: '',
+      factId: '',
+      recipientId: 'stu-1',
+      reason: '本人',
+      scope: { type: 'CLUB' as const, clubId: 'club-1' },
+      dedupKey: `logical-stuck-resume-${seq}`,
+      createdAt: '',
+    };
+    const saved = await stuckRepo.saveFactWithSnapshots(input, [snapshot]);
+    await stuckRepo.updateFactStatus(saved.fact.factId, 'DELIVERED', saved.fact.version);
+    (
+      stuckRepo as unknown as {
+        findFactsPausedByKillScope: () => Promise<unknown>;
+      }
+    ).findFactsPausedByKillScope = async () => {
+      const fact = await stuckRepo.findFactById(saved.fact.factId);
+      return fact ? [fact] : [];
+    };
+
+    const stuckResume = new ResumeKillSwitchCommand(stuckRepo, killSwitches, inbox, audit);
+    const result = await stuckResume.execute(
+      { scope: 'CLUB', clubId: 'club-1', operatorId: 'admin-1', operatorName: '超管' },
+      '2026-09-10T02:00:00.000Z',
+    );
+    // 能正常返回即证明未死循环；不满足转换因此补投数为 0
+    assert.equal(result.resumedFactCount, 0);
   });
 });

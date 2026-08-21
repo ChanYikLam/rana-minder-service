@@ -24,3 +24,7 @@ export const PRIVILEGED_AUDIT_WRITER = 'PrivilegedAuditWriter';
 export const RECIPIENT_RESOLVER = 'RecipientResolver';
 /** 通知认证会话解析端口（interfaces/nest） */
 export const NOTIFICATION_AUTH_SESSION_PROVIDER = 'NotificationAuthSessionProvider';
+/** 邮件配置存储端口（§14.4，开发阶段内存实现） */
+export const EMAIL_CONFIG_STORE = 'EmailConfigStore';
+/** 通知偏好存储端口（§7，按用户真实落库） */
+export const PREFERENCES_STORE = 'NotificationPreferencesStore';

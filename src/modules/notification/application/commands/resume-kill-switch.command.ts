@@ -84,6 +84,9 @@ export class ResumeKillSwitchCommand {
       );
       if (facts.length === 0) break;
 
+      // 进度保护：整批无任何事实满足转换时终止，防止不可转换事实
+      // 永久停留在查询集导致死循环（IFC-NTF-001 批次语义）
+      let progressed = false;
       for (const fact of facts) {
         // 状态机：暂停投递 → 待投递 → 已投递
         const resume = this.stateMachine.evaluate({
@@ -105,7 +108,9 @@ export class ResumeKillSwitchCommand {
 
         await this.repository.updateFactStatus(fact.factId, 'DELIVERED', fact.version);
         resumedFactCount += 1;
+        progressed = true;
       }
+      if (!progressed) break;
     }
 
     // 特权审计（恢复也属特权操作）

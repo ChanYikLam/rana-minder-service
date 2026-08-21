@@ -263,3 +263,34 @@ export interface PrivilegedAuditEntry {
   readonly traceId: string | null;
   readonly occurredAt: string;
 }
+
+/**
+ * 邮件配置存储端口（§14.4）。
+ * 开发阶段为内存实现（未接入真实 SMTP 发送）；生产替换为持久化配置。
+ */
+export interface EmailConfigRecord {
+  readonly clubId: string;
+  readonly smtpHost: string;
+  readonly smtpPort: number;
+  readonly smtpUser: string;
+  readonly fromName: string;
+  readonly encryption: 'ssl' | 'tls' | 'none';
+  readonly verified: boolean;
+  readonly lastTestPassedAt: string | null;
+  readonly keyRotatedAt: string | null;
+  readonly savedAt: string;
+}
+
+export interface EmailConfigStore {
+  findByClub(clubId: string): Promise<EmailConfigRecord | null>;
+  save(config: EmailConfigRecord): Promise<EmailConfigRecord>;
+}
+
+/**
+ * 通知偏好存储端口（§7：按用户真实落库）。
+ */
+export interface NotificationPreferencesStore {
+  /** 读取用户偏好；未落库返回 null */
+  get(userId: string): Promise<{ preferences: Record<string, boolean>; savedAt: string } | null>;
+  set(userId: string, preferences: Record<string, boolean>): Promise<{ savedAt: string }>;
+}

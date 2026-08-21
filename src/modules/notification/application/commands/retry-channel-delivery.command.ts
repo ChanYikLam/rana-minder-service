@@ -4,11 +4,15 @@
  * 持续重试失败投递；重试只重发通知，不重执行原业务。
  * 按尝试标识直接定位待重试尝试（不依赖队首顺序），
  * 只有处于失败重试状态的尝试才允许重试。
+ *
+ * 停止重试的 24 小时窗口从首次失败时刻（firstFailedAt）起算（NTF-007）；
+ * 重发内容复用创建时冻结的邮件标题/正文快照（NTF-002 最少摘要），
+ * 不产生空邮件。
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ChannelDeliveryAttemptRepository, EmailAdapter } from '../../infrastructure';
-import { shouldStopEmailRetry } from '../../domain';
+import { computeNextRetryAt, shouldStopEmailRetry } from '../../domain';
 import { CHANNEL_DELIVERY_ATTEMPT_REPOSITORY, EMAIL_ADAPTER } from '../../tokens';
 
 @Injectable()
@@ -40,11 +44,11 @@ export class RetryChannelDeliveryCommand {
       return;
     }
 
-    // 判断是否应停止重试
+    // 判断是否应停止重试（窗口从首次失败时刻起算，NTF-007）
     if (
       shouldStopEmailRetry({
         responseCategory: attempt.responseCategory ?? 'TEMPORARY_FAILURE',
-        firstFailureAt: attempt.createdAt,
+        firstFailureAt: attempt.firstFailedAt ?? attempt.createdAt,
         now: new Date().toISOString(),
       })
     ) {
@@ -57,12 +61,12 @@ export class RetryChannelDeliveryCommand {
       return;
     }
 
-    // 重发通知（不重执行原业务）
+    // 重发通知（不重执行原业务）；内容复用创建时冻结的快照，避免空邮件（NTF-002）
     try {
       const result = await this.emailAdapter.send({
         to: attempt.targetAddress ?? '',
-        subject: '重发通知',
-        body: '',
+        subject: attempt.emailSubject ?? '重发通知',
+        body: attempt.emailBody ?? '',
         senderIdentity: attempt.senderIdentity ?? '',
         templateVersionId: attempt.templateVersionId,
       });
@@ -76,26 +80,26 @@ export class RetryChannelDeliveryCommand {
         this.logger.log(`投递重试成功: attemptId=${attemptId}`);
       } else {
         const nextNumber = attempt.attemptNumber + 1;
+        const now = new Date().toISOString();
         await this.attemptRepository.updateAttempt(attemptId, {
           attemptNumber: nextNumber,
           status: 'FAILED_RETRY',
+          firstFailedAt: attempt.firstFailedAt ?? now,
           sanitizedError: result.sanitizedError,
-          nextRetryAt: this.calculateNextRetry(nextNumber),
+          // 刚失败的尝试序号 = attempt.attemptNumber，退避 2^N 递增
+          nextRetryAt: computeNextRetryAt(attempt.attemptNumber, now),
         });
       }
     } catch (error) {
       const nextNumber = attempt.attemptNumber + 1;
+      const now = new Date().toISOString();
       await this.attemptRepository.updateAttempt(attemptId, {
         attemptNumber: nextNumber,
         status: 'FAILED_RETRY',
+        firstFailedAt: attempt.firstFailedAt ?? now,
         sanitizedError: (error as Error).message,
-        nextRetryAt: this.calculateNextRetry(nextNumber),
+        nextRetryAt: computeNextRetryAt(attempt.attemptNumber, now),
       });
     }
-  }
-
-  private calculateNextRetry(attemptNumber: number): string {
-    const minutes = Math.min(2 ** attemptNumber, 60 * 6);
-    return new Date(Date.now() + minutes * 60 * 1000).toISOString();
   }
 }
