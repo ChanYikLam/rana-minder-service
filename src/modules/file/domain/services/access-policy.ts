@@ -109,11 +109,13 @@ export class AccessPolicy {
     }
     // 4) 本人历史访问：仅当 主体确为上传者 且 对应历史提交仍可见 时放行；
     //    权限判定下沉到领域规则，主体验证在策略内独立完成，防止调用方误传越权
+    //    （设计豁免：本人仍可查看/下载自己仍可见的历史提交，不受角色失权影响；
+    //     若历史提交已不可见则拒绝）
     if (principalIsUploader) {
       if (context.principalId !== request.uploaderId || !request.uploaderHistoryVisible) {
         return { allowed: false, errorCode: 'IFC-ERR-003' };
       }
-      return this.checkField(request, action);
+      return this.checkFieldAccess(request, action);
     }
     // 5) 非本人：仅本人材料 → 拒绝；否则要求有权业务角色
     if (request.ownerOnly) {
@@ -124,11 +126,11 @@ export class AccessPolicy {
     if (context.roles.length === 0) {
       return { allowed: false, errorCode: 'IFC-ERR-003' };
     }
-    return this.checkField(request, action);
+    return this.checkFieldAccess(request, action);
   }
 
   /** 字段级限制（可进一步限制预览/下载但不能扩大权限） */
-  private checkField(request: FileAccessRequest, action: FileAccessAction): AccessDecision {
+  checkFieldAccess(request: FileAccessRequest, action: FileAccessAction): AccessDecision {
     if (action === FileAccessAction.PREVIEW) {
       return request.fieldRestrictions.previewable
         ? { allowed: true }

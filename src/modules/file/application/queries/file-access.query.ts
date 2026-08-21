@@ -75,6 +75,16 @@ export class FileAccessQuery {
         ? FileAccessAction.DOWNLOAD
         : input.action;
 
+    // 降级后须按最终动作复核字段权限，防止绕过：
+    // 例如字段配置 previewable=true、downloadable=false，请求非安全格式预览
+    // 降级为下载时，若不复核则会签发下载地址，绕过下载限制（权限放大）。
+    if (effectiveAction !== input.action) {
+      const field = this.policy.checkFieldAccess(input.request, effectiveAction);
+      if (!field.allowed) {
+        throw new FileAccessDeniedError(field.errorCode ?? 'IFC-ERR-011', '附件访问被拒绝');
+      }
+    }
+
     // 水印（敏感附件默认加：查看者 + 时间）
     const now = new Date().toISOString();
     const watermark = this.watermark.decide(

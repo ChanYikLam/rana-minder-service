@@ -35,13 +35,17 @@ export interface SignedUrlProvider {
 @Injectable()
 export class DefaultSignedUrlProvider implements SignedUrlProvider {
   static readonly DEFAULT_TTL_MS = 5 * 60_000;
+  /** 短时地址最大有效期（避免误传大值破坏“短时地址”承诺） */
+  static readonly MAX_TTL_MS = 30 * 60_000;
 
   async issue(
     fileId: string,
     action: FileAccessAction,
     opts?: { ttlMs?: number; watermarkContent?: string },
   ): Promise<ShortLivedAccess> {
-    const ttl = opts?.ttlMs ?? DefaultSignedUrlProvider.DEFAULT_TTL_MS;
+    // TTL 做上限约束：默认 5 分钟，超过最大有效期则截断为最大有效期
+    const requested = opts?.ttlMs ?? DefaultSignedUrlProvider.DEFAULT_TTL_MS;
+    const ttl = Math.min(Math.max(0, requested), DefaultSignedUrlProvider.MAX_TTL_MS);
     return {
       token: randomUUID(),
       fileId,

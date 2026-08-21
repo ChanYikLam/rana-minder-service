@@ -79,6 +79,24 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
     assert.equal(issued.access.action, FileAccessAction.DOWNLOAD);
   });
 
+  it('短时地址 TTL 有上限：误传超大 ttlMs 被截断到最大有效期', async () => {
+    const { query } = makeQuery();
+    const issued = await query.issueAccess({
+      fileId: 'f1',
+      context: ctx(),
+      request: req({ uploaderHistoryVisible: true }),
+      principalIsUploader: true,
+      action: FileAccessAction.DOWNLOAD,
+      safeForPreview: false,
+      ttlMs: 24 * 60 * 60_000, // 1 天，远超“短时地址”承诺
+    });
+    const actual = Date.parse(issued.access.expiresAt) - Date.now();
+    assert.ok(
+      actual <= DefaultSignedUrlProvider.MAX_TTL_MS,
+      `实际有效期 ${actual}ms 不得超过 ${DefaultSignedUrlProvider.MAX_TTL_MS}ms`,
+    );
+  });
+
   it('敏感附件：水印内容含查看者与时间', async () => {
     const { query } = makeQuery();
     const issued = await query.issueAccess({
@@ -104,6 +122,44 @@ describe('FileAccessQuery（IFC-FIL-005 短时地址/水印/审计）', () => {
       safeForPreview: false, // 视频等非安全格式
     });
     assert.equal(issued.access.action, FileAccessAction.DOWNLOAD);
+  });
+
+  it('非安全格式请求预览但不可下载 → 降级复核拒绝，防止权限放大绕过', async () => {
+    const { query } = makeQuery();
+    // 字段配置 previewable=true、downloadable=false：可预览但禁止下载
+    await assert.rejects(
+      query.issueAccess({
+        fileId: 'f1',
+        context: ctx(),
+        request: req({
+          uploaderHistoryVisible: true,
+          fieldRestrictions: { previewable: true, downloadable: false },
+        }),
+        principalIsUploader: true,
+        action: FileAccessAction.PREVIEW,
+        safeForPreview: false, // 视频等非安全格式，会降级为下载
+      }),
+      /IFC-ERR-011/,
+      '降级为下载后仍受 downloadable=false 限制，不得签发下载地址',
+    );
+  });
+
+  it('非安全格式请求预览且不可下载 → 非本人业务角色同样被复核拒绝', async () => {
+    const { query } = makeQuery();
+    await assert.rejects(
+      query.issueAccess({
+        fileId: 'f1',
+        context: ctx({ principalId: 'u2' }),
+        request: req({
+          uploaderId: 'u1',
+          fieldRestrictions: { previewable: true, downloadable: false },
+        }),
+        principalIsUploader: false,
+        action: FileAccessAction.PREVIEW,
+        safeForPreview: false,
+      }),
+      /IFC-ERR-011/,
+    );
   });
 
   it('下载及敏感附件预览记录审计；普通预览不记录', async () => {
