@@ -198,11 +198,15 @@ export class NotificationStateMachine {
   /**
    * 转换 5a：收件人标记已读（幂等：已读状态重复标记不拒绝）。
    * 已投递 → 已读
+   * 仅允许从 UNREAD/READ 迁入，已隐藏/已处理不可逆回为已读。
    */
   private evaluateMarkRead(command: StateTransitionCommand): TransitionResult {
     if (command.currentStatus !== 'DELIVERED') {
       return this.reject('通知尚未投递，不能标记已读');
     }
+    const pres = command.currentPresentationStatus;
+    if (pres === 'HIDDEN') return this.reject('已隐藏的站内信不可标记为已读');
+    if (pres === 'PROCESSED') return this.reject('已处理的站内信不可标记为已读');
     return {
       allowed: true,
       newStatus: 'DELIVERED',
@@ -228,11 +232,14 @@ export class NotificationStateMachine {
   /**
    * 转换 5c：收件人标记已处理（幂等：已处理状态重复标记不拒绝）。
    * 已投递 → 已处理
+   * 已隐藏的站内信不可再标记为已处理。
    */
   private evaluateMarkProcessed(command: StateTransitionCommand): TransitionResult {
     if (command.currentStatus !== 'DELIVERED') {
       return this.reject('通知尚未投递，不能标记已处理');
     }
+    const pres = command.currentPresentationStatus;
+    if (pres === 'HIDDEN') return this.reject('已隐藏的站内信不可标记为已处理');
     return {
       allowed: true,
       newStatus: 'DELIVERED',
@@ -244,7 +251,7 @@ export class NotificationStateMachine {
 
   /**
    * 转换 5d：收件人隐藏。
-   * 已投递 → 隐藏
+   * 已投递 → 隐藏（隐藏是用户终态动作，从任意呈现状态均可隐藏）
    */
   private evaluateMarkHidden(command: StateTransitionCommand): TransitionResult {
     if (command.currentStatus !== 'DELIVERED') {

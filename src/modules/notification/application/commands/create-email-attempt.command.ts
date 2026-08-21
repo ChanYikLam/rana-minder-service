@@ -95,6 +95,7 @@ export class CreateEmailAttemptCommand {
     await this.attemptRepository.saveAttempt(attempt);
 
     // 发送邮件
+    let latestAttempt: ChannelDeliveryAttemptModel = attempt;
     try {
       const result = await this.emailAdapter.send({
         to: input.recipientEmail,
@@ -105,19 +106,19 @@ export class CreateEmailAttemptCommand {
       });
 
       if (result.status === 'SENT') {
-        await this.attemptRepository.updateAttempt(attempt.attemptId, {
+        latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
           status: 'DELIVERED',
           channelMessageId: result.channelMessageId,
           completedAt: new Date().toISOString(),
         });
       } else if (result.status === 'TEMPORARY_FAILURE') {
-        await this.attemptRepository.updateAttempt(attempt.attemptId, {
+        latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
           status: 'FAILED_RETRY',
           sanitizedError: result.sanitizedError,
           nextRetryAt: this.calculateNextRetry(1),
         });
       } else if (result.status === 'BOUNCE') {
-        await this.attemptRepository.updateAttempt(attempt.attemptId, {
+        latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
           status: 'PERMANENT_FAILURE',
           responseCategory: 'BOUNCE',
           sanitizedError: result.sanitizedError,
@@ -125,7 +126,7 @@ export class CreateEmailAttemptCommand {
         });
       } else {
         // UNCERTAIN：等待回读
-        await this.attemptRepository.updateAttempt(attempt.attemptId, {
+        latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
           status: 'FAILED_RETRY',
           responseCategory: 'UNCERTAIN',
           sanitizedError: '结果不确定，等待回读',
@@ -134,14 +135,14 @@ export class CreateEmailAttemptCommand {
       }
     } catch (error) {
       // 临时失败：进入重试（NTF-007）
-      await this.attemptRepository.updateAttempt(attempt.attemptId, {
+      latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
         status: 'FAILED_RETRY',
         sanitizedError: (error as Error).message,
         nextRetryAt: this.calculateNextRetry(1),
       });
     }
 
-    return attempt;
+    return latestAttempt;
   }
 
   private calculateNextRetry(attemptNumber: number): string {

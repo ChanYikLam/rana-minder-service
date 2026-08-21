@@ -78,6 +78,7 @@ import {
   exports: [
     CreateNotificationFactCommand,
     DeliverInboxCommand,
+    RetryChannelDeliveryCommand,
     CreateEmailAttemptCommand,
     NotificationQueryService,
   ],

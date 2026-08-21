@@ -1,6 +1,10 @@
-import { Injectable, Logger, Inject, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { TaskHandler, TaskRecord } from '../../contracts';
 import { TaskType } from '../../contracts';
+import {
+  DeliverInboxCommand,
+  RetryChannelDeliveryCommand,
+} from '../../../../modules/notification/application/commands';
 
 /**
  * 通知投递后台任务处理器。
@@ -16,13 +20,9 @@ export class NotificationDeliveryHandler implements TaskHandler {
 
   constructor(
     @Optional()
-    @Inject('DeliverInboxCommand')
-    private readonly deliverInbox?: {
-      execute: (factId: string, version: number) => Promise<{ presentationCount: number }>;
-    },
+    private readonly deliverInbox?: DeliverInboxCommand,
     @Optional()
-    @Inject('RetryChannelDeliveryCommand')
-    private readonly retryChannel?: { execute: (attemptId: string) => Promise<void> },
+    private readonly retryChannel?: RetryChannelDeliveryCommand,
   ) {}
 
   async handle(task: TaskRecord): Promise<void> {
