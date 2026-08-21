@@ -1,7 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { BucketRole } from '../../domain/models/file-model';
-import type { DeleteManifest, DeleteManifestItem, FileRecord } from '../../domain/models/file-model';
+import type {
+  DeleteManifest,
+  DeleteManifestItem,
+  FileRecord,
+} from '../../domain/models/file-model';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';
 

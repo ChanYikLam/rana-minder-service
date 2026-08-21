@@ -42,10 +42,7 @@ export class RemoveDraftFileCommand {
       throw new RemoveDraftFileError('IFC-ERR-006', '文件不存在');
     }
     if (file.state === FileState.BOUND_TO_SUBMISSION && !input.formalDeleteTakeover) {
-      throw new RemoveDraftFileError(
-        'IFC-ERR-006',
-        '已正式提交的附件不允许普通用户物理删除',
-      );
+      throw new RemoveDraftFileError('IFC-ERR-006', '已正式提交的附件不允许普通用户物理删除');
     }
     // 草稿不可移除（业务未开放该草稿移除）时拒绝；正式删除流程接管可覆盖
     if (!input.removable && !input.formalDeleteTakeover) {

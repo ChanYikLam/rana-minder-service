@@ -2,7 +2,13 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { BucketRole } from '../../domain/models/file-model';
-import type { CleanupQueueItem, FileRecord, ObjectLocation, UploadSession, FileVersion } from '../../domain/models/file-model';
+import type {
+  CleanupQueueItem,
+  FileRecord,
+  ObjectLocation,
+  UploadSession,
+  FileVersion,
+} from '../../domain/models/file-model';
 import { UploadPolicy } from '../../domain/services/upload-policy';
 import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
 import type { FileRepository } from '../../infrastructure/file-repository';

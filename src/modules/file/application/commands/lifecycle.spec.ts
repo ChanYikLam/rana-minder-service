@@ -17,7 +17,9 @@ import { UploadPolicy } from '../../domain/services/upload-policy';
 import { FileTypeGuard } from '../../domain/services/file-type-guard';
 
 const pngBytes = (): Uint8Array =>
-  new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]);
+  new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  ]);
 
 /** 构造一个已可用（AVAILABLE）的文件 */
 const makeAvailableFile = async (repo: InMemoryFileRepository, store: InMemoryObjectStore) => {
@@ -25,11 +27,7 @@ const makeAvailableFile = async (repo: InMemoryFileRepository, store: InMemoryOb
   const sm = new FileStateMachine();
   const initiate = new InitiateUploadCommand(repo, policy, sm);
   const complete = new CompleteUploadCommand(repo, store);
-  const ask = new AskFileCheckCommand(
-    repo,
-    store,
-    new ApplicationFileCheck(new FileTypeGuard()),
-  );
+  const ask = new AskFileCheckCommand(repo, store, new ApplicationFileCheck(new FileTypeGuard()));
   const promote = new PromoteFileCommand(repo, store);
   const input = {
     uploaderId: 'u1',
@@ -92,7 +90,11 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     const rig = makeRig();
     const file = await makeAvailableFile(rig.repo, rig.store);
     await assert.rejects(
-      rig.replace.execute({ fileId: file.fileId, editable: false, declaredSizeBytes: pngBytes().length }),
+      rig.replace.execute({
+        fileId: file.fileId,
+        editable: false,
+        declaredSizeBytes: pngBytes().length,
+      }),
       /已提交表单已锁定/,
     );
   });
@@ -103,7 +105,11 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
     const quarantined = { ...file, state: FileState.QUARANTINED_FAILED };
     await rig.repo.save(quarantined);
     await assert.rejects(
-      rig.replace.execute({ fileId: file.fileId, editable: true, declaredSizeBytes: pngBytes().length }),
+      rig.replace.execute({
+        fileId: file.fileId,
+        editable: true,
+        declaredSizeBytes: pngBytes().length,
+      }),
       /不可替换/,
     );
   });
