@@ -45,29 +45,26 @@ export class DeleteManifestHandler {
       throw new Error(`IFC-ERR-006: 文件不在待清理状态（当前 ${file.state}）`);
     }
 
-    let verified = 0;
-    let failed = 0;
     const items = await Promise.all(
       manifest.items.map(async (item) => {
         if (item.status === 'VERIFIED_DELETED') {
-          verified++;
           return item;
         }
-        let result;
         try {
-          result = await this.store.deleteAndVerify(item.location);
+          const result = await this.store.deleteAndVerify(item.location);
+          if (!result.ok) {
+            return { ...item, status: 'FAILED' as const };
+          }
         } catch {
-          failed++;
           return { ...item, status: 'FAILED' as const };
         }
-        if (!result.ok) {
-          failed++;
-          return { ...item, status: 'FAILED' as const };
-        }
-        verified++;
         return { ...item, status: 'VERIFIED_DELETED' as const };
       }),
     );
+
+    // 从结果推导计数，避免在并发回调中递增共享可变状态
+    const verified = items.filter((item) => item.status === 'VERIFIED_DELETED').length;
+    const failed = items.filter((item) => item.status === 'FAILED').length;
 
     // 全部项无失败即视为完成：清单为空（无版本对象待删除）时同样完成，避免永远卡在待清理
     const completed = failed === 0;

@@ -34,26 +34,24 @@ export class CleanupOrphansCommand {
       throw new Error('IFC-ERR-006: 正式删除清单接管，由删除清单处理');
     }
 
-    let allVerified = true;
     const processed = file.cleanupQueue.map(async (item) => {
       if (item.status === 'VERIFIED_DELETED') {
         return item;
       }
-      let result;
       try {
-        result = await this.store.deleteAndVerify(item.location);
+        const result = await this.store.deleteAndVerify(item.location);
+        if (!result.ok) {
+          return { ...item, status: 'FAILED' as const };
+        }
       } catch {
-        allVerified = false;
         return { ...item, status: 'FAILED' as const };
       }
-      if (!result.ok) {
-        allVerified = false;
-        return { ...item, status: 'FAILED' as const };
-      }
-      return { ...item, status: 'VERIFIED_DELETED' as const, queuedAt: item.queuedAt };
+      return { ...item, status: 'VERIFIED_DELETED' as const };
     });
     const queue = await Promise.all(processed);
 
+    // 从结果推导，避免在并发回调中修改共享可变状态；任一 FAILED 则保持待清理并持续重试
+    const allVerified = queue.every((item) => item.status === 'VERIFIED_DELETED');
     const state = allVerified
       ? this.stateMachine.transition(FileState.PENDING_CLEANUP, FileState.CLEANED)
       : FileState.PENDING_CLEANUP; // 部分失败：保持待清理并持续重试
