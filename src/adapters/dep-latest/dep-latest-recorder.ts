@@ -13,7 +13,7 @@
  * 边界：
  * - 只记录观测事实，不触发任何外部写入（ADR-011 §6.3）；
  * - 结果由各适配器基于真实 I/O 回填，本记录器拒绝伪造/默认值；
- * - 线程安全（互斥锁），供并发 worker 写入。
+ * - 进程内同步写入，Map 操作原子，无需显式加锁；供并发 worker 写入。
  *
  * 本记录器为进程内实现。生产如需跨进程共享，可替换为基于 DB / 缓存的实现，
  * 契约（record / latest）保持不变。
@@ -54,10 +54,10 @@ export class InMemoryDepLatestRecorder implements DepLatestRecorder {
   }
 
   record(snapshot: DepSnapshot): void {
-    // 互斥写入：避免并发 worker 交错导致读到半写状态。
+    // 拒绝陈旧覆盖：时间戳更早/相同的结果不得覆盖更新的结果。
+    // record 为同步方法且在单线程事件循环内执行，Map.get/set 为原子操作，无需显式加锁。
     const existing = this.records.get(snapshot.dep);
     if (existing && existing.lastCheckedAt.getTime() >= snapshot.lastCheckedAt.getTime()) {
-      // 拒绝陈旧覆盖：时间戳更早/相同的结果不得覆盖更新的结果。
       return;
     }
     this.records.set(snapshot.dep, snapshot);
