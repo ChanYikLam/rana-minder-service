@@ -1,16 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { TaskIntent } from '../contracts';
-import type { TransactionOutboxStore } from './transactional-outbox';
-import { TASK_OUTBOX_STORE } from './transactional-outbox';
+import { TASK_OUTBOX_STORE, type TransactionOutboxStore } from './transactional-outbox';
 
 @Injectable()
 export class TaskIntentOutbox {
   private readonly logger = new Logger(TaskIntentOutbox.name);
 
-  constructor(
-    @Inject(TASK_OUTBOX_STORE)
-    private readonly store: TransactionOutboxStore,
-  ) {}
+  constructor(@Inject(TASK_OUTBOX_STORE) private readonly store: TransactionOutboxStore) {}
 
   async register(intent: TaskIntent): Promise<void> {
     await this.store.append(intent);

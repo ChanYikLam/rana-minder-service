@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { TaskOpsTelemetryPort, TaskRepository } from '../contracts';
-import { TASK_OPS_TELEMETRY_PORT, TASK_REPOSITORY } from '../contracts';
-import { TaskOpsEventType } from '../contracts';
+import { TaskOpsEventType, TASK_OPS_TELEMETRY_PORT, TASK_REPOSITORY } from '../contracts';
 import { TaskIntentOutbox } from '../outbox';
 import { TaskExecutionPipeline } from '../executors/task-execution-pipeline';
 
@@ -10,12 +9,10 @@ export class TaskScheduler {
   private readonly logger = new Logger(TaskScheduler.name);
 
   constructor(
-    @Inject(TASK_REPOSITORY)
-    private readonly repository: TaskRepository,
+    @Inject(TASK_REPOSITORY) private readonly repository: TaskRepository,
     private readonly outbox: TaskIntentOutbox,
     private readonly pipeline: TaskExecutionPipeline,
-    @Inject(TASK_OPS_TELEMETRY_PORT)
-    private readonly ops: TaskOpsTelemetryPort,
+    @Inject(TASK_OPS_TELEMETRY_PORT) private readonly ops: TaskOpsTelemetryPort,
   ) {}
 
   async runOnce(workerId: string, now: Date, limit = 50): Promise<void> {
