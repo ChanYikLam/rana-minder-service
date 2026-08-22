@@ -52,8 +52,11 @@ export class ResolveRoutineActivationCommand {
     ) {
       throw new Error('IFC-ERR-007: 邀请不在待生效/重试状态');
     }
-    if (invitation.status === 'SYNC_FAILED_PENDING_RETRY' && input.escalateToAnomaly) {
-      // 重试中升级 → 高优先级同步异常（冻结普通重试）
+    // 无法确认且无法补偿到非成员 → 高优先级同步异常：
+    // 无论处于待生效还是重试状态，一律先升级，避免在 escalate 已判定
+    // 不可恢复后仍执行一次 Casdoor 组合写入（冗余外部副作用，且可能造成
+    // Casdoor 侧关系部分建立而邀请状态却为 anomaly 的不一致）。
+    if (input.escalateToAnomaly) {
       return this.toAnomaly(invitation);
     }
 
@@ -92,11 +95,6 @@ export class ResolveRoutineActivationCommand {
     ).length;
     const partial = confirmedCount > 0 && confirmedCount < invitation.relationTargets.length;
     const syncStatus: RelationSyncStatus = partial ? Sync.PARTIAL : Sync.UNCONFIRMED;
-
-    // 无法确认且无法补偿到非成员 → 高优先级同步异常
-    if (input.escalateToAnomaly) {
-      return this.toAnomaly(invitation);
-    }
 
     // 可重试：同步失败待重试（先回读后重试；无需本人重接；部分确认按组合补偿）
     const retry: RoutineInvitation = {

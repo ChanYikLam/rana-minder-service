@@ -205,6 +205,32 @@ describe('4.5.2 常规入社邀请（MEM-004、SRS-SM-MEM-004）', () => {
     assert.equal(view.activated, false); // 维持最小权限
   });
 
+  it('escalate 升级为异常时不再执行 Casdoor 组合写入（避免冗余外部副作用）', async () => {
+    let writes = 0;
+    const rig = makeRig(
+      makeCasdoor(async () => {
+        writes += 1;
+        return { groupConfirmed: true, departmentConfirmed: true };
+      }),
+    );
+    const inv = await rig.create.execute(createInput);
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    // 从待生效直接 escalate（首次即判定不可恢复）
+    const result = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: true,
+    });
+    assert.equal(result.anomaly, true);
+    assert.equal(result.invitation.status, 'HIGH_PRIORITY_SYNC_ANOMALY');
+    // 关键：escalate 已判定不可恢复，不应再执行 Casdoor 写入
+    assert.equal(writes, 0);
+  });
+
   it('拒绝/撤回/过期：仅待处理可操作；单胜者', async () => {
     const rig = makeRig();
     const inv1 = await rig.create.execute(createInput);
