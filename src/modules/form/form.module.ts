@@ -6,8 +6,8 @@
  * （权限桩失败关闭 / 静态资料目录）→ 状态机与校验/复制策略（纯规则单例）→
  * 应用用例/查询 → 传输中立 FormDesignController → Nest HTTP 适配控制器与守卫。
  *
- * 会话：Casdoor OIDC 会话链路接入前绑定 RejectAllFormAuthSessionProvider
- * （fail-closed，全部受保护端点 401 IFC-ERR-001）；权限：organization（3.2）
+ * 会话：经 adaptSessionProvider 转发到 identity 的 AUTH_SESSION_PROVIDER
+ * （OIDC 会话链路，B3 已接入）；权限：organization（3.2）
  * 设计/填写权限已接线组织授权（OrgBacked*，ORG-038）；部门级权限解析
  * （ORG-035）无契约支撑前，department 作用域设计仍 fail-closed（见适配器注释）。
  * 资料目录接入共享的 profile-field 常量（src/shared/models，静态实现，随 3.x 配置化目录替换）。
@@ -93,7 +93,6 @@ import { DefaultListSubmissionsQuery } from './application/queries/list-submissi
 import { FormDesignController } from './interfaces/controllers/form-design.controller';
 import { FormSubmissionController } from './interfaces/controllers/form-submission.controller';
 
-import { RejectAllFormAuthSessionProvider } from './interfaces/nest/form-auth-session';
 import { FormAuthGuard } from './interfaces/nest/form-auth.guard';
 import { OrgFormsNestController } from './interfaces/nest/org-forms.nest.controller';
 import { AdminFormsNestController } from './interfaces/nest/admin-forms.nest.controller';
