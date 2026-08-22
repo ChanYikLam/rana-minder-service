@@ -242,7 +242,9 @@ describe('NotificationController 邮件配置（NTF-006：持久化＋脱敏＋�
       fromName: '平台',
       smtpSecret: 'pw-p',
     });
-    const view = await controller.getAdminEmailConfig();
+    const view = await controller.getAdminEmailConfig(
+      authedRequest('super-1', { isPlatformAdmin: true }),
+    );
     assert.equal(view.smtpHost, 'p.example.edu');
     assert.equal(view.secretConfigured, true);
   });

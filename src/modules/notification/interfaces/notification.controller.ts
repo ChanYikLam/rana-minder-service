@@ -169,6 +169,17 @@ export class NotificationController {
     };
   }
 
+  /** 平台级管理端只读端点鉴权：仅超级管理员可读（NTF-006.6、清单 §15.9） */
+  private assertPlatformAdmin(request: Request): void {
+    if (!this.actorFrom(request).isPlatformAdmin) {
+      throw new ForbiddenException({
+        code: 'IFC-ERR-002',
+        message: '平台级管理端点仅超级管理员可访问',
+        supportId: null,
+      });
+    }
+  }
+
   /** 权限/业务错误 → HTTP 映射（403 IFC-ERR-002 / 400 IFC-ERR-005） */
   private mapConfigError(error: unknown): never {
     if (error instanceof EmailConfigPermissionError) {
@@ -332,9 +343,10 @@ export class NotificationController {
     return this.toggleKillSwitch('PLATFORM', null, input, session.userId, session.displayName);
   }
 
-  /** GET /api/admin/notifications/kill-switch（平台级状态） */
+  /** GET /api/admin/notifications/kill-switch（平台级状态；超管） */
   @Get('/api/admin/notifications/kill-switch')
-  async getPlatformKillSwitch(): Promise<NotificationKillSwitchState> {
+  async getPlatformKillSwitch(@Req() request: Request): Promise<NotificationKillSwitchState> {
+    this.assertPlatformAdmin(request);
     return this.toState(await this.killSwitches.findByScope('PLATFORM', null));
   }
 
@@ -528,9 +540,10 @@ export class NotificationController {
   // 平台邮件配置（接口清单 §15.9：平台级鉴权 isPlatformAdmin）
   // -------------------------------------------------------------------------
 
-  /** GET /api/admin/notifications/email-config（平台 SMTP 配置，脱敏） */
+  /** GET /api/admin/notifications/email-config（平台 SMTP 配置，脱敏；超管） */
   @Get('/api/admin/notifications/email-config')
-  async getAdminEmailConfig(): Promise<EmailConfigView> {
+  async getAdminEmailConfig(@Req() request: Request): Promise<EmailConfigView> {
+    this.assertPlatformAdmin(request);
     const config = await this.emailConfigs.findByClub(PLATFORM_EMAIL_CONFIG_KEY);
     return this.toConfigView(config);
   }
@@ -695,9 +708,9 @@ export class NotificationController {
   // 邮件模板（NTF-005：预览/测试/版本/回滚；失效回退平台默认）
   // -------------------------------------------------------------------------
 
-  /** GET /api/admin/notifications/templates（平台模板目录，§15.9） */
+  /** GET /api/admin/notifications/templates（平台模板目录，§15.9；超管） */
   @Get('/api/admin/notifications/templates')
-  async adminTemplateDirectory(): Promise<{
+  async adminTemplateDirectory(@Req() request: Request): Promise<{
     items: {
       kind: NotificationKind;
       title: string;
@@ -709,6 +722,7 @@ export class NotificationController {
       dedupKey: string | null;
     }[];
   }> {
+    this.assertPlatformAdmin(request);
     const items: {
       kind: NotificationKind;
       title: string;
@@ -872,9 +886,10 @@ export class NotificationController {
   // 邮件外发箱（接口清单 §15.9：最近 50 条，只读）
   // -------------------------------------------------------------------------
 
-  /** GET /api/admin/notifications/email-outbox（邮件发送记录，只读） */
+  /** GET /api/admin/notifications/email-outbox（邮件发送记录，只读；超管） */
   @Get('/api/admin/notifications/email-outbox')
-  async adminEmailOutbox(): Promise<{ items: EmailOutboxItem[] }> {
+  async adminEmailOutbox(@Req() request: Request): Promise<{ items: EmailOutboxItem[] }> {
+    this.assertPlatformAdmin(request);
     const attempts = await this.attemptRepository.findRecentEmailAttempts(50);
     return {
       items: attempts.map((attempt) => ({

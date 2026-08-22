@@ -17,6 +17,7 @@ import type {
   PrivilegedAuditWriter,
 } from '../../infrastructure';
 import { NotificationStateMachine } from '../../domain';
+import type { ChannelResponseCategory } from '../../domain';
 import {
   CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
   INBOX_ADAPTER,
@@ -43,8 +44,17 @@ export class MarkPermanentFailureCommand {
   /**
    * 标记永久失败并履行 NTF-007 提示义务。
    * 幂等：重复调用不产生重复站内信提示（去重键保护）。
+   *
+   * @param attemptId 投递尝试标识
+   * @param options 可选：本次失败响应类别与脱敏错误（用于 BOUNCE 等明确退信记录）
    */
-  async execute(attemptId: string): Promise<void> {
+  async execute(
+    attemptId: string,
+    options?: {
+      readonly responseCategory?: string | null;
+      readonly sanitizedError?: string | null;
+    },
+  ): Promise<void> {
     const attempt = await this.attemptRepository.findAttemptById(attemptId);
     if (!attempt) {
       this.logger.warn('无可标记为永久失败的尝试: ' + attemptId);
@@ -65,13 +75,21 @@ export class MarkPermanentFailureCommand {
 
     await this.attemptRepository.updateAttempt(attemptId, {
       status: 'PERMANENT_FAILURE',
+      ...(options?.responseCategory != null
+        ? { responseCategory: options.responseCategory as ChannelResponseCategory }
+        : {}),
+      ...(options?.sanitizedError != null ? { sanitizedError: options.sanitizedError } : {}),
       completedAt: new Date().toISOString(),
     });
     this.logger.log('投递尝试标记永久失败: attemptId=' + attemptId);
 
     // ---- NTF-007：邮件渠道永久失败后提示用户＋通知管理员 ----
     if (attempt.channel === 'EMAIL') {
-      await this.notifyUserAndAdmins(attempt.attemptId, attempt.factId, attempt.responseCategory);
+      await this.notifyUserAndAdmins(
+        attempt.attemptId,
+        attempt.factId,
+        options?.responseCategory ?? attempt.responseCategory,
+      );
     }
   }
 

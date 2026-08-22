@@ -128,8 +128,10 @@ export class ManualResendCommand {
     } catch (error) {
       await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
         status: 'FAILED_RETRY',
+        responseCategory: 'TEMPORARY_FAILURE' as const,
         firstFailedAt: now,
         sanitizedError: (error as Error).message,
+        nextRetryAt: computeNextRetryAt(1, now),
       });
     }
 

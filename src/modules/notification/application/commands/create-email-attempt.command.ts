@@ -123,9 +123,10 @@ export class CreateEmailAttemptCommand {
         : fact.scope.type === 'CLUB'
           ? fact.scope.clubId
           : 'platform',
-      // 内容快照（NTF-002 最少摘要 / NTF-005 模板渲染结果）：重试时复用，避免空邮件
-      emailSubject: input.emailSubject ?? fact.summary.slice(0, 100),
-      emailBody: input.emailBody ?? fact.summary,
+      // 内容快照（NTF-002 最少摘要 / NTF-005 模板渲染结果）：重试时复用，
+      // 避免空邮件——空串（模板渲染为空）也回退最少摘要（NTF-002）
+      emailSubject: input.emailSubject?.trim() ? input.emailSubject : fact.summary.slice(0, 100),
+      emailBody: input.emailBody?.trim() ? input.emailBody : fact.summary,
       firstFailedAt: null,
       responseCategory: null,
       sanitizedError: null,
