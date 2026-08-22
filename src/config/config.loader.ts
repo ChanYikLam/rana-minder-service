@@ -231,11 +231,7 @@ function buildExternalService(
       typeof raw?.endpoint === 'string' && raw.endpoint.length > 0
         ? raw.endpoint
         : (env[`${service}_ENDPOINT`] ?? ''),
-    tokenRef: optionalString(
-      raw?.tokenRef,
-      env[`${service}_TOKEN_REF`],
-      env[`${service}_TOKEN`],
-    ),
+    tokenRef: optionalString(raw?.tokenRef, env[`${service}_TOKEN_REF`], env[`${service}_TOKEN`]),
   };
 }
 

@@ -5,13 +5,12 @@
  * 无事务/事务不可用拒绝）而非伪造成功。
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import { IdentityModule } from './identity.module';
-import { ConfigurationModule } from '../../config';
 import {
   AUTH_SESSION_PROVIDER,
   APPLY_PROFILE_SYNC_STEP_USE_CASE,
