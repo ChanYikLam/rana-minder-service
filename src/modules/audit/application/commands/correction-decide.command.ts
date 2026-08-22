@@ -53,6 +53,18 @@ export class DecideCorrectionCommand {
     if (correction === null) {
       throw new CorrectionCommandError('IFC-ERR-006', '纠错申请不存在');
     }
+    // 幂等/终态：相同决定 → 直接返回原结果（避免重试缺省 reason/原值新值时误报）；
+    // 不同决定 → 终态不可覆盖（AUD-002）。置于授权校验之前，保证重复调用幂等成功。
+    if (
+      correction.status === CorrectionStatus.APPROVED ||
+      correction.status === CorrectionStatus.REJECTED
+    ) {
+      const sameDecision = (correction.status === CorrectionStatus.APPROVED) === input.approve;
+      if (sameDecision) {
+        return correction;
+      }
+      throw new CorrectionCommandError('IFC-ERR-007', '终态不可覆盖，新证据需新申请');
+    }
     // 处理资格（作者回避 + 处理角色 + 联合边界）
     this.policy.assertCanDecide(
       {
@@ -78,17 +90,6 @@ export class DecideCorrectionCommand {
         input.newValue.trim().length === 0)
     ) {
       throw new CorrectionCommandError('IFC-ERR-005', '批准须填写原值和新值');
-    }
-    // 幂等/终态：相同决定 → 返回原结果；不同决定 → 终态不可覆盖（AUD-002）
-    if (
-      correction.status === CorrectionStatus.APPROVED ||
-      correction.status === CorrectionStatus.REJECTED
-    ) {
-      const sameDecision = (correction.status === CorrectionStatus.APPROVED) === input.approve;
-      if (sameDecision) {
-        return correction;
-      }
-      throw new CorrectionCommandError('IFC-ERR-007', '终态不可覆盖，新证据需新申请');
     }
     if (
       correction.status !== CorrectionStatus.PENDING &&

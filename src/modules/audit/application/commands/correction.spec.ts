@@ -252,6 +252,11 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
     );
     const view = await rig.status.getStatus(draft.correctionId);
     assert.equal(view.history.length, 3); // DRAFTED + SUBMITTED + APPROVED
+    // 查询视图暴露批准追加的原值/新值/原因（AUD-001）
+    assert.equal(view.decision?.oldValue, '张四');
+    assert.equal(view.decision?.newValue, '张三');
+    assert.equal(view.decision?.reason, '确属笔误');
+    assert.equal(view.decision?.approved, true);
   });
 
   it('撤回：仅原提交人；处理角色代撤拒绝；待处理/逾期待处理可撤回', async () => {
@@ -350,6 +355,11 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
       }),
       /缺少目标记录所属社团/,
     );
+    // 处理期限晚于当前时间
+    await assert.rejects(
+      rig.save.execute({ ...draftInput, deadlineAt: '2000-01-01T00:00:00.000Z' }),
+      /处理期限必须晚于当前时间/,
+    );
   });
 
   it('提交用版本 CAS：并发提交只一个成功，另一并发幂等返回待处理', async () => {
@@ -397,6 +407,32 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
       }),
       /批准须填写原值和新值/,
     );
+  });
+
+  it('终态重复决定幂等：相同决定缺省 reason/原值新值仍成功返回', async () => {
+    const rig = makeRig();
+    const draft = await rig.save.execute(draftInput);
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
+    await rig.decide.execute({
+      correctionId: draft.correctionId,
+      decider: leader,
+      approve: true,
+      reason: '确属笔误',
+      oldValue: '张四',
+      newValue: '张三',
+    });
+    // 重复相同决定（重试可能缺省 reason/原值新值）应幂等返回，而非 IFC-ERR-005
+    const again = await rig.decide.execute({
+      correctionId: draft.correctionId,
+      decider: leader,
+      approve: true,
+      reason: '',
+    });
+    assert.equal(again.status, CorrectionStatus.APPROVED);
   });
 
   it('逾期任务与决定并发竞争失败时返回真实最新状态', async () => {

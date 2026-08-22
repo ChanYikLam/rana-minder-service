@@ -12,7 +12,15 @@ export interface CorrectionStatusView {
   readonly overdue: boolean;
   readonly objectiveErrorType: string;
   readonly submittedAt: string | null;
-  readonly decision: { approved: boolean; decidedBy: string; decidedAt: string } | null;
+  /** 处理决定（含批准时追加的原值/新值/原因，AUD-001） */
+  readonly decision: {
+    readonly approved: boolean;
+    readonly decidedBy: string;
+    readonly decidedAt: string;
+    readonly reason: string;
+    readonly oldValue: string;
+    readonly newValue: string;
+  } | null;
   /** 完整历史（批准/驳回/撤回保留） */
   readonly history: readonly { at: string; type: string; by: string }[];
 }
@@ -44,6 +52,9 @@ export class CorrectionStatusQuery {
               approved: correction.status === CorrectionStatus.APPROVED,
               decidedBy: correction.decision.decidedBy,
               decidedAt: correction.decision.decidedAt,
+              reason: correction.decision.reason,
+              oldValue: correction.decision.oldValue,
+              newValue: correction.decision.newValue,
             }
           : null,
       history: correction.history.map((h) => ({ at: h.at, type: h.type, by: h.by })),

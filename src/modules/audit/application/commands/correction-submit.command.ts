@@ -66,6 +66,9 @@ export class SaveCorrectionDraftCommand {
     if (input.deadlineAt.length === 0 || !Number.isFinite(Date.parse(input.deadlineAt))) {
       throw new CorrectionCommandError('IFC-ERR-005', '无效的处理期限');
     }
+    if (Date.parse(input.deadlineAt) <= Date.now()) {
+      throw new CorrectionCommandError('IFC-ERR-005', '处理期限必须晚于当前时间');
+    }
     if (input.expectedCorrection.trim().length === 0) {
       throw new CorrectionCommandError('IFC-ERR-005', '期望修正不能为空');
     }
