@@ -51,7 +51,8 @@ services:
       retries: 5
 
   casdoor:
-    image: casbin/casdoor:v3.108.0
+    # Docker Hub 镜像 tag 不含 v 前缀（源码 git tag 为 v3.108.0，镜像 tag 为 3.108.0）
+    image: casbin/casdoor:3.108.0
     container_name: ranaminder-dev-casdoor
     ports:
       - "8000:8000"
