@@ -33,6 +33,7 @@ rana-minder-service/
 ├── Dockerfile             后端镜像构建（双入口，见 Docker 镜像构建规范）
 ├── .dockerignore          镜像构建上下文排除规则（秘密防护）
 ├── docker-compose.dev.yml 开发环境依赖服务编排（PG18/MinIO/Casdoor/Mailpit）
+├── docker-compose.yml      官方单机部署编排（app＋worker＋PG＋MinIO＋Casdoor，只读挂载）
 ├── .cnb.yml               CI 流水线配置（cnb.cool 云原生构建）
 └── README.md              本文件
 ```

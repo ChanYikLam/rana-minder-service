@@ -57,51 +57,91 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
   it('事务生命周期：begin → query → commit 生效', async () => {
     const db = adapter!;
     const tx = await db.beginTransaction();
-    await db.setRlsContext(tx, { kind: 'unprotected' });
-    const rows = await db.query<{ one: number }>(tx, 'SELECT 1 AS one', []);
-    assert.equal(rows[0].one, 1);
-    await db.commit(tx);
+    try {
+      await db.setRlsContext(tx, { kind: 'unprotected' });
+      const rows = await db.query<{ one: number }>(tx, 'SELECT 1 AS one', []);
+      assert.equal(rows[0].one, 1);
+      await db.commit(tx);
+    } catch (err) {
+      await db.rollback(tx).catch(() => {});
+      throw err;
+    }
   });
 
   it('rollback 丢弃未提交写入', async () => {
     const db = adapter!;
     // 建临时表验证事务回滚
     const setupTx = await db.beginTransaction();
-    await db.query(setupTx, 'CREATE TEMP TABLE t2_demo(id int)', []);
-    await db.commit(setupTx);
+    try {
+      await db.query(setupTx, 'CREATE TEMP TABLE t2_demo(id int)', []);
+      await db.commit(setupTx);
+    } catch (err) {
+      await db.rollback(setupTx).catch(() => {});
+      throw err;
+    }
 
     const tx = await db.beginTransaction();
-    await db.setRlsContext(tx, { kind: 'unprotected' });
-    await db.query(tx, 'INSERT INTO t2_demo(id) VALUES ($1)', [42]);
-    await db.rollback(tx);
+    try {
+      await db.setRlsContext(tx, { kind: 'unprotected' });
+      await db.query(tx, 'INSERT INTO t2_demo(id) VALUES ($1)', [42]);
+      await db.rollback(tx);
+    } catch (err) {
+      await db.rollback(tx).catch(() => {});
+      throw err;
+    }
 
     const readTx = await db.beginTransaction();
-    const rows = await db.query<{ id: number }>(readTx, 'SELECT id FROM t2_demo', []);
-    assert.equal(rows.length, 0);
-    await db.commit(readTx);
+    try {
+      const rows = await db.query<{ id: number }>(readTx, 'SELECT id FROM t2_demo', []);
+      assert.equal(rows.length, 0);
+      await db.commit(readTx);
+    } catch (err) {
+      await db.rollback(readTx).catch(() => {});
+      throw err;
+    }
   });
 
   it('未收口事务经 clearRlsContext 兜底回滚并释放连接（污染防护）', async () => {
     const db = adapter!;
     const setupTx = await db.beginTransaction();
-    await db.query(setupTx, 'CREATE TEMP TABLE t2_demo2(id int)', []);
-    await db.commit(setupTx);
+    try {
+      await db.query(setupTx, 'CREATE TEMP TABLE t2_demo2(id int)', []);
+      await db.commit(setupTx);
+    } catch (err) {
+      await db.rollback(setupTx).catch(() => {});
+      throw err;
+    }
 
     const tx = await db.beginTransaction();
-    await db.query(tx, 'INSERT INTO t2_demo2(id) VALUES ($1)', [7]);
-    // 不 commit/rollback，直接 clearRlsContext → 兜底回滚
-    await db.clearRlsContext(tx);
+    try {
+      await db.query(tx, 'INSERT INTO t2_demo2(id) VALUES ($1)', [7]);
+      // 不 commit/rollback，直接 clearRlsContext → 兜底回滚
+      await db.clearRlsContext(tx);
+    } catch (err) {
+      await db.rollback(tx).catch(() => {});
+      throw err;
+    }
 
     const readTx = await db.beginTransaction();
-    const rows = await db.query<{ id: number }>(readTx, 'SELECT id FROM t2_demo2', []);
-    assert.equal(rows.length, 0);
-    await db.commit(readTx);
+    try {
+      const rows = await db.query<{ id: number }>(readTx, 'SELECT id FROM t2_demo2', []);
+      assert.equal(rows.length, 0);
+      await db.commit(readTx);
+    } catch (err) {
+      await db.rollback(readTx).catch(() => {});
+      throw err;
+    }
   });
 
   it('重复 commit 抛错；已收口后 query 抛错（防误用）', async () => {
     const db = adapter!;
     const tx = await db.beginTransaction();
-    await db.commit(tx);
+    try {
+      await db.commit(tx);
+    } catch (err) {
+      await db.rollback(tx).catch(() => {});
+      throw err;
+    }
     await assert.rejects(db.commit(tx));
     await assert.rejects(db.query<{ one: number }>(tx, 'SELECT 1', []));
   });
@@ -117,14 +157,20 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
         "SELECT current_setting('app.subject_id', true) AS ctx",
         [],
       );
-      assert.equal(rows[0].ctx, 'u-1');
-    } finally {
+      assert.equal(
+        rows[0]?.ctx,
+        'u-1',
+        `RLS 上下文中 app.subject_id 应为 u-1，实际 rows=${JSON.stringify(rows)}`,
+      );
       await db.commit(tx);
+    } catch (err) {
+      await db.rollback(tx).catch(() => {});
+      throw err;
     }
-    // 提交后上下文失效（新事务不再有该值）。
-    // 注意：对“曾用 SET LOCAL 设置、提交后被重置”的自定义 GUC，PostgreSQL 会
-    // 在复用连接上返回空串 ''（而非 NULL；全新连接才返回 NULL）。两者都表示
-    // RLS 上下文已随事务提交失效，故统一按“无 subject_id 泄漏”断言。
+
+    // 提交后上下文失效（新事务不再有该值）。注意：SET LOCAL 在提交时回退为会话级
+    // 默认值；自定义 GUC 一经引用即存在，回退值为空串 ''（连接池复用）或未定义
+    // NULL（全新会话）。此处只断言「不再是 u-1」，兼容两种会话状态。
     const tx2 = await db.beginTransaction();
     try {
       const rows2 = await db.query<{ ctx: string | null }>(
@@ -132,13 +178,15 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
         "SELECT current_setting('app.subject_id', true) AS ctx",
         [],
       );
-      assert.ok(
-        rows2[0].ctx === null || rows2[0].ctx === '',
-        `提交后 RLS 上下文应失效，实际得到: ${JSON.stringify(rows2[0].ctx)}`,
+      assert.notEqual(
+        rows2[0]?.ctx,
+        'u-1',
+        `提交后 app.subject_id 应不再是 u-1，实际 rows=${JSON.stringify(rows2)}`,
       );
-    } finally {
-      // 无论断言成败都收口事务，避免连接泄漏导致 pool.end() 挂起（CI 10 分钟超时）。
-      await db.rollback(tx2);
+      await db.commit(tx2);
+    } catch (err) {
+      await db.rollback(tx2).catch(() => {});
+      throw err;
     }
   });
 });

@@ -90,7 +90,7 @@
               -e POSTGRES_PASSWORD=ci \
               -e POSTGRES_DB=ranaminder_test \
               -p 5432:5432 \
-              postgres:18
+              postgres:18-alpine
             trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
             # 等待 PG18 就绪（最长约 60 秒）
             for i in $(seq 1 30); do
@@ -107,6 +107,11 @@
             # 与开发环境 scripts/dev/postgres-init.sql 保持一致的扩展初始化
             docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
               -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
+            # 应用经 TCP 连接 DB：pg 容器以 -p 5432:5432 发布端口，dind 下
+            # job 容器共享 daemon 网络命名空间，经 127.0.0.1 即可访问（CNB 官方
+            # docker 服务连接数据库推荐口径；容器桥接 IP 在 dind 下并不可达）。
+            export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
+              DATABASE_USER=postgres DATABASE_PASSWORD=ci DATABASE_SSL=false
             export CI=true
             npm run test:integration
         # 阶段 6：契约测试 L3（HTTP 级：信封/错误码/分页/幂等/脱敏）
@@ -186,7 +191,7 @@
               -e POSTGRES_PASSWORD=ci \
               -e POSTGRES_DB=ranaminder_test \
               -p 5432:5432 \
-              postgres:18
+              postgres:18-alpine
             trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
             for i in $(seq 1 30); do
               if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then
@@ -201,6 +206,11 @@
             done
             docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
               -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
+            # 应用经 TCP 连接 DB：pg 容器以 -p 5432:5432 发布端口，dind 下
+            # job 容器共享 daemon 网络命名空间，经 127.0.0.1 即可访问（CNB 官方
+            # docker 服务连接数据库推荐口径；容器桥接 IP 在 dind 下并不可达）。
+            export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
+              DATABASE_USER=postgres DATABASE_PASSWORD=ci DATABASE_SSL=false
             export CI=true
             npm run test:integration
         - name: 6-契约测试L3
@@ -271,7 +281,7 @@
               -e POSTGRES_PASSWORD=ci \
               -e POSTGRES_DB=ranaminder_test \
               -p 5432:5432 \
-              postgres:18
+              postgres:18-alpine
             trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
             for i in $(seq 1 30); do
               if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then
@@ -286,6 +296,11 @@
             done
             docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
               -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
+            # 应用经 TCP 连接 DB：pg 容器以 -p 5432:5432 发布端口，dind 下
+            # job 容器共享 daemon 网络命名空间，经 127.0.0.1 即可访问（CNB 官方
+            # docker 服务连接数据库推荐口径；容器桥接 IP 在 dind 下并不可达）。
+            export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
+              DATABASE_USER=postgres DATABASE_PASSWORD=ci DATABASE_SSL=false
             export CI=true
             npm run test:integration
         - name: 6-契约测试L3
