@@ -125,8 +125,8 @@
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
         # 阶段 8b：镜像安全扫描（trivy；HIGH/CRITICAL 为失败门，DEP-003 / SRS-NFR-022/023）
-        # 仅扫描应用自身依赖；跳过基础镜像 node:24-slim 自带 npm（/usr/local/lib/node_modules/npm），
-        # 其 CVE 由基础镜像维护，应用无法修复，不进入应用依赖门禁（见 DEP-Q-003）
+        # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
+        # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
         - name: 8b-镜像安全扫描
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
@@ -136,7 +136,7 @@
             fi
             # 扫描已构建镜像；HIGH/CRITICAL 漏洞使扫描失败（镜像层、OS 包、应用依赖）
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
-              --skip-dirs /usr/local/lib/node_modules/npm \
+              --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
               ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT}
         # 阶段 8c：镜像 SBOM 生成与复核（DEP-003 第三方依赖清单，供发布归档）
         - name: 8c-镜像SBOM与许可证复核
@@ -242,8 +242,8 @@
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
         # 阶段 8b：镜像安全扫描（trivy；HIGH/CRITICAL 为失败门，DEP-003 / SRS-NFR-022/023）
-        # 仅扫描应用自身依赖；跳过基础镜像 node:24-slim 自带 npm（/usr/local/lib/node_modules/npm），
-        # 其 CVE 由基础镜像维护，应用无法修复，不进入应用依赖门禁（见 DEP-Q-003）
+        # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
+        # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
         - name: 8b-镜像安全扫描
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
@@ -252,7 +252,7 @@
               curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.3
             fi
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
-              --skip-dirs /usr/local/lib/node_modules/npm \
+              --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
               ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT}
         # 阶段 8c：镜像 SBOM 生成与复核（DEP-003 第三方依赖清单，供发布归档）
         - name: 8c-镜像SBOM与许可证复核
@@ -353,8 +353,8 @@
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} .
             docker push ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
         # 阶段 8b：发布镜像安全扫描（trivy；HIGH/CRITICAL 失败即阻断发布，DEP-003 / SRS-NFR-022/023 / OPS-REL）
-        # 仅扫描应用自身依赖；跳过基础镜像 node:24-slim 自带 npm（/usr/local/lib/node_modules/npm），
-        # 其 CVE 由基础镜像维护，应用无法修复，不进入应用依赖门禁（见 DEP-Q-003）
+        # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
+        # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
         - name: 8b-镜像安全扫描
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
           script: |
@@ -363,7 +363,7 @@
               curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.3
             fi
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
-              --skip-dirs /usr/local/lib/node_modules/npm \
+              --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
               ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
         # 阶段 8c：发布镜像 SBOM 生成（DEP-003 第三方依赖/许可证清单，发布门证据归档）
         - name: 8c-镜像SBOM生成

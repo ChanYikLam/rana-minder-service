@@ -45,7 +45,7 @@ WORKDIR /app
 RUN groupadd --gid 10001 ranaminder && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin ranaminder && mkdir -p /etc/ranaminder
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 RUN corepack enable && pnpm install --prod --frozen-lockfile && pnpm store prune && \
-    rm -rf /usr/local/lib/node_modules/npm   # 运行阶段无需 npm，移除基础镜像内置 npm 消除其依赖层漏洞（DOCK-021 注 5）
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /root/.cache/node/corepack   # 运行阶段无需 npm/corepack，移除基础镜像内置 npm 与 corepack（及其 pnpm 缓存）消除其依赖层漏洞（DOCK-021 注 5）
 COPY --from=build /app/dist ./dist
 USER ranaminder
 EXPOSE 3000
@@ -58,7 +58,7 @@ CMD ["node", "dist/main.js"]
 2. **运行期依赖独立安装**：运行阶段 `pnpm install --prod --frozen-lockfile`（锁文件驱动），不复制构建期 `node_modules`，避免 dev 依赖与构建平台差异进入镜像；
 3. **源码不进入运行阶段**：仅复制 `dist/` 产物；`docs`、`test`、`scripts` 等由 `.dockerignore` 排除（§6）；
 4. 构建命令与 CI 阶段 7 一致（`pnpm run build`）；若后续引入独立 worker 构建脚本（`build:worker`），在构建阶段同步执行。
-5. **运行阶段不保留 npm**：生产镜像无需 npm 命令；`pnpm install --prod` 完成后 `rm -rf /usr/local/lib/node_modules/npm`，消除 node:24-slim 基础镜像内置 npm 及其依赖（`tar`、`minimatch`、`glob`、`cross-spawn`、`ip-address`、`brace-expansion` 等）的 HIGH/CRITICAL 漏洞，保证阶段 8b 镜像安全扫描（trivy `--exit-code 1`）与发布门通过。
+5. **运行阶段不保留 npm/corepack**：生产镜像无需 npm 命令；`pnpm install --prod` 完成后 `rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /root/.cache/node/corepack`，消除 node:24-slim 基础镜像内置 npm 与 corepack（及其 pnpm 缓存）及其依赖（`tar`、`minimatch`、`glob`、`cross-spawn`、`ip-address`、`brace-expansion` 等）的 HIGH/CRITICAL 漏洞，保证阶段 8b 镜像安全扫描（trivy `--exit-code 1`）与发布门通过。
 
 ## 4. 双入口镜像
 
