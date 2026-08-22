@@ -420,7 +420,11 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
       /IFC-ERR-003/,
     );
     await assert.rejects(
-      rig.status.getStatus(inv.invitationId, { principalId: 'other', roles: ['MEMBER'], clubId: 'c1' }),
+      rig.status.getStatus(inv.invitationId, {
+        principalId: 'other',
+        roles: ['MEMBER'],
+        clubId: 'c1',
+      }),
       /IFC-ERR-003/,
     );
     // 跨社团越权：他社团负责人/人事不得查看本社团邀请
