@@ -210,10 +210,7 @@ export class MarkOverdueCommand {
     const now = new Date().toISOString();
     const overdue: Correction = {
       ...correction,
-      status: this.stateMachine.transition(
-        correction.status,
-        CorrectionStatus.OVERDUE_PENDING,
-      ),
+      status: this.stateMachine.transition(correction.status, CorrectionStatus.OVERDUE_PENDING),
       version: correction.version + 1,
       overdueMarkedAt: now,
       history: [...correction.history, { at: now, type: 'MARKED_OVERDUE', by: 'system' }],

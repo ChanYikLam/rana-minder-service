@@ -40,7 +40,10 @@ export interface SubmitCorrectionInput {
 
 /** 前置失败 */
 export class CorrectionCommandError extends Error {
-  constructor(code: 'IFC-ERR-003' | 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-007', message: string) {
+  constructor(
+    code: 'IFC-ERR-003' | 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-007',
+    message: string,
+  ) {
     super(`${code}: ${message}`);
     this.name = 'CorrectionCommandError';
   }
