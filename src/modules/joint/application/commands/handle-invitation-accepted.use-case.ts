@@ -10,6 +10,7 @@ import { jointErrors } from '../errors';
 export interface HandleInvitationAcceptedInput {
   readonly conclusionId: string;
   readonly invitationId: string;
+  readonly actingClubId: string;
   readonly now: Date;
 }
 
@@ -24,6 +25,9 @@ export class DefaultHandleInvitationAcceptedUseCase implements HandleInvitationA
     const conclusionSnap = await this.repository.loadConclusion(input.conclusionId);
     if (conclusionSnap === null) {
       throw jointErrors.notFound('社团结论');
+    }
+    if (conclusionSnap.clubId !== input.actingClubId) {
+      throw jointErrors.forbidden('路径组织与结论所属组织不一致');
     }
     if (conclusionSnap.inviteStatus !== 'PENDING') {
       return;

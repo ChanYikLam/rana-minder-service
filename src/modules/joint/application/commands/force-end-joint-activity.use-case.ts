@@ -54,6 +54,6 @@ export class DefaultForceEndJointActivityUseCase implements ForceEndJointActivit
     }
     await this.repository.saveActivity(activity.toSnapshot(), activitySnap.revisionNumber);
 
-    await this.tasks.scheduleForceEndCleanup(input.activityId, activitySnap.revisionNumber);
+    await this.tasks.scheduleForceEndCleanup(input.activityId, activity.toSnapshot().revisionNumber);
   }
 }

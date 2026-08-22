@@ -17,6 +17,7 @@ export enum JointConclusionStatus {
 export enum JointConclusionEvent {
   SEND_INVITE = 'SEND_INVITE',
   ACCEPT_INVITE = 'ACCEPT_INVITE',
+  REJECT_INVITE = 'REJECT_INVITE',
   TO_REVIEW = 'TO_REVIEW',
   TIMEOUT_INVITE = 'TIMEOUT_INVITE',
   RESTORE_FROM_REVIEW = 'RESTORE_FROM_REVIEW',
@@ -45,6 +46,11 @@ export class JointConclusionStateMachine {
       case JointConclusionEvent.ACCEPT_INVITE:
         if (currentState === JointConclusionStatus.INVITE_PENDING) {
           return { allowed: true, nextState: JointConclusionStatus.LOCKED_ACCEPTED };
+        }
+        return { allowed: false };
+      case JointConclusionEvent.REJECT_INVITE:
+        if (currentState === JointConclusionStatus.INVITE_PENDING) {
+          return { allowed: true, nextState: JointConclusionStatus.REVIEW_PENDING };
         }
         return { allowed: false };
       case JointConclusionEvent.TO_REVIEW:

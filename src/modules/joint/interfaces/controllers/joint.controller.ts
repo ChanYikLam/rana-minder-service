@@ -582,22 +582,34 @@ export class JointController {
   handleInvitationAccepted(
     conclusionId: string,
     invitationId: string,
+    actingClubId: string,
   ): Promise<ControllerResult<unknown>> {
     const now = new Date();
     const actor = systemActor(now);
     return this.run(actor, () =>
-      this.handleInvitationAcceptedUseCase.execute({ conclusionId, invitationId, now }),
+      this.handleInvitationAcceptedUseCase.execute({
+        conclusionId,
+        invitationId,
+        actingClubId,
+        now,
+      }),
     );
   }
 
   handleInvitationRejected(
     conclusionId: string,
     invitationId: string,
+    actingClubId: string,
   ): Promise<ControllerResult<unknown>> {
     const now = new Date();
     const actor = systemActor(now);
     return this.run(actor, () =>
-      this.handleInvitationRejectedUseCase.execute({ conclusionId, invitationId, now }),
+      this.handleInvitationRejectedUseCase.execute({
+        conclusionId,
+        invitationId,
+        actingClubId,
+        now,
+      }),
     );
   }
 

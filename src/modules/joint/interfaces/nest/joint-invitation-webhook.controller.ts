@@ -33,7 +33,7 @@ export class JointInvitationWebhookController {
   ): Promise<ApiSuccess<unknown>> {
     const invitationId = jointWebhookInvitationIdFromRequest(request);
     return toHttpResponse(
-      await this.controller.handleInvitationAccepted(conclusionId, invitationId),
+      await this.controller.handleInvitationAccepted(conclusionId, invitationId, _clubId),
     );
   }
 
@@ -45,7 +45,7 @@ export class JointInvitationWebhookController {
   ): Promise<ApiSuccess<unknown>> {
     const invitationId = jointWebhookInvitationIdFromRequest(request);
     return toHttpResponse(
-      await this.controller.handleInvitationRejected(conclusionId, invitationId),
+      await this.controller.handleInvitationRejected(conclusionId, invitationId, _clubId),
     );
   }
 }

@@ -88,7 +88,7 @@ export class DefaultSendClubInvitationUseCase implements SendClubInvitationUseCa
     const notBefore = new Date(input.now.getTime() + INVITATION_TIMEOUT_DEFAULT_MS);
     await this.tasks.scheduleInvitationTimeout(
       conclusionSnap.jointActivityId,
-      conclusionSnap.revisionNumber,
+      conclusion.toSnapshot().revisionNumber,
       inv.invitationId,
       notBefore,
     );

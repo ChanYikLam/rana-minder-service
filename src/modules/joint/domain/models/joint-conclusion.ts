@@ -175,11 +175,16 @@ export class JointConclusion {
     return ok;
   }
 
-  markInviteRejected(_now: Date): void {
+  /** 邀请被拒绝：回退到可编辑+待复核，立即可重新编辑/重邀（避免卡死） */
+  markInviteRejected(machine: JointConclusionStateMachine, now: Date): boolean {
     if (this.snapshot.inviteStatus === 'ACCEPTED') {
       throw new JointDomainError('JNT_CON_LOCKED', '已接受锁定的结论不可被拒绝');
     }
-    this.snapshot = { ...this.snapshot, inviteStatus: 'REJECTED' };
+    const ok = this.transition(machine, JointConclusionEvent.REJECT_INVITE, now);
+    if (ok) {
+      this.snapshot = { ...this.snapshot, inviteStatus: 'REJECTED' };
+    }
+    return ok;
   }
 
   clearInvitation(_now: Date): void {

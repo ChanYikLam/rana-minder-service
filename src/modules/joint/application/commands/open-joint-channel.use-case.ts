@@ -81,7 +81,7 @@ export class DefaultOpenJointChannelUseCase implements OpenJointChannelUseCase {
 
     await this.tasks.scheduleChannelAutoClose(
       input.jointActivityId,
-      channelSnap.revisionNumber,
+      channel.toSnapshot().revisionNumber,
       windowId,
       input.deadline,
     );

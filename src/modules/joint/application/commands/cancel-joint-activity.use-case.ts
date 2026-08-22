@@ -53,6 +53,6 @@ export class DefaultCancelJointActivityUseCase implements CancelJointActivityUse
     }
     await this.repository.saveActivity(activity.toSnapshot(), activitySnap.revisionNumber);
 
-    await this.tasks.scheduleArchiveTerminal(input.activityId, activitySnap.revisionNumber);
+    await this.tasks.scheduleArchiveTerminal(input.activityId, activity.toSnapshot().revisionNumber);
   }
 }
