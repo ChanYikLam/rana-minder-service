@@ -98,7 +98,9 @@ import {
 } from './status-page/tokens';
 import { DefaultStaleUnknownRule } from './status-page/stale-unknown';
 import { ProcessAppStatusPort } from './status-page/app-status';
-import { NotWiredDbStatusPort } from './status-page/db-status';
+import { NotWiredDbStatusPort, PostgresDbStatusPort } from './status-page/db-status';
+import { DB_ADAPTER } from '../../adapters/tokens';
+import { realDbEnabled } from '../../adapters/adapters.module';
 import { NotWiredTaskSummaryPort } from './status-page/task-summary';
 import { RecorderDepLatestPort } from './status-page/recorder-dep-latest.port';
 import { DEP_LATEST_RECORDER } from '../../adapters/tokens';
@@ -245,7 +247,9 @@ const APP_STATUS_PORT_PROVIDER: Provider = {
 
 const DB_STATUS_PORT_PROVIDER: Provider = {
   provide: DB_STATUS_PORT,
-  useFactory: () => new NotWiredDbStatusPort(),
+  // 真实 PG 可用时使用 PostgresDbStatusPort（T4）；默认保持 NotWired 桩（fail-closed）。
+  useFactory: (db) => (realDbEnabled() ? new PostgresDbStatusPort(db) : new NotWiredDbStatusPort()),
+  inject: [DB_ADAPTER],
 };
 
 const TASK_SUMMARY_PORT_PROVIDER: Provider = {

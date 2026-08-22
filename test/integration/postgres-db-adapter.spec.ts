@@ -109,19 +109,22 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
   it('RLS 上下文随事务提交自动失效（事务级隔离）', async () => {
     const db = adapter!;
     const tx = await db.beginTransaction();
-    await db.setRlsContext(tx, { kind: 'single', subjectId: 'u-1' });
-    // 事务内 SET LOCAL 上下文生效
-    const rows = await db.query<{ ctx: string | null }>(
-      tx,
-      "SELECT current_setting('app.subject_id', true) AS ctx",
-      [],
-    );
-    assert.equal(rows[0].ctx, 'u-1');
-    await db.commit(tx);
-    // 提交后上下文失效：新事务不再携带上个事务的 subjectId。
-    // 注意：PG 自定义 GUC（app.*）一旦在某连接被引用，current_setting(..., true)
-    // 在该连接后续会话中返回空串 '' 而非 NULL（连接池复用时普遍如此）。因此这里断言
-    // “不再等于 u-1”（即无残留上下文），并可进一步断言回落为空串 ''。
+    try {
+      await db.setRlsContext(tx, { kind: 'single', subjectId: 'u-1' });
+      // 事务内 SET LOCAL 上下文生效
+      const rows = await db.query<{ ctx: string | null }>(
+        tx,
+        "SELECT current_setting('app.subject_id', true) AS ctx",
+        [],
+      );
+      assert.equal(rows[0].ctx, 'u-1');
+    } finally {
+      await db.commit(tx);
+    }
+    // 提交后上下文失效（新事务不再有该值）。
+    // 注意：对“曾用 SET LOCAL 设置、提交后被重置”的自定义 GUC，PostgreSQL 会
+    // 在复用连接上返回空串 ''（而非 NULL；全新连接才返回 NULL）。两者都表示
+    // RLS 上下文已随事务提交失效，故统一按“无 subject_id 泄漏”断言。
     const tx2 = await db.beginTransaction();
     try {
       const rows2 = await db.query<{ ctx: string | null }>(
@@ -129,9 +132,10 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
         "SELECT current_setting('app.subject_id', true) AS ctx",
         [],
       );
-      assert.notEqual(rows2[0].ctx, 'u-1');
-      assert.equal(rows2[0].ctx, '');
-      await db.commit(tx2);
+      assert.ok(
+        rows2[0].ctx === null || rows2[0].ctx === '',
+        `提交后 RLS 上下文应失效，实际得到: ${JSON.stringify(rows2[0].ctx)}`,
+      );
     } finally {
       // 无论断言成败都收口事务，避免连接泄漏导致 pool.end() 挂起（CI 10 分钟超时）。
       await db.rollback(tx2);
