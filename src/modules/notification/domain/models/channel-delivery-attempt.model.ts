@@ -20,6 +20,8 @@ export interface ChannelDeliveryAttemptModel {
   readonly factId: string;
   /** 收件人快照标识（投递尝试可回溯收件人快照，保证关联完整性） */
   readonly snapshotId: string | null;
+  /** 收件人主体标识（外发箱展示与永久失败提示定位；快照的冗余引用） */
+  readonly recipientId?: string | null;
   /** 渠道类型 */
   readonly channel: ChannelType;
   /** 渠道消息 ID（外部投递标识，用于幂等） */

@@ -9,7 +9,7 @@
 
 `DOCK-001`：范围：镜像**构建**规则与落地文件（`Dockerfile`、`.dockerignore`、开发环境 `docker-compose.dev.yml`）；不包含生产部署编排、镜像制品库发布流程（见部署运维手册 §13/§18）。
 
-`DOCK-002`：前置：代码尚未开工（无 `package.json`），本规范与落地文件以 [启动入口文档](../../src/启动入口文档.md)、[后端工程约定](后端工程约定-v1.0.md)、[依赖与版本基线](依赖与版本基线-v1.0.md) 为输入编写；代码就绪后镜像可直接构建。DEP-Q-003（基础镜像）正式确认前，本节选型为**强候选约定，不冻结**。
+`DOCK-002`：前置：代码尚未开工（无 `package.json`），本规范与落地文件以 [启动入口文档](../../src/启动入口文档.md)、[后端工程约定](后端工程约定-v1.0.md)、[依赖与版本基线](依赖与版本基线-v1.0.md) 为输入编写；代码就绪后镜像可直接构建。**DEP-Q-003（基础镜像）已于本文修订时冻结为 `node:24-slim`（运行阶段）＋ `node:24`（构建阶段）**，本节选型由此前的强候选转正为已冻结基线。
 
 `DOCK-003`：镜像形态：**单镜像双入口**——HTTP 应用（`dist/main.js`）与后台任务（`dist/main.worker.js`）共用同一镜像与编译产物（[启动入口文档](../../src/启动入口文档.md)、ADR-013 §2.3、OPS-TOPO-003），以启动命令区分；不设独立 worker 镜像，未来拆分部署仍同镜像不同命令（ADR-012）。
 
@@ -23,7 +23,7 @@
 | distroless（nodejs 24） | 小 | 定期更新 | 需另挂 CA 证书；镜像不含 shell | 无 shell，健康检查受限 | 候选；DEP-Q-003 若确认则仅改运行阶段 FROM |
 | alpine（node:24-alpine） | 最小 | 官方同步更新 | musl 兼容性需验证（pg 原生扩展场景）；CA 需 apk | busybox 工具 | 候选；node-postgres 场景收益有限 |
 
-`DOCK-011`：选型结论：**构建阶段 `node:24`（官方，含完整工具链）＋ 运行阶段 `node:24-slim`**。理由：与 [依赖与版本基线](依赖与版本基线-v1.0.md) §2 的 Node.js 24 LTS 基线一致；node-postgres 为纯 JS 客户端无编译负担；自带 CA 证书（HTTPS 出站）；非 root 与只读挂载约束可用官方镜像原生支持。若 DEP-Q-003 最终确认 distroless：仅调整运行阶段 `FROM` 与健康检查工具，构建阶段与 §3 不变。
+`DOCK-011`：选型结论（**已冻结**）：**构建阶段 `node:24`（官方，含完整工具链）＋ 运行阶段 `node:24-slim`**。理由：与 [依赖与版本基线](依赖与版本基线-v1.0.md) §2 的 Node.js 24 LTS 基线一致；node-postgres 为纯 JS 客户端无编译负担；自带 CA 证书（HTTPS 出站）；非 root 与只读挂载约束可用官方镜像原生支持。冻结依据见 `DEP-Q-003`（依赖与版本基线 §5）。后续如需改为 distroless：仅调整运行阶段 `FROM` 与健康检查工具，构建阶段与 §3 不变，并重新发起 DEP-Q-003 变更评审。
 
 ## 3. 多阶段构建
 
@@ -142,5 +142,5 @@ docker compose -f docker-compose.dev.yml up -d
 | 开发环境编排 docker-compose.dev.yml | 已落地（仓库根，四依赖服务） |
 | postgres 初始化脚本 | 已落地（scripts/dev/postgres-init.sql，挂载 init 自动执行） |
 | CI 阶段 8 门禁 | 已同步（Dockerfile＋package.json 双条件，三处配置） |
-| DEP-Q-003 | 保持待确认；node:24-slim 为强候选（§2），确认后按 DOCK-011 调整 |
-| 生产部署编排 | 不属本文件范围（部署运维手册体系另行收口） |
+| DEP-Q-003 | **已冻结**：运行阶段 node:24-slim ＋ 构建阶段 node:24（§2 DOCK-011），Dockerfile 已同步 |
+| 生产部署编排 | 已落地仓库根 `docker-compose.yml`（官方单机：app＋worker＋PostgreSQL＋MinIO＋Casdoor；只读挂载、--read-only、进程探针）；详参该文件头注释与部署运维手册 §13 |
