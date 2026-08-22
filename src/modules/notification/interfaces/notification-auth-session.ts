@@ -20,6 +20,14 @@ export interface NotificationAuthSession {
   /** 已认证用户展示名称（服务端认证结果） */
   readonly displayName: string;
   readonly now: Date;
+  /**
+   * 服务端解析的权限码集合（如 club:email:config、club:config:manage）。
+   * 只来自服务端会话/角色解析，不采纳客户端自报；未提供视为空集
+   * （fail-closed：邮件配置等特权端点将被拒绝，NTF-006）。
+   */
+  readonly permissions?: readonly string[];
+  /** 平台超管标记（服务端解析；未提供视为 false） */
+  readonly isPlatformAdmin?: boolean;
 }
 
 export interface NotificationAuthSessionProvider {

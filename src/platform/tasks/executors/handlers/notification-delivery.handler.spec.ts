@@ -16,6 +16,8 @@ import {
 } from '../../../../modules/notification/infrastructure';
 import { DeliverInboxCommand } from '../../../../modules/notification/application/commands/deliver-inbox.command';
 import { RetryChannelDeliveryCommand } from '../../../../modules/notification/application/commands/retry-channel-delivery.command';
+import { MarkPermanentFailureCommand } from '../../../../modules/notification/application/commands/mark-permanent-failure.command';
+import { InMemoryPrivilegedAuditWriter } from '../../../../modules/notification/infrastructure';
 import { NotificationDeliveryHandler } from './notification-delivery.handler';
 import type {
   CreateNotificationFactInput,
@@ -35,8 +37,12 @@ describe('NotificationDeliveryHandler（评审 #1：后台投递链路生效）'
     inbox = new InMemoryInboxAdapter();
     attempts = new InMemoryChannelDeliveryAttemptRepository();
     handler = new NotificationDeliveryHandler(
-      new DeliverInboxCommand(repo, inbox, attempts),
-      new RetryChannelDeliveryCommand(attempts, new InMemoryEmailAdapter()),
+      new DeliverInboxCommand(repo, inbox),
+      new RetryChannelDeliveryCommand(
+        attempts,
+        new InMemoryEmailAdapter(),
+        new MarkPermanentFailureCommand(attempts, repo, inbox, new InMemoryPrivilegedAuditWriter()),
+      ),
     );
   });
 

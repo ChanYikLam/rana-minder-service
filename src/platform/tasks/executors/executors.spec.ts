@@ -54,6 +54,9 @@ const defaultConfig: RanaMinderConfig = {
     buckets: { quarantine: 'q', primary: 'p', derived: 'd' },
   },
   mail: { host: 'localhost', port: 1025, fromAddress: 'no-reply@test' },
+  fileCheck: { endpoint: '' },
+  notify: { endpoint: '' },
+  backup: { endpoint: '' },
   observability: { logLevel: 'info', traceSamplingRate: 1.0 },
   job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
 };

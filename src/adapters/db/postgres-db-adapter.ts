@@ -76,6 +76,7 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       password: string;
       ssl: boolean;
       max?: number;
+      connectionTimeoutMillis?: number;
     },
   ) {
     this.pool = new Pool({
@@ -86,8 +87,13 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       password: poolConfig.password,
       ssl: poolConfig.ssl ? { rejectUnauthorized: false } : false,
       max: poolConfig.max ?? 10,
+      // 连接超时：避免 DB 不可达时 pool.connect() 无限挂起（如 CI 集成测试阶段
+      // dind 网络未就绪时静默阻塞直到 Runner 超时强杀）。超时后快速抛错便于定位。
+      connectionTimeoutMillis: poolConfig.connectionTimeoutMillis ?? 10_000,
       // 归还前若发现连接上仍有未收口事务，兜底回滚并告警（污染防护）。
       idleTimeoutMillis: 30_000,
+      // 连接池空闲即允许进程退出，避免 node --test 因池常驻句柄而等待事件循环耗尽。
+      allowExitOnIdle: true,
     });
 
     this.pool.on('error', (err) => {
@@ -171,7 +177,13 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.pool.end();
+    // 带超时的连接池关闭：若仍有未归还连接（如测试中断言失败后遗漏 commit/rollback），
+    // 避免 pool.end() 无限等待导致 CI 超时强杀（Runner 10 分钟无输出）。
+    // 超时后强制终止剩余连接，保证进程可退出。
+    await Promise.race([
+      this.pool.end(),
+      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+    ]);
   }
 }
 

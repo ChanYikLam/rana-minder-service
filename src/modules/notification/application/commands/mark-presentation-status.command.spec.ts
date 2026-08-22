@@ -6,11 +6,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { NotificationRepository } from '../../infrastructure';
-import {
-  InMemoryInboxAdapter,
-  InMemoryNotificationRepository,
-  InMemoryChannelDeliveryAttemptRepository,
-} from '../../infrastructure';
+import { InMemoryInboxAdapter, InMemoryNotificationRepository } from '../../infrastructure';
 import { MarkPresentationStatusCommand } from './mark-presentation-status.command';
 import { MarkAllReadCommand } from './mark-all-read.command';
 import { DeliverInboxCommand } from './deliver-inbox.command';
@@ -27,7 +23,7 @@ describe('MarkPresentationStatusCommand（NTF-003）', () => {
     seq += 1;
     repo = new InMemoryNotificationRepository();
     inbox = new InMemoryInboxAdapter();
-    deliver = new DeliverInboxCommand(repo, inbox, new InMemoryChannelDeliveryAttemptRepository());
+    deliver = new DeliverInboxCommand(repo, inbox);
     command = new MarkPresentationStatusCommand(inbox, repo);
   });
 
@@ -122,7 +118,7 @@ describe('MarkAllReadCommand（NTF-003：全部标记已读）', () => {
     seq += 1;
     repo = new InMemoryNotificationRepository();
     inbox = new InMemoryInboxAdapter();
-    deliver = new DeliverInboxCommand(repo, inbox, new InMemoryChannelDeliveryAttemptRepository());
+    deliver = new DeliverInboxCommand(repo, inbox);
     allRead = new MarkAllReadCommand(inbox);
   });
 
