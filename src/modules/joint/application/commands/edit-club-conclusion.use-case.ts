@@ -1,0 +1,75 @@
+/**
+ * 编辑社团结论用例（JNT-005）。结论不存在则创建可编辑态。
+ */
+
+import { JointConclusion } from '../../domain/models/joint-conclusion';
+import type { JointConclusionDecision } from '../../domain/state-machines/joint-conclusion.state-machine';
+import { JointConclusionStateMachine } from '../../domain/state-machines/joint-conclusion.state-machine';
+import type { JointRepository } from '../ports/joint-repository.port';
+import { jointErrors } from '../errors';
+
+export interface EditClubConclusionInput {
+  readonly jointActivityId: string;
+  readonly jointApplicationId: string;
+  readonly clubId: string;
+  readonly decision: JointConclusionDecision;
+  readonly note?: string | null;
+  readonly editorId: string;
+  readonly now: Date;
+  readonly id?: string;
+}
+
+export interface EditClubConclusionResult {
+  readonly conclusionId: string;
+}
+
+export interface EditClubConclusionUseCase {
+  execute(input: EditClubConclusionInput): Promise<EditClubConclusionResult>;
+}
+
+export class DefaultEditClubConclusionUseCase implements EditClubConclusionUseCase {
+  constructor(private readonly repository: JointRepository) {}
+
+  async execute(input: EditClubConclusionInput): Promise<EditClubConclusionResult> {
+    const conclusionId = JointConclusion.conclusionId(input.jointApplicationId, input.clubId);
+    let conclusionSnap;
+    let expectedRevision: number;
+
+    const existing = await this.repository.loadConclusion(conclusionId);
+    if (existing === null) {
+      const conclusion = JointConclusion.createEditable({
+        jointActivityId: input.jointActivityId,
+        jointApplicationId: input.jointApplicationId,
+        clubId: input.clubId,
+        now: input.now,
+      });
+      await this.repository.saveConclusion(conclusion.toSnapshot(), -1);
+      const saved = await this.repository.loadConclusion(conclusionId);
+      if (saved === null) {
+        throw jointErrors.preconditionFailed('社团结论创建失败');
+      }
+      conclusionSnap = saved;
+      expectedRevision = saved.revisionNumber;
+    } else {
+      if (existing.status !== 'EDITABLE' && existing.status !== 'REVIEW_PENDING') {
+        throw jointErrors.preconditionFailed('仅可编辑或待复核态的结论可改写');
+      }
+      conclusionSnap = existing;
+      expectedRevision = existing.revisionNumber;
+    }
+
+    const conclusion = JointConclusion.fromSnapshot(conclusionSnap);
+    if (
+      !conclusion.edit(new JointConclusionStateMachine(), {
+        decision: input.decision,
+        note: input.note,
+        editorId: input.editorId,
+        now: input.now,
+      })
+    ) {
+      throw jointErrors.preconditionFailed('社团结论编辑失败');
+    }
+    await this.repository.saveConclusion(conclusion.toSnapshot(), expectedRevision);
+    return { conclusionId };
+  }
+}
