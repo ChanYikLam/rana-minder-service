@@ -64,7 +64,13 @@ export class DefaultConfirmParticipationRoundUseCase implements ConfirmParticipa
 
     const participant = JointParticipant.fromSnapshot(participantSnap);
     const machine = new JointParticipantStateMachine();
-    if (!participant.confirm(machine, activity.confirmRound, input.actor, input.now)) {
+    // 待重确认（STALE_RECONFIRM）的社团在轮次一致时走重新确认，而非新建；
+    // 拟参与（PROPOSED）走首次确认。
+    if (participantSnap.status === 'STALE_RECONFIRM') {
+      if (!participant.reconfirm(machine, activity.confirmRound, input.actor, input.now)) {
+        throw jointErrors.preconditionFailed('参与社团重新确认失败');
+      }
+    } else if (!participant.confirm(machine, activity.confirmRound, input.actor, input.now)) {
       throw jointErrors.preconditionFailed('参与社团确认失败');
     }
     await this.repository.saveParticipant(participant.toSnapshot(), participantSnap.revisionNumber);

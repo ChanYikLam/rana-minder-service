@@ -111,6 +111,26 @@ export class JointParticipant {
     return this.transition(machine, JointParticipantEvent.STALE, now);
   }
 
+  /** 待重确认后重新确认：STALE_RECONFIRM → CONFIRMED（轮次一致时） */
+  reconfirm(
+    machine: JointParticipantStateMachine,
+    currentRound: number,
+    actor: string,
+    now: Date,
+  ): boolean {
+    if (this.snapshot.roundId !== currentRound) {
+      throw new JointDomainError(
+        'JNT_PART_ROUND_MISMATCH',
+        '确认轮次与活动当前轮次不一致，旧确认已失效',
+      );
+    }
+    const ok = this.transition(machine, JointParticipantEvent.RECONFIRM, now);
+    if (ok) {
+      this.snapshot = { ...this.snapshot, decidedBy: actor, confirmedAt: now };
+    }
+    return ok;
+  }
+
   participate(machine: JointParticipantStateMachine, now: Date): boolean {
     return this.transition(machine, JointParticipantEvent.PARTICIPATE, now);
   }
