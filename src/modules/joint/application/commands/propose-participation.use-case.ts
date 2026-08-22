@@ -63,9 +63,7 @@ export class DefaultProposeParticipationUseCase implements ProposeParticipationU
     // 直接恢复已撤回的关系回拟参与态，避免新建行与唯一约束 (activity_id, club_id, round_id) 冲突。
     if (existing !== null && existing.status === 'WITHDRAWN') {
       const participant = JointParticipant.fromSnapshot(existing);
-      if (
-        !participant.repropose(new JointParticipantStateMachine(), input.now)
-      ) {
+      if (!participant.repropose(new JointParticipantStateMachine(), input.now)) {
         throw jointErrors.preconditionFailed('参与社团重新提出失败');
       }
       await this.repository.saveParticipant(participant.toSnapshot(), existing.revisionNumber);
