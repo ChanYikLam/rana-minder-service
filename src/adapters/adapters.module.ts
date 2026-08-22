@@ -1,30 +1,59 @@
 /**
- * 平台适配模块（@Global；ADEP-Q-001/002 锁定前默认 NotWired 失败关闭桩）。
+ * 平台适配模块（@Global；默认 NotWired 失败关闭桩，依赖可用性开关显式开启真实实现）。
  *
- * 提供三个共享适配边界 token：DB_ADAPTER / CASDOOR_ADAPTER / MAIL_CHANNEL_ADAPTER。
+ * 提供共享适配边界 token：
+ * - DB_ADAPTER（T2 已接线：ADAPTERS_DB_REAL=1 时用真实 PostgresDbAdapter）
+ * - CASDOOR_ADAPTER / MAIL_CHANNEL_ADAPTER / ADAPTERS_FILECHECK /
+ *   ADAPTERS_NOTIFY / ADAPTERS_BACKUP（T3 接线）
+ * - DEP_LATEST_RECORDER：外部依赖最近结果记录器（供 observability DepLatestPort 绑定）
  *
- * 接线策略（T2）：
- * - DB_ADAPTER：默认绑定 NotWiredDbAdapter（fail-closed，未连接态任何操作抛
- *   DbUnavailableError）。当显式开启 `ADAPTERS_DB_REAL=1` 且能解析到数据库配置时，
- *   绑定真实 PostgresDbAdapter（pg 连接池 + 事务 + RLS 上下文，ADR-005）。
- * - CASDOOR_ADAPTER / MAIL_CHANNEL_ADAPTER：维持 NotWired 失败关闭桩，待
- *   DEP-Q-001/002 锁定与 T3 接线。
+ * 接线策略（T3）：每个外部适配器一律 fail-closed，仅当对应 `ADAPTERS_*_REAL=1`
+ * 且能解析到配置时才绑定真实实现；否则维持 NotWired 桩（返回 UNAVAILABLE/未知），
+ * 不伪健康、不静默成功（ADR-011 §2.1、GOV-008、NFR-003）。
  *
- * 可用性开关约定：真实适配器一律需显式开启（与 ORG_DEV_ACTOR_HEADER 一致），
+ * 可用性开关约定（与 T2 的 ADAPTERS_DB_REAL 一致）：
+ * - ADAPTERS_DB_REAL=1 → PostgresDbAdapter
+ * - ADAPTERS_CASDOOR_REAL=1 → HttpCasdoorAdapter
+ * - ADAPTERS_MAIL_REAL=1 → SmtpMailChannelAdapter
+ * - ADAPTERS_FILECHECK_REAL=1 → ExternalFileCheckAdapter
+ * - ADAPTERS_NOTIFY_REAL=1 → HttpNotifyAdapter
+ * - ADAPTERS_BACKUP_REAL=1 → ExternalBackupAdapter
+ *
  * 生产默认 fail-closed；单元测试不连接外部系统，保持桩行为。
- *
- * 注：本模块为 @Global 普通模块（非 DynamicModule），DB_ADAPTER 通过工厂按
- * `ADAPTERS_DB_REAL` 开关选择桩或真实实现，各领域模块可照常以静态导入方式
- * 复用（无需改动 importers）。
  */
 
 import { Global, Module } from '@nestjs/common';
 
-import { DB_ADAPTER, CASDOOR_ADAPTER, MAIL_CHANNEL_ADAPTER } from './tokens';
+import {
+  DB_ADAPTER,
+  CASDOOR_ADAPTER,
+  MAIL_CHANNEL_ADAPTER,
+  ADAPTERS_FILECHECK,
+  ADAPTERS_NOTIFY,
+  ADAPTERS_BACKUP,
+  DEP_LATEST_RECORDER,
+} from './tokens';
 import { NotWiredDbAdapter } from './db/not-wired-db.adapter';
 import { PostgresDbAdapter } from './db/postgres-db-adapter';
 import { NotWiredCasdoorAdapter } from './casdoor/not-wired-casdoor.adapter';
+import { HttpCasdoorAdapter } from './casdoor/http-casdoor.adapter';
 import { NotWiredMailChannelAdapter } from './mail/not-wired-mail.adapter';
+import { SmtpMailChannelAdapter } from './mail/smtp-mail.adapter';
+import { ExternalFileCheckAdapter } from './file-check/external-file-check.adapter';
+import { ApplicationFileCheck } from '../modules/file/infrastructure/file-check-port';
+import { HttpNotifyAdapter, type NotifyAdapter } from './notify/external-notify.adapter';
+import { ExternalBackupAdapter } from './backup/external-backup.adapter';
+import {
+  InMemoryDepLatestRecorder,
+  type DepLatestRecorder,
+} from './dep-latest/dep-latest-recorder';
+import {
+  trackCasdoor,
+  trackMail,
+  trackFileCheck,
+  trackNotify,
+  trackBackup,
+} from './dep-latest/decorators';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../config';
 import { isSecretRef, resolveSecret } from '../config';
 
@@ -33,9 +62,17 @@ export function realDbEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.ADAPTERS_DB_REAL === '1';
 }
 
+function realEnabled(envKey: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[envKey] === '1';
+}
+
+/** 单例外部依赖记录器：各适配器回填结果，observability 状态页读取。 */
+const depLatestRecorder: DepLatestRecorder = new InMemoryDepLatestRecorder();
+
 @Global()
 @Module({
   providers: [
+    // ---- DB（T2：默认 fail-closed 桩；ADAPTERS_DB_REAL=1 时用真实 PostgresDbAdapter）----
     {
       provide: DB_ADAPTER,
       useFactory: (config: RanaMinderConfig) => {
@@ -59,9 +96,132 @@ export function realDbEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
       },
       inject: [RANA_MINDER_CONFIG],
     },
-    { provide: CASDOOR_ADAPTER, useClass: NotWiredCasdoorAdapter },
-    { provide: MAIL_CHANNEL_ADAPTER, useClass: NotWiredMailChannelAdapter },
+    // ---- 外部依赖最近结果记录器（T3，供 observability DepLatestPort 绑定）----
+    {
+      provide: DEP_LATEST_RECORDER,
+      useValue: depLatestRecorder,
+    },
+    // ---- Casdoor（T3）----
+    {
+      provide: CASDOOR_ADAPTER,
+      useFactory: (config: RanaMinderConfig, recorder: DepLatestRecorder) => {
+        if (!realEnabled('ADAPTERS_CASDOOR_REAL')) {
+          return new NotWiredCasdoorAdapter();
+        }
+        const casdoor = config.casdoor;
+        const clientSecret = isSecretRef(casdoor.clientSecretRef)
+          ? resolveSecret(casdoor.clientSecretRef)
+          : casdoor.clientSecretRef;
+        return trackCasdoor(
+          new HttpCasdoorAdapter({
+            endpoint: casdoor.endpoint,
+            clientId: casdoor.clientId,
+            organization: casdoor.organization,
+            clientSecret,
+          }),
+          recorder,
+        );
+      },
+      inject: [RANA_MINDER_CONFIG, DEP_LATEST_RECORDER],
+    },
+    // ---- Mail（T3）----
+    {
+      provide: MAIL_CHANNEL_ADAPTER,
+      useFactory: (config: RanaMinderConfig, recorder: DepLatestRecorder) => {
+        if (!realEnabled('ADAPTERS_MAIL_REAL')) {
+          return new NotWiredMailChannelAdapter();
+        }
+        const mail = config.mail;
+        const user = mail.userRef
+          ? isSecretRef(mail.userRef)
+            ? resolveSecret(mail.userRef)
+            : mail.userRef
+          : undefined;
+        const password = mail.passwordRef
+          ? isSecretRef(mail.passwordRef)
+            ? resolveSecret(mail.passwordRef)
+            : mail.passwordRef
+          : undefined;
+        return trackMail(
+          new SmtpMailChannelAdapter({
+            host: mail.host,
+            port: mail.port,
+            fromAddress: mail.fromAddress,
+            ...(user !== undefined ? { user } : {}),
+            ...(password !== undefined ? { password } : {}),
+          }),
+          recorder,
+        );
+      },
+      inject: [RANA_MINDER_CONFIG, DEP_LATEST_RECORDER],
+    },
+    // ---- File-check（T3）----
+    {
+      provide: ADAPTERS_FILECHECK,
+      useFactory: (config: RanaMinderConfig, recorder: DepLatestRecorder) => {
+        // 默认：应用侧初检（不信任扩展名、默认禁止可执行/脚本/高风险压缩）；
+        // 开启 ADAPTERS_FILECHECK_REAL 时委托外部检查服务。
+        if (!realEnabled('ADAPTERS_FILECHECK_REAL')) {
+          return new ApplicationFileCheck();
+        }
+        return trackFileCheck(
+          new ExternalFileCheckAdapter({ endpoint: config.storage.endpoint }),
+          recorder,
+        );
+      },
+      inject: [RANA_MINDER_CONFIG, DEP_LATEST_RECORDER],
+    },
+    // ---- Notify（T3）----
+    {
+      provide: ADAPTERS_NOTIFY,
+      useFactory: (config: RanaMinderConfig, recorder: DepLatestRecorder): NotifyAdapter => {
+        if (!realEnabled('ADAPTERS_NOTIFY_REAL')) {
+          // fail-closed：未启用时返回不可用桩（对象为 UNAVAILABLE 语义）。
+          return {
+            async send() {
+              const { randomUUID } = await import('node:crypto');
+              const { externalFailure } = await import('../common/contracts/external-result');
+              return externalFailure(
+                'UNAVAILABLE',
+                {
+                  code: 'NOTIFY-NOT-WIRED',
+                  message: '外部通知渠道适配未启用（首版桩）',
+                  retryable: true,
+                  rawStatusCode: null,
+                },
+                randomUUID(),
+                new Date(),
+              );
+            },
+          };
+        }
+        return trackNotify(new HttpNotifyAdapter({ endpoint: config.storage.endpoint }), recorder);
+      },
+      inject: [RANA_MINDER_CONFIG, DEP_LATEST_RECORDER],
+    },
+    // ---- Backup（T3）----
+    {
+      provide: ADAPTERS_BACKUP,
+      useFactory: (config: RanaMinderConfig, recorder: DepLatestRecorder) => {
+        if (!realEnabled('ADAPTERS_BACKUP_REAL')) {
+          return null;
+        }
+        return trackBackup(
+          new ExternalBackupAdapter({ endpoint: config.storage.endpoint }),
+          recorder,
+        );
+      },
+      inject: [RANA_MINDER_CONFIG, DEP_LATEST_RECORDER],
+    },
   ],
-  exports: [DB_ADAPTER, CASDOOR_ADAPTER, MAIL_CHANNEL_ADAPTER],
+  exports: [
+    DB_ADAPTER,
+    CASDOOR_ADAPTER,
+    MAIL_CHANNEL_ADAPTER,
+    ADAPTERS_FILECHECK,
+    ADAPTERS_NOTIFY,
+    ADAPTERS_BACKUP,
+    DEP_LATEST_RECORDER,
+  ],
 })
 export class AdaptersModule {}
