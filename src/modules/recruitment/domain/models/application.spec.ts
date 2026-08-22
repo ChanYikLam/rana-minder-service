@@ -92,7 +92,9 @@ describe('Application (REC-003)', () => {
       true,
     );
     assert.equal(app.status, 'SUBMITTED');
-    assert.equal(app.revisionNumber, 2);
+    // 提交(0→1) → 撤回(→2) → 重提(→3)：每次状态变迁均递增修订号，
+    // 以保证乐观锁能拦截并发的不同状态变更
+    assert.equal(app.revisionNumber, 3);
   });
 
   it('退出后不可重提（终态）', () => {

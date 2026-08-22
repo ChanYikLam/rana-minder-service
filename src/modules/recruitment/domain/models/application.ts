@@ -268,9 +268,8 @@ export class Application {
     if (!result.allowed) {
       return false;
     }
-    const base = { ...this.snapshot, status: result.nextState, updatedAt: now };
+    const revisionNumber = this.snapshot.revisionNumber + 1;
     if (revisionInput !== null) {
-      const revisionNumber = this.snapshot.revisionNumber + 1;
       const revision: ApplicationRevision = {
         revision: revisionNumber,
         departmentChoices: revisionInput.departmentChoices,
@@ -278,13 +277,26 @@ export class Application {
         qualifySnapshot: revisionInput.qualifySnapshot,
         submittedAt: now,
       };
-      base.revisionNumber = revisionNumber;
-      base.departmentChoices = revisionInput.departmentChoices;
-      base.formRef = revisionInput.formRef;
-      base.qualifySnapshot = revisionInput.qualifySnapshot;
-      base.revisions = [...this.snapshot.revisions, revision];
+      this.snapshot = {
+        ...this.snapshot,
+        status: result.nextState,
+        updatedAt: now,
+        // 每次状态变迁都递增修订号，保证乐观锁（WHERE revision_number）能拦截
+        // 并发的不同状态变更（如 withdraw 与 finalReject 竞争），避免丢失更新
+        revisionNumber,
+        departmentChoices: revisionInput.departmentChoices,
+        formRef: revisionInput.formRef,
+        qualifySnapshot: revisionInput.qualifySnapshot,
+        revisions: [...this.snapshot.revisions, revision],
+      };
+    } else {
+      this.snapshot = {
+        ...this.snapshot,
+        status: result.nextState,
+        updatedAt: now,
+        revisionNumber,
+      };
     }
-    this.snapshot = base;
     return true;
   }
 }
