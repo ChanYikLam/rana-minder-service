@@ -160,6 +160,9 @@ export class InterviewWorkflowUseCase {
     );
   }
   async skip(input: SkipInterviewInput): Promise<InterviewWorkflowResult> {
+    if (typeof input.reason !== 'string' || input.reason.trim() === '') {
+      throw recruitmentErrors.validation('跳轮/免试须填写原因');
+    }
     const { record, expectedRevision } = await this.loadManaged(input.interviewId, input.actor);
     if (!record.skip(new DefaultInterviewRecordStateMachine(), input.reason, input.now)) {
       throw recruitmentErrors.preconditionFailed('面试跳轮/免试失败');

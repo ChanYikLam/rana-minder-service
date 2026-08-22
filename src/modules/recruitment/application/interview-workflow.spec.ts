@@ -174,6 +174,29 @@ describe('recruitment interview workflow (REC-005)', () => {
     assert.strictEqual(skipped.status, 'SKIPPED');
   });
 
+  it('跳轮/免试必须填写原因', async () => {
+    const pending = InterviewRecord.createPending({
+      id: 'iv-skip-empty',
+      applicationId,
+      activityId: (await repo.loadApplication(applicationId))!.activityId,
+      clubId: CLUB_ID,
+      roundId: 'round-7',
+      applicantId: APPLICANT,
+      now: NOW,
+    });
+    await repo.saveInterview(pending.toSnapshot(), -1);
+    await assert.rejects(
+      () =>
+        workflow.skip({
+          interviewId: pending.id,
+          reason: '   ',
+          actor: MANAGER,
+          now: NOW,
+        }),
+      { code: 'REC_VALIDATION' },
+    );
+  });
+
   it('作废保留原始事实（VOIDED）', async () => {
     const scheduled = await workflow.schedule({
       applicationId,
