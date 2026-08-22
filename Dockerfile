@@ -3,7 +3,7 @@
 # RanaMinder Service 镜像（HTTP 应用与后台任务双入口，单镜像）
 # 权威依据：docs/engineering/Docker镜像构建规范-v1.0.md（DOCK-001~081）
 #          ADR-010（配置只读挂载）、ADR-013（Node 24 / NestJS 双入口）、
-#          依赖与版本基线（Node 24 LTS；DEP-Q-003 未冻结，node:24-slim 为强候选）
+#          依赖与版本基线（Node 24 LTS；DEP-Q-003 已冻结为 node:24-slim，见 DOCK-011）
 # 注意：本文件与 .cnb.yml CI 阶段 8 联动；代码未开工时阶段自动跳过
 # ============================================================
 
@@ -19,7 +19,7 @@ RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build && pnpm run build:worker
 
-# ---- 运行阶段（node:24-slim，DEP-Q-003 强候选）----
+# ---- 运行阶段（node:24-slim，DEP-Q-003 已冻结，见 DOCK-011）----
 FROM node:24-slim AS runtime
 
 ENV NODE_ENV=production \

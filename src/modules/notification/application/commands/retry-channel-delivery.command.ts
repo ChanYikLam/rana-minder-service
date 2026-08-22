@@ -14,6 +14,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ChannelDeliveryAttemptRepository, EmailAdapter } from '../../infrastructure';
 import { computeNextRetryAt, shouldStopEmailRetry } from '../../domain';
 import { CHANNEL_DELIVERY_ATTEMPT_REPOSITORY, EMAIL_ADAPTER } from '../../tokens';
+import { MarkPermanentFailureCommand } from './mark-permanent-failure.command';
 
 @Injectable()
 export class RetryChannelDeliveryCommand {
@@ -24,6 +25,9 @@ export class RetryChannelDeliveryCommand {
     private readonly attemptRepository: ChannelDeliveryAttemptRepository,
     @Inject(EMAIL_ADAPTER)
     private readonly emailAdapter: EmailAdapter,
+    // 永久失败统一走 MarkPermanentFailureCommand：承担 NTF-007
+    // 站内信提示用户＋特权审计通知管理员义务（重试路径不再绕过）
+    private readonly markPermanentFailure: MarkPermanentFailureCommand,
   ) {}
 
   /**
@@ -52,11 +56,9 @@ export class RetryChannelDeliveryCommand {
         now: new Date().toISOString(),
       })
     ) {
-      // 进入永久失败（NTF-007）
-      await this.attemptRepository.updateAttempt(attemptId, {
-        status: 'PERMANENT_FAILURE',
-        completedAt: new Date().toISOString(),
-      });
+      // 进入永久失败（NTF-007）：统一走 MarkPermanentFailureCommand
+      // 以承担站内信提示用户＋通知管理员义务
+      await this.markPermanentFailure.execute(attemptId);
       this.logger.log(`投递进入永久失败: attemptId=${attemptId}`);
       return;
     }
@@ -79,12 +81,11 @@ export class RetryChannelDeliveryCommand {
         });
         this.logger.log(`投递重试成功: attemptId=${attemptId}`);
       } else if (result.status === 'BOUNCE') {
-        // 明确退信：立即进入永久失败，不再重试（NTF-007）
-        await this.attemptRepository.updateAttempt(attemptId, {
-          status: 'PERMANENT_FAILURE',
+        // 明确退信：立即进入永久失败，不再重试（NTF-007）；
+        // 统一走 MarkPermanentFailureCommand 以承担提示义务并保留退信类别
+        await this.markPermanentFailure.execute(attemptId, {
           responseCategory: 'BOUNCE',
           sanitizedError: result.sanitizedError,
-          completedAt: new Date().toISOString(),
         });
         this.logger.log(`投递重试遇明确退信，进入永久失败: attemptId=${attemptId}`);
       } else {

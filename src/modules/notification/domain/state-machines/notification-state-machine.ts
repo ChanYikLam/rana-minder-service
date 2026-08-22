@@ -251,7 +251,7 @@ export class NotificationStateMachine {
 
   /**
    * 转换 5d：收件人隐藏。
-   * 已投递 → 隐藏（隐藏是用户终态动作，从任意呈现状态均可隐藏）
+   * 已投递 → 隐藏
    */
   private evaluateMarkHidden(command: StateTransitionCommand): TransitionResult {
     if (command.currentStatus !== 'DELIVERED') {

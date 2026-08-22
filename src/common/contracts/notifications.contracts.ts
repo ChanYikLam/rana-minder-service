@@ -121,13 +121,17 @@ export interface NotificationKillSwitchInput {
   operatorName?: string;
 }
 
-/** SMTP 配置（脱敏，不含密钥） */
+/** SMTP 配置（脱敏，不含密钥；NTF-006 密钥不明文回显） */
 export interface EmailConfigView {
   smtpHost: string;
   smtpPort: number;
   smtpUser: string;
   fromName: string;
   encryption: 'ssl' | 'tls' | 'none';
+  /** 是否已配置密钥（只显示是/否与指纹，永不回显密钥） */
+  secretConfigured: boolean;
+  /** 密钥指纹（SHA-256 前 12 位；识别"已配置/已变更"） */
+  secretFingerprint: string | null;
   verified: boolean;
   lastTestPassedAt: string | null;
   keyRotatedAt: string | null;
@@ -140,6 +144,11 @@ export interface EmailConfigInput {
   smtpUser: string;
   fromName: string;
   encryption?: 'ssl' | 'tls' | 'none';
+  /**
+   * 发信密钥（写-only，NTF-006）：只能重填或轮换，服务端加密落库，
+   * 任何响应不回显。缺省沿用已存密钥。
+   */
+  smtpSecret?: string;
 }
 
 /** POST /api/org/:clubId/notifications/email-config 响应 data */
@@ -183,4 +192,46 @@ export interface NotificationTemplate {
   channel: ['inbox'] | ['inbox', 'email'];
   link: string | null;
   dedupKey: string | null;
+}
+
+/** 邮件模板视图（GET 目录 / 保存后回显；不含收件人数据） */
+export interface EmailTemplateView {
+  templateId: string;
+  kind: NotificationKind;
+  scopeType: 'PLATFORM' | 'CLUB';
+  clubId: string | null;
+  subject: string;
+  htmlBody: string;
+  activeVersion: number;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+/** 保存邮件模板请求 input（POST club/admin 模板端点） */
+export interface EmailTemplateSaveInput {
+  subject: string;
+  htmlBody: string;
+}
+
+/** 模板预览结果（NTF-005.8） */
+export interface EmailTemplatePreviewResult {
+  ok: boolean;
+  subject: string | null;
+  htmlBody: string | null;
+  ignoredVariables: readonly string[];
+  source: 'CLUB_CUSTOM' | 'PLATFORM_DEFAULT' | 'LAST_RESORT' | 'DRAFT';
+  violations: readonly string[];
+}
+
+/** 模板测试邮件结果（NTF-005.8） */
+export interface EmailTemplateTestResult {
+  ok: boolean;
+  sanitizedError: string | null;
+  violations: readonly string[];
+}
+
+/** 模板回滚结果（NTF-005.8） */
+export interface EmailTemplateRollbackResult {
+  rolledBack: boolean;
+  activeVersion: number;
 }
