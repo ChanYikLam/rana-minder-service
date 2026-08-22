@@ -51,9 +51,11 @@ function mapUser(raw: Record<string, unknown>): CasdoorUser | null {
     grade: typeof raw['grade'] === 'string' ? raw['grade'] : null,
     state: typeof raw['state'] === 'string' ? raw['state'] : 'UNVERIFIABLE',
     externalVersion:
-      typeof raw['externalVersion'] === 'string' || typeof raw['updatedTime'] === 'string'
-        ? ((raw['externalVersion'] as string) ?? (raw['updatedTime'] as string))
-        : null,
+      typeof raw['externalVersion'] === 'string'
+        ? (raw['externalVersion'] as string)
+        : typeof raw['updatedTime'] === 'string'
+          ? (raw['updatedTime'] as string)
+          : null,
   };
 }
 
@@ -254,7 +256,9 @@ export class HttpCasdoorAdapter implements CasdoorAdapter {
       { patch: patch.grade, read: readback.data.grade },
     ]
       .filter((f): f is { patch: string; read: string | null } => f.patch !== undefined)
-      .every(({ patch, read }) => read === patch || (patch === '' && (read === '' || read === null)));
+      .every(
+        ({ patch, read }) => read === patch || (patch === '' && (read === '' || read === null)),
+      );
     if (!changed) {
       return externalFailure(
         'UNCERTAIN',

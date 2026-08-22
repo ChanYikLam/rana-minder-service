@@ -182,4 +182,23 @@ describe('ExternalBackupAdapter（备份报告）', () => {
     const adapter = new ExternalBackupAdapter({ endpoint: 'https://backup.example.com', fetchFn });
     assert.equal(await adapter.lastRestore(), undefined);
   });
+
+  it('未知状态记录被跳过（不伪造为确定的 failure，状态页显示未知）', async () => {
+    const fetchFn = makeFetch(async () => ({
+      ok: true,
+      status: 200,
+      body: {
+        records: [
+          { backupId: 'b-ok', startedAt: '2026-08-22T00:00:00Z', status: 'success' },
+          // 未知/中间态（如 pending）：不应被伪装成 failure，而应跳过
+          { backupId: 'b-pending', startedAt: '2026-08-22T00:01:00Z', status: 'pending' },
+        ],
+      },
+    }));
+    const adapter = new ExternalBackupAdapter({ endpoint: 'https://backup.example.com', fetchFn });
+    const list = await adapter.recentBackups(5);
+    assert.equal(list.length, 1);
+    assert.equal(list[0]?.backupId, 'b-ok');
+    assert.equal(list[0]?.status, 'success');
+  });
 });

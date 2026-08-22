@@ -54,6 +54,25 @@ describe('HttpCasdoorAdapter', () => {
     assert.equal(res.data?.email, 'chen@example.com');
   });
 
+  it('externalVersion 非字符串时回退到 updatedTime，且不把非字符串强转返回', async () => {
+    const fetchFn = makeFetch(async () => ({
+      ok: true,
+      status: 200,
+      body: userBody({ externalVersion: 12345, updatedTime: '2026-08-22T00:00:00Z' }),
+    }));
+    const adapter = new HttpCasdoorAdapter({
+      endpoint: 'https://casdoor.example.com',
+      clientId: 'c',
+      organization: 'org',
+      clientSecret: 's',
+      fetchFn,
+    });
+    const res = await adapter.getUser('u1');
+    assert.equal(res.status, 'SUCCESS');
+    // 数字 externalVersion 不应被 as string 强转返回；应回退到字符串 updatedTime
+    assert.equal(res.data?.externalVersion, '2026-08-22T00:00:00Z');
+  });
+
   it('getUser 404 返回 NOT_FOUND', async () => {
     const fetchFn = makeFetch(async () => ({ ok: false, status: 404, body: null }));
     const adapter = new HttpCasdoorAdapter({

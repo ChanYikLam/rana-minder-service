@@ -12,13 +12,18 @@ import { SmtpMailChannelAdapter, type SmtpMailAdapterOptions } from './smtp-mail
 import type { Socket } from 'node:net';
 import type { VerificationEmailDispatch } from './mail-channel-adapter';
 
-/** 基于 EventEmitter 的最小 Socket mock，按脚本队列依次触发 data。 */
+/**
+ * 基于 EventEmitter 的最小 Socket mock，按脚本队列依次触发 data；
+ * 支持插入 `{ err: Error }` 条目以模拟等待响应期间对端断开/重置。
+ */
+type ScriptEntry = string[] | { err: Error };
+
 class FakeSocket extends EventEmitter {
   written: string[] = [];
-  private script: string[][];
+  private script: ScriptEntry[];
   private destroyed = false;
 
-  constructor(script: string[][]) {
+  constructor(script: ScriptEntry[]) {
     super();
     this.script = script;
   }
@@ -27,10 +32,13 @@ class FakeSocket extends EventEmitter {
     this.written.push(data);
     // 依命令触发对应响应（可按 chunk 数组分片推送）。
     const chunk = this.script.shift();
-    if (chunk) {
+    if (chunk && Array.isArray(chunk)) {
       for (const c of chunk) {
         this.emit('data', Buffer.from(c, 'utf8'));
       }
+    } else if (chunk && 'err' in chunk) {
+      // 模拟对端断开/重置：在等待响应时触发 error。
+      this.emit('error', chunk.err);
     }
     if (cb) cb();
     return true;
@@ -40,7 +48,7 @@ class FakeSocket extends EventEmitter {
   emitConnect(): void {
     this.emit('connect');
     const banner = this.script.shift();
-    if (banner) {
+    if (banner && Array.isArray(banner)) {
       for (const c of banner) {
         this.emit('data', Buffer.from(c, 'utf8'));
       }
@@ -176,5 +184,21 @@ describe('SmtpMailChannelAdapter（真实 SMTP 渠道）', () => {
     });
     const res = await adapter.sendVerificationEmail(dispatch());
     assert.equal(res.status, 'RETRYABLE_FAILURE');
+  });
+
+  it('RCPT 阶段对端断开（socket error）→ 立即 RETRYABLE_FAILURE，不等到超时', async () => {
+    const socket = new FakeSocket([
+      ['220 smtp.example.com ESMTP\r\n'],
+      ['250-smtp.example.com Hello\r\n250 HELP\r\n'],
+      ['250 OK\r\n'],
+      { err: new Error('socket hang up') }, // 在 RCPT 命令等待响应时触发 error
+    ]);
+    const adapter = makeAdapter(socket);
+    const start = Date.now();
+    const res = await adapter.sendVerificationEmail(dispatch());
+    const elapsed = Date.now() - start;
+    assert.equal(res.status, 'RETRYABLE_FAILURE');
+    // 未等满 2000ms 超时即返回，说明 socket error 被及时捕获而非拖到超时。
+    assert.ok(elapsed < 1500, `elapsed=${elapsed}ms`);
   });
 });

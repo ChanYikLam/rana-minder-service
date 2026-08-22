@@ -54,6 +54,14 @@ async function smtpExchange(socket: Socket, command: string, timeoutMs: number):
       reject(new Error('smtp-timeout'));
     }, timeoutMs);
     let buffer = '';
+    // 监听 socket error：等待响应期间对端断开/重置（ECONNRESET 等）时及时以真实错误
+    // reject，避免一直挂起到超时、把根因错误误判为 smtp-timeout。
+    const onError = (err: Error) => {
+      clearTimeout(timer);
+      socket.removeListener('data', onData);
+      socket.removeListener('error', onError);
+      reject(err);
+    };
     const onData = (chunk: Buffer) => {
       buffer += chunk.toString('utf8');
       // 仅当缓冲以换行结尾（收到完整行）时再判定，避免截断半行。
@@ -66,6 +74,7 @@ async function smtpExchange(socket: Socket, command: string, timeoutMs: number):
         if (m && m[2] === ' ') {
           clearTimeout(timer);
           socket.removeListener('data', onData);
+          socket.removeListener('error', onError);
           resolve(line);
           return;
         }
@@ -73,6 +82,7 @@ async function smtpExchange(socket: Socket, command: string, timeoutMs: number):
       // 仅收到 continuation 行，继续累积等待最终行。
     };
     socket.on('data', onData);
+    socket.once('error', onError);
     socket.write(`${command}\r\n`, 'utf8');
   });
 }
@@ -191,7 +201,7 @@ export class SmtpMailChannelAdapter implements MailChannelAdapter {
         'MIME-Version: 1.0',
         'Content-Type: text/plain; charset=UTF-8',
         `Message-ID: ${messageId}`,
-        `Date: ${new Date().toUTCString()}`,
+        `Date: ${this.now().toUTCString()}`,
         `Subject: =?UTF-8?B?${Buffer.from('邮箱验证', 'utf8').toString('base64')}?=`,
         '',
         `验证码/链接：${code}`,

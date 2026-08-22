@@ -42,11 +42,13 @@ function toBackupRecord(raw: RawRecord): BackupRecord | null {
   if (typeof raw?.backupId !== 'string' || typeof raw?.startedAt !== 'string') {
     return null;
   }
+  if (raw.status !== 'success' && raw.status !== 'failure' && raw.status !== 'in-progress') {
+    // ADR-011 §6.3：遇到无法识别的中间态/未知态时跳过该记录，状态页显示"未知"，
+    // 不把"不确定"伪装成确定的 failure（只展示事实、不伪造健康）。
+    return null;
+  }
   const completed = typeof raw.completedAt === 'string' ? new Date(raw.completedAt) : undefined;
-  const status =
-    raw.status === 'success' || raw.status === 'failure' || raw.status === 'in-progress'
-      ? raw.status
-      : 'failure';
+  const status = raw.status;
   return {
     backupId: raw.backupId,
     startedAt: new Date(raw.startedAt),
@@ -62,11 +64,12 @@ function toRestoreRecord(raw: RawRecord): RestoreRecord | null {
   if (typeof raw?.restoreId !== 'string' || typeof raw?.startedAt !== 'string') {
     return null;
   }
+  if (raw.status !== 'success' && raw.status !== 'failure' && raw.status !== 'in-progress') {
+    // ADR-011 §6.3：同 toBackupRecord，未知态跳过，不伪造为确定的 failure。
+    return null;
+  }
   const completed = typeof raw.completedAt === 'string' ? new Date(raw.completedAt) : undefined;
-  const status =
-    raw.status === 'success' || raw.status === 'failure' || raw.status === 'in-progress'
-      ? raw.status
-      : 'failure';
+  const status = raw.status;
   return {
     restoreId: raw.restoreId,
     startedAt: new Date(raw.startedAt),
