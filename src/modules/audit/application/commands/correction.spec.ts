@@ -13,6 +13,7 @@ import {
   CorrectionStatus,
 } from '../../domain/state-machines/correction-state-machine';
 import { CorrectionPolicy } from '../../domain/services/correction-policy';
+import type { Correction } from '../../domain/models/correction';
 
 const makeRig = () => {
   const repo = new InMemoryCorrectionRepository();
@@ -259,5 +260,45 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
     assert.equal(swapped, false); // 撤回已提交 → 决定失败（单胜者）
     const after = await rig.repo.load(draft.correctionId);
     assert.equal(after!.status, CorrectionStatus.WITHDRAWN);
+  });
+
+  it('草稿必填校验：期望修正/原作者为空拒绝（IFC-ERR-005）', async () => {
+    const rig = makeRig();
+    await assert.rejects(
+      rig.save.execute({ ...draftInput, expectedCorrection: '  ' }),
+      /期望修正不能为空/,
+    );
+    await assert.rejects(
+      rig.save.execute({ ...draftInput, authorId: '' }),
+      /缺少记录原作者/,
+    );
+  });
+
+  it('提交用版本 CAS：并发提交只一个成功，另一并发幂等返回待处理', async () => {
+    const rig = makeRig();
+    const draft = await rig.save.execute(draftInput);
+    const stale = (await rig.repo.load(draft.correctionId))!;
+    // 模拟另一个并发已把同一草稿推进到待处理
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
+    const concurrent: Correction = {
+      ...stale,
+      status: CorrectionStatus.PENDING,
+      version: stale.version + 1,
+      submittedAt: new Date().toISOString(),
+      history: [...stale.history, { at: new Date().toISOString(), type: 'SUBMITTED', by: 'stu1' }],
+    };
+    const swapped = await rig.repo.compareAndSwap(stale, concurrent);
+    assert.equal(swapped, false); // 旧版本 CAS 失败 → 单胜者
+    // 提交命令在 CAS 失败时幂等返回已生效的待处理状态
+    const result = await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
+    assert.equal(result.status, CorrectionStatus.PENDING);
   });
 });

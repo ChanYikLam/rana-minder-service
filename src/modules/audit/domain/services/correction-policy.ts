@@ -39,7 +39,9 @@ export class CorrectionPreconditionError extends Error {
 export class CorrectionPolicy {
   /** 客观错误判定：主观评价争议 → 拒绝（IFC-ERR-006） */
   assertObjectiveError(description: string): void {
-    const subjective = /不认同|主观|不喜欢|觉得不好|评价不公/.test(description);
+    // 仅当描述明确表达"单纯不认同/不喜欢主观评价"类异议时判定为主观争议；
+    // 避免因出现"主观"等孤立词误伤客观纠错（如"该评语主观且有误，属客观事实"）。
+    const subjective = /不认同|不认可|不喜欢|觉得不好|觉得不公平|评价不公|主观臆断/.test(description);
     if (subjective) {
       throw new CorrectionPreconditionError('IFC-ERR-006', '单纯不认同主观评价不属于事实错误');
     }

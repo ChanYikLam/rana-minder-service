@@ -63,6 +63,12 @@ export class SaveCorrectionDraftCommand {
     if (input.deadlineAt.length === 0 || !Number.isFinite(Date.parse(input.deadlineAt))) {
       throw new CorrectionCommandError('IFC-ERR-005', '无效的处理期限');
     }
+    if (input.expectedCorrection.trim().length === 0) {
+      throw new CorrectionCommandError('IFC-ERR-005', '期望修正不能为空');
+    }
+    if (input.authorId.length === 0) {
+      throw new CorrectionCommandError('IFC-ERR-005', '缺少记录原作者');
+    }
     const now = new Date().toISOString();
     const correction: Correction = {
       correctionId: randomUUID(),
@@ -125,7 +131,14 @@ export class SubmitCorrectionCommand {
       submittedAt: now,
       history: [...correction.history, { at: now, type: 'SUBMITTED', by: input.applicantId }],
     };
-    await this.repo.save(submitted);
+    // 用版本 CAS 推进草稿→待处理，避免并发提交覆盖（与决定/撤回单胜者语义一致）
+    if (!(await this.repo.compareAndSwap(correction, submitted))) {
+      const latest = await this.repo.load(input.correctionId);
+      if (latest !== null && latest.status === CorrectionStatus.PENDING) {
+        return latest; // 并发提交已生效，幂等返回
+      }
+      throw new CorrectionCommandError('IFC-ERR-007', '纠错申请已被并发变更，提交失败');
+    }
     return submitted;
   }
 }
