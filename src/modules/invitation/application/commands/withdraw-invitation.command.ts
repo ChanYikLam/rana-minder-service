@@ -38,7 +38,6 @@ export class WithdrawInvitationCommand {
   ) {}
 
   async execute(input: WithdrawInvitationInput): Promise<Invitation> {
-    this.policy.assertCanIssue(input.principalRoles);
     const invitation = await this.repo.load(input.invitationId);
     if (invitation === null) {
       throw new WithdrawInvitationError('IFC-ERR-006', '邀请不存在');

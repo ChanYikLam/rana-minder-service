@@ -47,7 +47,6 @@ export class ReissueInvitationCommand {
   ) {}
 
   async execute(input: ReissueInvitationInput): Promise<Invitation> {
-    this.policy.assertCanIssue(input.issuerRoles);
     if (!input.eligibilityOk) {
       throw new ReissueInvitationError('IFC-ERR-006', '当前资格/结论不允许重发');
     }

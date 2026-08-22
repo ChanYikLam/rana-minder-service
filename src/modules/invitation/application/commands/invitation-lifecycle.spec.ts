@@ -519,4 +519,24 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
     const final = await rig.repo.load(inv.invitationId);
     assert.equal(final!.version, before + 1);
   });
+
+  it('状态机：终态不可转换；除已接受外终态可重发（isTerminal/canReissue 规则收敛）', () => {
+    const sm = new InvitationStateMachine();
+    // 已接受不可逆（无出边）
+    assert.equal(sm.canTransition('ACCEPTED', 'PENDING'), false);
+    assert.equal(sm.canTransition('ACCEPTED', 'WITHDRAWN'), false);
+    assert.equal(sm.canReissue('ACCEPTED'), false);
+    // 其余终态为可重发
+    assert.equal(sm.isTerminal('REJECTED'), true);
+    assert.equal(sm.isTerminal('WITHDRAWN'), true);
+    assert.equal(sm.isTerminal('EXPIRED'), true);
+    assert.equal(sm.isTerminal('FORCE_INVALIDATED'), true);
+    assert.equal(sm.canReissue('REJECTED'), true);
+    assert.equal(sm.canReissue('WITHDRAWN'), true);
+    assert.equal(sm.canReissue('EXPIRED'), true);
+    assert.equal(sm.canReissue('FORCE_INVALIDATED'), true);
+    // 非终态（待处理）不可重发
+    assert.equal(sm.isTerminal('PENDING'), false);
+    assert.equal(sm.canReissue('PENDING'), false);
+  });
 });

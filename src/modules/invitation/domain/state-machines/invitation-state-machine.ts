@@ -82,13 +82,11 @@ export class InvitationStateMachine {
     return TERMINAL_STATUSES.includes(status);
   }
 
-  /** 可重发（已拒绝/已撤回/已过期/强制失效；已接受不可重发） */
+  /** 可重发（已拒绝/已撤回/已过期/强制失效；已接受不可重发）
+   *
+   * 复用 {@link isTerminal}：除已接受外，其余终态均可重发。
+   * 这样“已接受不可逆”与“可重发范围”的规则收敛到一处，避免语义分叉。 */
   canReissue(status: InvitationStatus): boolean {
-    return (
-      status === InvitationStatus.REJECTED ||
-      status === InvitationStatus.WITHDRAWN ||
-      status === InvitationStatus.EXPIRED ||
-      status === InvitationStatus.FORCE_INVALIDATED
-    );
+    return this.isTerminal(status) && status !== InvitationStatus.ACCEPTED;
   }
 }
