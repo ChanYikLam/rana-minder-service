@@ -83,8 +83,9 @@ export class ExecuteDepartmentApplicationCommand {
     const operatorRoles = await this.access.operatorRolesAt(app.clubId, operatorId);
     this.policy.assertCanExecute(operatorRoles);
 
-    // 重新检查目标有效性（前提变化拒绝重复，保持当前实际状态）
-    await this.assertTargetsValidForExecution(app);
+    // 目标有效性复核（前提变化拒绝重复，保持当前实际状态）：
+    // 目录有效性已在 decide 时复核，执行侧以关系仓储实际段为准，
+    // 由 startAttempt 内部的 markRemove/addDept 做存在性与冲突校验。
 
     return this.startAttempt(app, operatorId);
   }
@@ -207,7 +208,8 @@ export class ExecuteDepartmentApplicationCommand {
       return closed;
     }
 
-    await this.assertTargetsValidForExecution(app);
+    // 目标有效性由 startAttempt 内部的 markRemove/addDept 按实际关系段校验，
+    // 与 decide 时的目录复核口径一致，避免双重校验产生分歧。
     return this.startAttempt(app, operatorId);
   }
 
@@ -379,13 +381,6 @@ export class ExecuteDepartmentApplicationCommand {
     // 立即尝试一次写入＋回读结算（A6/A7 由 settle 完成）
     await this.settleChange.execute(groupId);
     return this.settle(next.applicationId);
-  }
-
-  /** 目标复核：目标部门仍有效；退出范围仍属于申请人 */
-  private async assertTargetsValidForExecution(app: DepartmentApplication): Promise<void> {
-    void app;
-    // 目录有效性在 decide 时已复核；执行侧以关系仓储的实际段为准
-    // （markRemove/addDept 内部已做存在性与冲突校验，避免双重口径）。
   }
 
   /** 回读判断是否已实际全部达成（重试前先回读 ORG-027） */

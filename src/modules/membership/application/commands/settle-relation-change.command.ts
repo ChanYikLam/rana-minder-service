@@ -307,12 +307,15 @@ export class SettleRelationChangeCommand {
       }
       return t;
     });
+    // 结束原因由结束决定（R4）的 endKind 推导：调动移出/退部/辞职/免职各归其类，
+    // 避免纯退出（LEAVE）场景被硬编码误记为“调动移出”（TRANSFER_OUT）。
+    const endKind = r.end?.endKind ?? null;
     return {
       ...r,
       status: this.stateMachine.transition(r.status, DepartmentRelationStatus.HISTORICAL_ENDED),
       version: r.version + 1,
       actualEndAt: nowIso,
-      endReason: 'TRANSFER_OUT',
+      endReason: endKind,
       tenures,
       history: [
         ...r.history,
@@ -320,7 +323,7 @@ export class SettleRelationChangeCommand {
           at: nowIso,
           type: 'END_CONFIRMED',
           by: 'SYSTEM',
-          note: `组=${r.change?.changeGroupId} 调动移出生效`,
+          note: `组=${r.change?.changeGroupId} ${endKind === 'TRANSFER_OUT' ? '调动移出生效' : '关系结束生效'}`,
         } satisfies RelationHistoryEvent,
       ],
     };

@@ -480,6 +480,30 @@ describe('MEM-003 A5/A6 执行与生效（整体执行、全部确认才生效�
     const oldRel = await rig.relRepo.listBySubjectAndRef('c1', 'stu2', 'd1');
     assert.equal(newRel[0]?.status, 'CURRENTLY_VALID');
     assert.equal(oldRel[0]?.status, 'HISTORICAL_ENDED'); // 同组收口，不得半完成
+    // 移出侧结束原因由结束决定（R4 endKind）推导，调动为 TRANSFER_OUT
+    assert.equal(oldRel[0]?.endReason, 'TRANSFER_OUT');
+  });
+
+  it('纯退出申请：移出侧历史结束，结束原因记为退部（LEAVE_DEPARTMENT）而非调动移出', async () => {
+    const rig = makeRig();
+    await seedValidDept(rig, 'stu1', 'd1');
+    const app = await rig.submit.execute({
+      clubId: 'c1',
+      applicantId: 'stu1',
+      type: 'LEAVE',
+      leaveDeptIds: ['d1'],
+    });
+    await rig.decide.execute({
+      applicationId: app.applicationId,
+      operatorId: 'leader1', // d1 无部门负责人 → 回退社团负责人
+      decision: 'APPROVE',
+    });
+    const done = await rig.executeApp.execute(app.applicationId, 'leader1');
+    assert.equal(done.status, 'EFFECTIVE');
+    const rel = await rig.relRepo.listBySubjectAndRef('c1', 'stu1', 'd1');
+    assert.equal(rel[0]?.status, 'HISTORICAL_ENDED');
+    // 纯退出不应被硬编码误记为“调动移出”
+    assert.equal(rel[0]?.endReason, 'LEAVE_DEPARTMENT');
   });
 
   it('无执行权限者不能启动执行；未批准不能执行', async () => {
