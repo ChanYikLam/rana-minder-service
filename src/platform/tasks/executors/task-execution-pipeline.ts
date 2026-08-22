@@ -1,6 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../../config';
-import { TaskStatus, TASK_PROCESSOR_REGISTRY, TaskExecutionError } from '../contracts';
+import {
+  TaskStatus,
+  TASK_PROCESSOR_REGISTRY,
+  TASK_REPOSITORY,
+  TaskExecutionError,
+} from '../contracts';
 import type { TaskProcessorRegistry, TaskRecord, TaskRepository } from '../contracts';
 import { RecoveryReplayConvergence } from '../idempotency';
 import { LeaseManager } from '../lease';
@@ -16,7 +21,7 @@ export class TaskExecutionPipeline {
   private readonly logger = new Logger(TaskExecutionPipeline.name);
 
   constructor(
-    private readonly repository: TaskRepository,
+    @Inject(TASK_REPOSITORY) private readonly repository: TaskRepository,
     private readonly leases: LeaseManager,
     private readonly convergence: RecoveryReplayConvergence,
     @Inject(TASK_PROCESSOR_REGISTRY)
