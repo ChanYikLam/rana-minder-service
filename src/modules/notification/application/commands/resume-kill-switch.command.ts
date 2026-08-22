@@ -73,44 +73,62 @@ export class ResumeKillSwitchCommand {
       throw new Error('当前范围没有活跃的站内信紧急关闭');
     }
 
+    // 范围叠加（IFC-NTF-001）：社团级关闭之上若平台级仍关闭，则该社团暂停
+    // 事实须保持暂停（由平台级关闭覆盖），不得因解除社团级关闭而补投。
+    // 平台级关闭期间创建/暂停的社团事实不能被社团级恢复绕过。
+    const platformStillKilled =
+      input.scope === 'CLUB'
+        ? Boolean((await this.killSwitches.findByScope('PLATFORM', null))?.active)
+        : false;
+
     // 恢复只补投渠道，不重放业务（NTF-001、IFC-NTF-001）
     let resumedFactCount = 0;
-    for (;;) {
-      // 按原事件时间升序（仓储已排序），分批补投
-      const facts = await this.repository.findFactsPausedByKillScope(
-        input.scope,
-        input.clubId,
-        RESUME_BATCH_SIZE,
-      );
-      if (facts.length === 0) break;
+    if (!platformStillKilled) {
+      for (;;) {
+        // 按原事件时间升序（仓储已排序），分批补投
+        const facts = await this.repository.findFactsPausedByKillScope(
+          input.scope,
+          input.clubId,
+          RESUME_BATCH_SIZE,
+        );
+        if (facts.length === 0) break;
 
-      // 进度保护：整批无任何事实满足转换时终止，防止不可转换事实
-      // 永久停留在查询集导致死循环（IFC-NTF-001 批次语义）
-      let progressed = false;
-      for (const fact of facts) {
-        // 状态机：暂停投递 → 待投递 → 已投递
-        const resume = this.stateMachine.evaluate({
-          type: 'RESUME_INBOX',
-          currentStatus: fact.status,
-        });
-        if (!resume.allowed) continue;
-        const deliver = this.stateMachine.evaluate({
-          type: 'DELIVER_INBOX',
-          currentStatus: 'CREATED_PENDING_DELIVERY',
-        });
-        if (!deliver.allowed) continue;
+        // 进度保护：整批无任何事实满足转换时终止，防止不可转换事实
+        // 永久停留在查询集导致死循环（IFC-NTF-001 批次语义）
+        let progressed = false;
+        for (const fact of facts) {
+          // 状态机：暂停投递 → 待投递 → 已投递
+          const resume = this.stateMachine.evaluate({
+            type: 'RESUME_INBOX',
+            currentStatus: fact.status,
+          });
+          if (!resume.allowed) continue;
+          const deliver = this.stateMachine.evaluate({
+            type: 'DELIVER_INBOX',
+            currentStatus: 'CREATED_PENDING_DELIVERY',
+          });
+          if (!deliver.allowed) continue;
 
-        // 按收件人快照创建/确认唯一呈现（NTF-003 逻辑事件＋收件人去重）
-        const snapshots = await this.repository.findSnapshotsByFactId(fact.factId);
-        for (const snapshot of snapshots) {
-          await this.inboxAdapter.createOrConfirmPresentation(fact, snapshot);
+          try {
+            // 按收件人快照创建/确认唯一呈现（NTF-003 逻辑事件＋收件人去重）
+            const snapshots = await this.repository.findSnapshotsByFactId(fact.factId);
+            for (const snapshot of snapshots) {
+              await this.inboxAdapter.createOrConfirmPresentation(fact, snapshot);
+            }
+
+            await this.repository.updateFactStatus(fact.factId, 'DELIVERED', fact.version);
+            resumedFactCount += 1;
+            progressed = true;
+          } catch (error) {
+            // 乐观锁版本冲突：该事实可能正被并发投递，跳过并继续（IFC-ERR-008），
+            // 不让单个冲突中断整批补投，确保恢复命令能完成并落库恢复状态。
+            this.logger.warn(
+              `补投失败（可能并发变更，跳过）: factId=${fact.factId}, error=${(error as Error).message}`,
+            );
+          }
         }
-
-        await this.repository.updateFactStatus(fact.factId, 'DELIVERED', fact.version);
-        resumedFactCount += 1;
-        progressed = true;
+        if (!progressed) break;
       }
-      if (!progressed) break;
     }
 
     // 特权审计（恢复也属特权操作）

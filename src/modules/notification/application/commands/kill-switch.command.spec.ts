@@ -688,4 +688,81 @@ describe('ResumeKillSwitchCommand（IFC-NTF-001：恢复补投）', () => {
     // 能正常返回即证明未死循环；不满足转换因此补投数为 0
     assert.equal(result.resumedFactCount, 0);
   });
+
+  it('范围叠加：平台级仍关闭时，恢复社团级不补投该社团暂停事实', async () => {
+    // 平台级关闭覆盖全部社团，社团 club-1 的暂停事实须保持暂停
+    await apply.execute(
+      {
+        scope: 'PLATFORM',
+        clubId: null,
+        reason: '平台紧急维护',
+        operatorId: 'admin-1',
+        operatorName: '超管',
+        expectedRecoveryAt: FUTURE,
+        confirmed: true,
+      },
+      NOW,
+    );
+    const factA = await createPendingFact(
+      'club-1',
+      '2026-09-08T00:00:00.000Z',
+      'stu-1',
+      'CREATED_PAUSED_DELIVERY',
+    );
+    // 社团级单独关闭（与平台级叠加）
+    await closeClub('club-1');
+
+    // 恢复社团级：平台级仍 active，club-1 的暂停事实不得被补投
+    const result = await resume.execute(
+      { scope: 'CLUB', clubId: 'club-1', operatorId: 'admin-1', operatorName: '超管' },
+      '2026-09-10T02:00:00.000Z',
+    );
+    assert.equal(result.resumedFactCount, 0, '平台级仍关闭时社团级恢复不得补投');
+    assert.equal(
+      (await repo.findFactById(factA.factId))?.status,
+      'CREATED_PAUSED_DELIVERY',
+      '事实须保持暂停（平台级关闭覆盖）',
+    );
+    // 社团级关闭状态被解除，但平台级仍 active
+    assert.equal((await killSwitches.findByScope('CLUB', 'club-1'))?.active, false);
+    assert.equal((await killSwitches.findByScope('PLATFORM', null))?.active, true);
+  });
+
+  it('范围叠加：平台级关闭解除后，暂停事实由平台级恢复统一补投', async () => {
+    await apply.execute(
+      {
+        scope: 'PLATFORM',
+        clubId: null,
+        reason: '平台紧急维护',
+        operatorId: 'admin-1',
+        operatorName: '超管',
+        expectedRecoveryAt: FUTURE,
+        confirmed: true,
+      },
+      NOW,
+    );
+    const factA = await createPendingFact(
+      'club-1',
+      '2026-09-08T00:00:00.000Z',
+      'stu-1',
+      'CREATED_PAUSED_DELIVERY',
+    );
+    await closeClub('club-1');
+
+    // 恢复平台级关闭：负责补投全部（含 club-1）暂停事实
+    const platformResume = await resume.execute(
+      { scope: 'PLATFORM', clubId: null, operatorId: 'admin-1', operatorName: '超管' },
+      '2026-09-10T01:00:00.000Z',
+    );
+    assert.equal(platformResume.resumedFactCount, 1);
+    assert.equal((await repo.findFactById(factA.factId))?.status, 'DELIVERED');
+
+    // 平台级恢复已把 club-1 事实补投，club-1 单独恢复无待投事实（幂等）
+    const clubResume = await resume.execute(
+      { scope: 'CLUB', clubId: 'club-1', operatorId: 'admin-1', operatorName: '超管' },
+      '2026-09-10T02:00:00.000Z',
+    );
+    assert.equal(clubResume.resumedFactCount, 0);
+    assert.equal((await repo.findFactById(factA.factId))?.status, 'DELIVERED');
+  });
 });

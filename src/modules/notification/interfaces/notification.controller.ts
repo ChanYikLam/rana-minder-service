@@ -33,6 +33,7 @@ import {
   Post,
   Query,
   Req,
+  ForbiddenException,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -62,9 +63,15 @@ import type {
   KillSwitchRepository,
   EmailConfigStore,
   NotificationPreferencesStore,
+  NotificationPrivilegeVerifier,
 } from '../infrastructure';
 import type { KillSwitchScope, KillSwitchStateModel } from '../domain';
-import { EMAIL_CONFIG_STORE, KILL_SWITCH_REPOSITORY, PREFERENCES_STORE } from '../tokens';
+import {
+  EMAIL_CONFIG_STORE,
+  KILL_SWITCH_REPOSITORY,
+  NOTIFICATION_PRIVILEGE_VERIFIER,
+  PREFERENCES_STORE,
+} from '../tokens';
 import { NotificationAuthGuard, notificationSessionFromRequest } from './notification-auth.guard';
 
 const NOTIFICATION_KINDS = [
@@ -104,6 +111,8 @@ export class NotificationController {
     private readonly emailConfigs: EmailConfigStore,
     @Inject(PREFERENCES_STORE)
     private readonly preferences: NotificationPreferencesStore,
+    @Inject(NOTIFICATION_PRIVILEGE_VERIFIER)
+    private readonly privileges: NotificationPrivilegeVerifier,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -237,6 +246,10 @@ export class NotificationController {
     @Body() input: NotificationKillSwitchInput,
   ): Promise<NotificationKillSwitchState> {
     const session = notificationSessionFromRequest(request);
+    // 授权（XCC-FAIL-009）：仅超管/社团管理员可关闭；当前权限端口 fail-closed 一律拒绝
+    if (!(await this.privileges.canOperateKillSwitch('CLUB', clubId, session.userId))) {
+      throw new ForbiddenException('无权执行社团级站内信紧急关闭');
+    }
     return this.toggleKillSwitch('CLUB', clubId, input, session.userId, session.displayName);
   }
 
@@ -254,6 +267,10 @@ export class NotificationController {
     @Body() input: NotificationKillSwitchInput,
   ): Promise<NotificationKillSwitchState> {
     const session = notificationSessionFromRequest(request);
+    // 授权（XCC-FAIL-009）：仅超管可关闭平台级站内信；当前权限端口 fail-closed 一律拒绝
+    if (!(await this.privileges.canOperateKillSwitch('PLATFORM', null, session.userId))) {
+      throw new ForbiddenException('无权执行平台级站内信紧急关闭');
+    }
     return this.toggleKillSwitch('PLATFORM', null, input, session.userId, session.displayName);
   }
 

@@ -8,15 +8,22 @@
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { ForbiddenException } from '@nestjs/common';
 import type { Request } from 'express';
 
 import {
   InMemoryEmailConfigStore,
   InMemoryKillSwitchRepository,
   InMemoryNotificationPreferencesStore,
+  InMemoryNotificationRepository,
+  InMemoryPrivilegedAuditWriter,
+  FailClosedNotificationPrivilegeVerifier,
 } from '../infrastructure';
 import { NotificationController } from './notification.controller';
 import { NOTIFICATION_AUTH_SESSION_KEY } from './notification-auth.guard';
+import { ApplyKillSwitchCommand } from '../application/commands';
+import type { KillSwitchScope } from '../domain';
+import type { NotificationPrivilegeVerifier } from '../infrastructure';
 
 /** 挂载已认证会话的请求 */
 function authedRequest(userId: string, displayName = userId): Request {
@@ -44,6 +51,7 @@ describe('NotificationController 邮件配置（评审 #6：持久化）', () =>
       new InMemoryKillSwitchRepository(),
       emailConfigs,
       new InMemoryNotificationPreferencesStore(),
+      new FailClosedNotificationPrivilegeVerifier(),
     );
   });
 
@@ -108,6 +116,7 @@ describe('NotificationController 通知偏好（评审 #7：按会话 userId 落
       new InMemoryKillSwitchRepository(),
       new InMemoryEmailConfigStore(),
       preferences,
+      new FailClosedNotificationPrivilegeVerifier(),
     );
   });
 
@@ -136,5 +145,94 @@ describe('NotificationController 通知偏好（评审 #7：按会话 userId 落
     });
     const other = await controller.myPreferences(authedRequest('user-2'));
     assert.equal(other.preferences.application, true, 'user-2 不受 user-1 影响');
+  });
+});
+
+describe('NotificationController 站内信紧急关闭授权（XCC-FAIL-009：越权防护）', () => {
+  it('fail-closed：任意已登录用户执行社团级关闭被拒绝（403）', async () => {
+    const controller = new NotificationController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      new InMemoryKillSwitchRepository(),
+      new InMemoryEmailConfigStore(),
+      new InMemoryNotificationPreferencesStore(),
+      new FailClosedNotificationPrivilegeVerifier(),
+    );
+    await assert.rejects(
+      controller.clubKillSwitch(authedRequest('user-1'), 'club-1', {
+        active: true,
+        reason: '维护',
+        confirmed: true,
+        expectedRecoveryAt: new Date(Date.now() + 3600_000).toISOString(),
+      }),
+      ForbiddenException,
+    );
+  });
+
+  it('fail-closed：任意已登录用户执行平台级关闭被拒绝（403）', async () => {
+    const controller = new NotificationController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      new InMemoryKillSwitchRepository(),
+      new InMemoryEmailConfigStore(),
+      new InMemoryNotificationPreferencesStore(),
+      new FailClosedNotificationPrivilegeVerifier(),
+    );
+    await assert.rejects(
+      controller.platformKillSwitch(authedRequest('user-1'), {
+        active: true,
+        reason: '维护',
+        confirmed: true,
+        expectedRecoveryAt: new Date(Date.now() + 3600_000).toISOString(),
+      }),
+      ForbiddenException,
+    );
+  });
+
+  it('授权通过：超管执行社团级关闭走真实命令并落库关闭状态', async () => {
+    const allowAll: NotificationPrivilegeVerifier = {
+      async canOperateKillSwitch(
+        _scope: KillSwitchScope,
+        _clubId: string | null,
+        _subjectId: string,
+      ): Promise<boolean> {
+        return true;
+      },
+    };
+    const killSwitches = new InMemoryKillSwitchRepository();
+    const apply = new ApplyKillSwitchCommand(
+      new InMemoryNotificationRepository(),
+      killSwitches,
+      new InMemoryPrivilegedAuditWriter(),
+    );
+    const controller = new NotificationController(
+      {} as never,
+      {} as never,
+      {} as never,
+      apply,
+      {} as never,
+      killSwitches,
+      new InMemoryEmailConfigStore(),
+      new InMemoryNotificationPreferencesStore(),
+      allowAll,
+    );
+    const state = await controller.clubKillSwitch(authedRequest('admin-1', '管理员'), 'club-9', {
+      active: true,
+      reason: '系统维护',
+      confirmed: true,
+      expectedRecoveryAt: new Date(Date.now() + 3600_000).toISOString(),
+    });
+    assert.equal(state.active, true);
+    assert.equal(state.scope, 'club');
+    assert.equal(state.clubId, 'club-9');
+    const saved = await killSwitches.findByScope('CLUB', 'club-9');
+    assert.ok(saved?.active);
+    assert.equal(saved?.operatorName, '管理员');
   });
 });

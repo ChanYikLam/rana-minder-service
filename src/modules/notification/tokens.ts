@@ -28,3 +28,5 @@ export const NOTIFICATION_AUTH_SESSION_PROVIDER = 'NotificationAuthSessionProvid
 export const EMAIL_CONFIG_STORE = 'EmailConfigStore';
 /** 通知偏好存储端口（§7，按用户真实落库） */
 export const PREFERENCES_STORE = 'NotificationPreferencesStore';
+/** 站内信紧急关闭特权核验端口（XCC-FAIL-009，fail-closed） */
+export const NOTIFICATION_PRIVILEGE_VERIFIER = 'NotificationPrivilegeVerifier';

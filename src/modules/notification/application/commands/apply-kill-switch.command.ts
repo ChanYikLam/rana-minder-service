@@ -107,13 +107,22 @@ export class ApplyKillSwitchCommand {
           currentStatus: fact.status,
         });
         if (!transition.allowed) continue;
-        await this.repository.updateFactStatus(
-          fact.factId,
-          'CREATED_PAUSED_DELIVERY',
-          fact.version,
-        );
-        pausedFactCount += 1;
-        progressed = true;
+        try {
+          await this.repository.updateFactStatus(
+            fact.factId,
+            'CREATED_PAUSED_DELIVERY',
+            fact.version,
+          );
+          pausedFactCount += 1;
+          progressed = true;
+        } catch (error) {
+          // 乐观锁版本冲突：该事实可能正被并发投递/处理，跳过并继续
+          // （IFC-ERR-008），不让单个冲突中断整批关闭，确保紧急关闭
+          // 状态能最终保存、不产生部分暂停后状态未落库的数据卡死。
+          this.logger.warn(
+            `暂停通知失败（可能并发变更，跳过）: factId=${fact.factId}, error=${(error as Error).message}`,
+          );
+        }
       }
       if (!progressed) break;
     }
