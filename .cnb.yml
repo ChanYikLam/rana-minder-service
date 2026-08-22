@@ -141,7 +141,7 @@
           script: |
             set -e
             if ! command -v syft >/dev/null 2>&1; then
-              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | bash -s -- -b /usr/local/bin
             fi
             # 生成镜像 SBOM 并输出（发布门证据归档用，不推送产物）
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
@@ -254,7 +254,7 @@
           script: |
             set -e
             if ! command -v syft >/dev/null 2>&1; then
-              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | bash -s -- -b /usr/local/bin
             fi
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
             echo "镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
@@ -362,7 +362,7 @@
           script: |
             set -e
             if ! command -v syft >/dev/null 2>&1; then
-              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | bash -s -- -b /usr/local/bin
             fi
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
             echo "发布镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
