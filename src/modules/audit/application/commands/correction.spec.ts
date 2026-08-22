@@ -390,6 +390,54 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
     assert.equal(result.status, CorrectionStatus.PENDING);
   });
 
+  it('客观错误类型必须为合法枚举值；目标记录版本号须为非负整数（IFC-ERR-005）', async () => {
+    const rig = makeRig();
+    // 非法客观错误类型（非 AUD-001/002 客观错误枚举）→ 拒绝
+    await assert.rejects(
+      rig.save.execute({
+        ...draftInput,
+        objectiveErrorType: 'NOT_A_REAL_TYPE' as never,
+      }),
+      /无效的客观错误类型/,
+    );
+    // 目标记录版本号为负数 → 拒绝
+    await assert.rejects(
+      rig.save.execute({
+        ...draftInput,
+        targetRecord: { ...draftInput.targetRecord, recordVersion: -1 },
+      }),
+      /目标记录版本号无效/,
+    );
+  });
+
+  it('终态幂等返回也须授权：未授权调用方在终态分支下被拒绝（防信息泄露）', async () => {
+    const rig = makeRig();
+    const draft = await rig.save.execute(draftInput);
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
+    await rig.decide.execute({
+      correctionId: draft.correctionId,
+      decider: leader,
+      approve: true,
+      reason: '确属笔误',
+      oldValue: '张四',
+      newValue: '张三',
+    });
+    // 未授权（无关社团、非处理角色）调用方即使重复相同决定也拒绝，避免读取终态详情
+    await assert.rejects(
+      rig.decide.execute({
+        correctionId: draft.correctionId,
+        decider: { principalId: 'other', roles: [], clubId: 'c9' },
+        approve: true,
+        reason: 'x',
+      }),
+      /仅社团负责人\/人事/,
+    );
+  });
+
   it('批准须提供原值/新值：缺省时拒绝（IFC-ERR-005）', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute(draftInput);

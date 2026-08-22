@@ -53,19 +53,10 @@ export class DecideCorrectionCommand {
     if (correction === null) {
       throw new CorrectionCommandError('IFC-ERR-006', '纠错申请不存在');
     }
-    // 幂等/终态：相同决定 → 直接返回原结果（避免重试缺省 reason/原值新值时误报）；
-    // 不同决定 → 终态不可覆盖（AUD-002）。置于授权校验之前，保证重复调用幂等成功。
-    if (
-      correction.status === CorrectionStatus.APPROVED ||
-      correction.status === CorrectionStatus.REJECTED
-    ) {
-      const sameDecision = (correction.status === CorrectionStatus.APPROVED) === input.approve;
-      if (sameDecision) {
-        return correction;
-      }
-      throw new CorrectionCommandError('IFC-ERR-007', '终态不可覆盖，新证据需新申请');
-    }
-    // 处理资格（作者回避 + 处理角色 + 联合边界）
+    // 先做授权校验（作者回避 + 处理角色 + 联合边界），避免未授权调用方在幂等/终态
+    // 分支下读取到纠错决定详情（信息泄露）。授权通过后再处理幂等/终态：
+    // 相同决定 → 直接返回原结果（避免重试缺省 reason/原值新值时误报）；
+    // 不同决定 → 终态不可覆盖（AUD-002）。已授权的重试仍可幂等成功。
     this.policy.assertCanDecide(
       {
         principalId: input.decider.principalId,
@@ -79,6 +70,16 @@ export class DecideCorrectionCommand {
       },
     );
     this.policy.assertNotSelfDecision(input.decider.principalId, correction.authorId);
+    if (
+      correction.status === CorrectionStatus.APPROVED ||
+      correction.status === CorrectionStatus.REJECTED
+    ) {
+      const sameDecision = (correction.status === CorrectionStatus.APPROVED) === input.approve;
+      if (sameDecision) {
+        return correction;
+      }
+      throw new CorrectionCommandError('IFC-ERR-007', '终态不可覆盖，新证据需新申请');
+    }
     // 决定必填原因（驳回必填；批准为变更原因）
     this.policy.assertReason(input.reason);
     // 批准须提供原值/新值（只追加；AUD-001），避免空串入库

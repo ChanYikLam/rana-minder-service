@@ -6,7 +6,7 @@ import {
 } from '../../domain/state-machines/correction-state-machine';
 import type { Correction } from '../../domain/models/correction';
 import { CorrectionPolicy } from '../../domain/services/correction-policy';
-import type { ObjectiveErrorType } from '../../domain/models/correction';
+import { ObjectiveErrorType } from '../../domain/models/correction';
 import { CORRECTION_REPOSITORY } from '../../infrastructure/correction-repository';
 import type { CorrectionRepository } from '../../infrastructure/correction-repository';
 
@@ -90,6 +90,18 @@ export class SaveCorrectionDraftCommand {
     }
     if (input.targetRecord.ownerClubId.length === 0) {
       throw new CorrectionCommandError('IFC-ERR-005', '缺少目标记录所属社团');
+    }
+    // 客观错误类型必须是合法枚举值（AUD-001/002：仅客观事实错误可纠错）
+    const validErrorTypes = Object.values(ObjectiveErrorType);
+    if (!validErrorTypes.includes(input.objectiveErrorType)) {
+      throw new CorrectionCommandError('IFC-ERR-005', '无效的客观错误类型');
+    }
+    // 目标记录版本号须为非负整数，避免无效版本进入 CAS 比较
+    if (
+      !Number.isInteger(input.targetRecord.recordVersion) ||
+      input.targetRecord.recordVersion < 0
+    ) {
+      throw new CorrectionCommandError('IFC-ERR-005', '目标记录版本号无效');
     }
     const now = new Date().toISOString();
     const correction: Correction = {
