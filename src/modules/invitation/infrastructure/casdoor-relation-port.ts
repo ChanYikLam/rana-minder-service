@@ -21,10 +21,7 @@ export interface CasdoorRelationResult {
  */
 export interface CasdoorRelationPort {
   /** 写入社团 Group 并回读确认 */
-  writeAndReadBackGroup(
-    clubId: string,
-    principalId: string,
-  ): Promise<CasdoorRelationResult>;
+  writeAndReadBackGroup(clubId: string, principalId: string): Promise<CasdoorRelationResult>;
 }
 
 /** 占位实现（开发期直接确认；真实接入由 3.3 Casdoor 适配/适配器模块提供） */

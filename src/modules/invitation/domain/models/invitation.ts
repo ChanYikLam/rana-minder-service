@@ -27,7 +27,8 @@ export type ActivationStatus = (typeof ActivationStatus)[keyof typeof Activation
 /** 不可变历史（接受和退出历史不得删除；REC-026~028、JNT-016） */
 export interface InvitationHistoryEvent {
   readonly at: string;
-  readonly type: 'CREATED' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN' | 'EXPIRED' | 'FORCE_INVALIDATED';
+  readonly type:
+    'CREATED' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN' | 'EXPIRED' | 'FORCE_INVALIDATED';
   readonly by: string;
   readonly note?: string;
 }

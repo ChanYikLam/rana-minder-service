@@ -27,7 +27,18 @@ const makeRig = () => {
   const reissue = new ReissueInvitationCommand(repo, policy, sm);
   const resolveActivation = new ResolveActivationCommand(repo, new DefaultCasdoorRelationPort());
   const status = new InvitationStatusQuery(repo);
-  return { repo, create, accept, reject, withdraw, expire, forceInvalidate, reissue, resolveActivation, status };
+  return {
+    repo,
+    create,
+    accept,
+    reject,
+    withdraw,
+    expire,
+    forceInvalidate,
+    reissue,
+    resolveActivation,
+    status,
+  };
 };
 
 const createInput = {
@@ -84,14 +95,26 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
   it('接受不可逆：不能撤销/改回待处理；重复接受返回原结果（幂等）', async () => {
     const rig = makeRig();
     const inv = await rig.create.execute(createInput);
-    const accepted = await rig.accept.execute({ invitationId: inv.invitationId, principalId: 'stu1', eligibilityOk: true });
+    const accepted = await rig.accept.execute({
+      invitationId: inv.invitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+    });
     // 重复接受 → 返回原结果
-    const again = await rig.accept.execute({ invitationId: inv.invitationId, principalId: 'stu1', eligibilityOk: true });
+    const again = await rig.accept.execute({
+      invitationId: inv.invitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+    });
     assert.equal(again.status, 'ACCEPTED');
     assert.equal(again.version, accepted.version);
     // 已接受不可撤回
     await assert.rejects(
-      rig.withdraw.execute({ invitationId: inv.invitationId, principalId: 'hr1', principalRoles: ['HR_ADMIN'] }),
+      rig.withdraw.execute({
+        invitationId: inv.invitationId,
+        principalId: 'hr1',
+        principalRoles: ['HR_ADMIN'],
+      }),
       /仅待处理邀请可撤回/,
     );
   });
@@ -101,7 +124,11 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
     const inv = await rig.create.execute(createInput);
     const loaded1 = await rig.repo.load(inv.invitationId);
     // 先撤回（用撤回前的版本快照模拟并发：接受用旧版本 CAS 应失败）
-    await rig.withdraw.execute({ invitationId: inv.invitationId, principalId: 'hr1', principalRoles: ['HR_ADMIN'] });
+    await rig.withdraw.execute({
+      invitationId: inv.invitationId,
+      principalId: 'hr1',
+      principalRoles: ['HR_ADMIN'],
+    });
     const stale = { ...loaded1! }; // 旧版本
     const accepted = { ...stale, status: 'ACCEPTED' as const, version: stale.version + 1 };
     const swapped = await rig.repo.compareAndSwap(stale, accepted);
@@ -113,7 +140,10 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
   it('拒绝：本人、待处理可拒绝；重发后旧邀请保留不修改', async () => {
     const rig = makeRig();
     const inv = await rig.create.execute(createInput);
-    const rejected = await rig.reject.execute({ invitationId: inv.invitationId, principalId: 'stu1' });
+    const rejected = await rig.reject.execute({
+      invitationId: inv.invitationId,
+      principalId: 'stu1',
+    });
     assert.equal(rejected.status, 'REJECTED');
     // 非本人拒绝 → 拒绝
     await assert.rejects(
@@ -125,23 +155,39 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
   it('过期：系统截止任务幂等；冻结时不得过期', async () => {
     const rig = makeRig();
     const inv = await rig.create.execute(createInput);
-    const expired = await rig.expire.execute({ invitationId: inv.invitationId, expiryAllowed: true });
+    const expired = await rig.expire.execute({
+      invitationId: inv.invitationId,
+      expiryAllowed: true,
+    });
     assert.equal(expired!.status, 'EXPIRED');
     // 冻结（活动暂停）→ 不转换
     const inv2 = await rig.create.execute({ ...createInput, inviteeId: 'stu2' });
-    const frozen = await rig.expire.execute({ invitationId: inv2.invitationId, expiryAllowed: false });
+    const frozen = await rig.expire.execute({
+      invitationId: inv2.invitationId,
+      expiryAllowed: false,
+    });
     assert.equal(frozen!.status, 'PENDING');
   });
 
   it('强制失效：待处理→强制失效；已接受不受影响', async () => {
     const rig = makeRig();
     const pending = await rig.create.execute(createInput);
-    const invalidated = await rig.forceInvalidate.execute({ invitationId: pending.invitationId, source: 'ACTIVITY_CANCELLED' });
+    const invalidated = await rig.forceInvalidate.execute({
+      invitationId: pending.invitationId,
+      source: 'ACTIVITY_CANCELLED',
+    });
     assert.equal(invalidated!.status, 'FORCE_INVALIDATED');
     // 已接受不受影响
     const acceptedInv = await rig.create.execute({ ...createInput, inviteeId: 'stu2' });
-    await rig.accept.execute({ invitationId: acceptedInv.invitationId, principalId: 'stu2', eligibilityOk: true });
-    const kept = await rig.forceInvalidate.execute({ invitationId: acceptedInv.invitationId, source: 'ACTIVITY_CANCELLED' });
+    await rig.accept.execute({
+      invitationId: acceptedInv.invitationId,
+      principalId: 'stu2',
+      eligibilityOk: true,
+    });
+    const kept = await rig.forceInvalidate.execute({
+      invitationId: acceptedInv.invitationId,
+      source: 'ACTIVITY_CANCELLED',
+    });
     assert.equal(kept!.status, 'ACCEPTED');
   });
 
@@ -165,7 +211,11 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
     assert.equal(old!.status, 'REJECTED');
     // 已接受不可重发
     const acceptedInv = await rig.create.execute({ ...createInput, inviteeId: 'stu2' });
-    await rig.accept.execute({ invitationId: acceptedInv.invitationId, principalId: 'stu2', eligibilityOk: true });
+    await rig.accept.execute({
+      invitationId: acceptedInv.invitationId,
+      principalId: 'stu2',
+      eligibilityOk: true,
+    });
     await assert.rejects(
       rig.reissue.execute({
         oldInvitationId: acceptedInv.invitationId,
@@ -181,9 +231,16 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
   it('激活解析：回读确认 → 已生效；15 分钟仍失败 → 同步失败待重试（保持已接受、成员未生效）', async () => {
     const rig = makeRig();
     const inv = await rig.create.execute(createInput);
-    await rig.accept.execute({ invitationId: inv.invitationId, principalId: 'stu1', eligibilityOk: true });
+    await rig.accept.execute({
+      invitationId: inv.invitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+    });
     // 回读确认成功 → 已生效
-    const ok = await rig.resolveActivation.execute({ invitationId: inv.invitationId, deadlineExceeded: false });
+    const ok = await rig.resolveActivation.execute({
+      invitationId: inv.invitationId,
+      deadlineExceeded: false,
+    });
     assert.equal(ok.activated, true);
     assert.equal(ok.invitation.activation?.status, 'ACTIVATED');
   });

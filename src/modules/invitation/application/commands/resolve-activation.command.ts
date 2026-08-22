@@ -20,6 +20,14 @@ export interface ResolveActivationResult {
   readonly activated: boolean;
 }
 
+/** 激活解析前置失败（IFC-ERR-006） */
+export class ResolveActivationError extends Error {
+  constructor(message: string) {
+    super(`IFC-ERR-006: ${message}`);
+    this.name = 'ResolveActivationError';
+  }
+}
+
 /**
  * 成员身份生效意图解析（REC-026、ORG-027、MEM-002）。
  *
@@ -39,10 +47,10 @@ export class ResolveActivationCommand {
   async execute(input: ResolveActivationInput): Promise<ResolveActivationResult> {
     const invitation = await this.repo.load(input.invitationId);
     if (invitation === null) {
-      throw new Error('IFC-ERR-006: 邀请不存在');
+      throw new ResolveActivationError('邀请不存在');
     }
     if (invitation.status !== 'ACCEPTED' || invitation.activation === null) {
-      throw new Error('IFC-ERR-006: 邀请未接受或不存在生效意图');
+      throw new ResolveActivationError('邀请未接受或不存在生效意图');
     }
     const activation = invitation.activation;
     if (activation.status === ActivationStatus.ACTIVATED) {
@@ -73,8 +81,7 @@ export class ResolveActivationCommand {
         status: nextStatus,
         attemptCount: nextAttempt,
         lastAttemptAt: now,
-        lastError:
-          result.ok ? undefined : (result.reason ?? 'casdoor-write-readback-failed'),
+        lastError: result.ok ? undefined : (result.reason ?? 'casdoor-write-readback-failed'),
       },
     };
     await this.repo.save(updated);

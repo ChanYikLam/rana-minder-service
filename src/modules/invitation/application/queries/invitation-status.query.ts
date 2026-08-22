@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { Invitation } from '../../domain/models/invitation';
 import { INVITATION_REPOSITORY } from '../../infrastructure/invitation-repository';
 import type { InvitationRepository } from '../../infrastructure/invitation-repository';
 
@@ -17,6 +16,14 @@ export interface InvitationStatusView {
   readonly version: number;
 }
 
+/** 邀请状态查询失败（IFC-ERR-006） */
+export class InvitationStatusQueryError extends Error {
+  constructor(message: string) {
+    super(`IFC-ERR-006: ${message}`);
+    this.name = 'InvitationStatusQueryError';
+  }
+}
+
 /**
  * 邀请状态查询（IFC-SM-019）。
  *
@@ -25,14 +32,12 @@ export interface InvitationStatusView {
  */
 @Injectable()
 export class InvitationStatusQuery {
-  constructor(
-    @Inject(INVITATION_REPOSITORY) private readonly repo: InvitationRepository,
-  ) {}
+  constructor(@Inject(INVITATION_REPOSITORY) private readonly repo: InvitationRepository) {}
 
   async getStatus(invitationId: string): Promise<InvitationStatusView> {
     const invitation = await this.repo.load(invitationId);
     if (invitation === null) {
-      throw new Error('IFC-ERR-006: 邀请不存在');
+      throw new InvitationStatusQueryError('邀请不存在');
     }
     return {
       invitationId: invitation.invitationId,

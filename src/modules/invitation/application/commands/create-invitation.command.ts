@@ -57,10 +57,7 @@ export class CreateInvitationCommand {
     // 同社团同对象最多一份待处理邀请（MEM-018：重复待处理 → IFC-ERR-009 幂等冲突）
     const existing = await this.repo.findPending(input.clubId, input.inviteeId);
     if (existing !== null) {
-      throw new CreateInvitationError(
-        'IFC-ERR-009',
-        '同社团同对象已存在待处理邀请',
-      );
+      throw new CreateInvitationError('IFC-ERR-009', '同社团同对象已存在待处理邀请');
     }
 
     const now = new Date().toISOString();
