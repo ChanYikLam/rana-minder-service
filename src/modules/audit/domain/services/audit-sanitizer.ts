@@ -72,7 +72,9 @@ export class AuditSanitizer {
     const diffs: string[] = [];
     for (const [key, value] of Object.entries(input)) {
       const s = this.sanitizeField(key, value);
-      if (s.redacted || typeof value === 'string' || value !== null) {
+      // 过滤掉 undefined/null：不记录无意义的空值差异；字符串（含空串）与
+      // 其它非空值（数字/布尔/对象）以及已脱敏的敏感字段才记录
+      if (s.redacted || (value !== undefined && value !== null)) {
         diffs.push(`${key}=${s.display}`);
       }
     }

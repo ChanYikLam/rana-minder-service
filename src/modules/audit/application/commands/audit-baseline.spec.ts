@@ -131,15 +131,43 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
       rig.query.search({ principalId: 'hr2', roles: ['HR_ADMIN'], clubId: 'c2' }, { clubId: 'c1' }),
       /只能查询本社团审计/,
     );
-    // 部门负责人未限定对象 → 拒绝
+    // 部门负责人未携带对象白名单 → 拒绝
     await assert.rejects(
       rig.query.search({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'] }, {}),
-      /需限定业务对象/,
+      /须携带可访问业务对象白名单/,
+    );
+    // 部门负责人查询白名单外的对象 → 拒绝（防横向越权）
+    await assert.rejects(
+      rig.query.search(
+        { principalId: 'd1', roles: ['DEPARTMENT_LEADER'], accessibleObjectIds: ['o1'] },
+        { objectId: 'o999' },
+      ),
+      /只能查询自己有权访问的业务对象审计/,
     );
     // 成员 → 拒绝
     await assert.rejects(
       rig.query.search({ principalId: 'mem1', roles: ['MEMBER'] }, {}),
       /不看内部审计/,
     );
+  });
+
+  it('部门负责人查询结果强制限定在对象白名单内（防结果越权）', async () => {
+    const rig = makeRig();
+    await rig.writer.write({ ...baseEvent, target: { objectType: 'MEMBERSHIP', objectId: 'o1' }, actorId: 'u1' });
+    await rig.writer.write({ ...baseEvent, target: { objectType: 'MEMBERSHIP', objectId: 'o2' }, actorId: 'u1' });
+    // 白名单仅含 o1：即使 filter.objectId 传 o1，也拿不到 o2 的记录
+    const rows = await rig.query.search(
+      { principalId: 'd1', roles: ['DEPARTMENT_LEADER'], accessibleObjectIds: ['o1'] },
+      { objectId: 'o1' },
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.target?.objectId, 'o1');
+    // 不带 objectId 过滤时同样只返回白名单内对象
+    const all = await rig.query.search(
+      { principalId: 'd1', roles: ['DEPARTMENT_LEADER'], accessibleObjectIds: ['o2'] },
+      {},
+    );
+    assert.equal(all.length, 1);
+    assert.equal(all[0]?.target?.objectId, 'o2');
   });
 });
