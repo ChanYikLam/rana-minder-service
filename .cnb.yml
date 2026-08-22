@@ -394,6 +394,17 @@
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
             echo "发布镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
             wc -c /tmp/ranaminder-sbom.spdx.json
+            # 复制到工作目录，供阶段 8d 归档到附件（发布门证据可追溯）
+            mkdir -p artifacts && cp /tmp/ranaminder-sbom.spdx.json artifacts/ranaminder-sbom.spdx.json
+        # 阶段 8d：归档 SBOM 到 commit 附件（DEP-003 发布门证据持久化，供人工门复核）
+        # 上传到当前 commit 附件，不依赖 release 是否存在；文件在构建容器销毁后仍可追溯
+        - name: 8d-归档SBOM证据
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          image: cnbcool/attachments:latest
+          settings:
+            commit: $CNB_COMMIT
+            attachments:
+              - "./artifacts/ranaminder-sbom.spdx.json"
         - name: 10-依赖审计与许可证登记
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f pnpm-lock.yaml ]'
           script: |
