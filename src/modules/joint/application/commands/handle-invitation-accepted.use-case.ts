@@ -29,11 +29,11 @@ export class DefaultHandleInvitationAcceptedUseCase implements HandleInvitationA
     if (conclusionSnap.clubId !== input.actingClubId) {
       throw jointErrors.forbidden('路径组织与结论所属组织不一致');
     }
-    if (conclusionSnap.inviteStatus !== 'PENDING') {
-      return;
-    }
     if (conclusionSnap.invitationId !== input.invitationId) {
       throw jointErrors.forbidden('邀请标识与结论不一致');
+    }
+    if (conclusionSnap.inviteStatus !== 'PENDING') {
+      return;
     }
     const conclusion = JointConclusion.fromSnapshot(conclusionSnap);
     if (!conclusion.markInviteAccepted(new JointConclusionStateMachine(), input.now)) {

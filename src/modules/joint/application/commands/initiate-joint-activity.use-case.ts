@@ -52,6 +52,9 @@ export class DefaultInitiateJointActivityUseCase implements InitiateJointActivit
     if (!Array.isArray(input.clubIds) || input.clubIds.length < 2) {
       throw jointErrors.validation('联合活动至少须有两个拟参与社团');
     }
+    if (new Set(input.clubIds).size !== input.clubIds.length) {
+      throw jointErrors.validation('联合活动的拟参与社团不可重复');
+    }
     if (!input.clubIds.includes(input.actingClubId)) {
       throw jointErrors.forbidden('发起组织须为联合活动的参与社团之一');
     }
