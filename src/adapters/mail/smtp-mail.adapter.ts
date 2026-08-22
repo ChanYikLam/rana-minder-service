@@ -40,41 +40,41 @@ function encodeBase64(input: string): string {
   return Buffer.from(input, 'utf8').toString('base64');
 }
 
-/** 对单个 SMTP 命令发起请求并等待一行响应。 */
+/**
+ * SMTP 单命令请求/响应：累积缓冲直到收到最终状态行（`<3位码><空格>…`）。
+ *
+ * SMTP 多行响应中 continuation 行以 `<3位码>-` 结尾、最终状态行以 `<3位码> `（空格）
+ * 结尾。原实现把任意以 2/3/4/5 开头的行都当作最终行，导致 EHLO 等多行响应在
+ * 分片到达时被过早判定完成，后续命令时序错乱。此处按最终状态行收口。
+ */
 async function smtpExchange(socket: Socket, command: string, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       socket.destroy();
       reject(new Error('smtp-timeout'));
     }, timeoutMs);
+    let buffer = '';
     const onData = (chunk: Buffer) => {
-      const text = chunk.toString('utf8');
-      // 简单多行响应：取最后一行作为最终状态行。
-      const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
-      const last = lines[lines.length - 1] ?? '';
-      if (
-        last.startsWith('5') ||
-        last.startsWith('4') ||
-        last.startsWith('2') ||
-        last.startsWith('3')
-      ) {
-        clearTimeout(timer);
-        socket.removeListener('data', onData);
-        resolve(last);
+      buffer += chunk.toString('utf8');
+      // 仅当缓冲以换行结尾（收到完整行）时再判定，避免截断半行。
+      if (!buffer.endsWith('\n')) {
+        return;
       }
-      // 否则继续等待（如 DATA 阶段的多行）。
+      for (const line of buffer.split(/\r?\n/)) {
+        const m = /^(\d{3})([ -])/.exec(line);
+        // 最终状态行：`<3位码> `（空格）；continuation 行 `<3位码>-` 继续等待。
+        if (m && m[2] === ' ') {
+          clearTimeout(timer);
+          socket.removeListener('data', onData);
+          resolve(line);
+          return;
+        }
+      }
+      // 仅收到 continuation 行，继续累积等待最终行。
     };
     socket.on('data', onData);
     socket.write(`${command}\r\n`, 'utf8');
   });
-}
-
-/** 读取并消费一个服务器多行响应（用于 DATA 结束后的最终状态）。 */
-function readResponseLines(chunk: Buffer): string[] {
-  return chunk
-    .toString('utf8')
-    .split(/\r?\n/)
-    .filter((l) => l.length > 0);
 }
 
 export class SmtpMailChannelAdapter implements MailChannelAdapter {
@@ -204,13 +204,24 @@ export class SmtpMailChannelAdapter implements MailChannelAdapter {
           socket.destroy();
           reject(new Error('smtp-data-timeout'));
         }, this.timeoutMs);
-        socket.write(`${body}\r\n.\r\n`, 'utf8', () => {
-          socket.once('data', (chunk) => {
-            clearTimeout(timer);
-            const lines = readResponseLines(chunk);
-            resolve(lines[lines.length - 1] ?? '');
-          });
-        });
+        let buffer = '';
+        const onData = (chunk: Buffer) => {
+          buffer += chunk.toString('utf8');
+          if (!buffer.endsWith('\n')) {
+            return;
+          }
+          for (const line of buffer.split(/\r?\n/)) {
+            const m = /^(\d{3})([ -])/.exec(line);
+            if (m && m[2] === ' ') {
+              clearTimeout(timer);
+              socket.removeListener('data', onData);
+              resolve(line);
+              return;
+            }
+          }
+        };
+        socket.on('data', onData);
+        socket.write(`${body}\r\n.\r\n`, 'utf8', () => {});
         socket.once('error', (err) => {
           clearTimeout(timer);
           reject(err);

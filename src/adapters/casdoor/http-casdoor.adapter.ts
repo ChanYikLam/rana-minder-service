@@ -238,12 +238,18 @@ export class HttpCasdoorAdapter implements CasdoorAdapter {
         ts,
       );
     }
-    // 校验写入学段确实反映到读回值（至少一个字段匹配）。
-    const changed =
-      (patch.email !== undefined && readback.data.email === patch.email) ||
-      (patch.phone !== undefined && readback.data.phone === patch.phone) ||
-      (patch.college !== undefined && readback.data.college === patch.college) ||
-      (patch.grade !== undefined && readback.data.grade === patch.grade);
+    // 校验写入学段确实反映到读回值：patch 中出现的每个字段都需在读回中可见，
+    // 才能宣称写后回读收口成功（CAS-WR-006/007）。用「所有字段都匹配」而非
+    // 「任一匹配」，避免多字段更新时部分字段静默丢失仍被判定为成功。
+    // 清空语义：patch 传空串时读回为 null/空串均视为已清空。
+    const changed = [
+      { patch: patch.email, read: readback.data.email },
+      { patch: patch.phone, read: readback.data.phone },
+      { patch: patch.college, read: readback.data.college },
+      { patch: patch.grade, read: readback.data.grade },
+    ]
+      .filter((f): f is { patch: string; read: string | null } => f.patch !== undefined)
+      .every(({ patch, read }) => read === patch || (patch === '' && (read === '' || read === null)));
     if (!changed) {
       return externalFailure(
         'UNCERTAIN',
