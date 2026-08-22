@@ -213,7 +213,14 @@ export class JointConclusion {
 
   /** 待复核后恢复邀请（沿用原冻结剩余时长，由端口层处理） */
   restoreFromReview(machine: JointConclusionStateMachine, now: Date): boolean {
-    return this.transition(machine, JointConclusionEvent.RESTORE_FROM_REVIEW, now);
+    const ok = this.transition(machine, JointConclusionEvent.RESTORE_FROM_REVIEW, now);
+    if (ok) {
+      // 恢复后回到 INVITE_PENDING，inviteStatus 须复位为 PENDING，
+      // 否则 handleInvitationAccepted 会因 inviteStatus !== 'PENDING' 提前 return，
+      // 导致已接受锁定的结论永远无法被锁定。
+      this.snapshot = { ...this.snapshot, inviteStatus: 'PENDING' };
+    }
+    return ok;
   }
 
   archive(machine: JointConclusionStateMachine, now: Date): boolean {

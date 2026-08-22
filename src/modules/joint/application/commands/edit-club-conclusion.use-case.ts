@@ -40,6 +40,13 @@ export class DefaultEditClubConclusionUseCase implements EditClubConclusionUseCa
     if (input.actingClubId !== input.clubId) {
       throw jointErrors.forbidden('仅可编辑本组织的社团结论');
     }
+    const applicationSnap = await this.repository.loadApplication(input.jointApplicationId);
+    if (applicationSnap === null) {
+      throw jointErrors.notFound('联合申请');
+    }
+    if (applicationSnap.jointActivityId !== input.jointActivityId) {
+      throw jointErrors.preconditionFailed('联合申请不属于该联合活动，无法编辑社团结论');
+    }
     await assertOrgScope(this.repository, input.jointActivityId, input.actingClubId);
     if (
       !(await this.authorization.canEditConclusion({
