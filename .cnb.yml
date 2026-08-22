@@ -131,7 +131,7 @@
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             set -e
-            if ! command -v trivy >/dev/null 2>&1; then
+            if ! (command -v trivy >/dev/null 2>&1 && trivy --version 2>&1 | grep -q '0.69.3'); then
               curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
               echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
               tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
@@ -146,7 +146,7 @@
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             set -e
-            if ! command -v syft >/dev/null 2>&1; then
+            if ! (command -v syft >/dev/null 2>&1 && syft --version 2>&1 | grep -q '1.51.0'); then
               curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
               echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
               tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
@@ -154,7 +154,7 @@
             fi
             # 生成镜像 SBOM 并输出（发布门证据归档用，不推送产物）
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
-            echo "镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
+            echo "镜像 SBOM 已生成（spdx-json），作为第三方依赖/许可证清单证据归档，供发布门复核。"
             wc -c /tmp/ranaminder-sbom.spdx.json
         # 阶段 10：依赖审计与许可证登记（DEP-003）
         - name: 10-依赖审计与许可证登记
@@ -254,7 +254,7 @@
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             set -e
-            if ! command -v trivy >/dev/null 2>&1; then
+            if ! (command -v trivy >/dev/null 2>&1 && trivy --version 2>&1 | grep -q '0.69.3'); then
               curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
               echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
               tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
@@ -268,14 +268,14 @@
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             set -e
-            if ! command -v syft >/dev/null 2>&1; then
+            if ! (command -v syft >/dev/null 2>&1 && syft --version 2>&1 | grep -q '1.51.0'); then
               curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
               echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
               tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
               rm -f /tmp/syft.tar.gz
             fi
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
-            echo "镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
+            echo "镜像 SBOM 已生成（spdx-json），作为第三方依赖/许可证清单证据归档，供发布门复核。"
             wc -c /tmp/ranaminder-sbom.spdx.json
         - name: 10-依赖审计与许可证登记
           if: "[ -f pnpm-lock.yaml ]"
@@ -371,7 +371,7 @@
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
           script: |
             set -e
-            if ! command -v trivy >/dev/null 2>&1; then
+            if ! (command -v trivy >/dev/null 2>&1 && trivy --version 2>&1 | grep -q '0.69.3'); then
               curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
               echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
               tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
@@ -385,20 +385,20 @@
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
           script: |
             set -e
-            if ! command -v syft >/dev/null 2>&1; then
+            if ! (command -v syft >/dev/null 2>&1 && syft --version 2>&1 | grep -q '1.51.0'); then
               curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
               echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
               tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
               rm -f /tmp/syft.tar.gz
             fi
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
-            echo "发布镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
+            echo "发布镜像 SBOM 已生成（spdx-json），作为第三方依赖/许可证清单证据归档，供发布门复核。"
             wc -c /tmp/ranaminder-sbom.spdx.json
             # 复制到工作目录，供阶段 8d 归档到附件（发布门证据可追溯）
             mkdir -p artifacts && cp /tmp/ranaminder-sbom.spdx.json artifacts/ranaminder-sbom.spdx.json
         # 阶段 8d：归档 SBOM 到 commit 附件（DEP-003 发布门证据持久化，供人工门复核）
         # 上传到当前 commit 附件，不依赖 release 是否存在；文件在构建容器销毁后仍可追溯
-        # 8d 使用固定版本 attachments 插件镜像（v1.1.4 = 当前 latest），避免 :latest 不可复现的供应链风险（同 trivy/syft 固定版本）
+        # 8d 使用固定版本 attachments 插件镜像 v1.1.4，避免 :latest 不可复现的供应链风险（同 trivy/syft 固定版本；v1.1.4 与 latest 为不同 digest，按固定版本拉取）
         - name: 8d-归档SBOM证据
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
           image: cnbcool/attachments:v1.1.4
