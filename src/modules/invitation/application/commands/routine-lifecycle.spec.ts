@@ -265,4 +265,35 @@ describe('4.5.2 常规入社邀请（MEM-004、SRS-SM-MEM-004）', () => {
       /已是本社团成员/,
     );
   });
+
+  it('重试仍失败：保持同步失败待重试（自环），不抛非法转换，attempt 累积', async () => {
+    // 社团与部门持续未确认（全未确认，可重试）
+    const rig = makeRig(
+      makeCasdoor(async () => ({ groupConfirmed: false, departmentConfirmed: false })),
+    );
+    const inv = await rig.create.execute(createInput);
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    const first = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: false,
+    });
+    assert.equal(first.invitation.status, 'SYNC_FAILED_PENDING_RETRY');
+    // 第二次重试仍失败：应保持重试状态而非抛 IllegalRoutineTransitionError
+    const second = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: false,
+    });
+    assert.equal(second.invitation.status, 'SYNC_FAILED_PENDING_RETRY');
+    assert.equal(second.activated, false);
+    assert.equal(second.invitation.attemptCount, 2); // 重试次数累积
+    // 不开放权限
+    const view = await rig.status.getStatus(inv.routineInvitationId);
+    assert.equal(view.activationPending, true);
+    assert.equal(view.activated, false);
+  });
 });

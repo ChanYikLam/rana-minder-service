@@ -65,6 +65,7 @@ const TRANSITIONS: Readonly<Record<RoutineInvitationStatus, readonly RoutineInvi
     RoutineInvitationStatus.HIGH_PRIORITY_SYNC_ANOMALY,
   ],
   [RoutineInvitationStatus.SYNC_FAILED_PENDING_RETRY]: [
+    RoutineInvitationStatus.SYNC_FAILED_PENDING_RETRY, // 重试仍失败保持重试（自环；避免第二次起抛非法转换）
     RoutineInvitationStatus.ACCEPTED_PENDING_ACTIVATION, // 重试回到待生效继续回读
     RoutineInvitationStatus.ACTIVATED, // 已实际全部达成直接收口
     RoutineInvitationStatus.HIGH_PRIORITY_SYNC_ANOMALY, // 无法确认且无法补偿
