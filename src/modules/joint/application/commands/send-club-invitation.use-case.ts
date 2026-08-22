@@ -3,6 +3,8 @@
  */
 
 import { JointConclusion } from '../../domain/models/joint-conclusion';
+import { JointActivity } from '../../domain/models/joint-activity';
+import { JointActivityStateMachine } from '../../domain/state-machines/joint-activity.state-machine';
 import { JointConclusionStateMachine } from '../../domain/state-machines/joint-conclusion.state-machine';
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
@@ -58,6 +60,10 @@ export class DefaultSendClubInvitationUseCase implements SendClubInvitationUseCa
     if (applicationSnap === null) {
       throw jointErrors.notFound('联合申请');
     }
+    const activitySnap = await this.repository.loadActivity(conclusionSnap.jointActivityId);
+    if (activitySnap === null) {
+      throw jointErrors.notFound('联合活动');
+    }
 
     const machine = new JointConclusionStateMachine();
     const trial = JointConclusion.fromSnapshot(conclusionSnap);
@@ -84,6 +90,16 @@ export class DefaultSendClubInvitationUseCase implements SendClubInvitationUseCa
       throw jointErrors.preconditionFailed('社团邀请发送失败');
     }
     await this.repository.saveConclusion(conclusion.toSnapshot(), conclusionSnap.revisionNumber);
+
+    // 首邀：将活动从已公布（PUBLISHED）流转到邀请阶段（INVITING），单向门（乐观锁单胜者）。
+    // 发送首邀后禁止再次确认本轮参与，活动方可进入结束确认（BEGIN_END_CONFIRM 仅接受 INVITING）。
+    const activity = JointActivity.fromSnapshot(activitySnap);
+    if (activity.firstInvitationAt === null) {
+      if (!activity.markFirstInvitation(new JointActivityStateMachine(), input.now)) {
+        throw jointErrors.preconditionFailed('联合活动无法进入邀请阶段');
+      }
+      await this.repository.saveActivity(activity.toSnapshot(), activitySnap.revisionNumber);
+    }
 
     const notBefore = new Date(input.now.getTime() + INVITATION_TIMEOUT_DEFAULT_MS);
     await this.tasks.scheduleInvitationTimeout(
