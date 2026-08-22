@@ -101,10 +101,7 @@ export class ChangeDepartmentRelationCommand {
     // 结束类变更（退部/免职）属于 EndDepartmentRelationCommand（R4）职责范围；
     // 本命令只接受新增/调岗类。若不拦截，LEAVE/REVOKE 会被误建成“加入”段（direction=add），
     // 造成错误的关系语义（错误地新建关系而非结束关系）。
-    if (
-      input.changeType === 'LEAVE_DEPARTMENT' ||
-      input.changeType === 'REVOKE_POSITION'
-    ) {
+    if (input.changeType === 'LEAVE_DEPARTMENT' || input.changeType === 'REVOKE_POSITION') {
       throw new ChangeRelationError(
         'IFC-ERR-006',
         '退部/免职等结束类变更须走 EndDepartmentRelationCommand（R4），本命令仅处理加入/任命/调岗',

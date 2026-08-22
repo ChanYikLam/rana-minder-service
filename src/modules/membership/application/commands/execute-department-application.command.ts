@@ -415,9 +415,7 @@ export class ExecuteDepartmentApplicationCommand {
           app.applicantId,
           app.targetDeptId,
         );
-        targetEffective = segs.some(
-          (r) => r.status === DepartmentRelationStatus.CURRENTLY_VALID,
-        );
+        targetEffective = segs.some((r) => r.status === DepartmentRelationStatus.CURRENTLY_VALID);
       }
       if (!targetEffective) return false;
       return this.allLeaveTargetsInactive(app);
