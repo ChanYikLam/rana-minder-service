@@ -79,12 +79,18 @@ export class ResolveRoutineActivationCommand {
         lastError: undefined,
         history: [...invitation.history, { at: now, type: 'ACTIVATED', by: 'system' }],
       };
-      await this.repo.save(activated);
+      if (!(await this.repo.compareAndSwap(invitation, activated))) {
+        throw new Error('IFC-ERR-007: 邀请状态已被并发变更，激活失败');
+      }
       return { invitation: activated, activated: true, anomaly: false };
     }
 
     // 部分确认或全未确认：不得成功（不得开放权限）
-    const partial = result.groupConfirmed !== result.departmentConfirmed;
+    // 按实际组合目标数判定：仅 GROUP（未指定初始部门）时，group 未确认属唯一目标未确认（UNCONFIRMED）
+    const confirmedCount = invitation.relationTargets.filter((t) =>
+      t.kind === 'GROUP' ? result.groupConfirmed : result.departmentConfirmed,
+    ).length;
+    const partial = confirmedCount > 0 && confirmedCount < invitation.relationTargets.length;
     const syncStatus: RelationSyncStatus = partial ? Sync.PARTIAL : Sync.UNCONFIRMED;
 
     // 无法确认且无法补偿到非成员 → 高优先级同步异常
@@ -106,7 +112,9 @@ export class ResolveRoutineActivationCommand {
       })),
       history: [...invitation.history, { at: now, type: 'SYNC_FAILED', by: 'system' }],
     };
-    await this.repo.save(retry);
+    if (!(await this.repo.compareAndSwap(invitation, retry))) {
+      throw new Error('IFC-ERR-007: 邀请状态已被并发变更，重试失败');
+    }
     return { invitation: retry, activated: false, anomaly: false };
   }
 
@@ -121,7 +129,9 @@ export class ResolveRoutineActivationCommand {
       lastError: 'unrecoverable-composite-sync',
       history: [...invitation.history, { at: now, type: 'HIGH_PRIORITY_ANOMALY', by: 'system' }],
     };
-    await this.repo.save(anomaly);
+    if (!(await this.repo.compareAndSwap(invitation, anomaly))) {
+      throw new Error('IFC-ERR-007: 邀请状态已被并发变更，异常收口失败');
+    }
     // 通知本人、发送方和超级管理员由通知/审计模块承接（本命令只收口状态；维持最小权限）
     return { invitation: anomaly, activated: false, anomaly: true };
   }

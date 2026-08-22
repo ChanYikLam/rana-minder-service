@@ -296,4 +296,55 @@ describe('4.5.2 常规入社邀请（MEM-004、SRS-SM-MEM-004）', () => {
     assert.equal(view.activationPending, true);
     assert.equal(view.activated, false);
   });
+
+  it('resolve 并发变更：CAS 失败抛 IFC-ERR-007（不覆盖版本更新）', async () => {
+    // 组合回读期间，另一 worker 并发提交了更新的版本 → resolve 的 CAS 应失败
+    let realId = '';
+    const rig = makeRig(
+      makeCasdoor(async () => {
+        // 模拟并发：回读期间另一 worker 已提升同一邀请的版本并落库
+        const latest = (await rig.repo.load(realId))!;
+        await rig.repo.save({ ...latest, version: latest.version + 1 });
+        return { groupConfirmed: true, departmentConfirmed: true };
+      }),
+    );
+    const inv = await rig.create.execute(createInput);
+    realId = inv.routineInvitationId;
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    await assert.rejects(
+      rig.resolve.execute({
+        routineInvitationId: inv.routineInvitationId,
+        escalateToAnomaly: false,
+      }),
+      /IFC-ERR-007/,
+    );
+  });
+
+  it('未指定初始部门时 group 未确认 → UNCONFIRMED（而非误标 PARTIAL）', async () => {
+    const rig = makeRig(
+      makeCasdoor(async () => ({ groupConfirmed: false, departmentConfirmed: true })),
+    );
+    // 不指定初始部门（initialDepartmentId = null）：仅 GROUP 一个组合目标
+    const inv = await rig.create.execute({ ...createInput, initialDepartmentId: null });
+    assert.equal(inv.relationTargets.length, 1);
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    const result = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: false,
+    });
+    assert.equal(result.activated, false);
+    assert.equal(result.invitation.status, 'SYNC_FAILED_PENDING_RETRY');
+    // 唯一目标未确认 → UNCONFIRMED，而非 PARTIAL
+    assert.equal(result.invitation.syncStatus, 'UNCONFIRMED');
+  });
 });
