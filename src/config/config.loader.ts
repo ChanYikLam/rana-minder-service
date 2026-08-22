@@ -254,8 +254,12 @@ function parseString(
   envName: string,
   fallback: string,
 ): string {
-  if (typeof fromFile === 'string' && fromFile.length > 0) return fromFile;
-  if (typeof fromEnv === 'string' && fromEnv.length > 0) return fromEnv;
+  if (typeof fromFile === 'string' && fromFile.length > 0) {
+    return rejectPlaceholder(fromFile, envName);
+  }
+  if (typeof fromEnv === 'string' && fromEnv.length > 0) {
+    return rejectPlaceholder(fromEnv, envName);
+  }
   if (fallback.length > 0) return fallback;
   throw new ConfigLoadError(`Missing required config: ${envName}`);
 }
@@ -309,22 +313,40 @@ function parseLogLevel(
   return fallback;
 }
 
+/**
+ * 未改写占位符前缀（ADR-010 / OPS-CFG-001）：示例配置中秘密统一以 CHANGE_ME 占位，
+ * 部署者必须改写为真实值或外置引用后再启动。加载到仍为占位符的值一律拒绝（fail-closed），
+ * 避免应用带着占位符（如 CHANGE_ME 当数据库密码）真实运行。
+ */
+const PLACEHOLDER_PREFIX = 'CHANGE_ME';
+
+function rejectPlaceholder(value: string, envName: string): string {
+  if (value.startsWith(PLACEHOLDER_PREFIX)) {
+    throw new ConfigLoadError(
+      `Config placeholder not replaced: ${envName} is still '${value}'. ` +
+        `Replace it with a real value or an external ref (\${env:...} / \${file:...}) before starting.`,
+    );
+  }
+  return value;
+}
+
 function requireField(
   fromFile: unknown,
   fromEnv: string | undefined,
   envName: string,
   fallbackSecretEnv: string | undefined,
 ): string {
+  let value: string;
   if (typeof fromFile === 'string' && fromFile.length > 0) {
-    return isSecretRef(fromFile) ? resolveSecret(fromFile) : fromFile;
+    value = isSecretRef(fromFile) ? resolveSecret(fromFile) : fromFile;
+  } else if (typeof fromEnv === 'string' && fromEnv.length > 0) {
+    value = isSecretRef(fromEnv) ? resolveSecret(fromEnv) : fromEnv;
+  } else if (fallbackSecretEnv !== undefined && fallbackSecretEnv.length > 0) {
+    value = fallbackSecretEnv;
+  } else {
+    throw new ConfigLoadError(`Missing required config: ${envName}`);
   }
-  if (typeof fromEnv === 'string' && fromEnv.length > 0) {
-    return isSecretRef(fromEnv) ? resolveSecret(fromEnv) : fromEnv;
-  }
-  if (fallbackSecretEnv !== undefined && fallbackSecretEnv.length > 0) {
-    return fallbackSecretEnv;
-  }
-  throw new ConfigLoadError(`Missing required config: ${envName}`);
+  return rejectPlaceholder(value, envName);
 }
 
 function optionalString(
@@ -333,10 +355,16 @@ function optionalString(
   fallback: string | undefined,
 ): string | undefined {
   if (typeof fromFile === 'string' && fromFile.length > 0) {
-    return isSecretRef(fromFile) ? resolveSecret(fromFile) : fromFile;
+    return rejectPlaceholder(
+      isSecretRef(fromFile) ? resolveSecret(fromFile) : fromFile,
+      'optional secret',
+    );
   }
   if (typeof fromEnv === 'string' && fromEnv.length > 0) {
-    return isSecretRef(fromEnv) ? resolveSecret(fromEnv) : fromEnv;
+    return rejectPlaceholder(
+      isSecretRef(fromEnv) ? resolveSecret(fromEnv) : fromEnv,
+      'optional secret',
+    );
   }
   return fallback;
 }

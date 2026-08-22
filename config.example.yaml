@@ -13,7 +13,8 @@
 #         ${env:VAR_NAME}         从环境变量读取
 #         ${file:/path/to/secret} 从白名单路径读取（/etc/ranaminder/secrets/、/run/secrets/）
 #   - 真实 config.yaml 必须排除在源码仓库与镜像之外（见 .dockerignore）；
-#   - 正式环境（environment.name=prod）缺失必要配置或仍使用占位符时应用拒绝启动（fail-closed）。
+#   - 配置加载器对仍未改写的占位符（CHANGE_ME*）一律拒绝启动（fail-closed）：
+#     加载到即抛 ConfigLoadError，应用与 worker 以非零状态退出，不会带着占位符运行。
 # ============================================================
 
 server:
@@ -21,8 +22,10 @@ server:
   port: 3000
   gracefulShutdownTimeoutMs: 10000
 
+# 部署档位标注（dev|test|prod）。当前仅供运维识读，不参与加载器判定：
+# 占位符拒绝等 fail-closed 约束由加载器无条件生效（见 config.loader.ts rejectPlaceholder）。
+# HTTPS、最小观测等正式环境约束由部署边界（反向代理/编排）保证，见部署运维手册。
 environment:
-  # dev | test | prod；prod 触发正式环境强制约束（HTTPS、占位符拒绝、最小观测）
   name: prod
 
 database:
