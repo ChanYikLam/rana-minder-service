@@ -6,9 +6,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type {
-  CurrentPermissionsPort,
-} from '../../organization/application/ports';
+import type { CurrentPermissionsPort } from '../../organization/application/ports';
 import { OrgBackedNotificationPrivilegeVerifier } from './org-notification-privilege-verifier';
 
 class FakePermissions implements CurrentPermissionsPort {
@@ -40,24 +38,12 @@ describe('OrgBackedNotificationPrivilegeVerifier（kill-switch 特权映射）',
   });
 
   it('CLUB 范围：超管或该社团管理员可操作', async () => {
-    assert.equal(
-      await verifier.canOperateKillSwitch('CLUB', 'club-acm', 'u_root'),
-      true,
-    );
-    assert.equal(
-      await verifier.canOperateKillSwitch('CLUB', 'club-acm', 'u_hr'),
-      true,
-    );
+    assert.equal(await verifier.canOperateKillSwitch('CLUB', 'club-acm', 'u_root'), true);
+    assert.equal(await verifier.canOperateKillSwitch('CLUB', 'club-acm', 'u_hr'), true);
   });
 
   it('CLUB 范围：无权限者拒绝；CLUB 范围缺 clubId 拒绝（fail-closed）', async () => {
-    assert.equal(
-      await verifier.canOperateKillSwitch('CLUB', 'club-acm', 'u_out'),
-      false,
-    );
-    assert.equal(
-      await verifier.canOperateKillSwitch('CLUB', null, 'u_hr'),
-      false,
-    );
+    assert.equal(await verifier.canOperateKillSwitch('CLUB', 'club-acm', 'u_out'), false);
+    assert.equal(await verifier.canOperateKillSwitch('CLUB', null, 'u_hr'), false);
   });
 });

@@ -55,8 +55,7 @@ export class OidcAuthSessionProvider implements AuthSessionProvider {
       return {
         subjectId: sub,
         now,
-        mailCapable:
-          typeof payload['email'] === 'string' && payload['email'].length > 0,
+        mailCapable: typeof payload['email'] === 'string' && payload['email'].length > 0,
       };
     } catch {
       return null;
@@ -64,10 +63,7 @@ export class OidcAuthSessionProvider implements AuthSessionProvider {
   }
 
   /** 签发会话 JWT（24h 有效期） */
-  static async signSession(
-    claims: SessionClaims,
-    secret: Uint8Array,
-  ): Promise<string> {
+  static async signSession(claims: SessionClaims, secret: Uint8Array): Promise<string> {
     return new SignJWT({
       sub: claims.sub,
       name: claims.name ?? '',

@@ -23,7 +23,6 @@
 import { Module } from '@nestjs/common';
 import { NotificationController } from './interfaces';
 import { NotificationAuthGuard } from './interfaces/notification-auth.guard';
-import { RejectAllNotificationAuthSessionProvider } from './interfaces/notification-auth-session';
 import {
   CreateNotificationFactCommand,
   DeliverInboxCommand,
@@ -64,9 +63,7 @@ import {
   InMemoryEmailTemplateStore,
 } from './infrastructure';
 import { OrgBackedNotificationPrivilegeVerifier } from './infrastructure/org-notification-privilege-verifier';
-import {
-  CURRENT_PERMISSIONS_PORT,
-} from '../organization/application/ports';
+import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
 import { OrganizationModule } from '../organization/module';
 import { IdentityModule } from '../identity/identity.module';
 import { AUTH_SESSION_PROVIDER } from '../identity/tokens';

@@ -21,9 +21,7 @@ import { OrganizationModule } from '../organization/module';
 import { IdentityModule } from '../identity/identity.module';
 import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
 import { adaptSessionProvider } from '../../shared/adapt-session-provider';
-import {
-  CURRENT_PERMISSIONS_PORT,
-} from '../organization/application/ports';
+import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
 import { DB_ADAPTER } from '../../adapters/tokens';
 
 import {
@@ -93,7 +91,6 @@ import { DefaultListSubmissionsQuery } from './application/queries/list-submissi
 import { FormDesignController } from './interfaces/controllers/form-design.controller';
 import { FormSubmissionController } from './interfaces/controllers/form-submission.controller';
 
-import { RejectAllFormAuthSessionProvider } from './interfaces/nest/form-auth-session';
 import { FormAuthGuard } from './interfaces/nest/form-auth.guard';
 import { OrgFormsNestController } from './interfaces/nest/org-forms.nest.controller';
 import { AdminFormsNestController } from './interfaces/nest/admin-forms.nest.controller';
