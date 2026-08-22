@@ -1,13 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { MembershipPeriod } from '../../domain/models/membership-period';
-import { ActivationExternalPhase } from '../../domain/models/membership-period';
+import { ActivationExternalPhase, ActivationProgress } from '../../domain/models/membership-period';
 import { MembershipPeriodStateMachine } from '../../domain/state-machines/membership-period.state-machine';
 import { MEMBERSHIP_CASDOOR_PORT } from '../../infrastructure/casdoor-group.port';
 import type { MembershipCasdoorPort } from '../../infrastructure/casdoor-group.port';
 import { InMemoryMembershipNotificationPort } from '../../infrastructure/in-memory-stubs';
 import { MEMBERSHIP_NOTIFICATION_PORT, saveNotificationFact } from '../ports';
 import type { MembershipNotificationPort } from '../ports';
+import { sanitizeReason } from './sanitize-reason';
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
 import type { MembershipRepository } from '../../infrastructure/membership-repository';
 
@@ -78,9 +79,10 @@ export class CompensateMemberActivationCommand {
       activation: {
         ...act,
         phase: ActivationExternalPhase.PENDING,
+        progress: ActivationProgress.FAILED_PENDING_RETRY,
         attemptCount: act.attemptCount + 1,
         lastAttemptAt: new Date().toISOString(),
-        lastError: reason.length > 200 ? reason.slice(0, 200) + '…' : reason,
+        lastError: sanitizeReason(reason),
       },
       history: [
         ...fenced.history,
