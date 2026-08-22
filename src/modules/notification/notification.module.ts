@@ -37,7 +37,15 @@ import {
   MarkAllReadCommand,
   ApplyKillSwitchCommand,
   ResumeKillSwitchCommand,
+  DispatchOptionalEmailCommand,
+  SaveEmailConfigCommand,
+  TestEmailConfigCommand,
+  RotateEmailKeyCommand,
+  SaveEmailTemplateCommand,
+  RollbackEmailTemplateCommand,
+  SendTemplateTestEmailCommand,
 } from './application/commands';
+import { EmailTemplateResolver } from './application/services/email-template-resolver';
 import { NotificationQueryService } from './application/queries';
 import { DefaultRecipientSnapshotResolver } from './domain/services';
 import {
@@ -50,16 +58,24 @@ import {
   InMemoryPrivilegedAuditWriter,
   InMemoryEmailConfigStore,
   InMemoryNotificationPreferencesStore,
+  AesGcmEmailSecretCipher,
+  InMemoryClubEmailPolicyStore,
+  InMemoryPlatformEmailSuspensionStore,
+  InMemoryEmailTemplateStore,
   FailClosedNotificationPrivilegeVerifier,
 } from './infrastructure';
 import {
   CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
+  CLUB_EMAIL_POLICY_STORE,
   EMAIL_ADAPTER,
   EMAIL_CONFIG_STORE,
+  EMAIL_SECRET_CIPHER,
+  EMAIL_TEMPLATE_STORE,
   INBOX_ADAPTER,
   KILL_SWITCH_REPOSITORY,
   NOTIFICATION_AUTH_SESSION_PROVIDER,
   NOTIFICATION_REPOSITORY,
+  PLATFORM_EMAIL_SUSPENSION_STORE,
   PREFERENCES_STORE,
   PRIVILEGED_AUDIT_WRITER,
   RECIPIENT_RESOLVER,
@@ -83,6 +99,15 @@ import {
     MarkAllReadCommand,
     ApplyKillSwitchCommand,
     ResumeKillSwitchCommand,
+    // 4.3.3 可选邮件渠道命令
+    DispatchOptionalEmailCommand,
+    SaveEmailConfigCommand,
+    TestEmailConfigCommand,
+    RotateEmailKeyCommand,
+    SaveEmailTemplateCommand,
+    RollbackEmailTemplateCommand,
+    SendTemplateTestEmailCommand,
+    EmailTemplateResolver,
     // 查询服务
     NotificationQueryService,
     // 接口守卫
@@ -125,6 +150,23 @@ import {
       provide: PREFERENCES_STORE,
       useClass: InMemoryNotificationPreferencesStore,
     },
+    // 4.3.3 可选邮件渠道基础设施（密钥加密/策略/模板；生产替换为持久化实现）
+    {
+      provide: EMAIL_SECRET_CIPHER,
+      useClass: AesGcmEmailSecretCipher,
+    },
+    {
+      provide: CLUB_EMAIL_POLICY_STORE,
+      useClass: InMemoryClubEmailPolicyStore,
+    },
+    {
+      provide: PLATFORM_EMAIL_SUSPENSION_STORE,
+      useClass: InMemoryPlatformEmailSuspensionStore,
+    },
+    {
+      provide: EMAIL_TEMPLATE_STORE,
+      useClass: InMemoryEmailTemplateStore,
+    },
     // 站内信紧急关闭特权核验（fail-closed：权限端口接入前一律拒绝）
     {
       provide: NOTIFICATION_PRIVILEGE_VERIFIER,
@@ -145,9 +187,9 @@ import {
   exports: [
     CreateNotificationFactCommand,
     DeliverInboxCommand,
-    RetryChannelDeliveryCommand,
     CreateEmailAttemptCommand,
     RetryChannelDeliveryCommand,
+    DispatchOptionalEmailCommand,
     MarkPresentationStatusCommand,
     MarkAllReadCommand,
     ApplyKillSwitchCommand,

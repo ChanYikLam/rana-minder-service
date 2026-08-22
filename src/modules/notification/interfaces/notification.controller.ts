@@ -24,6 +24,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -33,7 +34,6 @@ import {
   Post,
   Query,
   Req,
-  ForbiddenException,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -43,6 +43,8 @@ import type {
   NotificationPreferences,
   MeNotificationPreferencesResult,
   MeNotificationPreferencesSaved,
+  OrgNotificationPreferencesResult,
+  OrgNotificationPreferencesSaved,
   NotificationKillSwitchState,
   NotificationKillSwitchInput,
   EmailConfigView,
@@ -51,6 +53,13 @@ import type {
   EmailConfigTestResult,
   EmailKeyRotated,
   NotificationListQuery,
+  EmailTemplateView,
+  EmailTemplateSaveInput,
+  EmailTemplatePreviewResult,
+  EmailTemplateTestResult,
+  EmailTemplateRollbackResult,
+  EmailOutboxItem,
+  NotificationKind,
 } from '../../../common/contracts/notifications.contracts';
 import { NotificationQueryService } from '../application/queries/notification-query.service';
 import {
@@ -63,15 +72,35 @@ import type {
   KillSwitchRepository,
   EmailConfigStore,
   NotificationPreferencesStore,
-  NotificationPrivilegeVerifier,
+  ClubEmailPolicyStore,
+  PlatformEmailSuspensionStore,
+  ChannelDeliveryAttemptRepository,
+  EmailTemplateStore,
 } from '../infrastructure';
-import type { KillSwitchScope, KillSwitchStateModel } from '../domain';
+import type { KillSwitchScope, KillSwitchStateModel, ClubEmailPolicy } from '../domain';
+import { defaultClubEmailPolicy } from '../domain';
 import {
+  CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
+  CLUB_EMAIL_POLICY_STORE,
   EMAIL_CONFIG_STORE,
+  EMAIL_TEMPLATE_STORE,
   KILL_SWITCH_REPOSITORY,
-  NOTIFICATION_PRIVILEGE_VERIFIER,
+  PLATFORM_EMAIL_SUSPENSION_STORE,
   PREFERENCES_STORE,
 } from '../tokens';
+import {
+  SaveEmailConfigCommand,
+  TestEmailConfigCommand,
+  RotateEmailKeyCommand,
+  SaveEmailTemplateCommand,
+  RollbackEmailTemplateCommand,
+  SendTemplateTestEmailCommand,
+  EmailConfigPermissionError,
+  PLATFORM_EMAIL_CONFIG_KEY,
+  type EmailConfigActor,
+  type EmailConfigScope,
+} from '../application/commands';
+import { EmailTemplateResolver } from '../application/services/email-template-resolver';
 import { NotificationAuthGuard, notificationSessionFromRequest } from './notification-auth.guard';
 
 const NOTIFICATION_KINDS = [
@@ -111,9 +140,57 @@ export class NotificationController {
     private readonly emailConfigs: EmailConfigStore,
     @Inject(PREFERENCES_STORE)
     private readonly preferences: NotificationPreferencesStore,
-    @Inject(NOTIFICATION_PRIVILEGE_VERIFIER)
-    private readonly privileges: NotificationPrivilegeVerifier,
+    // ---- 4.3.3 可选邮件渠道 ----
+    private readonly saveEmailConfigCommand: SaveEmailConfigCommand,
+    private readonly testEmailConfigCommand: TestEmailConfigCommand,
+    private readonly rotateEmailKeyCommand: RotateEmailKeyCommand,
+    private readonly saveEmailTemplateCommand: SaveEmailTemplateCommand,
+    private readonly rollbackEmailTemplateCommand: RollbackEmailTemplateCommand,
+    private readonly sendTemplateTestEmailCommand: SendTemplateTestEmailCommand,
+    private readonly templateResolver: EmailTemplateResolver,
+    @Inject(CLUB_EMAIL_POLICY_STORE)
+    private readonly clubPolicies: ClubEmailPolicyStore,
+    @Inject(PLATFORM_EMAIL_SUSPENSION_STORE)
+    private readonly platformSuspension: PlatformEmailSuspensionStore,
+    @Inject(EMAIL_TEMPLATE_STORE)
+    private readonly emailTemplates: EmailTemplateStore,
+    @Inject(CHANNEL_DELIVERY_ATTEMPT_REPOSITORY)
+    private readonly attemptRepository: ChannelDeliveryAttemptRepository,
   ) {}
+
+  /** 从服务端会话构建配置操作者身份（不信任客户端自报，NTF-006） */
+  private actorFrom(request: Request): EmailConfigActor {
+    const session = notificationSessionFromRequest(request);
+    return {
+      userId: session.userId,
+      displayName: session.displayName,
+      isPlatformAdmin: session.isPlatformAdmin ?? false,
+      permissions: session.permissions ?? [],
+    };
+  }
+
+  /** 平台级管理端只读端点鉴权：仅超级管理员可读（NTF-006.6、清单 §15.9） */
+  private assertPlatformAdmin(request: Request): void {
+    if (!this.actorFrom(request).isPlatformAdmin) {
+      throw new ForbiddenException({
+        code: 'IFC-ERR-002',
+        message: '平台级管理端点仅超级管理员可访问',
+        supportId: null,
+      });
+    }
+  }
+
+  /** 权限/业务错误 → HTTP 映射（403 IFC-ERR-002 / 400 IFC-ERR-005） */
+  private mapConfigError(error: unknown): never {
+    if (error instanceof EmailConfigPermissionError) {
+      throw new ForbiddenException({
+        code: 'IFC-ERR-002',
+        message: (error as Error).message,
+        supportId: null,
+      });
+    }
+    throw new BadRequestException((error as Error).message);
+  }
 
   // -------------------------------------------------------------------------
   // 本人通知（NTF-003：已读/未读/已处理/隐藏、类型筛选、跳转业务页）
@@ -237,7 +314,7 @@ export class NotificationController {
   // 紧急关闭站内信（NTF-001、SRS-FAIL-009、IFC-NTF-001、XCC-FAIL-009）
   // -------------------------------------------------------------------------
 
-  /** POST /api/org/:clubId/notifications/kill-switch（社团级；操作者取自会话） */
+  /** POST /api/org/:clubId/notifications/kill-switch（社团级紧急关闭，超管；操作者取自会话） */
   @Post('/api/org/:clubId/notifications/kill-switch')
   @HttpCode(HttpStatus.OK)
   async clubKillSwitch(
@@ -245,11 +322,8 @@ export class NotificationController {
     @Param('clubId') clubId: string,
     @Body() input: NotificationKillSwitchInput,
   ): Promise<NotificationKillSwitchState> {
+    this.assertPlatformAdmin(request);
     const session = notificationSessionFromRequest(request);
-    // 授权（XCC-FAIL-009）：仅超管/社团管理员可关闭；当前权限端口 fail-closed 一律拒绝
-    if (!(await this.privileges.canOperateKillSwitch('CLUB', clubId, session.userId))) {
-      throw new ForbiddenException('无权执行社团级站内信紧急关闭');
-    }
     return this.toggleKillSwitch('CLUB', clubId, input, session.userId, session.displayName);
   }
 
@@ -259,24 +333,22 @@ export class NotificationController {
     return this.toState(await this.killSwitches.findByScope('CLUB', clubId));
   }
 
-  /** POST /api/admin/notifications/kill-switch（平台级，超管；清单 15.9） */
+  /** POST /api/admin/notifications/kill-switch（平台级紧急关闭，超管；清单 15.9） */
   @Post('/api/admin/notifications/kill-switch')
   @HttpCode(HttpStatus.OK)
   async platformKillSwitch(
     @Req() request: Request,
     @Body() input: NotificationKillSwitchInput,
   ): Promise<NotificationKillSwitchState> {
+    this.assertPlatformAdmin(request);
     const session = notificationSessionFromRequest(request);
-    // 授权（XCC-FAIL-009）：仅超管可关闭平台级站内信；当前权限端口 fail-closed 一律拒绝
-    if (!(await this.privileges.canOperateKillSwitch('PLATFORM', null, session.userId))) {
-      throw new ForbiddenException('无权执行平台级站内信紧急关闭');
-    }
     return this.toggleKillSwitch('PLATFORM', null, input, session.userId, session.displayName);
   }
 
-  /** GET /api/admin/notifications/kill-switch（平台级状态） */
+  /** GET /api/admin/notifications/kill-switch（平台级状态；超管） */
   @Get('/api/admin/notifications/kill-switch')
-  async getPlatformKillSwitch(): Promise<NotificationKillSwitchState> {
+  async getPlatformKillSwitch(@Req() request: Request): Promise<NotificationKillSwitchState> {
+    this.assertPlatformAdmin(request);
     return this.toState(await this.killSwitches.findByScope('PLATFORM', null));
   }
 
@@ -340,22 +412,32 @@ export class NotificationController {
   }
 
   // -------------------------------------------------------------------------
-  // 邮件配置
+  // 邮件配置（NTF-006：社团独立密钥、不明文回显、测试后启用）
   // -------------------------------------------------------------------------
 
-  /**
-   * GET /api/org/:clubId/notifications/email-config
-   * 开发桩：内存持久化读取（未接入真实 SMTP；生产替换为配置库 + 密钥环）。
-   */
-  @Get('/api/org/:clubId/notifications/email-config')
-  async getEmailConfig(@Param('clubId') clubId: string): Promise<EmailConfigView> {
-    const config = await this.emailConfigs.findByClub(clubId);
+  /** 配置视图脱敏映射：只暴露"已配置"与指纹，永不回显密钥（NTF-006.7） */
+  private toConfigView(
+    config: {
+      smtpHost: string;
+      smtpPort: number;
+      smtpUser: string;
+      fromName: string;
+      encryption: 'ssl' | 'tls' | 'none';
+      secretCiphertext: string | null;
+      secretFingerprint: string | null;
+      verified: boolean;
+      lastTestPassedAt: string | null;
+      keyRotatedAt: string | null;
+    } | null,
+  ): EmailConfigView {
     return {
       smtpHost: config?.smtpHost ?? '',
       smtpPort: config?.smtpPort ?? 587,
       smtpUser: config?.smtpUser ?? '',
       fromName: config?.fromName ?? '',
       encryption: config?.encryption ?? 'tls',
+      secretConfigured: Boolean(config?.secretCiphertext),
+      secretFingerprint: config?.secretFingerprint ?? null,
       verified: config?.verified ?? false,
       lastTestPassedAt: config?.lastTestPassedAt ?? null,
       keyRotatedAt: config?.keyRotatedAt ?? null,
@@ -363,73 +445,514 @@ export class NotificationController {
   }
 
   /**
+   * GET /api/org/:clubId/notifications/email-config
+   * 脱敏读取；人事管理员与部门负责人无权查看（需 club:email:config 或超管）。
+   */
+  @Get('/api/org/:clubId/notifications/email-config')
+  async getEmailConfig(
+    @Req() request: Request,
+    @Param('clubId') clubId: string,
+  ): Promise<EmailConfigView> {
+    try {
+      assertScopeAccess(this.actorFrom(request), { type: 'CLUB', clubId });
+    } catch (error) {
+      this.mapConfigError(error);
+    }
+    const config = await this.emailConfigs.findByClub(clubId);
+    return this.toConfigView(config);
+  }
+
+  /**
    * POST /api/org/:clubId/notifications/email-config
-   * 开发桩：持久化候选配置（verified 沿用已通过测试的状态，否则为 false）。
-   * 契约要求"未通过测试不可保存（422 IFC-ERR-006）"，待真实 SMTP 接入后
-   * 在测试端点真实验证时执行；当前 dev 阶段允许保存候选以便联调。
+   * 保存配置（密钥加密落库；关键变更后必须重新测试才能启用）。
    */
   @Post('/api/org/:clubId/notifications/email-config')
   async saveEmailConfig(
+    @Req() request: Request,
     @Param('clubId') clubId: string,
     @Body() input: EmailConfigInput,
   ): Promise<EmailConfigSaved> {
-    const existing = await this.emailConfigs.findByClub(clubId);
-    const savedAt = new Date().toISOString();
-    const saved = await this.emailConfigs.save({
-      clubId,
-      smtpHost: input.smtpHost,
-      smtpPort: input.smtpPort ?? 587,
-      smtpUser: input.smtpUser,
-      fromName: input.fromName,
-      encryption: input.encryption ?? 'tls',
-      // 主机/用户/端口不变时保留已验证状态；变化即视为未验证
-      verified: Boolean(
-        existing?.verified &&
-        existing.smtpHost === input.smtpHost &&
-        existing.smtpUser === input.smtpUser &&
-        existing.smtpPort === (input.smtpPort ?? 587),
-      ),
-      lastTestPassedAt: existing?.lastTestPassedAt ?? null,
-      keyRotatedAt: existing?.keyRotatedAt ?? null,
-      savedAt,
-    });
-    return { ...saved, savedAt };
+    try {
+      const saved = await this.saveEmailConfigCommand.execute({
+        scope: { type: 'CLUB', clubId },
+        actor: this.actorFrom(request),
+        smtpHost: input.smtpHost,
+        smtpPort: input.smtpPort,
+        smtpUser: input.smtpUser,
+        fromName: input.fromName,
+        encryption: input.encryption,
+        smtpSecret: input.smtpSecret,
+      });
+      return { ...this.toConfigView(saved), savedAt: saved.savedAt };
+    } catch (error) {
+      this.mapConfigError(error);
+    }
   }
 
   /**
    * POST /api/org/:clubId/notifications/email-config/test
-   * 开发桩：未接入真实 SMTP 发送，模拟发送成功并将配置标记为已验证
-   * （verified=true），供联调走通"测试通过后启用"流程。
+   * 发送测试邮件；通过后配置启用（verified=true，NTF-006.7）。
    */
   @Post('/api/org/:clubId/notifications/email-config/test')
-  async testEmailConfig(@Param('clubId') clubId: string): Promise<EmailConfigTestResult> {
-    const existing = await this.emailConfigs.findByClub(clubId);
-    if (existing) {
-      const now = new Date().toISOString();
-      await this.emailConfigs.save({ ...existing, verified: true, lastTestPassedAt: now });
+  async testEmailConfig(
+    @Req() request: Request,
+    @Param('clubId') clubId: string,
+    @Body() body: { to?: string } | undefined,
+  ): Promise<EmailConfigTestResult> {
+    try {
+      const result = await this.testEmailConfigCommand.execute({
+        scope: { type: 'CLUB', clubId },
+        actor: this.actorFrom(request),
+        to: body?.to,
+      });
+      if (!result.ok) {
+        throw new BadRequestException({
+          code: 'IFC-ERR-006',
+          message: result.sanitizedError ?? '测试邮件未通过，配置保持未启用',
+          supportId: null,
+        });
+      }
+      return { status: 'sent', sentAt: result.sentAt as string, to: result.to as string };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.mapConfigError(error);
     }
-    return {
-      status: 'sent',
-      sentAt: new Date().toISOString(),
-      to: 'test@example.com',
-    };
   }
 
   /**
    * POST /api/org/:clubId/notifications/email-config/rotate-key
-   * 开发桩：轮换后需重新测试（verified=false），真实密钥轮换待接入密钥环。
+   * 密钥轮换：旧密钥立即失效，须重填并通过测试邮件后启用。
    */
   @Post('/api/org/:clubId/notifications/email-config/rotate-key')
-  async rotateKey(@Param('clubId') clubId: string): Promise<EmailKeyRotated> {
-    const existing = await this.emailConfigs.findByClub(clubId);
-    if (existing) {
-      const now = new Date().toISOString();
-      await this.emailConfigs.save({ ...existing, verified: false, keyRotatedAt: now });
+  async rotateKey(
+    @Req() request: Request,
+    @Param('clubId') clubId: string,
+  ): Promise<EmailKeyRotated> {
+    try {
+      return await this.rotateEmailKeyCommand.execute({
+        scope: { type: 'CLUB', clubId },
+        actor: this.actorFrom(request),
+      });
+    } catch (error) {
+      this.mapConfigError(error);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 平台邮件配置（接口清单 §15.9：平台级鉴权 isPlatformAdmin）
+  // -------------------------------------------------------------------------
+
+  /** GET /api/admin/notifications/email-config（平台 SMTP 配置，脱敏；超管） */
+  @Get('/api/admin/notifications/email-config')
+  async getAdminEmailConfig(@Req() request: Request): Promise<EmailConfigView> {
+    this.assertPlatformAdmin(request);
+    const config = await this.emailConfigs.findByClub(PLATFORM_EMAIL_CONFIG_KEY);
+    return this.toConfigView(config);
+  }
+
+  /** POST /api/admin/notifications/email-config（保存平台配置） */
+  @Post('/api/admin/notifications/email-config')
+  async saveAdminEmailConfig(
+    @Req() request: Request,
+    @Body() input: EmailConfigInput,
+  ): Promise<EmailConfigSaved> {
+    try {
+      const saved = await this.saveEmailConfigCommand.execute({
+        scope: { type: 'PLATFORM' },
+        actor: this.actorFrom(request),
+        smtpHost: input.smtpHost,
+        smtpPort: input.smtpPort,
+        smtpUser: input.smtpUser,
+        fromName: input.fromName,
+        encryption: input.encryption,
+        smtpSecret: input.smtpSecret,
+      });
+      return { ...this.toConfigView(saved), savedAt: saved.savedAt };
+    } catch (error) {
+      this.mapConfigError(error);
+    }
+  }
+
+  /** POST /api/admin/notifications/email-config/test（平台测试邮件） */
+  @Post('/api/admin/notifications/email-config/test')
+  async testAdminEmailConfig(
+    @Req() request: Request,
+    @Body() body: { to?: string } | undefined,
+  ): Promise<EmailConfigTestResult> {
+    try {
+      const result = await this.testEmailConfigCommand.execute({
+        scope: { type: 'PLATFORM' },
+        actor: this.actorFrom(request),
+        to: body?.to,
+      });
+      if (!result.ok) {
+        throw new BadRequestException({
+          code: 'IFC-ERR-006',
+          message: result.sanitizedError ?? '测试邮件未通过，配置保持未启用',
+          supportId: null,
+        });
+      }
+      return { status: 'sent', sentAt: result.sentAt as string, to: result.to as string };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.mapConfigError(error);
+    }
+  }
+
+  /** POST /api/admin/notifications/email-config/rotate-key（平台密钥轮换） */
+  @Post('/api/admin/notifications/email-config/rotate-key')
+  async rotateAdminKey(@Req() request: Request): Promise<EmailKeyRotated> {
+    try {
+      return await this.rotateEmailKeyCommand.execute({
+        scope: { type: 'PLATFORM' },
+        actor: this.actorFrom(request),
+      });
+    } catch (error) {
+      this.mapConfigError(error);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 社团通知偏好（NTF-004：负责人/人事按类型关闭本社团邮件；默认开启）
+  // -------------------------------------------------------------------------
+
+  /** GET /api/org/:clubId/notifications/preferences（社团级邮件开关目录） */
+  @Get('/api/org/:clubId/notifications/preferences')
+  async orgPreferences(
+    @Req() request: Request,
+    @Param('clubId') clubId: string,
+  ): Promise<OrgNotificationPreferencesResult> {
+    this.assertOrgReadAccess(request, clubId);
+    const policy = await this.clubPolicies.findByClub(clubId);
+    const preferences = this.policyToPreferences(policy);
+    return { preferences, savedAt: policy?.updatedAt ?? null };
+  }
+
+  /**
+   * POST /api/org/:clubId/notifications/preferences
+   * 更新社团级邮件开关（负责人/人事；未知 kind 拒绝，不静默接受）。
+   */
+  @Post('/api/org/:clubId/notifications/preferences')
+  async updateOrgPreferences(
+    @Req() request: Request,
+    @Param('clubId') clubId: string,
+    @Body('preferences') preferences: Partial<NotificationPreferences>,
+  ): Promise<OrgNotificationPreferencesSaved> {
+    const actor = this.actorFrom(request);
+    const hasAccess =
+      actor.isPlatformAdmin ||
+      (actor.permissions ?? []).some(
+        (p) => p === 'club:config:manage' || p === 'club:email:config',
+      );
+    if (!hasAccess) {
+      throw new ForbiddenException({
+        code: 'IFC-ERR-002',
+        message: '无权管理该社团通知偏好',
+        supportId: null,
+      });
+    }
+    for (const [key, value] of Object.entries(preferences ?? {})) {
+      if (!(NOTIFICATION_KINDS as readonly string[]).includes(key)) {
+        throw new BadRequestException('未知通知类型: ' + key);
+      }
+      if (typeof value !== 'boolean') {
+        throw new BadRequestException('偏好值必须为布尔: ' + key);
+      }
+    }
+    const existing = await this.clubPolicies.findByClub(clubId);
+    const base = existing ?? defaultClubEmailPolicy(clubId);
+    const now = new Date().toISOString();
+    const mergedKinds: Partial<Record<NotificationKind, boolean>> = {
+      ...base.kindEmailEnabled,
+    };
+    for (const [key, value] of Object.entries(preferences ?? {})) {
+      mergedKinds[key as NotificationKind] = value as boolean;
+    }
+    const saved = await this.clubPolicies.save({
+      ...base,
+      kindEmailEnabled: mergedKinds,
+      updatedBy: actor.userId,
+      updatedAt: now,
+    });
+    return {
+      preferences: this.policyToPreferences(saved),
+      savedAt: saved.updatedAt ?? now,
+    };
+  }
+
+  private policyToPreferences(policy: ClubEmailPolicy | null): NotificationPreferences {
+    const preferences = {} as NotificationPreferences;
+    for (const kind of NOTIFICATION_KINDS as readonly NotificationKind[]) {
+      const override = policy?.kindEmailEnabled[kind];
+      preferences[kind] = override !== undefined ? override : true; // 默认开启（NTF-004.1）
+    }
+    return preferences;
+  }
+
+  /** 社团偏好读取权限：负责人/人事（club:config:manage / club:email:config）或超管 */
+  private assertOrgReadAccess(request: Request, _clubId: string): void {
+    const actor = this.actorFrom(request);
+    const hasAccess =
+      actor.isPlatformAdmin ||
+      (actor.permissions ?? []).some(
+        (p) => p === 'club:config:manage' || p === 'club:email:config',
+      );
+    if (!hasAccess) {
+      throw new ForbiddenException({
+        code: 'IFC-ERR-002',
+        message: '无权查看该社团通知偏好',
+        supportId: null,
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 邮件模板（NTF-005：预览/测试/版本/回滚；失效回退平台默认）
+  // -------------------------------------------------------------------------
+
+  /** GET /api/admin/notifications/templates（平台模板目录，§15.9；超管） */
+  @Get('/api/admin/notifications/templates')
+  async adminTemplateDirectory(@Req() request: Request): Promise<{
+    items: {
+      kind: NotificationKind;
+      title: string;
+      body: string;
+      emailSubject?: string;
+      emailBody?: string;
+      channel: ['inbox'] | ['inbox', 'email'];
+      link: string | null;
+      dedupKey: string | null;
+    }[];
+  }> {
+    this.assertPlatformAdmin(request);
+    const items: {
+      kind: NotificationKind;
+      title: string;
+      body: string;
+      emailSubject?: string;
+      emailBody?: string;
+      channel: ['inbox'] | ['inbox', 'email'];
+      link: string | null;
+      dedupKey: string | null;
+    }[] = [];
+    for (const kind of NOTIFICATION_KINDS as readonly NotificationKind[]) {
+      const template = await this.emailTemplates.findActive({ type: 'PLATFORM' }, kind);
+      if (!template) continue;
+      items.push({
+        kind,
+        title: template.subject,
+        body: stripHtml(template.htmlBody),
+        emailSubject: template.subject,
+        emailBody: template.htmlBody,
+        channel: ['inbox', 'email'],
+        link: null,
+        dedupKey: null,
+      });
+    }
+    return { items };
+  }
+
+  /** POST /api/org/:clubId/notifications/email-templates/:kind（保存社团自定义模板） */
+  @Post('/api/org/:clubId/notifications/email-templates/:kind')
+  async saveClubTemplate(
+    @Req() request: Request,
+    @Param('clubId') clubId: string,
+    @Param('kind') kind: string,
+    @Body() input: EmailTemplateSaveInput,
+  ): Promise<EmailTemplateView> {
+    try {
+      const { template } = await this.saveEmailTemplateCommand.execute({
+        scope: { type: 'CLUB', clubId },
+        actor: this.actorFrom(request),
+        kind,
+        subject: input.subject,
+        htmlBody: input.htmlBody,
+      });
+      return this.toTemplateView(template);
+    } catch (error) {
+      this.mapConfigError(error);
+    }
+  }
+
+  /** POST /api/org/:clubId/notifications/email-templates/:kind/preview（预览渲染） */
+  @Post('/api/org/:clubId/notifications/email-templates/:kind/preview')
+  async previewClubTemplate(
+    @Req() request: Request,
+    @Param('clubId') clubId: string,
+    @Param('kind') kind: string,
+    @Body() input: (EmailTemplateSaveInput & { variables?: Record<string, string> }) | undefined,
+  ): Promise<EmailTemplatePreviewResult> {
+    this.assertOrgReadAccess(request, clubId);
+    const hasDraft = Boolean(input?.subject || input?.htmlBody);
+    const preview = await this.templateResolver.preview({
+      kind: kind as NotificationKind,
+      clubId,
+      draftSubject: hasDraft ? (input?.subject ?? '') : null,
+      draftHtmlBody: hasDraft ? (input?.htmlBody ?? '') : null,
+      variables: input?.variables ?? {},
+    });
+    if (!preview.ok) {
+      return {
+        ok: false,
+        subject: null,
+        htmlBody: null,
+        ignoredVariables: [],
+        source: 'DRAFT',
+        violations: preview.violations,
+      };
     }
     return {
-      rotated: true,
-      rotatedAt: new Date().toISOString(),
-      verified: false,
+      ok: true,
+      subject: preview.subject,
+      htmlBody: preview.htmlBody,
+      ignoredVariables: preview.ignoredVariables,
+      source: preview.source,
+      violations: [],
     };
+  }
+
+  /** POST /api/org/:clubId/notifications/email-templates/:kind/test（模板测试邮件） */
+  @Post('/api/org/:clubId/notifications/email-templates/:kind/test')
+  async testClubTemplate(
+    @Req() request: Request,
+    @Param('clubId') clubId: string,
+    @Param('kind') kind: string,
+    @Body() input: (EmailTemplateSaveInput & { to?: string }) | undefined,
+  ): Promise<EmailTemplateTestResult> {
+    // 模板测试邮件会使用该社团 SMTP 账号向任意地址发信（潜在滥用向量），
+    // 与预览/保存/回滚一致：需社团模板管理权限（club:config:manage）或超管。
+    this.assertOrgReadAccess(request, clubId);
+    try {
+      // 发信账号来自该社团自己的已验证配置（不能借用，NTF-006）
+      const config = await this.emailConfigs.findByClub(clubId);
+      if (!config || !config.verified || !config.secretCiphertext) {
+        throw new BadRequestException('社团无有效发信配置，请先配置并通过测试邮件');
+      }
+      return await this.sendTemplateTestEmailCommand.execute({
+        kind,
+        clubId,
+        draftSubject: input?.subject ?? null,
+        draftHtmlBody: input?.htmlBody ?? null,
+        to: input?.to ?? '',
+        fromAddress: config.smtpUser,
+        fromDisplayName: config.fromName,
+      });
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.mapConfigError(error);
+    }
+  }
+
+  /** POST /api/org/:clubId/notifications/email-templates/:kind/rollback（版本回滚） */
+  @Post('/api/org/:clubId/notifications/email-templates/:kind/rollback')
+  async rollbackClubTemplate(
+    @Req() request: Request,
+    @Param('clubId') clubId: string,
+    @Param('kind') kind: string,
+    @Body() input: { version: number } | undefined,
+  ): Promise<EmailTemplateRollbackResult> {
+    try {
+      const rolled = await this.rollbackEmailTemplateCommand.execute({
+        scope: { type: 'CLUB', clubId },
+        actor: this.actorFrom(request),
+        kind,
+        version: input?.version ?? 0,
+      });
+      return { rolledBack: true, activeVersion: rolled.activeVersion };
+    } catch (error) {
+      this.mapConfigError(error);
+    }
+  }
+
+  /**
+   * 从渠道尝试的发件身份提取作用域标识（供外发箱展示）。
+   * 新投递路径 senderIdentity 为"展示名 <发信账号>"（NTF-008），仅旧格式
+   * （纯作用域标识）可回退为 clubId；含 < > 的展示名格式返回 null，
+   * 避免把发件人展示名误当作社团标识。
+   */
+  private senderScopeIdFromIdentity(senderIdentity: string | null): string | null {
+    if (!senderIdentity || senderIdentity === 'platform') return null;
+    if (
+      senderIdentity.includes('<') ||
+      senderIdentity.includes('>') ||
+      senderIdentity.includes('@')
+    ) {
+      return null;
+    }
+    return senderIdentity;
+  }
+
+  private toTemplateView(template: {
+    templateId: string;
+    kind: NotificationKind;
+    scope: { type: 'PLATFORM' } | { type: 'CLUB'; clubId: string };
+    subject: string;
+    htmlBody: string;
+    activeVersion: number;
+    updatedBy: string | null;
+    updatedAt: string | null;
+  }): EmailTemplateView {
+    return {
+      templateId: template.templateId,
+      kind: template.kind,
+      scopeType: template.scope.type,
+      clubId: template.scope.type === 'CLUB' ? template.scope.clubId : null,
+      subject: template.subject,
+      htmlBody: template.htmlBody,
+      activeVersion: template.activeVersion,
+      updatedBy: template.updatedBy,
+      updatedAt: template.updatedAt,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // 邮件外发箱（接口清单 §15.9：最近 50 条，只读）
+  // -------------------------------------------------------------------------
+
+  /** GET /api/admin/notifications/email-outbox（邮件发送记录，只读；超管） */
+  @Get('/api/admin/notifications/email-outbox')
+  async adminEmailOutbox(@Req() request: Request): Promise<{ items: EmailOutboxItem[] }> {
+    this.assertPlatformAdmin(request);
+    const attempts = await this.attemptRepository.findRecentEmailAttempts(50);
+    return {
+      items: attempts.map((attempt) => ({
+        id: attempt.attemptId,
+        toUserId: attempt.recipientId ?? attempt.snapshotId ?? '',
+        toEmail: attempt.targetAddress ?? '',
+        subject: attempt.emailSubject ?? '',
+        body: attempt.emailBody ?? '',
+        kind: 'system' as NotificationKind,
+        // senderIdentity 在新投递路径下是"展示名 <发信账号>"格式（NTF-008），
+        // 无法作为社团标识使用；仅旧格式（纯作用域标识，不含 < >）才作为 clubId 回退。
+        clubId: this.senderScopeIdFromIdentity(attempt.senderIdentity),
+        sentAt: attempt.completedAt ?? attempt.createdAt,
+      })),
+    };
+  }
+}
+
+/** 从 HTML 提取纯文本（模板目录展示用） */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+}
+
+/** 社团邮件配置访问校验（查看与修改同权：club:email:config 或超管，NTF-006.6） */
+function assertScopeAccess(actor: EmailConfigActor, scope: EmailConfigScope): void {
+  if (scope.type === 'PLATFORM') {
+    if (!actor.isPlatformAdmin) {
+      throw new EmailConfigPermissionError('平台邮件配置仅超级管理员可管理');
+    }
+    return;
+  }
+  const hasClubPermission = (actor.permissions ?? []).includes('club:email:config');
+  if (!hasClubPermission && !actor.isPlatformAdmin) {
+    throw new EmailConfigPermissionError('无权查看或管理该社团邮件配置');
   }
 }

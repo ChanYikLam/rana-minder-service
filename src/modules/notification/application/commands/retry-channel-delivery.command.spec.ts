@@ -10,8 +10,12 @@ import type { EmailSendInput, EmailSendResult } from '../../infrastructure';
 import {
   InMemoryChannelDeliveryAttemptRepository,
   InMemoryEmailAdapter,
+  InMemoryNotificationRepository,
+  InMemoryInboxAdapter,
+  InMemoryPrivilegedAuditWriter,
 } from '../../infrastructure';
 import { RetryChannelDeliveryCommand } from './retry-channel-delivery.command';
+import { MarkPermanentFailureCommand } from './mark-permanent-failure.command';
 import type { ChannelDeliveryAttemptModel } from '../../domain';
 
 function makeAttempt(
@@ -52,6 +56,18 @@ class RecordingEmailAdapter extends InMemoryEmailAdapter {
   }
 }
 
+/** 构建独立的 MarkPermanentFailureCommand（承担 NTF-007 提示义务） */
+function buildMarkPermanent(
+  attemptRepo: InMemoryChannelDeliveryAttemptRepository,
+): MarkPermanentFailureCommand {
+  return new MarkPermanentFailureCommand(
+    attemptRepo,
+    new InMemoryNotificationRepository(),
+    new InMemoryInboxAdapter(),
+    new InMemoryPrivilegedAuditWriter(),
+  );
+}
+
 describe('RetryChannelDeliveryCommand（评审 #3/#1/#2）', () => {
   let attempts: InMemoryChannelDeliveryAttemptRepository;
   let email: RecordingEmailAdapter;
@@ -60,7 +76,7 @@ describe('RetryChannelDeliveryCommand（评审 #3/#1/#2）', () => {
   beforeEach(() => {
     attempts = new InMemoryChannelDeliveryAttemptRepository();
     email = new RecordingEmailAdapter();
-    command = new RetryChannelDeliveryCommand(attempts, email);
+    command = new RetryChannelDeliveryCommand(attempts, email, buildMarkPermanent(attempts));
   });
 
   it('指定非队首 attemptId 也能被定位并重试成功（评审 #3）', async () => {
@@ -138,7 +154,11 @@ describe('RetryChannelDeliveryCommand（评审 #3/#1/#2）', () => {
         };
       }
     })();
-    const cmd = new RetryChannelDeliveryCommand(attempts, bounceEmail);
+    const cmd = new RetryChannelDeliveryCommand(
+      attempts,
+      bounceEmail,
+      buildMarkPermanent(attempts),
+    );
     await attempts.saveAttempt(makeAttempt('attempt-bounce', 'FAILED_RETRY'));
 
     await cmd.execute('attempt-bounce');
@@ -154,7 +174,7 @@ describe('RetryChannelDeliveryCommand（评审 #3/#1/#2）', () => {
         return { status: 'TEMPORARY_FAILURE', channelMessageId: null, sanitizedError: 'timeout' };
       }
     })();
-    const cmd = new RetryChannelDeliveryCommand(attempts, tempEmail);
+    const cmd = new RetryChannelDeliveryCommand(attempts, tempEmail, buildMarkPermanent(attempts));
     await attempts.saveAttempt(makeAttempt('attempt-temp', 'FAILED_RETRY'));
 
     await cmd.execute('attempt-temp');
