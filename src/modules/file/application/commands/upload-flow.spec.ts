@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { InMemoryFileRepository } from '../../infrastructure/in-memory-file-repository';
 import { InMemoryObjectStore } from '../../infrastructure/object-store-port';
 import { ApplicationFileCheck } from '../../infrastructure/file-check-port';
@@ -11,7 +12,7 @@ import { FileStatusQuery } from '../queries/file-status.query';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { UploadPolicy } from '../../domain/services/upload-policy';
 import { FileTypeGuard } from '../../domain/services/file-type-guard';
-import { MAX_SESSION_TTL_MINUTES } from './initiate-upload.command';
+import { MAX_SESSION_TTL_MINUTES } from './session-ttl';
 import type { FileRecord } from '../../domain/models/file-model';
 
 const pngBytes = (): Uint8Array =>
@@ -112,6 +113,48 @@ describe('上传与安全检查链路（4.2.1：IFC-FIL-001~003）', () => {
     const view = await flow.status.getStatus(file.fileId, 'u1');
     assert.equal(view.accessible, true);
     assert.equal(view.checkStatus, 'PASSED');
+  });
+
+  it('晋升成功即删除隔离源字节，避免隔离区残留孤儿对象（FORM-009）', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    const quarantine = file.versions[0].objectLocation; // 晋升前的隔离定位
+    await flow.complete.execute(completeInput(file, pngBytes()));
+    await flow.ask.execute({ fileId: file.fileId, principalId: 'u1' });
+    const promoted = await flow.promote.execute({ fileId: file.fileId, principalId: 'u1' });
+    assert.equal(promoted.state, FileState.AVAILABLE);
+    assert.equal(promoted.versions[0].objectLocation.bucketRole, 'OBJECT');
+    // 权威原件区存在晋升副本，隔离区源字节已删除（copy-then-delete）
+    assert.notEqual(await flow.store.read(promoted.versions[0].objectLocation), null);
+    assert.equal(await flow.store.read(quarantine), null);
+  });
+
+  it('晋升重试幂等：隔离源已删但权威原件区副本已建立时，重复晋升视为成功（恢复能力）', async () => {
+    const flow = makeFlow();
+    const file = await flow.initiate.execute(baseInput);
+    await flow.complete.execute(completeInput(file, pngBytes()));
+    const quarantine = file.versions[0].objectLocation; // 晋升前的隔离定位
+    const target = {
+      ...quarantine,
+      bucketRole: 'OBJECT' as const,
+      objectKind: 'OBJECT' as const,
+      actualSize: pngBytes().length,
+    };
+    const sha256 = createHash('sha256').update(pngBytes()).digest('hex');
+    // 模拟首次晋升：写目标副本 + 删隔离源（copy-then-delete），但随后 DB 持久化失败
+    const first = await flow.store.promoteToObject(quarantine, target, sha256);
+    assert.equal(first.ok, true);
+    // DB 未持久化，隔离源已被删除，重试晋升：因目标副本已存在且摘要匹配应幂等成功，
+    // 不得因“源对象缺失”而永久卡在 CHECKING
+    const retry = await flow.store.promoteToObject(quarantine, target, sha256);
+    assert.equal(retry.ok, true);
+    // 源确实缺失、目标也缺失时仍应如实失败（不伪装成功）
+    const missing = await flow.store.promoteToObject(
+      { ...quarantine, randomKey: 'never-exists' },
+      { ...target, randomKey: 'never-exists' },
+      sha256,
+    );
+    assert.equal(missing.ok, false);
   });
 
   it('检查失败 → 隔离/失败，可重试标志按结果', async () => {
