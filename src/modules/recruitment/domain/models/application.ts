@@ -247,6 +247,9 @@ export class Application {
     }
     const seen = new Set<string>();
     for (const choice of choices) {
+      if (typeof choice.departmentId !== 'string' || choice.departmentId.trim() === '') {
+        throw new RecruitmentDomainError('REC_VALIDATION', '志愿部门标识不可为空');
+      }
       if (seen.has(choice.departmentId)) {
         throw new RecruitmentDomainError('REC_VALIDATION', '志愿部门不可重复');
       }

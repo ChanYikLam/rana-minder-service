@@ -70,6 +70,21 @@ describe('Application (REC-003)', () => {
     );
   });
 
+  it('志愿部门标识为空 → 拒绝', () => {
+    const app = draft();
+    assert.throws(
+      () =>
+        app.submit(MACHINE, NOW, {
+          departmentChoices: [{ departmentId: '  ', order: 1 }],
+          formRef: null,
+          qualifySnapshot: null,
+          minChoices: 1,
+          maxChoices: 3,
+        }),
+      /志愿部门标识不可为空/,
+    );
+  });
+
   it('撤回 → 重提（新修订）', () => {
     const app = draft();
     app.submit(MACHINE, NOW, {
