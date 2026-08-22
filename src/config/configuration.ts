@@ -72,12 +72,24 @@ export interface JobConfig {
   readonly maxAttempts: number;
 }
 
+/** 外部服务适配器（文件检查/通知/备份）端点配置。endpoint 为空时适配器保持 fail-closed。 */
+export interface ExternalServiceConfig {
+  readonly endpoint: string;
+  readonly tokenRef?: string;
+}
+
 export interface RanaMinderConfig {
   readonly server: ServerConfig;
   readonly database: DatabaseConfig;
   readonly casdoor: CasdoorConfig;
   readonly storage: StorageConfig;
   readonly mail: MailConfig;
+  /** 外部技术安全检查服务（ADAPTERS_FILECHECK_REAL）。 */
+  readonly fileCheck: ExternalServiceConfig;
+  /** 外部通知渠道（ADAPTERS_NOTIFY_REAL）。 */
+  readonly notify: ExternalServiceConfig;
+  /** 外部备份/恢复记录服务（ADAPTERS_BACKUP_REAL）。 */
+  readonly backup: ExternalServiceConfig;
   readonly observability: ObservabilityConfig;
   readonly job: JobConfig;
 }

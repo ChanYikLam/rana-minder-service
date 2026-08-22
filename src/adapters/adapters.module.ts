@@ -163,12 +163,18 @@ const depLatestRecorder: DepLatestRecorder = new InMemoryDepLatestRecorder();
       provide: ADAPTERS_FILECHECK,
       useFactory: (config: RanaMinderConfig, recorder: DepLatestRecorder) => {
         // 默认：应用侧初检（不信任扩展名、默认禁止可执行/脚本/高风险压缩）；
-        // 开启 ADAPTERS_FILECHECK_REAL 时委托外部检查服务。
-        if (!realEnabled('ADAPTERS_FILECHECK_REAL')) {
+        // 开启 ADAPTERS_FILECHECK_REAL 且配置了端点时委托外部检查服务。
+        if (!realEnabled('ADAPTERS_FILECHECK_REAL') || !config.fileCheck.endpoint) {
           return new ApplicationFileCheck();
         }
+        const token = isSecretRef(config.fileCheck.tokenRef)
+          ? resolveSecret(config.fileCheck.tokenRef)
+          : config.fileCheck.tokenRef;
         return trackFileCheck(
-          new ExternalFileCheckAdapter({ endpoint: config.storage.endpoint }),
+          new ExternalFileCheckAdapter({
+            endpoint: config.fileCheck.endpoint,
+            ...(token !== undefined ? { token } : {}),
+          }),
           recorder,
         );
       },
@@ -178,8 +184,8 @@ const depLatestRecorder: DepLatestRecorder = new InMemoryDepLatestRecorder();
     {
       provide: ADAPTERS_NOTIFY,
       useFactory: (config: RanaMinderConfig, recorder: DepLatestRecorder): NotifyAdapter => {
-        if (!realEnabled('ADAPTERS_NOTIFY_REAL')) {
-          // fail-closed：未启用时返回不可用桩（对象为 UNAVAILABLE 语义）。
+        if (!realEnabled('ADAPTERS_NOTIFY_REAL') || !config.notify.endpoint) {
+          // fail-closed：未启用或未配置端点时返回不可用桩（对象为 UNAVAILABLE 语义）。
           return {
             async send() {
               return externalFailure(
@@ -196,7 +202,16 @@ const depLatestRecorder: DepLatestRecorder = new InMemoryDepLatestRecorder();
             },
           };
         }
-        return trackNotify(new HttpNotifyAdapter({ endpoint: config.storage.endpoint }), recorder);
+        const token = isSecretRef(config.notify.tokenRef)
+          ? resolveSecret(config.notify.tokenRef)
+          : config.notify.tokenRef;
+        return trackNotify(
+          new HttpNotifyAdapter({
+            endpoint: config.notify.endpoint,
+            ...(token !== undefined ? { token } : {}),
+          }),
+          recorder,
+        );
       },
       inject: [RANA_MINDER_CONFIG, DEP_LATEST_RECORDER],
     },
@@ -204,12 +219,18 @@ const depLatestRecorder: DepLatestRecorder = new InMemoryDepLatestRecorder();
     {
       provide: ADAPTERS_BACKUP,
       useFactory: (config: RanaMinderConfig, recorder: DepLatestRecorder) => {
-        if (!realEnabled('ADAPTERS_BACKUP_REAL')) {
-          // fail-closed：未启用时返回空集桩（不抛异常、不伪造备份记录）。
+        if (!realEnabled('ADAPTERS_BACKUP_REAL') || !config.backup.endpoint) {
+          // fail-closed：未启用或未配置端点时返回空集桩（不抛异常、不伪造备份记录）。
           return new NotWiredBackupReportPort();
         }
+        const token = isSecretRef(config.backup.tokenRef)
+          ? resolveSecret(config.backup.tokenRef)
+          : config.backup.tokenRef;
         return trackBackup(
-          new ExternalBackupAdapter({ endpoint: config.storage.endpoint }),
+          new ExternalBackupAdapter({
+            endpoint: config.backup.endpoint,
+            ...(token !== undefined ? { token } : {}),
+          }),
           recorder,
         );
       },

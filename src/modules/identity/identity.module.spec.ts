@@ -67,6 +67,9 @@ describe('IdentityModule 装配（DI 图 + 失败关闭）', () => {
       },
     },
     mail: { host: '', port: 25, fromAddress: '' },
+    fileCheck: { endpoint: '' },
+    notify: { endpoint: '' },
+    backup: { endpoint: '' },
     observability: { logLevel: 'info', traceSamplingRate: 1 },
     job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
   };
