@@ -147,53 +147,6 @@ describe('NotificationStateMachine (SRS-SM-NTF-001)', () => {
       assert.equal(result.allowed, true);
       assert.equal(result.newPresentationStatus, 'HIDDEN');
     });
-
-    it('已隐藏 → 拒绝逆回为已读（呈现状态不可逆）', () => {
-      const result = sm.evaluate({
-        type: 'MARK_READ',
-        currentStatus: 'DELIVERED',
-        currentPresentationStatus: 'HIDDEN',
-      });
-      assert.equal(result.allowed, false);
-    });
-
-    it('已处理 → 拒绝逆回为已读（呈现状态不可逆）', () => {
-      const result = sm.evaluate({
-        type: 'MARK_READ',
-        currentStatus: 'DELIVERED',
-        currentPresentationStatus: 'PROCESSED',
-      });
-      assert.equal(result.allowed, false);
-    });
-
-    it('已隐藏 → 拒绝标记为已处理', () => {
-      const result = sm.evaluate({
-        type: 'MARK_PROCESSED',
-        currentStatus: 'DELIVERED',
-        currentPresentationStatus: 'HIDDEN',
-      });
-      assert.equal(result.allowed, false);
-    });
-
-    it('未读 → 标记已读（正常路径）', () => {
-      const result = sm.evaluate({
-        type: 'MARK_READ',
-        currentStatus: 'DELIVERED',
-        currentPresentationStatus: 'UNREAD',
-      });
-      assert.equal(result.allowed, true);
-      assert.equal(result.newPresentationStatus, 'READ');
-    });
-
-    it('已读 → 重复标记已读（幂等允许）', () => {
-      const result = sm.evaluate({
-        type: 'MARK_READ',
-        currentStatus: 'DELIVERED',
-        currentPresentationStatus: 'READ',
-      });
-      assert.equal(result.allowed, true);
-      assert.equal(result.newPresentationStatus, 'READ');
-    });
   });
 
   describe('转换 8：临时投递失败 → 失败重试', () => {

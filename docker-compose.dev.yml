@@ -31,8 +31,10 @@ services:
       retries: 5
 
   minio:
-    # 开发用 latest；生产必须锁定 tag（依赖与版本基线 §2）
-    image: minio/minio:latest
+    # 版本锁定（ADR-013 §2.2 可复现：禁止浮动 latest）；
+    # 当前锁定 RELEASE.2024-08-17T01-24-54Z（MinIO 官方 release tag，非 latest）。
+    # 升级须回归 S3 兼容能力并同步依赖与版本基线-v1.0.md 的锁定值。
+    image: minio/minio:RELEASE.2024-08-17T01-24-54Z
     container_name: ranaminder-dev-minio
     command: server /data --console-address ":9001"
     environment:
@@ -68,7 +70,10 @@ services:
       start_period: 30s
 
   mailpit:
-    image: axllent/mailpit:latest
+    # 版本锁定（ADR-013 §2.2 可复现：禁止浮动 latest）；
+    # 当前锁定 v1.20.0（axllent/mailpit 具体版本，非 latest）。
+    # 升级须回归 SMTP/UI 能力并同步依赖与版本基线-v1.0.md 的锁定值。
+    image: axllent/mailpit:v1.20.0
     container_name: ranaminder-dev-mailpit
     ports:
       - "8025:8025"
