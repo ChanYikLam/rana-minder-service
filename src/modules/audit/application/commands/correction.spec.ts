@@ -143,6 +143,45 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
     assert.equal(rejected.status, CorrectionStatus.REJECTED);
   });
 
+  it('联合共同事实：参与社团负责人/人事可处理，无关社团拒绝（AUD-010）', async () => {
+    const rig = makeRig();
+    const draft = await rig.save.execute({
+      ...draftInput,
+      targetRecord: {
+        objectType: 'JOINT_SCHEDULE',
+        objectId: 'js-1',
+        ownerClubId: 'c1',
+        fieldKey: 'schedule',
+        recordVersion: 1,
+      },
+    });
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '排期时间错误',
+    });
+    // 参与社团集合明确时：无关社团（c9）越权 → 拒绝
+    await assert.rejects(
+      rig.decide.execute({
+        correctionId: draft.correctionId,
+        decider: { principalId: 'hr9', roles: ['HR_ADMIN'], clubId: 'c9' },
+        participantClubIds: ['c1', 'c2'],
+        approve: false,
+        reason: '经核实排期无误',
+      }),
+      /仅参与社团/,
+    );
+    // 参与社团之一 → 成功
+    const decided = await rig.decide.execute({
+      correctionId: draft.correctionId,
+      decider: { principalId: 'hr2', roles: ['HR_ADMIN'], clubId: 'c2' },
+      participantClubIds: ['c1', 'c2'],
+      approve: false,
+      reason: '经核实排期无误',
+    });
+    assert.equal(decided.status, CorrectionStatus.REJECTED);
+  });
+
   it('驳回必填原因（IFC-ERR-005）', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute(draftInput);

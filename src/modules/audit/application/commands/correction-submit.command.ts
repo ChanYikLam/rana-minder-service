@@ -59,7 +59,7 @@ export class CorrectionCommandError extends Error {
 export class SaveCorrectionDraftCommand {
   constructor(
     @Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository,
-    private readonly stateMachine: CorrectionStateMachine = new CorrectionStateMachine(),
+    private readonly stateMachine: CorrectionStateMachine,
   ) {}
 
   async execute(input: SaveCorrectionDraftInput): Promise<Correction> {
@@ -123,7 +123,7 @@ export class SubmitCorrectionCommand {
   constructor(
     @Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository,
     private readonly policy: CorrectionPolicy,
-    private readonly stateMachine: CorrectionStateMachine = new CorrectionStateMachine(),
+    private readonly stateMachine: CorrectionStateMachine,
   ) {}
 
   async execute(input: SubmitCorrectionInput): Promise<Correction> {

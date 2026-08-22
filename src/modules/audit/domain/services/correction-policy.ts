@@ -73,7 +73,12 @@ export class CorrectionPolicy {
       /** 当前社团（本社团处理） */
       clubId?: string;
     },
-    target: { objectType: string; ownerClubId: string },
+    target: {
+      objectType: string;
+      ownerClubId: string;
+      /** 无单一作者共同事实（联合排期等）的参与社团集合；提供时校验处理人归属（AUD-010） */
+      participantClubIds?: readonly string[];
+    },
   ): void {
     if (decider.roles.includes(SUPER_ADMIN_ROLE)) {
       return;
@@ -88,6 +93,13 @@ export class CorrectionPolicy {
       // 仍需来自某参与社团（至少提供 clubId），避免无社团归属的负责人任意放行
       if (decider.clubId === undefined || decider.clubId.length === 0) {
         throw new CorrectionForbiddenError('跨社团改写他人记录');
+      }
+      // 若提供了参与社团集合，须校验处理人归属在集合内（防止无关社团越权处理联合记录）
+      if (
+        target.participantClubIds !== undefined &&
+        !target.participantClubIds.includes(decider.clubId)
+      ) {
+        throw new CorrectionForbiddenError('仅参与社团可处理联合记录纠错');
       }
       return;
     }

@@ -7,6 +7,7 @@ import type { Correction, CorrectionDecision } from '../../domain/models/correct
 import { CorrectionPolicy } from '../../domain/services/correction-policy';
 import { CORRECTION_REPOSITORY } from '../../infrastructure/correction-repository';
 import type { CorrectionRepository } from '../../infrastructure/correction-repository';
+import { CorrectionCommandError } from './correction-submit.command';
 
 /** 处理人（批准/驳回）输入（SRS-SM-AUD-001：待处理/逾期待处理→已批准/已驳回） */
 export interface DecideCorrectionInput {
@@ -17,6 +18,8 @@ export interface DecideCorrectionInput {
     /** 当前社团（本社团处理） */
     readonly clubId?: string;
   };
+  /** 无单一作者共同事实（联合排期等）的参与社团集合（可选；提供时校验处理人归属） */
+  readonly participantClubIds?: readonly string[];
   /** approve=true 批准；false 驳回 */
   readonly approve: boolean;
   /** 驳回必填原因；批准为变更原因 */
@@ -24,17 +27,6 @@ export interface DecideCorrectionInput {
   /** 批准时的原值/新值（追加；原记录保留） */
   readonly oldValue?: string;
   readonly newValue?: string;
-}
-
-/** 前置失败 */
-export class DecideCorrectionError extends Error {
-  constructor(
-    code: 'IFC-ERR-003' | 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-007',
-    message: string,
-  ) {
-    super(`${code}: ${message}`);
-    this.name = 'DecideCorrectionError';
-  }
 }
 
 /**
@@ -53,13 +45,13 @@ export class DecideCorrectionCommand {
   constructor(
     @Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository,
     private readonly policy: CorrectionPolicy,
-    private readonly stateMachine: CorrectionStateMachine = new CorrectionStateMachine(),
+    private readonly stateMachine: CorrectionStateMachine,
   ) {}
 
   async execute(input: DecideCorrectionInput): Promise<Correction> {
     const correction = await this.repo.load(input.correctionId);
     if (correction === null) {
-      throw new DecideCorrectionError('IFC-ERR-006', '纠错申请不存在');
+      throw new CorrectionCommandError('IFC-ERR-006', '纠错申请不存在');
     }
     // 处理资格（作者回避 + 处理角色 + 联合边界）
     this.policy.assertCanDecide(
@@ -71,6 +63,7 @@ export class DecideCorrectionCommand {
       {
         objectType: correction.targetRecord.objectType,
         ownerClubId: correction.targetRecord.ownerClubId,
+        participantClubIds: input.participantClubIds,
       },
     );
     this.policy.assertNotSelfDecision(input.decider.principalId, correction.authorId);
@@ -84,7 +77,7 @@ export class DecideCorrectionCommand {
         input.newValue === undefined ||
         input.newValue.trim().length === 0)
     ) {
-      throw new DecideCorrectionError('IFC-ERR-005', '批准须填写原值和新值');
+      throw new CorrectionCommandError('IFC-ERR-005', '批准须填写原值和新值');
     }
     // 幂等/终态：相同决定 → 返回原结果；不同决定 → 终态不可覆盖（AUD-002）
     if (
@@ -95,13 +88,13 @@ export class DecideCorrectionCommand {
       if (sameDecision) {
         return correction;
       }
-      throw new DecideCorrectionError('IFC-ERR-007', '终态不可覆盖，新证据需新申请');
+      throw new CorrectionCommandError('IFC-ERR-007', '终态不可覆盖，新证据需新申请');
     }
     if (
       correction.status !== CorrectionStatus.PENDING &&
       correction.status !== CorrectionStatus.OVERDUE_PENDING
     ) {
-      throw new DecideCorrectionError('IFC-ERR-007', '仅待处理/逾期待处理可决定');
+      throw new CorrectionCommandError('IFC-ERR-007', '仅待处理/逾期待处理可决定');
     }
 
     const now = new Date().toISOString();
@@ -130,7 +123,7 @@ export class DecideCorrectionCommand {
       ],
     };
     if (!(await this.repo.compareAndSwap(correction, decided))) {
-      throw new DecideCorrectionError('IFC-ERR-007', '纠错申请已被并发变更，决定失败');
+      throw new CorrectionCommandError('IFC-ERR-007', '纠错申请已被并发变更，决定失败');
     }
     return decided;
   }
@@ -154,16 +147,16 @@ export interface WithdrawCorrectionInput {
 export class WithdrawCorrectionCommand {
   constructor(
     @Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository,
-    private readonly stateMachine: CorrectionStateMachine = new CorrectionStateMachine(),
+    private readonly stateMachine: CorrectionStateMachine,
   ) {}
 
   async execute(input: WithdrawCorrectionInput): Promise<Correction> {
     const correction = await this.repo.load(input.correctionId);
     if (correction === null) {
-      throw new DecideCorrectionError('IFC-ERR-006', '纠错申请不存在');
+      throw new CorrectionCommandError('IFC-ERR-006', '纠错申请不存在');
     }
     if (correction.applicantId !== input.applicantId) {
-      throw new DecideCorrectionError('IFC-ERR-003', '仅原提交人可撤回纠错申请');
+      throw new CorrectionCommandError('IFC-ERR-003', '仅原提交人可撤回纠错申请');
     }
     if (correction.status === CorrectionStatus.WITHDRAWN) {
       return correction; // 幂等
@@ -172,7 +165,7 @@ export class WithdrawCorrectionCommand {
       correction.status !== CorrectionStatus.PENDING &&
       correction.status !== CorrectionStatus.OVERDUE_PENDING
     ) {
-      throw new DecideCorrectionError('IFC-ERR-007', '仅待处理/逾期待处理可撤回');
+      throw new CorrectionCommandError('IFC-ERR-007', '仅待处理/逾期待处理可撤回');
     }
     const now = new Date().toISOString();
     const withdrawn: Correction = {
@@ -182,7 +175,7 @@ export class WithdrawCorrectionCommand {
       history: [...correction.history, { at: now, type: 'WITHDRAWN', by: input.applicantId }],
     };
     if (!(await this.repo.compareAndSwap(correction, withdrawn))) {
-      throw new DecideCorrectionError('IFC-ERR-007', '纠错申请已被并发变更，撤回失败');
+      throw new CorrectionCommandError('IFC-ERR-007', '纠错申请已被并发变更，撤回失败');
     }
     return withdrawn;
   }
@@ -203,7 +196,7 @@ export interface MarkOverdueInput {
 export class MarkOverdueCommand {
   constructor(
     @Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository,
-    private readonly stateMachine: CorrectionStateMachine = new CorrectionStateMachine(),
+    private readonly stateMachine: CorrectionStateMachine,
   ) {}
 
   async execute(input: MarkOverdueInput): Promise<Correction | null> {
