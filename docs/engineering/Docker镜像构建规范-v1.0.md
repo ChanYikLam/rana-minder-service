@@ -131,6 +131,8 @@ docker compose -f docker-compose.dev.yml up -d
 
 `DOCK-081`：验证项：双入口分别启动成功；只读配置生效（容器内 `/etc/ranaminder/config.yaml` 只读）；`docker history` 无配置/秘密层；非 root 用户生效（`docker exec id`）；`docker run --read-only` 无写路径异常。
 
+`DOCK-082`：上述验证已固化为可重复脚本 `scripts/verify-image.sh`（退出码非 0 即存在失败项），用法：先 `cp config.example.yaml config.dev.yaml`，再 `bash scripts/verify-image.sh [IMAGE_TAG]`（默认 `ranaminder-service:dev`）。本机无 Docker 时脚本以退出码 2 明确提示需在具备 Docker/CI 环境执行。
+
 ## 10. 检查结论
 
 | 检查项 | 结果 |
