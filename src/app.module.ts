@@ -48,6 +48,7 @@ import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
 import { NotificationModule } from './modules/notification';
 import { InvitationModule } from './modules/invitation/module';
+import { AuditModule } from './modules/audit/module';
 import { DB_STATUS_PORT, TASK_SUMMARY_PORT } from './platform/observability/status-page/tokens';
 import {
   NestOpsTelemetry,
@@ -74,6 +75,7 @@ import type { TaskRepository } from './platform/tasks/contracts';
     FormModule,
     NotificationModule,
     InvitationModule,
+    AuditModule,
   ],
   controllers: [],
   providers: [
