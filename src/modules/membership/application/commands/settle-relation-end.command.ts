@@ -49,13 +49,13 @@ export class SettleRelationEndCommand {
     }
     if (relation.status !== DepartmentRelationStatus.END_PROCESSING) {
       // 幂等：已收口直接返回当前状态
-      return {
-        outcome:
-          relation.status === DepartmentRelationStatus.HISTORICAL_ENDED
-            ? 'ENDED'
-            : 'KEPT_PROCESSING',
-        relation,
-      };
+      const outcome =
+        relation.status === DepartmentRelationStatus.HISTORICAL_ENDED
+          ? 'ENDED'
+          : relation.status === DepartmentRelationStatus.CURRENTLY_VALID
+            ? 'RESTORED' // 已恢复原关系（R6 失败恢复结果）
+            : 'KEPT_PROCESSING';
+      return { outcome, relation };
     }
 
     const nowIso = new Date().toISOString();

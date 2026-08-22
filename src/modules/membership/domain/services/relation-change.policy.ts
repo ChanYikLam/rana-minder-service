@@ -96,6 +96,8 @@ export interface RelationEndContext {
   readonly subjectIsOwner: boolean;
   readonly successors?: readonly string[];
   readonly emergencyBypass?: boolean;
+  /** 被结束关系的成员主体 id（交接时排除把本人当作继任者） */
+  readonly subjectId?: string;
 }
 
 /** 部门/职位关系策略（纯规则） */
@@ -143,11 +145,17 @@ export class RelationChangePolicy {
 
   /** 最后负责人连续性（ORG-021~025）：撤销唯一负责人必须同命令指定继任者或超管紧急处置 */
   assertOwnerContinuityOnEnd(
-    ctx: Pick<RelationEndContext, 'subjectIsOwner' | 'successors' | 'emergencyBypass'>,
+    ctx: Pick<
+      RelationEndContext,
+      'subjectIsOwner' | 'successors' | 'emergencyBypass' | 'subjectId'
+    >,
   ): void {
     if (ctx.emergencyBypass === true) return;
     if (!ctx.subjectIsOwner) return;
-    const successorGranted = (ctx.successors ?? []).some((id) => Boolean(id));
+    const successors = ctx.successors ?? [];
+    const successorGranted = successors.some(
+      (id) => Boolean(id) && id !== ctx.subjectId, // 继任者不得为被撤销者本人
+    );
     if (!successorGranted) {
       throw new RelationPreconditionError(
         '撤销最后一名负责人必须同命令完成交接或由超级管理员紧急处置（ORG-021~025、IFC-ERR-006）',

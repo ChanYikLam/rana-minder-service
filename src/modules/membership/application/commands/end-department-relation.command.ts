@@ -107,6 +107,7 @@ export class EndDepartmentRelationCommand {
     this.policy.assertOwnerContinuityOnEnd({
       subjectIsOwner,
       successors: input.successors ?? [],
+      subjectId: input.subjectId,
       emergencyBypass: input.emergencyBypass === true || isSuper,
     });
 
@@ -140,7 +141,14 @@ export class EndDepartmentRelationCommand {
         },
       ],
     };
-    await this.repo.save(next);
+    // 单胜者竞争：与续任/其他变更并发只一个成功（版本比较交换 IFC-GEN-007）
+    const swapped = await this.repo.compareAndSwap(relation, next);
+    if (!swapped) {
+      throw new EndRelationError(
+        'IFC-ERR-007',
+        '关系段状态已变化（与并发变更竞争），请刷新后按实际状态操作',
+      );
+    }
 
     await saveNotificationFact(this.notifications, {
       kind: 'RELATION_END_STARTED',

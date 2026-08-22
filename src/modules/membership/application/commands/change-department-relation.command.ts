@@ -275,6 +275,7 @@ export class ChangeDepartmentRelationCommand {
       this.policy.assertOwnerContinuityOnEnd({
         subjectIsOwner: true,
         successors: input.successors ?? [],
+        subjectId: input.subjectId,
         emergencyBypass:
           input.emergencyBypass === true ||
           (await this.access.isPlatformSuperAdmin(input.operatorId)),

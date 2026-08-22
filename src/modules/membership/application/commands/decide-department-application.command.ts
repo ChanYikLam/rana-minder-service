@@ -108,9 +108,10 @@ export class DecideDepartmentApplicationCommand {
     }
 
     const nowIso = new Date().toISOString();
+    const decidedByRole = pickDecidingRole(operatorRoles);
     const approval: ApplicationApprovalState = {
       decision: input.decision,
-      decidedByRole: operatorRoles[0] ?? 'UNKNOWN',
+      decidedByRole,
       decidedBy: input.operatorId,
       decidedAt: nowIso,
       rejectReason: input.decision === 'REJECT' ? (input.rejectReason ?? null) : null,
@@ -186,4 +187,13 @@ export class DecideDepartmentApplicationCommand {
       }
     }
   }
+}
+
+/** 审批角色留痕：按权限层级取最高角色，避免多角色操作者记录不准确（MEM-017） */
+function pickDecidingRole(roles: readonly string[]): string {
+  const priority = ['SUPER_ADMIN', 'CLUB_LEADER', 'HR_ADMIN', 'DEPARTMENT_LEADER'];
+  for (const role of priority) {
+    if (roles.includes(role)) return role;
+  }
+  return roles[0] ?? 'UNKNOWN';
 }
