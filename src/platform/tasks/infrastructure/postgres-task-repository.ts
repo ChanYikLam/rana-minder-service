@@ -128,7 +128,7 @@ export class PostgresTaskRepository implements TaskRepository {
                payload, lease_worker_id, lease_version, lease_until, leased_at,
                attempts, max_attempts, not_before, failure, result_ref, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULL,NULL,NULL,NULL,0,$9,$10,NULL,NULL,$11,$11)
-         ON CONFLICT (intent_id) DO NOTHING`,
+         ON CONFLICT DO NOTHING`,
         [
           taskId,
           intent.taskType,
@@ -151,12 +151,21 @@ export class PostgresTaskRepository implements TaskRepository {
            FROM public.job_tasks WHERE intent_id = $1`,
         [intent.intentId],
       );
-      if (rows[0] === undefined) {
-        throw new Error(
-          `PostgresTaskRepository.insert: 任务插入后未读到记录 intentId=${intent.intentId}`,
-        );
-      }
-      return rowToRecord(rows[0]);
+      if (rows[0] !== undefined) return rowToRecord(rows[0]);
+      // 兜底：`ON CONFLICT DO NOTHING` 会一并抑制 idempotency_key 唯一约束冲突
+      // （并发写入同一 idempotency_key 的不同 intent），此时按 idempotency_key 读回既有任务。
+      const byKeyAfter = await this.db.query<JobTaskRow>(
+        tx,
+        `SELECT task_id, task_type, status, intent_id, idempotency_key, scope, source,
+                payload, lease_worker_id, lease_version, lease_until, leased_at,
+                attempts, max_attempts, not_before, failure, result_ref, created_at, updated_at
+           FROM public.job_tasks WHERE idempotency_key = $1`,
+        [intent.idempotencyKey],
+      );
+      if (byKeyAfter[0] !== undefined) return rowToRecord(byKeyAfter[0]);
+      throw new Error(
+        `PostgresTaskRepository.insert: 任务插入后未读到记录 intentId=${intent.intentId}`,
+      );
     });
   }
 
