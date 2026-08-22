@@ -303,15 +303,15 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     },
     {
       provide: RECORD_JOINT_EVALUATION_USE_CASE,
-      useFactory: (repo) => new DefaultRecordJointEvaluationUseCase(repo),
-      inject: [JOINT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultRecordJointEvaluationUseCase(repo, auth),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
     },
 
     // ----- 社团结论与邀请（JNT-005） -----
     {
       provide: EDIT_CLUB_CONCLUSION_USE_CASE,
-      useFactory: (repo) => new DefaultEditClubConclusionUseCase(repo),
-      inject: [JOINT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultEditClubConclusionUseCase(repo, auth),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
     },
     {
       provide: SEND_CLUB_INVITATION_USE_CASE,
@@ -331,8 +331,9 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     },
     {
       provide: RESTORE_FROM_REVIEW_USE_CASE,
-      useFactory: (repo, invitation) => new DefaultRestoreFromReviewUseCase(repo, invitation),
-      inject: [JOINT_REPOSITORY, JOINT_INVITATION_PORT],
+      useFactory: (repo, invitation, auth) =>
+        new DefaultRestoreFromReviewUseCase(repo, invitation, auth),
+      inject: [JOINT_REPOSITORY, JOINT_INVITATION_PORT, JOINT_AUTHORIZATION],
     },
 
     // ----- 任务式（TASK，无授权） -----
@@ -360,13 +361,13 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     // ----- 查询（JNT-001~006） -----
     {
       provide: GET_JOINT_ACTIVITY_QUERY,
-      useFactory: (repo) => new DefaultGetJointActivityUseCase(repo),
-      inject: [JOINT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultGetJointActivityUseCase(repo, auth),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
     },
     {
       provide: GET_JOINT_APPLICATION_QUERY,
-      useFactory: (repo) => new DefaultGetJointApplicationUseCase(repo),
-      inject: [JOINT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultGetJointApplicationUseCase(repo, auth),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
     },
     {
       provide: GET_JOINT_CHANNEL_QUERY,
@@ -375,23 +376,23 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     },
     {
       provide: GET_JOINT_INTERVIEW_QUERY,
-      useFactory: (repo) => new DefaultGetJointInterviewUseCase(repo),
-      inject: [JOINT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultGetJointInterviewUseCase(repo, auth),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
     },
     {
       provide: LIST_CLUB_CONCLUSIONS_QUERY,
-      useFactory: (repo) => new DefaultListClubConclusionsUseCase(repo),
-      inject: [JOINT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultListClubConclusionsUseCase(repo, auth),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
     },
     {
       provide: LIST_JOINT_APPLICATIONS_QUERY,
-      useFactory: (repo) => new DefaultListJointApplicationsUseCase(repo),
-      inject: [JOINT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultListJointApplicationsUseCase(repo, auth),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
     },
     {
       provide: LIST_JOINT_PARTICIPANTS_QUERY,
-      useFactory: (repo) => new DefaultListJointParticipantsUseCase(repo),
-      inject: [JOINT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultListJointParticipantsUseCase(repo, auth),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
     },
 
     // ----- 传输中立控制器 -----

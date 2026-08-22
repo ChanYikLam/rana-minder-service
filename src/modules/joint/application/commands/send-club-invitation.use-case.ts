@@ -44,6 +44,9 @@ export class DefaultSendClubInvitationUseCase implements SendClubInvitationUseCa
     if (conclusionSnap === null) {
       throw jointErrors.notFound('社团结论');
     }
+    if (conclusionSnap.decision == null) {
+      throw jointErrors.preconditionFailed('未填写结论前禁止发送邀请');
+    }
     const applicationSnap = await this.repository.loadApplication(
       conclusionSnap.jointApplicationId,
     );
@@ -51,18 +54,24 @@ export class DefaultSendClubInvitationUseCase implements SendClubInvitationUseCa
       throw jointErrors.notFound('联合申请');
     }
 
+    const machine = new JointConclusionStateMachine();
+    const trial = JointConclusion.fromSnapshot(conclusionSnap);
+    if (!trial.sendInvite(machine, { invitationId: '_precheck_', now: input.now })) {
+      throw jointErrors.preconditionFailed('当前结论状态不允许发送邀请');
+    }
+
     const inv = await this.invitation.sendJointInvitation({
       jointActivityId: conclusionSnap.jointActivityId,
       jointApplicationId: conclusionSnap.jointApplicationId,
       clubId: conclusionSnap.clubId,
       applicantId: applicationSnap.applicantId,
-      decision: conclusionSnap.decision!,
+      decision: conclusionSnap.decision,
       freezeRemainingMs: undefined,
     });
 
     const conclusion = JointConclusion.fromSnapshot(conclusionSnap);
     if (
-      !conclusion.sendInvite(new JointConclusionStateMachine(), {
+      !conclusion.sendInvite(machine, {
         invitationId: inv.invitationId,
         now: input.now,
       })

@@ -366,14 +366,12 @@ export class OrgJointNestController {
   ): Promise<ApiSuccess<unknown>> {
     const input = parseJointRequestEnvelope(body).input as {
       clubId: string;
-      interviewerId: string;
       values: Record<string, unknown>;
     };
     return toHttpResponse(
       await this.controller.recordEvaluation(this.actor(request), {
         interviewId,
         clubId: input.clubId,
-        interviewerId: input.interviewerId,
         values: input.values,
       }),
     );
@@ -426,29 +424,35 @@ export class OrgJointNestController {
 
   @Get('activities/:activityId')
   async getActivity(
-    @Param('clubId') _clubId: string,
+    @Param('clubId') clubId: string,
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.getActivity(this.actor(request), activityId));
+    return toHttpResponse(
+      await this.controller.getActivity(this.actor(request), activityId, clubId),
+    );
   }
 
   @Get('activities/:activityId/participants')
   async listParticipants(
-    @Param('clubId') _clubId: string,
+    @Param('clubId') clubId: string,
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.listParticipants(this.actor(request), activityId));
+    return toHttpResponse(
+      await this.controller.listParticipants(this.actor(request), activityId, clubId),
+    );
   }
 
   @Get('activities/:activityId/applications')
   async listApplications(
-    @Param('clubId') _clubId: string,
+    @Param('clubId') clubId: string,
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.listApplications(this.actor(request), activityId));
+    return toHttpResponse(
+      await this.controller.listApplications(this.actor(request), activityId, clubId),
+    );
   }
 
   @Get('activities/:activityId/channel')

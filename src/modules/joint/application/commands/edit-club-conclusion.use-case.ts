@@ -6,6 +6,7 @@ import { JointConclusion } from '../../domain/models/joint-conclusion';
 import type { JointConclusionDecision } from '../../domain/state-machines/joint-conclusion.state-machine';
 import { JointConclusionStateMachine } from '../../domain/state-machines/joint-conclusion.state-machine';
 import type { JointRepository } from '../ports/joint-repository.port';
+import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
 
 export interface EditClubConclusionInput {
@@ -28,9 +29,22 @@ export interface EditClubConclusionUseCase {
 }
 
 export class DefaultEditClubConclusionUseCase implements EditClubConclusionUseCase {
-  constructor(private readonly repository: JointRepository) {}
+  constructor(
+    private readonly repository: JointRepository,
+    private readonly authorization: JointAuthorizationPort,
+  ) {}
 
   async execute(input: EditClubConclusionInput): Promise<EditClubConclusionResult> {
+    if (
+      !(await this.authorization.canEditConclusion({
+        subjectId: input.editorId,
+        activityId: input.jointActivityId,
+        clubId: input.clubId,
+        action: 'EDIT_CONCLUSION',
+      }))
+    ) {
+      throw jointErrors.forbidden('无权编辑该社团结论');
+    }
     const conclusionId = JointConclusion.conclusionId(input.jointApplicationId, input.clubId);
     let conclusionSnap;
     let expectedRevision: number;

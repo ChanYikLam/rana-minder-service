@@ -431,7 +431,6 @@ export class JointController {
     input: {
       readonly interviewId: string;
       readonly clubId: string;
-      readonly interviewerId: string;
       readonly values: Record<string, unknown>;
     },
   ): Promise<ControllerResult<unknown>> {
@@ -439,8 +438,8 @@ export class JointController {
       this.recordEvaluationUseCase.execute({
         interviewId: input.interviewId,
         clubId: input.clubId,
-        interviewerId: input.interviewerId,
         values: input.values,
+        subjectId: actor.subjectId,
         now: actor.now,
       }),
     );
@@ -504,7 +503,11 @@ export class JointController {
 
   restoreFromReview(actor: ActorContext, conclusionId: string): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.restoreFromReviewUseCase.execute({ conclusionId, now: actor.now }),
+      this.restoreFromReviewUseCase.execute({
+        conclusionId,
+        subjectId: actor.subjectId,
+        now: actor.now,
+      }),
     );
   }
 
@@ -537,12 +540,27 @@ export class JointController {
   }
 
   // ----- 查询（JNT-001~006） -----
-  getActivity(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.getActivityUseCase.execute({ activityId }));
+  getActivity(
+    actor: ActorContext,
+    activityId: string,
+    clubId: string,
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.getActivityUseCase.execute({
+        activityId,
+        subjectId: actor.subjectId,
+        clubId,
+      }),
+    );
   }
 
   getApplication(actor: ActorContext, applicationId: string): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.getApplicationUseCase.execute({ applicationId }));
+    return this.run(actor, () =>
+      this.getApplicationUseCase.execute({
+        applicationId,
+        subjectId: actor.subjectId,
+      }),
+    );
   }
 
   getChannel(actor: ActorContext, jointActivityId: string): Promise<ControllerResult<unknown>> {
@@ -550,21 +568,51 @@ export class JointController {
   }
 
   getInterview(actor: ActorContext, interviewId: string): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.getInterviewUseCase.execute({ interviewId }));
+    return this.run(actor, () =>
+      this.getInterviewUseCase.execute({
+        interviewId,
+        subjectId: actor.subjectId,
+      }),
+    );
   }
 
   listConclusions(
     actor: ActorContext,
     jointApplicationId: string,
   ): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.listConclusionsUseCase.execute({ jointApplicationId }));
+    return this.run(actor, () =>
+      this.listConclusionsUseCase.execute({
+        jointApplicationId,
+        subjectId: actor.subjectId,
+      }),
+    );
   }
 
-  listApplications(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.listApplicationsUseCase.execute({ activityId }));
+  listApplications(
+    actor: ActorContext,
+    activityId: string,
+    clubId: string,
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.listApplicationsUseCase.execute({
+        activityId,
+        subjectId: actor.subjectId,
+        clubId,
+      }),
+    );
   }
 
-  listParticipants(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.listParticipantsUseCase.execute({ activityId }));
+  listParticipants(
+    actor: ActorContext,
+    activityId: string,
+    clubId: string,
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.listParticipantsUseCase.execute({
+        activityId,
+        subjectId: actor.subjectId,
+        clubId,
+      }),
+    );
   }
 }

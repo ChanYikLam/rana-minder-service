@@ -6,8 +6,10 @@
  */
 
 export interface JointAuthorizationInput {
-  readonly activityId?: string;
   readonly subjectId: string;
+  readonly activityId?: string;
+  readonly clubId?: string;
+  readonly applicantId?: string;
   /** 动作类型，用于 3.x 精细判定 */
   readonly action:
     | 'INITIATE'
@@ -17,7 +19,16 @@ export interface JointAuthorizationInput {
     | 'CANCEL'
     | 'FORCE_END'
     | 'MANAGE_PARTICIPATION'
-    | 'VIEW_LIST';
+    | 'VIEW_LIST'
+    | 'VIEW_ACTIVITY'
+    | 'VIEW_APPLICATION'
+    | 'VIEW_INTERVIEW'
+    | 'VIEW_CONCLUSIONS'
+    | 'VIEW_APPLICATIONS'
+    | 'VIEW_PARTICIPANTS'
+    | 'RECORD_EVALUATION'
+    | 'EDIT_CONCLUSION'
+    | 'RESTORE_REVIEW';
 }
 
 export interface JointAuthorizationPort {
@@ -28,6 +39,15 @@ export interface JointAuthorizationPort {
   canCancelOrForceEnd(input: JointAuthorizationInput): Promise<boolean>;
   canManageParticipation(input: JointAuthorizationInput): Promise<boolean>;
   canViewList(input: JointAuthorizationInput): Promise<boolean>;
+  canViewJointActivity(input: JointAuthorizationInput): Promise<boolean>;
+  canViewApplication(input: JointAuthorizationInput): Promise<boolean>;
+  canViewInterview(input: JointAuthorizationInput): Promise<boolean>;
+  canViewConclusions(input: JointAuthorizationInput): Promise<boolean>;
+  canViewApplications(input: JointAuthorizationInput): Promise<boolean>;
+  canViewParticipants(input: JointAuthorizationInput): Promise<boolean>;
+  canRecordEvaluation(input: JointAuthorizationInput): Promise<boolean>;
+  canEditConclusion(input: JointAuthorizationInput): Promise<boolean>;
+  canRestoreReview(input: JointAuthorizationInput): Promise<boolean>;
 }
 
 export class NotWiredJointAuthorization implements JointAuthorizationPort {
@@ -50,6 +70,33 @@ export class NotWiredJointAuthorization implements JointAuthorizationPort {
     return false;
   }
   async canViewList(): Promise<boolean> {
+    return false;
+  }
+  async canViewJointActivity(): Promise<boolean> {
+    return false;
+  }
+  async canViewApplication(): Promise<boolean> {
+    return false;
+  }
+  async canViewInterview(): Promise<boolean> {
+    return false;
+  }
+  async canViewConclusions(): Promise<boolean> {
+    return false;
+  }
+  async canViewApplications(): Promise<boolean> {
+    return false;
+  }
+  async canViewParticipants(): Promise<boolean> {
+    return false;
+  }
+  async canRecordEvaluation(): Promise<boolean> {
+    return false;
+  }
+  async canEditConclusion(): Promise<boolean> {
+    return false;
+  }
+  async canRestoreReview(): Promise<boolean> {
     return false;
   }
 }

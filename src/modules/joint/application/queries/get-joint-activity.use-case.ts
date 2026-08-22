@@ -6,10 +6,13 @@ import { JointActivity } from '../../domain/models/joint-activity';
 import { JointParticipant } from '../../domain/models/joint-participant';
 import { JointChannel } from '../../domain/models/joint-channel';
 import type { JointRepository } from '../ports/joint-repository.port';
+import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
 
 export interface GetJointActivityInput {
   readonly activityId: string;
+  readonly subjectId: string;
+  readonly clubId: string;
 }
 
 export interface GetJointActivityResult {
@@ -23,9 +26,22 @@ export interface GetJointActivityUseCase {
 }
 
 export class DefaultGetJointActivityUseCase implements GetJointActivityUseCase {
-  constructor(private readonly repository: JointRepository) {}
+  constructor(
+    private readonly repository: JointRepository,
+    private readonly authorization: JointAuthorizationPort,
+  ) {}
 
   async execute(input: GetJointActivityInput): Promise<GetJointActivityResult> {
+    if (
+      !(await this.authorization.canViewJointActivity({
+        subjectId: input.subjectId,
+        activityId: input.activityId,
+        clubId: input.clubId,
+        action: 'VIEW_ACTIVITY',
+      }))
+    ) {
+      throw jointErrors.forbidden('无权查看该联合活动');
+    }
     const activitySnap = await this.repository.loadActivity(input.activityId);
     if (activitySnap === null) {
       throw jointErrors.notFound('联合活动');
