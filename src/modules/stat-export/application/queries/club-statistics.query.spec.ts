@@ -370,6 +370,59 @@ describe('ClubStatisticsQuery — summary 角色（STAT-002）', () => {
     assert.equal(currentItem.trend, 'up', '趋势应由前学年去重基准计算');
     assert.equal(currentItem.trendValue, 1, 'trendValue = 当前去重 3 - 前学年去重 2');
   });
+
+  it('趋势按 departmentId 筛选口径一致（STAT-001）：前学年仅统计同部门去重', async () => {
+    const source = new InMemoryStatisticsSource();
+    source.seedClubProfile({ clubId: 'club-trend-dept', forcedSuspension: false });
+    // 前学年 2024-2025：dept-a 有 uA(S100)，dept-b 有 uB(S101)
+    // 当前学年 2025-2026：dept-a 有 uC(S102)
+    source.seedMembershipFacts('club-trend-dept', [
+      {
+        userId: 'uA',
+        studentNo: 'S100',
+        departmentId: 'dept-a',
+        departmentName: 'A部',
+        positionId: null,
+        academicYear: '2024-2025',
+      },
+      {
+        userId: 'uB',
+        studentNo: 'S101',
+        departmentId: 'dept-b',
+        departmentName: 'B部',
+        positionId: null,
+        academicYear: '2024-2025',
+      },
+      {
+        userId: 'uC',
+        studentNo: 'S102',
+        departmentId: 'dept-a',
+        departmentName: 'A部',
+        positionId: null,
+        academicYear: '2025-2026',
+      },
+    ]);
+    source.seedAdmissionHistory('club-trend-dept', []);
+    const audit = new InMemoryStatisticsAuditPort();
+    const query = new ClubStatisticsQuery(source, audit, new StatisticsSpecification());
+    const principal = makePrincipal({
+      userId: 'u_leader',
+      clubScopes: [{ clubId: 'club-trend-dept', level: 'club', departmentIds: [] }],
+    });
+
+    const view = await query.summary({
+      principal,
+      clubId: 'club-trend-dept',
+      filters: { academicYear: '2025-2026', departmentId: 'dept-a' },
+    });
+    const currentItem = view.summary.find((s) => s.label === '当前成员总数');
+    assert.ok(currentItem);
+    // 当前学年 dept-a 去重 = 1（uC）；前学年 dept-a 去重 = 1（uA，不含 dept-b 的 uB）
+    // 因此趋势应为 flat，而非误判为 down（若用全社团前学年 2 人对比则错误显示 down）
+    assert.equal(currentItem.value, 1, '当前学年 dept-a 去重后 1 人');
+    assert.equal(currentItem.trend, 'flat', 'dept-a 口径下前学年 1 人 → 当年 1 人，无趋势');
+    assert.equal(currentItem.trendValue, 0, '口径一致时无涨跌');
+  });
 });
 
 // ===========================================================================

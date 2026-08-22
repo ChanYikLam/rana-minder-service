@@ -133,7 +133,7 @@ export class ClubStatisticsQuery {
     const currentTotal = this.spec.uniqueStudentCount(scopedMemberships, filters);
 
     // 趋势（按学年 buckets）
-    const memberByYear = this.groupMembersByYear(scopedMemberships);
+    const memberByYear = this.groupMembersByYear(scopedMemberships, filters);
     const currentYear = filters?.academicYear ?? undefined;
     const memberTrend = this.spec.computeTrend(currentYear, currentTotal, memberByYear);
 
@@ -143,12 +143,12 @@ export class ClubStatisticsQuery {
     const normalHistoryTrend = this.spec.computeTrend(
       currentYear,
       admissionHistory.normalTotal,
-      this.groupHistoryByYear(scopedHistory, 'normal'),
+      this.groupHistoryByYear(scopedHistory, 'normal', filters),
     );
     const jointHistoryTrend = this.spec.computeTrend(
       currentYear,
       admissionHistory.jointTotal,
-      this.groupHistoryByYear(scopedHistory, 'joint'),
+      this.groupHistoryByYear(scopedHistory, 'joint', filters),
     );
 
     // 审计
@@ -396,10 +396,19 @@ export class ClubStatisticsQuery {
    * 避免 `memberTrend` 以非去重计数与前学年（去重）对比，导致趋势基准不一致。
    */
   private groupMembersByYear(
-    memberships: readonly { academicYear: string; studentNo: string }[],
+    memberships: readonly {
+      academicYear: string;
+      studentNo: string;
+      departmentId?: string | null;
+    }[],
+    filters?: StatisticsFilters,
   ): Map<string, number> {
     const buckets = new Map<string, Set<string>>();
     for (const m of memberships) {
+      // 与 currentTotal（uniqueStudentCount）保持同一过滤口径（STAT-001）：
+      // 应用 departmentId 筛选，避免趋势基准与当前值口径不一致；
+      // 不应用 academicYear 筛选，以保留前一年度桶用于趋势对比。
+      if (filters?.departmentId && m.departmentId !== filters.departmentId) continue;
       let set = buckets.get(m.academicYear);
       if (set === undefined) {
         set = new Set();
@@ -413,12 +422,26 @@ export class ClubStatisticsQuery {
   }
 
   private groupHistoryByYear(
-    history: readonly { academicYear: string; scope: 'normal' | 'joint' }[],
-    scope?: 'normal' | 'joint',
+    history: readonly {
+      academicYear: string;
+      scope: 'normal' | 'joint';
+      departmentId?: string | null;
+      acceptedAt?: string;
+    }[],
+    scope: 'normal' | 'joint',
+    filters?: StatisticsFilters,
   ): Map<string, number> {
     const map = new Map<string, number>();
     for (const h of history) {
-      if (scope !== undefined && h.scope !== scope) continue;
+      if (h.scope !== scope) continue;
+      // 与 admissionHistory.normalTotal / jointTotal（matchesAdmission）保持同一
+      // 过滤口径（STAT-001）：应用 departmentId / timeRange 筛选，不应用
+      // academicYear，以保留前一年度桶用于趋势对比。
+      if (filters?.departmentId && h.departmentId !== filters.departmentId) continue;
+      if (filters?.timeRange) {
+        if (h.acceptedAt === undefined || h.acceptedAt < filters.timeRange.from) continue;
+        if (h.acceptedAt > filters.timeRange.to) continue;
+      }
       map.set(h.academicYear, (map.get(h.academicYear) ?? 0) + 1);
     }
     return map;
