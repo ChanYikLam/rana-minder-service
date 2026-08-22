@@ -389,31 +389,54 @@ export class ExecuteDepartmentApplicationCommand {
     // ANOMALY 人工修复（resolve-relation-anomaly）后，目标关系段已按 Casdoor
     // 当前值收口。若申请目标已实际达成（加入侧已生效/移出侧已移除），则直接
     // 收口生效，避免对已生效关系重复执行触发 IFC-ERR-007 冲突。
-    if (app.type === 'JOIN' || app.type === 'TRANSFER') {
+    //
+    // 注意：跨部门调动必须整体达成（MEM-009），目标侧已生效但移出侧仍残留时
+    // 不得判定为已生效——否则会造成“半完成调动被收口为已生效”。
+    if (app.type === 'JOIN') {
       if (app.targetDeptId !== null) {
         const segs = await this.relRepo.listBySubjectAndRef(
           app.clubId,
           app.applicantId,
           app.targetDeptId,
         );
-        if (segs.some((r) => r.status === DepartmentRelationStatus.CURRENTLY_VALID)) {
-          return true;
-        }
+        return segs.some((r) => r.status === DepartmentRelationStatus.CURRENTLY_VALID);
       }
+      return false;
     }
-    if (app.type === 'LEAVE' || app.type === 'TRANSFER') {
-      for (const d of app.leaveDeptIds) {
-        const segs = await this.relRepo.listBySubjectAndRef(app.clubId, app.applicantId, d);
-        const hasActive = segs.some(
-          (r) =>
-            ACTIVE_RELATION_STATUSES.includes(r.status) &&
-            r.status !== DepartmentRelationStatus.SYNC_ANOMALY,
+    if (app.type === 'LEAVE') {
+      return this.allLeaveTargetsInactive(app);
+    }
+    if (app.type === 'TRANSFER') {
+      // 目标已生效 且 全部移出源均已移除，才视为整体达成（不得半完成）
+      let targetEffective = false;
+      if (app.targetDeptId !== null) {
+        const segs = await this.relRepo.listBySubjectAndRef(
+          app.clubId,
+          app.applicantId,
+          app.targetDeptId,
         );
-        if (hasActive) return false; // 移出目标仍有有效段：未达成
+        targetEffective = segs.some(
+          (r) => r.status === DepartmentRelationStatus.CURRENTLY_VALID,
+        );
       }
-      return true; // 全部移出目标已无有效段：移出已达成
+      if (!targetEffective) return false;
+      return this.allLeaveTargetsInactive(app);
     }
     return false;
+  }
+
+  /** 全部移出目标已无有效段（SYNC_ANOMALY 视为未收口，不算已移除） */
+  private async allLeaveTargetsInactive(app: DepartmentApplication): Promise<boolean> {
+    for (const d of app.leaveDeptIds) {
+      const segs = await this.relRepo.listBySubjectAndRef(app.clubId, app.applicantId, d);
+      const hasActive = segs.some(
+        (r) =>
+          ACTIVE_RELATION_STATUSES.includes(r.status) &&
+          r.status !== DepartmentRelationStatus.SYNC_ANOMALY,
+      );
+      if (hasActive) return false; // 移出目标仍有有效段：未达成
+    }
+    return true; // 全部移出目标已无有效段：移出已达成
   }
 }
 

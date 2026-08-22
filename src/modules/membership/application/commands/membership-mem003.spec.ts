@@ -641,6 +641,47 @@ describe('MEM-003 A7/A8 失败保持原关系与人工重试', () => {
     assert.ok(relAfter.some((r) => r.status === 'CURRENTLY_VALID'));
   });
 
+  it('调动重试不得半完成收口：目标已生效但移出源仍残留时继续执行而非直接生效', async () => {
+    // 首次执行硬失败且补偿完成 → 源部门 d1 恢复当前有效、目标 d2 回到无关系
+    // 注：第一个 add outcome 供 seedValidDept(d1) 成功确认；第二个供调动执行时 d2 硬失败
+    const rig = makeRig([
+      [{ target: { kind: 'DEPARTMENT', refId: 'd1' }, ok: true, confirmed: true }],
+      [{ target: { kind: 'DEPARTMENT', refId: 'd2' }, ok: false, confirmed: false }],
+    ]);
+    await seedValidDept(rig, 'stu1', 'd1');
+    const app = await rig.submit.execute({
+      clubId: 'c1',
+      applicantId: 'stu1',
+      type: 'TRANSFER',
+      targetDeptId: 'd2',
+      leaveDeptIds: ['d1'],
+    });
+    await rig.decide.execute({
+      applicationId: app.applicationId,
+      operatorId: 'deptLeadD2',
+      decision: 'APPROVE',
+    });
+    const failed = await rig.executeApp.execute(app.applicationId, 'leader1');
+    assert.equal(failed.status, 'EXEC_FAILED_ORIGINAL_PRESERVED');
+
+    // 模拟目标侧已在 Casdoor 实际落定（外部加入）：人为建立 d2 当前有效段
+    const targetStarted = await rig.change.execute({
+      clubId: 'c1',
+      subjectId: 'stu1',
+      operatorId: 'leader1',
+      changeType: 'JOIN_DEPARTMENT',
+      targetRefId: 'd2',
+    });
+    await rig.settleChange.execute(targetStarted.groupId); // 默认确认 → d2 当前有效
+
+    // 源部门 d1 仍是当前有效（移出未达成）：重试不得判定已生效、直接收口为 EFFECTIVE。
+    // 修复前会误收口为 EFFECTIVE；修复后不会走“已生效”捷径——
+    // 因 d2 已存在有效段，startAttempt 会以 IFC-ERR-007 拒绝重复加入（而非返回 EFFECTIVE）。
+    const srcSegs = await rig.relRepo.listBySubjectAndRef('c1', 'stu1', 'd1');
+    assert.ok(srcSegs.some((r) => r.status === 'CURRENTLY_VALID'));
+    await assert.rejects(rig.executeApp.retry(app.applicationId, 'leader1'), /IFC-ERR-007/);
+  });
+
   /** 第一次执行失败、随后队列恢复成功的夹具 */
   async function makeRigWithRetryScenario(): Promise<{
     rig: Rig;
