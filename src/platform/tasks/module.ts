@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 
+import { AdaptersModule } from '../../adapters/adapters.module';
 import { ReadModelModule } from '../read-model/module';
 import { CasdoorModule } from '../casdoor/module';
 import { NotificationModule } from '../../modules/notification';
 import { TASK_OPS_TELEMETRY_PORT, TASK_PROCESSOR_REGISTRY, TASK_REPOSITORY } from './contracts';
-import { InMemoryTaskRepository } from './in-memory-task-repository';
+import { PostgresTaskRepository } from './infrastructure/postgres-task-repository';
 import {
   IDEMPOTENCY_STORE,
   InMemoryIdempotencyStore,
@@ -42,13 +43,13 @@ import { ManualInterventionService, TaskScheduler } from './scheduler';
 import { TasksWorker } from './worker-entry';
 
 @Module({
-  imports: [ReadModelModule, CasdoorModule, NotificationModule],
+  imports: [ReadModelModule, CasdoorModule, AdaptersModule, NotificationModule],
   providers: [
-    InMemoryTaskRepository,
+    PostgresTaskRepository,
     InMemoryTransactionOutboxStore,
     InMemoryIdempotencyStore,
     InMemoryBatchStore,
-    { provide: TASK_REPOSITORY, useExisting: InMemoryTaskRepository },
+    { provide: TASK_REPOSITORY, useExisting: PostgresTaskRepository },
     { provide: TASK_OUTBOX_STORE, useExisting: InMemoryTransactionOutboxStore },
     { provide: IDEMPOTENCY_STORE, useExisting: InMemoryIdempotencyStore },
     { provide: BATCH_STORE, useExisting: InMemoryBatchStore },

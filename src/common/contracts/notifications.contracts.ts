@@ -16,6 +16,12 @@ export type NotificationKind =
   | 'transition'
   | 'correction';
 
+/** 站内信呈现子状态（NTF-003：已读/未读/已处理/隐藏） */
+export type NotificationPresentationStatus = 'read' | 'unread' | 'processed' | 'hidden';
+
+/** 有期限通知当前办理状态（NTF-003：可处理/已处理/已撤回/已过期） */
+export type NotificationDeadlineStatus = 'actionable' | 'processed' | 'withdrawn' | 'expired';
+
 /** GET /api/notifications 响应 item */
 export interface NotificationItem {
   id: string;
@@ -24,9 +30,28 @@ export interface NotificationItem {
   title: string;
   body: string;
   read: boolean;
+  /** 呈现子状态：已读/未读/已处理/隐藏（NTF-003） */
+  status: NotificationPresentationStatus;
+  /** 有期限通知当前办理状态（可处理/已处理/已撤回/已过期；无期限为 null） */
+  deadlineStatus: NotificationDeadlineStatus | null;
+  /** 有期限通知的截止时间 */
+  deadlineAt: string | null;
   createdAt: string;
+  readAt: string | null;
+  processedAt: string | null;
+  hiddenAt: string | null;
   link: string | null;
   clubName: string | null;
+}
+
+/** GET /api/notifications 查询参数（类型筛选/未读筛选/隐藏列表，NTF-003） */
+export interface NotificationListQuery {
+  /** 按通知类型筛选（8 类 kind） */
+  kind?: NotificationKind | null;
+  /** 仅未读 */
+  unreadOnly?: boolean;
+  /** 包含隐藏列表（默认主列表不展示隐藏） */
+  includeHidden?: boolean;
 }
 
 /** GET /api/notifications 响应 data */
@@ -88,15 +113,25 @@ export interface NotificationKillSwitchState {
 export interface NotificationKillSwitchInput {
   active: boolean;
   reason?: string;
+  /** 预计恢复时间（关闭时必须设置） */
+  expectedRecoveryAt?: string;
+  /** 二次确认（关闭时必须为 true） */
+  confirmed?: boolean;
+  /** 操作者展示名称 */
+  operatorName?: string;
 }
 
-/** SMTP 配置（脱敏，不含密钥） */
+/** SMTP 配置（脱敏，不含密钥；NTF-006 密钥不明文回显） */
 export interface EmailConfigView {
   smtpHost: string;
   smtpPort: number;
   smtpUser: string;
   fromName: string;
   encryption: 'ssl' | 'tls' | 'none';
+  /** 是否已配置密钥（只显示是/否与指纹，永不回显密钥） */
+  secretConfigured: boolean;
+  /** 密钥指纹（SHA-256 前 12 位；识别"已配置/已变更"） */
+  secretFingerprint: string | null;
   verified: boolean;
   lastTestPassedAt: string | null;
   keyRotatedAt: string | null;
@@ -109,6 +144,11 @@ export interface EmailConfigInput {
   smtpUser: string;
   fromName: string;
   encryption?: 'ssl' | 'tls' | 'none';
+  /**
+   * 发信密钥（写-only，NTF-006）：只能重填或轮换，服务端加密落库，
+   * 任何响应不回显。缺省沿用已存密钥。
+   */
+  smtpSecret?: string;
 }
 
 /** POST /api/org/:clubId/notifications/email-config 响应 data */
@@ -152,4 +192,46 @@ export interface NotificationTemplate {
   channel: ['inbox'] | ['inbox', 'email'];
   link: string | null;
   dedupKey: string | null;
+}
+
+/** 邮件模板视图（GET 目录 / 保存后回显；不含收件人数据） */
+export interface EmailTemplateView {
+  templateId: string;
+  kind: NotificationKind;
+  scopeType: 'PLATFORM' | 'CLUB';
+  clubId: string | null;
+  subject: string;
+  htmlBody: string;
+  activeVersion: number;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+/** 保存邮件模板请求 input（POST club/admin 模板端点） */
+export interface EmailTemplateSaveInput {
+  subject: string;
+  htmlBody: string;
+}
+
+/** 模板预览结果（NTF-005.8） */
+export interface EmailTemplatePreviewResult {
+  ok: boolean;
+  subject: string | null;
+  htmlBody: string | null;
+  ignoredVariables: readonly string[];
+  source: 'CLUB_CUSTOM' | 'PLATFORM_DEFAULT' | 'LAST_RESORT' | 'DRAFT';
+  violations: readonly string[];
+}
+
+/** 模板测试邮件结果（NTF-005.8） */
+export interface EmailTemplateTestResult {
+  ok: boolean;
+  sanitizedError: string | null;
+  violations: readonly string[];
+}
+
+/** 模板回滚结果（NTF-005.8） */
+export interface EmailTemplateRollbackResult {
+  rolledBack: boolean;
+  activeVersion: number;
 }

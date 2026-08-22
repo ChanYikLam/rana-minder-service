@@ -1,22 +1,45 @@
 /**
- * 通知持久化端口定义（DATA-NTF-001、IFC-TX-002/005）。
+ * 通知持久化端口定义（DATA-NTF-001、IFC-TX-002/005、IFC-NTF-001）。
  *
  * 通知事实、收件人快照、渠道投递意图和尝试在 PostgreSQL 持久化。
  * 通知事实与权益业务结果在同一事务保存；渠道投递在独立事务进行。
+ *
+ * 站内信紧急关闭（SRS-FAIL-009）：关闭只暂停对应渠道呈现/投递，
+ * 新通知事实和收件人仍创建；恢复按原事件时间升序补投并以
+ * 逻辑事件＋收件人去重，不重复执行业务。
  */
 
 import type {
   ChannelDeliveryAttemptModel,
+  ClubEmailPolicy,
   CreateNotificationFactInput,
+  EmailTemplateModel,
+  EmailTemplateScope,
+  EmailTemplateVersion,
   InboxPresentationModel,
+  InboxPresentationStatus,
+  KillSwitchScope,
+  KillSwitchStateModel,
   NotificationFactModel,
+  PlatformEmailSuspension,
   RecipientSnapshot,
 } from '../domain';
+import type { NotificationKind } from '../../../common/contracts/notifications.contracts';
 
 /** 通知事实事务保存结果 */
 export interface NotificationFactTransactionResult {
   readonly fact: NotificationFactModel;
   readonly snapshots: readonly RecipientSnapshot[];
+}
+
+/** 站内信列表筛选条件（NTF-003：类型筛选、未读筛选、隐藏列表） */
+export interface InboxListFilter {
+  /** 按通知类型筛选（null 表示不过滤） */
+  readonly kind?: string | null;
+  /** 仅未读 */
+  readonly unreadOnly?: boolean;
+  /** 包含隐藏（默认隐藏不展示在主列表） */
+  readonly includeHidden?: boolean;
 }
 
 /**
@@ -59,7 +82,27 @@ export interface NotificationRepository {
   findFactsPendingDelivery(limit: number): Promise<readonly NotificationFactModel[]>;
 
   /**
-   * 按通知事实标识查询关联的收件人快照。
+   * 查询紧急关闭范围内待投递的通知事实（SRS-FAIL-009）。
+   * 平台范围匹配全部作用域；社团范围只匹配该社团 CLUB 作用域事实。
+   */
+  findFactsPendingDeliveryByKillScope(
+    scope: KillSwitchScope,
+    clubId: string | null,
+    limit: number,
+  ): Promise<readonly NotificationFactModel[]>;
+
+  /**
+   * 查询紧急关闭范围内暂停投递的通知事实，按原事件时间升序
+   * （IFC-NTF-001：恢复后按原事件时间升序补投）。
+   */
+  findFactsPausedByKillScope(
+    scope: KillSwitchScope,
+    clubId: string | null,
+    limit: number,
+  ): Promise<readonly NotificationFactModel[]>;
+
+  /**
+   * 按通知事实查询收件人快照（补投时按快照创建/确认唯一呈现）。
    */
   findSnapshotsByFactId(factId: string): Promise<readonly RecipientSnapshot[]>;
 }
@@ -71,7 +114,7 @@ export interface NotificationRepository {
 export interface InboxAdapter {
   /**
    * 创建或确认唯一站内信呈现记录。
-   * 同一逻辑事件＋收件人只对应一条站内信。
+   * 同一逻辑事件＋收件人只对应一条站内信（NTF-003）。
    */
   createOrConfirmPresentation(
     fact: NotificationFactModel,
@@ -79,19 +122,26 @@ export interface InboxAdapter {
   ): Promise<InboxPresentationModel>;
 
   /**
-   * 更新呈现子状态。
+   * 更新呈现子状态（已读/已处理/隐藏；PROCESSED/HIDDEN 为终态）。
    */
   updatePresentationStatus(
     presentationId: string,
-    status: InboxPresentationModel['status'],
+    status: InboxPresentationStatus,
     expectedVersion: number,
   ): Promise<InboxPresentationModel>;
 
   /**
-   * 查询用户的通知列表。
+   * 全部标记已读（仅收件人本人，逐条幂等）。
+   * 返回实际更新的条数。
+   */
+  markAllRead(recipientId: string): Promise<number>;
+
+  /**
+   * 查询用户的通知列表（类型筛选/未读筛选/隐藏列表）。
    */
   listForUser(
     recipientId: string,
+    filter: InboxListFilter,
     cursor: string | null,
     limit: number,
   ): Promise<readonly InboxPresentationModel[]>;
@@ -102,14 +152,9 @@ export interface InboxAdapter {
   countUnread(recipientId: string): Promise<number>;
 
   /**
-   * 按呈现标识查询单条站内信（用于标记已读/已处理/隐藏）。
+   * 按呈现标识查询（校验本人归属与乐观锁版本用）。
    */
   findPresentation(presentationId: string): Promise<InboxPresentationModel | null>;
-
-  /**
-   * 将收件人全部未读站内信标记为已读，逐条幂等，返回更新条数。
-   */
-  markAllRead(recipientId: string): Promise<number>;
 }
 
 /**
@@ -130,6 +175,13 @@ export interface EmailSendInput {
   readonly body: string;
   readonly senderIdentity: string;
   readonly templateVersionId: string | null;
+  /**
+   * 实际发信账号（NTF-008/009）。适配器必须以其作为信封 From，
+   * 且 Reply-To 固定为同一地址；模板不得覆盖发件人身份。
+   */
+  readonly fromAddress?: string | null;
+  /** 回复地址：领域层保证等于 fromAddress；适配器不得接受其他值 */
+  readonly replyTo?: string | null;
 }
 
 /** 邮件发送结果 */
@@ -160,6 +212,18 @@ export interface ChannelDeliveryAttemptRepository {
    * 查询失败重试中的尝试。
    */
   findRetryableAttempts(limit: number): Promise<readonly ChannelDeliveryAttemptModel[]>;
+
+  /**
+   * 按尝试标识查询（重试时直接定位指定尝试，不依赖队首顺序）。
+   */
+  findAttemptById(attemptId: string): Promise<ChannelDeliveryAttemptModel | null>;
+
+  /**
+   * 查询最近的邮件渠道尝试（平台管理端邮件外发箱只读查询，
+   * 接口清单 §15.9 GET /api/admin/notifications/email-outbox）。
+   * 按创建时间倒序；只读，不暴露密钥或完整收件人敏感信息以外的内容。
+   */
+  findRecentEmailAttempts(limit: number): Promise<readonly ChannelDeliveryAttemptModel[]>;
 }
 
 /**
@@ -171,4 +235,170 @@ export interface TemplateSnapshotService {
    * 发送时冻结模板版本与发件身份（NTF-008/009）。
    */
   snapshotTemplate(kind: string, channel: 'INBOX' | 'EMAIL'): Promise<string>;
+}
+
+/**
+ * 站内信紧急关闭仓储端口（SRS-FAIL-009、DATA-NTF-001）。
+ */
+export interface KillSwitchRepository {
+  /**
+   * 保存/更新关闭状态（同范围保留首次 stoppedAt，active=false 表示已恢复）。
+   */
+  save(state: KillSwitchStateModel): Promise<KillSwitchStateModel>;
+
+  /**
+   * 查询指定范围的关闭记录（不区分是否活跃，用于查看历史）。
+   */
+  findByScope(scope: KillSwitchScope, clubId: string | null): Promise<KillSwitchStateModel | null>;
+
+  /**
+   * 按记录标识查询。
+   */
+  findById(switchId: string): Promise<KillSwitchStateModel | null>;
+}
+
+/**
+ * 特权审计写入端口（需求发现 08：紧急关闭必须写入特权审计）。
+ * 生产实现对接审计模块/PostgreSQL，内存桩仅用于开发阶段。
+ */
+export interface PrivilegedAuditWriter {
+  /**
+   * 写入一条特权审计记录，返回审计引用。
+   * 审计保存失败时应抛出异常，由调用方决定是否中止命令。
+   */
+  write(entry: PrivilegedAuditEntry): Promise<string>;
+}
+
+/** 特权审计记录 */
+export interface PrivilegedAuditEntry {
+  readonly actorId: string;
+  readonly actorName: string;
+  readonly action: string;
+  /** 影响范围描述（如 platform、club:xxx） */
+  readonly scope: string;
+  readonly targetType: string;
+  readonly targetId: string;
+  readonly reason: string;
+  readonly detail: Record<string, string>;
+  readonly traceId: string | null;
+  readonly occurredAt: string;
+}
+
+/**
+ * 邮件配置存储端口（§14.4）。
+ * 开发阶段为内存实现（未接入真实 SMTP 发送）；生产替换为持久化配置。
+ */
+export interface EmailConfigRecord {
+  readonly clubId: string;
+  readonly smtpHost: string;
+  readonly smtpPort: number;
+  readonly smtpUser: string;
+  readonly fromName: string;
+  readonly encryption: 'ssl' | 'tls' | 'none';
+  /**
+   * 发信密钥密文（AES-256-GCM；NTF-006 密钥不明文存储、不明文回显）。
+   * 视图（EmailConfigView）永不返回本字段；只能重填或轮换。
+   */
+  readonly secretCiphertext: string | null;
+  /** 密钥指纹（SHA-256 前 12 位；用于识别"已配置/已变更"，不泄露密钥） */
+  readonly secretFingerprint: string | null;
+  readonly verified: boolean;
+  readonly lastTestPassedAt: string | null;
+  readonly keyRotatedAt: string | null;
+  readonly savedAt: string;
+}
+
+export interface EmailConfigStore {
+  findByClub(clubId: string): Promise<EmailConfigRecord | null>;
+  save(config: EmailConfigRecord): Promise<EmailConfigRecord>;
+}
+
+/**
+ * 通知偏好存储端口（§7：按用户真实落库）。
+ */
+export interface NotificationPreferencesStore {
+  /** 读取用户偏好；未落库返回 null */
+  get(userId: string): Promise<{ preferences: Record<string, boolean>; savedAt: string } | null>;
+  set(userId: string, preferences: Record<string, boolean>): Promise<{ savedAt: string }>;
+}
+
+/**
+ * 发信密钥加密端口（NTF-006）。
+ * 密钥落库前加密（AES-256-GCM），读取后解密使用；
+ * 任何路径不得明文回显，只能重填或轮换。
+ */
+export interface EmailSecretCipher {
+  /** 明文 → 密文（含随机 IV 与认证标签） */
+  encrypt(plaintext: string): string;
+  /** 密文 → 明文；篡改或密钥不匹配时抛出异常 */
+  decrypt(ciphertext: string): string;
+  /** 密钥指纹：识别"已配置/已变更"，不泄露密钥内容 */
+  fingerprint(plaintext: string): string;
+}
+
+/**
+ * 社团邮件策略存储端口（NTF-004：按活动或类型关闭本社团邮件）。
+ */
+export interface ClubEmailPolicyStore {
+  findByClub(clubId: string): Promise<ClubEmailPolicy | null>;
+  save(policy: ClubEmailPolicy): Promise<ClubEmailPolicy>;
+}
+
+/** 平台级邮件停用目录存储端口（超管统一停用某类邮件；NTF-004.3） */
+export interface PlatformEmailSuspensionStore {
+  get(): Promise<PlatformEmailSuspension>;
+  set(suspension: PlatformEmailSuspension): Promise<void>;
+}
+
+/**
+ * 邮件模板存储端口（NTF-005）。
+ * 平台默认模板由超管维护；社团自定义模板基于默认模板改文字；
+ * 版本保存与回滚以版本快照实现。
+ */
+export interface EmailTemplateStore {
+  /** 查询活跃模板（平台或社团作用域）；不存在返回 null */
+  findActive(scope: EmailTemplateScope, kind: NotificationKind): Promise<EmailTemplateModel | null>;
+  /** 保存新版本并激活（安全校验通过后调用） */
+  saveVersion(
+    scope: EmailTemplateScope,
+    kind: NotificationKind,
+    subject: string,
+    htmlBody: string,
+    savedBy: string,
+    note: string,
+  ): Promise<EmailTemplateModel>;
+  /** 查询指定模板的全部版本（新→旧） */
+  listVersions(templateId: string): Promise<readonly EmailTemplateVersion[]>;
+  /** 回滚到指定版本（版本必须存在） */
+  rollbackToVersion(
+    templateId: string,
+    version: number,
+    rolledBackBy: string,
+  ): Promise<EmailTemplateModel>;
+  /** 删除社团自定义模板（回退平台默认的显式途径之一） */
+  deleteClubTemplate(clubId: string, kind: NotificationKind): Promise<boolean>;
+}
+
+/**
+ * 通知特权核验端口（XCC-FAIL-009、IFC-NTF-001 权限边界）。
+ *
+ * 站内信紧急关闭/恢复为超级管理员或社团管理员专属高危操作，必须校验操作者
+ * 具备对应权限，否则拒绝（fail-closed）。
+ * - PLATFORM 范围：仅超级管理员可操作；
+ * - CLUB 范围：超级管理员或该社团管理员可操作。
+ *
+ * 当前开发阶段：organization/社团管理员端口未接入，一律拒绝（fail-closed，
+ * 不得因无法核验而放行高风险操作，对齐 ADR-009 §2.1）。
+ * organization 模块落地后由对应实现替换本桩。
+ */
+export interface NotificationPrivilegeVerifier {
+  /**
+   * 校验操作者是否有权执行站内信紧急关闭/恢复。
+   * @returns 通过返回 true；拒绝返回 false
+   */
+  canOperateKillSwitch(
+    scope: KillSwitchScope,
+    clubId: string | null,
+    subjectId: string,
+  ): Promise<boolean>;
 }

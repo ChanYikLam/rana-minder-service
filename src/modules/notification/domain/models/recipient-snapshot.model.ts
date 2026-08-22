@@ -40,8 +40,6 @@ export function buildDedupKey(logicalEventId: string, recipientId: string): stri
 
 /** 收件人解析输入 */
 export interface RecipientResolveInput {
-  /** 逻辑事件标识（用于构建收件人去重键，NTF-003） */
-  readonly logicalEventId: string;
   /** 事件类型 */
   readonly eventType: string;
   /** 业务对象标识 */
