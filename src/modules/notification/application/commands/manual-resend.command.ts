@@ -92,6 +92,7 @@ export class ManualResendCommand {
 
     await this.attemptRepository.saveAttempt(newAttempt);
 
+    let latestAttempt: ChannelDeliveryAttemptModel = newAttempt;
     try {
       const result = await this.emailAdapter.send({
         to: targetEmail,
@@ -102,13 +103,13 @@ export class ManualResendCommand {
       });
 
       if (result.status === 'SENT') {
-        await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+        latestAttempt = await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
           status: 'DELIVERED',
           channelMessageId: result.channelMessageId,
           completedAt: new Date().toISOString(),
         });
       } else if (result.status === 'BOUNCE') {
-        await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+        latestAttempt = await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
           status: 'PERMANENT_FAILURE',
           responseCategory: 'BOUNCE',
           sanitizedError: result.sanitizedError,
@@ -116,7 +117,7 @@ export class ManualResendCommand {
         });
       } else {
         // TEMPORARY_FAILURE / UNCERTAIN：进入失败重试，记录首次失败时间（NTF-007）
-        await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+        latestAttempt = await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
           status: 'FAILED_RETRY',
           responseCategory:
             result.status === 'UNCERTAIN' ? ('UNCERTAIN' as const) : ('TEMPORARY_FAILURE' as const),
@@ -126,7 +127,7 @@ export class ManualResendCommand {
         });
       }
     } catch (error) {
-      await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+      latestAttempt = await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
         status: 'FAILED_RETRY',
         responseCategory: 'TEMPORARY_FAILURE' as const,
         firstFailedAt: now,
@@ -136,6 +137,6 @@ export class ManualResendCommand {
     }
 
     this.logger.log(`人工补发完成: factId=${factId}, targetEmail=${targetEmail}`);
-    return newAttempt;
+    return latestAttempt;
   }
 }

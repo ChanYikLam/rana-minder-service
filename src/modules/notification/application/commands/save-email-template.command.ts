@@ -15,10 +15,7 @@
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { EmailConfigActor } from './save-email-config.command';
-import {
-  assertCanManageEmailConfig,
-  EmailConfigPermissionError,
-} from './save-email-config.command';
+import { EmailConfigPermissionError } from './save-email-config.command';
 import type { EmailTemplateStore, PrivilegedAuditWriter } from '../../infrastructure';
 import type { EmailTemplateModel } from '../../domain';
 import { EMAIL_TEMPLATE_STORE, PRIVILEGED_AUDIT_WRITER } from '../../tokens';
@@ -63,7 +60,8 @@ export class SaveEmailTemplateCommand {
       if (!hasPermission && !input.actor.isPlatformAdmin) {
         throw new EmailConfigPermissionError('无权管理该社团邮件模板');
       }
-      assertCanManageEmailConfig({ type: 'CLUB', clubId: input.scope.clubId }, input.actor);
+      // 仅要求 club:config:manage（或超管）；不得额外要求发信配置权限
+      // club:email:config（NTF-005：模板管理不依赖邮件发信配置）。
     } else if (!input.actor.isPlatformAdmin) {
       throw new EmailConfigPermissionError('平台默认模板仅超级管理员可维护');
     }
