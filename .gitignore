@@ -15,6 +15,7 @@ build/
 # ---------- 外置配置文件（ADR-010/OPS-CFG-001：真实 config.yaml 不入版本库；仅 config.example.yaml 示例可入） ----------
 config.yaml
 config.*.yaml
+*.local.yaml
 !config.example.yaml
 
 # ---------- 编辑器与 IDE ----------

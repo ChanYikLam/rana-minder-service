@@ -1,78 +1,83 @@
-# ============================================================
-# RanaMinder Service 配置示例（ADR-010 单文件外置配置）
+# RanaMinder 示例配置（config.example.yaml）
+# 权威依据：ADR-010（单文件外置配置与 Docker 只读挂载）、配置规格-v1.0.md
 #
-# 部署用法：
-#   cp config.example.yaml config.yaml
-#   # 编辑 config.yaml 填写真实内容后，再启动 docker compose
+# 用途：部署者复制本文件为 config.yaml（或 config.dev.yaml），填写真实内容。
+# 真实内容**绝不进入源码仓库、镜像、日志、截图**（ADR-010 / SRS-NFR-032）。
+# 本文件全部为虚构示例：秘密一律用 CHANGE_ME 占位，正式环境检测到占位符即启动失败。
 #
-# 约定（ADR-010 / OPS-CFG-001/003/005）：
-#   - 本文件不含真实秘密，仅保留结构完整、秘密留空的字段；
-#   - 秘密一律以"CHANGE_ME"占位，部署者必须改写为真实值后再启动：
-#       直接写明文（单文件集中填写，首版允许）
-#       或改为外置引用形式，不写明文（推荐）：
-#         ${env:VAR_NAME}         从环境变量读取
-#         ${file:/path/to/secret} 从白名单路径读取（/etc/ranaminder/secrets/、/run/secrets/）
-#   - 真实 config.yaml 必须排除在源码仓库与镜像之外（见 .dockerignore）；
-#   - 配置加载器对仍未改写的占位符（CHANGE_ME*）一律拒绝启动（fail-closed）：
-#     加载到即抛 ConfigLoadError，应用与 worker 以非零状态退出，不会带着占位符运行。
+# 复制并填写：
+#   cp config.example.yaml config.yaml        # 生产/测试（部署项目目录）
+#   cp config.example.yaml config.dev.yaml    # 开发（后端以 CONFIG_FILE 指向）
+#
+# 结构说明：本文件字段名与嵌套结构必须与 src/config/config.loader.ts 的
+# 实际读取契约一致（配置规格 §2 草案字段名已由实现评审确认，见 loader/configuration）。
 # ============================================================
 
+# ---- server：HTTP 与任务入口（loader: server.port / host / gracefulShutdownTimeoutMs）----
 server:
-  host: 0.0.0.0
-  port: 3000
-  gracefulShutdownTimeoutMs: 10000
+  port: 3000                    # HTTP 应用监听端口（默认 3000）
+  host: 0.0.0.0                 # 监听地址（默认 0.0.0.0）
+  gracefulShutdownTimeoutMs: 10000  # 优雅停机超时（默认 10000）
 
-# 部署档位标注（dev|test|prod）。当前仅供运维识读，不参与加载器判定：
-# 占位符拒绝等 fail-closed 约束由加载器无条件生效（见 config.loader.ts rejectPlaceholder）。
-# HTTPS、最小观测等正式环境约束由部署边界（反向代理/编排）保证，见部署运维手册。
-environment:
-  name: prod
-
+# ---- database：PostgreSQL 18（ADR-014 统一业务 Schema）----
 database:
-  # compose 内 PostgreSQL 服务名
-  host: postgres
+  host: 127.0.0.1               # 单机部署：postgres 服务名；拆分部署：独立节点
   port: 5432
   name: ranaminder
   user: ranaminder
-  schema: app
-  ssl: false
-  # 必填。部署者改写为真实密码（或外置引用，如 ${file:/run/secrets/db_password}）
-  passwordRef: CHANGE_ME
+  schema: app                   # 统一业务 Schema（默认 app）
+  passwordRef: CHANGE_ME        # 外置密钥引用，不写明文（必填）
+  ssl: false                    # 传输加密布尔开关；正式环境按 OPS-CFG-006 强制 TLS
 
+# ---- casdoor：学校既有 v3.108.0 精确兼容基线（loader: redirectUri 为必填）----
 casdoor:
-  # 学校既有 v3.108.0 实例地址
-  endpoint: https://casdoor.example.edu
-  clientId: CHANGE_ME
-  organization: CHANGE_ME
-  redirectUri: http://localhost:3000/api/auth/callback
-  # 必填。部署者改写为真实客户端秘密（或外置引用）
-  clientSecretRef: CHANGE_ME
+  endpoint: http://127.0.0.1:8000   # 学校实例地址（开发为本地 Casdoor 靶场）
+  organization: CHANGE_ME           # 学校级 Organization
+  clientId: CHANGE_ME               # OIDC 客户端标识（非秘密）
+  clientSecretRef: CHANGE_ME        # 客户端秘密引用（必填）
+  redirectUri: http://localhost:5173/auth/callback  # 登录回调（开发为前端 dev server，必填）
 
+# ---- storage：S3 兼容对象存储（DATA-Q-012 三个私有 Bucket，loader: buckets 嵌套）----
 storage:
-  # compose 内 MinIO 服务名
-  endpoint: http://minio:9000
-  region: us-east-1
-  # 必填。对应 MinIO root 凭据；部署者改写为真实值（或外置引用）
-  accessKeyRef: CHANGE_ME
-  secretKeyRef: CHANGE_ME
-  buckets:
-    quarantine: ranaminder-quarantine
-    primary: ranaminder-primary
-    derived: ranaminder-derived
+  endpoint: http://127.0.0.1:9000   # MinIO / 兼容端点
+  region: us-east-1                 # 兼容占位
+  accessKeyRef: CHANGE_ME           # 访问键引用（必填）
+  secretKeyRef: CHANGE_ME           # 秘密键引用（必填）
+  buckets:                          # 三个私有 Bucket（DATA-Q-012）
+    quarantine: CHANGE_ME           # 待检查隔离 Bucket（私有）
+    primary: CHANGE_ME              # 权威原件 Bucket（私有）
+    derived: CHANGE_ME              # 临时派生 Bucket（私有）
 
+# ---- mail：SMTP 渠道（开发指向 Mailpit；loader: host / port / fromAddress / userRef / passwordRef）----
 mail:
-  host: localhost
-  port: 1025
-  fromAddress: no-reply@example.edu
-  # 可选：SMTP 需认证时填写；无需认证可留空
-  userRef: ""
-  passwordRef: ""
+  host: 127.0.0.1               # 开发为 Mailpit
+  port: 1025                    # 开发 Mailpit SMTP
+  fromAddress: no-reply@example.invalid  # 虚构发件身份
+  userRef: ""                   # 需要认证时填写（可留空）
+  passwordRef: ""               # 需要认证时填写（可留空）
 
+# ---- fileCheck：外部技术安全检查服务（loader: endpoint / tokenRef，endpoint 空则 fail-closed）----
+fileCheck:
+  endpoint: ""                  # 留空则保持 fail-closed
+  tokenRef: ""
+
+# ---- notify：外部通知渠道（loader: endpoint / tokenRef，endpoint 空则 fail-closed）----
+notify:
+  endpoint: ""                  # 留空则保持 fail-closed
+  tokenRef: ""
+
+# ---- backup：外部备份/恢复记录服务（loader: endpoint / tokenRef，endpoint 空则 fail-closed）----
+backup:
+  endpoint: ""                  # 留空则保持 fail-closed
+  tokenRef: ""
+
+# ---- observability：内置最小观测（ADR-011；loader: logLevel / traceSamplingRate）----
 observability:
-  logLevel: info
-  traceSamplingRate: 1.0
+  logLevel: info                # debug | info | warn | error
+  traceSamplingRate: 1.0        # 首版默认全采（ADR-011 §2.1 收口）
 
+# ---- job：后台任务调度（ADR-004；loader: schedulerIntervalMs / defaultLeaseMs / maxAttempts）----
 job:
-  schedulerIntervalMs: 1000
-  defaultLeaseMs: 60000
-  maxAttempts: 5
+  schedulerIntervalMs: 1000     # 调度器轮询间隔（默认 1000）
+  defaultLeaseMs: 60000         # 默认租约时长（默认 60000）
+  maxAttempts: 5                # 最大尝试次数（默认 5）
