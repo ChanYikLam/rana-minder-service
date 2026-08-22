@@ -1,0 +1,51 @@
+import { Inject, Injectable } from '@nestjs/common';
+import type { Correction } from '../../domain/models/correction';
+import { CORRECTION_REPOSITORY } from '../../infrastructure/correction-repository';
+import type { CorrectionRepository } from '../../infrastructure/correction-repository';
+
+/** 纠错状态查询视图（真实状态；含历史） */
+export interface CorrectionStatusView {
+  readonly correctionId: string;
+  readonly status: string;
+  /** 逾期标志（仅标记，不自动处置） */
+  readonly overdue: boolean;
+  readonly objectiveErrorType: string;
+  readonly submittedAt: string | null;
+  readonly decision: { approved: boolean; decidedBy: string; decidedAt: string } | null;
+  /** 完整历史（批准/驳回/撤回保留） */
+  readonly history: readonly { at: string; type: string; by: string }[];
+}
+
+/**
+ * 纠错状态查询（IFC-SM-028）。
+ * 返回真实状态与完整历史；逾期仅标志不自动处置。
+ */
+@Injectable()
+export class CorrectionStatusQuery {
+  constructor(
+    @Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository,
+  ) {}
+
+  async getStatus(correctionId: string): Promise<CorrectionStatusView> {
+    const correction = await this.repo.load(correctionId);
+    if (correction === null) {
+      throw new Error('IFC-ERR-006: 纠错申请不存在');
+    }
+    return {
+      correctionId: correction.correctionId,
+      status: correction.status,
+      overdue: correction.status === 'OVERDUE_PENDING' || correction.overdueMarkedAt !== null,
+      objectiveErrorType: correction.objectiveErrorType,
+      submittedAt: correction.submittedAt,
+      decision:
+        correction.decision !== null
+          ? {
+              approved: correction.status === 'APPROVED',
+              decidedBy: correction.decision.decidedBy,
+              decidedAt: correction.decision.decidedAt,
+            }
+          : null,
+      history: correction.history.map((h) => ({ at: h.at, type: h.type, by: h.by })),
+    };
+  }
+}

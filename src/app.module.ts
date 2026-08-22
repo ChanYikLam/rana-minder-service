@@ -48,6 +48,7 @@ import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
 import { NotificationModule } from './modules/notification';
 import { InvitationModule } from './modules/invitation/module';
+import { AuditModule } from './modules/audit/module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { InvitationModule } from './modules/invitation/module';
     FormModule,
     NotificationModule,
     InvitationModule,
+    AuditModule,
   ],
   controllers: [],
   providers: [],

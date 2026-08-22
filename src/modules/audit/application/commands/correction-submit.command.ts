@@ -1,0 +1,128 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { CorrectionStateMachine } from '../../domain/state-machines/correction-state-machine';
+import type { Correction } from '../../domain/models/correction';
+import { CorrectionPolicy } from '../../domain/services/correction-policy';
+import type { ObjectiveErrorType } from '../../domain/models/correction';
+import { CORRECTION_REPOSITORY } from '../../infrastructure/correction-repository';
+import type { CorrectionRepository } from '../../infrastructure/correction-repository';
+
+/** 保存草稿输入（SRS-SM-AUD-001：新建→草稿） */
+export interface SaveCorrectionDraftInput {
+  readonly applicantId: string;
+  /** 记录原作者（作者回避） */
+  readonly authorId: string;
+  readonly targetRecord: {
+    readonly objectType: string;
+    readonly objectId: string;
+    /** 目标记录所属社团（跨社团改写判定；AUD-010） */
+    readonly ownerClubId: string;
+    readonly fieldKey: string;
+    readonly recordVersion: number;
+  };
+  readonly objectiveErrorType: ObjectiveErrorType;
+  readonly expectedCorrection: string;
+  readonly evidenceRefs: readonly string[];
+  /** 处理期限（超管配置） */
+  readonly deadlineAt: string;
+}
+
+/** 提交输入（SRS-SM-AUD-001：草稿→待处理） */
+export interface SubmitCorrectionInput {
+  readonly correctionId: string;
+  readonly applicantId: string;
+  /** 客观错误描述（主观评价争议 → 拒绝） */
+  readonly objectiveDescription: string;
+}
+
+/** 前置失败 */
+export class CorrectionCommandError extends Error {
+  constructor(code: 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-007', message: string) {
+    super(`${code}: ${message}`);
+    this.name = 'CorrectionCommandError';
+  }
+}
+
+/**
+ * 保存纠错申请草稿（SRS-SM-AUD-001：新建→草稿）。
+ *
+ * 学生可针对本人资料/报名/明显事实提交纠错申请并上传证据；
+ * 证据访问不扩大原权限；不改变原业务记录。
+ */
+@Injectable()
+export class SaveCorrectionDraftCommand {
+  constructor(
+    @Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository,
+    private readonly stateMachine: CorrectionStateMachine = new CorrectionStateMachine(),
+  ) {}
+
+  async execute(input: SaveCorrectionDraftInput): Promise<Correction> {
+    if (input.deadlineAt.length === 0 || !Number.isFinite(Date.parse(input.deadlineAt))) {
+      throw new CorrectionCommandError('IFC-ERR-005', '无效的处理期限');
+    }
+    const now = new Date().toISOString();
+    const correction: Correction = {
+      correctionId: randomUUID(),
+      applicantId: input.applicantId,
+      authorId: input.authorId,
+      targetRecord: input.targetRecord,
+      objectiveErrorType: input.objectiveErrorType,
+      expectedCorrection: input.expectedCorrection,
+      evidenceRefs: input.evidenceRefs,
+      deadlineAt: input.deadlineAt,
+      status: this.stateMachine.transition('NEW', 'DRAFT'),
+      version: 1,
+      createdAt: now,
+      submittedAt: null,
+      overdueMarkedAt: null,
+      decision: null,
+      history: [{ at: now, type: 'DRAFTED', by: input.applicantId }],
+    };
+    await this.repo.save(correction);
+    return correction;
+  }
+}
+
+/**
+ * 提交纠错申请（SRS-SM-AUD-001：草稿→待处理）。
+ *
+ * - 指明客观错误、期望修正、原因和必要证据；
+ * - **单纯不认同主观评价不属于事实错误**（拒绝，IFC-ERR-006）；
+ * - 原子保存正式申请、处理期限和角色型待办（占位）；原记录不变。
+ */
+@Injectable()
+export class SubmitCorrectionCommand {
+  constructor(
+    @Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository,
+    private readonly policy: CorrectionPolicy,
+    private readonly stateMachine: CorrectionStateMachine = new CorrectionStateMachine(),
+  ) {}
+
+  async execute(input: SubmitCorrectionInput): Promise<Correction> {
+    const correction = await this.repo.load(input.correctionId);
+    if (correction === null) {
+      throw new CorrectionCommandError('IFC-ERR-006', '纠错申请不存在');
+    }
+    if (correction.applicantId !== input.applicantId) {
+      throw new CorrectionCommandError('IFC-ERR-006', '仅原提交人可提交');
+    }
+    if (correction.status === 'PENDING') {
+      return correction; // 幂等
+    }
+    if (correction.status !== 'DRAFT') {
+      throw new CorrectionCommandError('IFC-ERR-007', '仅草稿状态可提交');
+    }
+    // 客观错误判定：主观评价争议拒绝
+    this.policy.assertObjectiveError(input.objectiveDescription);
+    const now = new Date().toISOString();
+    const submitted: Correction = {
+      ...correction,
+      status: this.stateMachine.transition('DRAFT', 'PENDING'),
+      version: correction.version + 1,
+      submittedAt: now,
+      history: [...correction.history, { at: now, type: 'SUBMITTED', by: input.applicantId }],
+    };
+    await this.repo.save(submitted);
+    return submitted;
+  }
+}
