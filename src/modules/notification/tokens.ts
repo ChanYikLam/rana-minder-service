@@ -36,3 +36,5 @@ export const CLUB_EMAIL_POLICY_STORE = 'ClubEmailPolicyStore';
 export const PLATFORM_EMAIL_SUSPENSION_STORE = 'PlatformEmailSuspensionStore';
 /** 邮件模板存储端口（NTF-005：平台默认＋社团自定义＋版本回滚） */
 export const EMAIL_TEMPLATE_STORE = 'EmailTemplateStore';
+/** 站内信紧急关闭特权核验端口（XCC-FAIL-009，fail-closed） */
+export const NOTIFICATION_PRIVILEGE_VERIFIER = 'NotificationPrivilegeVerifier';

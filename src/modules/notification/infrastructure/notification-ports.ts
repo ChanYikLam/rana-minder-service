@@ -378,3 +378,27 @@ export interface EmailTemplateStore {
   /** 删除社团自定义模板（回退平台默认的显式途径之一） */
   deleteClubTemplate(clubId: string, kind: NotificationKind): Promise<boolean>;
 }
+
+/**
+ * 通知特权核验端口（XCC-FAIL-009、IFC-NTF-001 权限边界）。
+ *
+ * 站内信紧急关闭/恢复为超级管理员或社团管理员专属高危操作，必须校验操作者
+ * 具备对应权限，否则拒绝（fail-closed）。
+ * - PLATFORM 范围：仅超级管理员可操作；
+ * - CLUB 范围：超级管理员或该社团管理员可操作。
+ *
+ * 当前开发阶段：organization/社团管理员端口未接入，一律拒绝（fail-closed，
+ * 不得因无法核验而放行高风险操作，对齐 ADR-009 §2.1）。
+ * organization 模块落地后由对应实现替换本桩。
+ */
+export interface NotificationPrivilegeVerifier {
+  /**
+   * 校验操作者是否有权执行站内信紧急关闭/恢复。
+   * @returns 通过返回 true；拒绝返回 false
+   */
+  canOperateKillSwitch(
+    scope: KillSwitchScope,
+    clubId: string | null,
+    subjectId: string,
+  ): Promise<boolean>;
+}

@@ -21,8 +21,7 @@ export class TaskExecutionPipeline {
   private readonly logger = new Logger(TaskExecutionPipeline.name);
 
   constructor(
-    @Inject(TASK_REPOSITORY)
-    private readonly repository: TaskRepository,
+    @Inject(TASK_REPOSITORY) private readonly repository: TaskRepository,
     private readonly leases: LeaseManager,
     private readonly convergence: RecoveryReplayConvergence,
     @Inject(TASK_PROCESSOR_REGISTRY)

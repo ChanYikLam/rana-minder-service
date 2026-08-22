@@ -62,6 +62,7 @@ import {
   InMemoryClubEmailPolicyStore,
   InMemoryPlatformEmailSuspensionStore,
   InMemoryEmailTemplateStore,
+  FailClosedNotificationPrivilegeVerifier,
 } from './infrastructure';
 import {
   CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
@@ -79,6 +80,7 @@ import {
   PRIVILEGED_AUDIT_WRITER,
   RECIPIENT_RESOLVER,
   TEMPLATE_SNAPSHOT_SERVICE,
+  NOTIFICATION_PRIVILEGE_VERIFIER,
 } from './tokens';
 
 @Module({
@@ -164,6 +166,11 @@ import {
     {
       provide: EMAIL_TEMPLATE_STORE,
       useClass: InMemoryEmailTemplateStore,
+    },
+    // 站内信紧急关闭特权核验（fail-closed：权限端口接入前一律拒绝）
+    {
+      provide: NOTIFICATION_PRIVILEGE_VERIFIER,
+      useClass: FailClosedNotificationPrivilegeVerifier,
     },
     // 领域服务（端口以字符串 Token 注册，接口在运行时被擦除不能作 DI Token）
     {

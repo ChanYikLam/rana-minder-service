@@ -33,6 +33,7 @@ import type {
   EmailSendResult,
   KillSwitchRepository,
   NotificationPreferencesStore,
+  NotificationPrivilegeVerifier,
   NotificationRepository,
   PlatformEmailSuspensionStore,
   PrivilegedAuditEntry,
@@ -668,5 +669,26 @@ export class InMemoryEmailTemplateStore implements EmailTemplateStore {
     if (!model) return false;
     this.templates.delete(key);
     return true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// NotificationPrivilegeVerifier（XCC-FAIL-009：权限 fail-closed）
+// ---------------------------------------------------------------------------
+
+/**
+ * 站内信紧急关闭特权核验 fail-closed 桩（权限端口接入前）。
+ *
+ * organization/社团管理员端口未接入前，任何超管/管理员身份一律拒绝，
+ * 不得因无法核验而放行高危关闭操作（ADR-009 §2.1、IFC-NTF-001）。
+ * 接入后由真实授权实现替换本桩。
+ */
+export class FailClosedNotificationPrivilegeVerifier implements NotificationPrivilegeVerifier {
+  async canOperateKillSwitch(
+    _scope: KillSwitchScope,
+    _clubId: string | null,
+    _subjectId: string,
+  ): Promise<boolean> {
+    return false;
   }
 }

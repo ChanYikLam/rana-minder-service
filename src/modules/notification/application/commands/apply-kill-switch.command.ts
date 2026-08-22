@@ -9,6 +9,7 @@
  * - 超管鉴权由接口层守卫执行，本命令只负责业务与审计事实。
  */
 
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   KillSwitchRepository,
@@ -107,18 +108,30 @@ export class ApplyKillSwitchCommand {
           currentStatus: fact.status,
         });
         if (!transition.allowed) continue;
-        await this.repository.updateFactStatus(
-          fact.factId,
-          'CREATED_PAUSED_DELIVERY',
-          fact.version,
-        );
-        pausedFactCount += 1;
-        progressed = true;
+        try {
+          await this.repository.updateFactStatus(
+            fact.factId,
+            'CREATED_PAUSED_DELIVERY',
+            fact.version,
+          );
+          pausedFactCount += 1;
+          progressed = true;
+        } catch (error) {
+          // 乐观锁版本冲突：该事实可能正被并发投递/处理，跳过并继续
+          // （IFC-ERR-008），不让单个冲突中断整批关闭，确保紧急关闭
+          // 状态能最终保存、不产生部分暂停后状态未落库的数据卡死。
+          this.logger.warn(
+            `暂停通知失败（可能并发变更，跳过）: factId=${fact.factId}, error=${(error as Error).message}`,
+          );
+        }
       }
       if (!progressed) break;
     }
 
-    const switchId = `ks-${now}-${input.scope.toLowerCase()}-${input.clubId ?? 'platform'}`;
+    // switchId 用 UUIDv7 保证全局唯一（模型注释要求）。避免用毫秒时间戳拼接：
+    // 同 scope+clubId 快速「关→恢→关」或同一毫秒并发关闭会产生相同 ID，
+    // 导致仓储按 scope 覆盖旧关闭/审计历史（数据完整性）。
+    const switchId = randomUUID();
     const state: KillSwitchStateModel = {
       switchId,
       scope: input.scope,

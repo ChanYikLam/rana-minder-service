@@ -7,10 +7,7 @@ import { computeLeaseUntil, decideLease, isLeaseValid } from './lease';
 export class LeaseManager {
   private readonly logger = new Logger(LeaseManager.name);
 
-  constructor(
-    @Inject(TASK_REPOSITORY)
-    private readonly repository: TaskRepository,
-  ) {}
+  constructor(@Inject(TASK_REPOSITORY) private readonly repository: TaskRepository) {}
 
   async tryClaim(
     taskId: string,

@@ -7,10 +7,7 @@ import { TASK_REPOSITORY } from '../contracts';
 export class ManualInterventionService {
   private readonly logger = new Logger(ManualInterventionService.name);
 
-  constructor(
-    @Inject(TASK_REPOSITORY)
-    private readonly repository: TaskRepository,
-  ) {}
+  constructor(@Inject(TASK_REPOSITORY) private readonly repository: TaskRepository) {}
 
   async markManualIntervention(
     taskId: string,
