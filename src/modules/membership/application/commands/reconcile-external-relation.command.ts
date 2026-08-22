@@ -218,7 +218,12 @@ export class ReconcileExternalRelationCommand {
         return isLast && t.actualStartAt === null ? { ...t, actualStartAt: nowIso } : t;
       });
     } else if (settledAs === 'HISTORICAL_ENDED') {
-      status = this.stateMachine.transition(base.status, DepartmentRelationStatus.HISTORICAL_ENDED);
+      // 已是历史结束的段被新事件（不同 externalEventKey）重复外部移除：幂等保持，
+      // 避免对无自环的 HISTORICAL_ENDED 触发非法转换崩溃（R7 重复移除收口幂等）。
+      status =
+        base.status === DepartmentRelationStatus.HISTORICAL_ENDED
+          ? base.status
+          : this.stateMachine.transition(base.status, DepartmentRelationStatus.HISTORICAL_ENDED);
       tenures = base.tenures.map((t, idx) => {
         const isLast = idx === base.tenures.length - 1;
         return isLast && t.actualEndAt === null && t.actualStartAt !== null

@@ -14,7 +14,8 @@
  *     进入后不可按待审批撤回）；
  * A6. 执行处理中 → 已生效：加入/退出/调动的全部目标关系回读确认（调动不得半完成）；
  * A7. 执行处理中 → 执行失败保持原关系：自动重试结束且原关系回读完整；
- * A8. 执行失败保持原关系 → 执行处理中：人工重试（不重新审批，沿用原业务幂等键）。
+ * A8. 执行失败保持原关系 → 执行处理中：人工重试（不重新审批，沿用原业务幂等键）；
+ *     扩展：重试前回读发现目标已实际生效 → 直接收口到已生效。
  *
  * 核心不变量：
  * - 撤回能力在批准后关闭（A4 之后无 A2 出边）；
@@ -68,6 +69,7 @@ const TRANSITIONS: Readonly<
   ],
   [DepartmentApplicationStatus.EXEC_FAILED_ORIGINAL_PRESERVED]: [
     DepartmentApplicationStatus.EXECUTION_PROCESSING, // A8 人工重试
+    DepartmentApplicationStatus.EFFECTIVE, // A8 扩展：重试前回读发现已实际生效，直接收口
   ],
   [DepartmentApplicationStatus.WITHDRAWN]: [],
   [DepartmentApplicationStatus.REJECTED]: [],

@@ -110,9 +110,9 @@ export class ExecuteDepartmentApplicationCommand {
     const nextStatus =
       result.outcome === 'CONFIRMED'
         ? DepartmentApplicationStatus.EFFECTIVE
-        : result.outcome === 'COMPENSATED'
+        : result.outcome === 'COMPENSATED' || result.outcome === 'ANOMALY'
           ? DepartmentApplicationStatus.EXEC_FAILED_ORIGINAL_PRESERVED
-          : DepartmentApplicationStatus.EXECUTION_PROCESSING; // KEPT_PROCESSING / ANOMALY 保持执行处理中
+          : DepartmentApplicationStatus.EXECUTION_PROCESSING; // KEPT_PROCESSING 保持执行处理中
 
     if (nextStatus === app.status) return app;
 
@@ -137,7 +137,9 @@ export class ExecuteDepartmentApplicationCommand {
             nextStatus === DepartmentApplicationStatus.EFFECTIVE
               ? '全部目标关系回读确认，申请生效'
               : nextStatus === DepartmentApplicationStatus.EXEC_FAILED_ORIGINAL_PRESERVED
-                ? '执行失败：补偿已完成且原关系保持，可人工重试'
+                ? result.outcome === 'ANOMALY'
+                  ? '执行遇同步异常：关系段已转入同步异常，须人工处置后重试'
+                  : '执行失败：补偿已完成且原关系保持，可人工重试'
                 : `结算结果 ${result.outcome}，保持执行处理中`,
         },
       ],
@@ -158,13 +160,17 @@ export class ExecuteDepartmentApplicationCommand {
         nextStatus === DepartmentApplicationStatus.EFFECTIVE
           ? '申请已生效'
           : nextStatus === DepartmentApplicationStatus.EXEC_FAILED_ORIGINAL_PRESERVED
-            ? '申请执行失败（原关系保持）'
+            ? result.outcome === 'ANOMALY'
+              ? '申请执行遇同步异常（需人工处置）'
+              : '申请执行失败（原关系保持）'
             : '申请执行处理中',
       body:
         nextStatus === DepartmentApplicationStatus.EFFECTIVE
           ? '部门关系变更已全部回读确认并生效。'
           : nextStatus === DepartmentApplicationStatus.EXEC_FAILED_ORIGINAL_PRESERVED
-            ? '外部同步失败但你的原有关系保持不变，可由管理员重试。'
+            ? result.outcome === 'ANOMALY'
+              ? '执行产生同步异常，关系已冻结最小权限，须由管理员按 Casdoor 当前值修复后重试。'
+              : '外部同步失败但你的原有关系保持不变，可由管理员重试。'
             : '关系变更仍在回读确认中。',
     });
     return next;
@@ -383,11 +389,34 @@ export class ExecuteDepartmentApplicationCommand {
   }
 
   /** 回读判断是否已实际全部达成（重试前先回读 ORG-027） */
-  private async checkAlreadyEffective(_app: DepartmentApplication): Promise<boolean> {
-    void _app;
-    // 上次失败的补偿语义保证原关系保持；"已实际生效"仅发生在补偿未确认的
-    // 同步异常路径，该路径下申请仍为执行处理中而非失败态。此处恒 false，
-    // 由 settleChange 的回读事实判定隐式覆盖。
+  private async checkAlreadyEffective(app: DepartmentApplication): Promise<boolean> {
+    // ANOMALY 人工修复（resolve-relation-anomaly）后，目标关系段已按 Casdoor
+    // 当前值收口。若申请目标已实际达成（加入侧已生效/移出侧已移除），则直接
+    // 收口生效，避免对已生效关系重复执行触发 IFC-ERR-007 冲突。
+    if (app.type === 'JOIN' || app.type === 'TRANSFER') {
+      if (app.targetDeptId !== null) {
+        const segs = await this.relRepo.listBySubjectAndRef(
+          app.clubId,
+          app.applicantId,
+          app.targetDeptId,
+        );
+        if (segs.some((r) => r.status === DepartmentRelationStatus.CURRENTLY_VALID)) {
+          return true;
+        }
+      }
+    }
+    if (app.type === 'LEAVE' || app.type === 'TRANSFER') {
+      for (const d of app.leaveDeptIds) {
+        const segs = await this.relRepo.listBySubjectAndRef(app.clubId, app.applicantId, d);
+        const hasActive = segs.some(
+          (r) =>
+            ACTIVE_RELATION_STATUSES.includes(r.status) &&
+            r.status !== DepartmentRelationStatus.SYNC_ANOMALY,
+        );
+        if (hasActive) return false; // 移出目标仍有有效段：未达成
+      }
+      return true; // 全部移出目标已无有效段：移出已达成
+    }
     return false;
   }
 }

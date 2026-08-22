@@ -714,6 +714,38 @@ describe('MEM-002 R7 外部直接增删对账（以 Casdoor 当前结果为准�
     assert.equal(extAfter.length, 1); // 不重复历史
   });
 
+  it('HISTORICAL_ENDED 段被新事件（不同 upstreamAt）重复外部移除：幂等保持不崩溃', async () => {
+    // 成员曾退出（历史结束段），Casdoor 再次发起移除（不同上游时间＝新事件，幂等键不同）
+    const port = new StubCasdoorPort([], [], [false, false]);
+    const repo = new InMemoryDepartmentRelationRepository();
+    const notify = new InMemoryMembershipNotificationPort();
+    const cmd = new ReconcileExternalRelationCommand(repo, port, notify);
+    const first = await cmd.execute({
+      clubId: 'c1',
+      subjectId: 'stu1',
+      kind: 'DEPARTMENT',
+      refId: 'dx',
+      observedDirection: 'remove',
+      upstreamAt: '2026-08-01T01:00:00.000Z',
+    });
+    assert.equal(first.settledAs, 'HISTORICAL_ENDED');
+    assert.equal(first.relation.status, 'HISTORICAL_ENDED');
+    // 新事件（不同 upstreamAt）再次移除：不得触发非法 HISTORICAL_ENDED -> HISTORICAL_ENDED 转换
+    const again = await cmd.execute({
+      clubId: 'c1',
+      subjectId: 'stu1',
+      kind: 'DEPARTMENT',
+      refId: 'dx',
+      observedDirection: 'remove',
+      upstreamAt: '2026-08-05T00:00:00.000Z',
+    });
+    assert.equal(again.settledAs, 'HISTORICAL_ENDED');
+    assert.equal(again.relation.status, 'HISTORICAL_ENDED');
+    // 历史仅追加一次（新事件追加为新历史），不重复覆盖原事件
+    const extEvents = again.relation.history.filter((e) => e.type === 'EXTERNAL_CHANGE');
+    assert.equal(extEvents.length, 2);
+  });
+
   it('非法状态（零负责人/孤立关系）→ 同步异常＋最小权限收敛＋告警', async () => {
     const port = new StubCasdoorPort([], [], [true]);
     const repo = new InMemoryDepartmentRelationRepository();

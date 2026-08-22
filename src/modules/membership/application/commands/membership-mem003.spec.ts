@@ -22,6 +22,7 @@ import {
   ExecuteDepartmentApplicationCommand,
   applicationGroupIdOf,
 } from './execute-department-application.command';
+import { ResolveRelationAnomalyCommand } from './resolve-relation-anomaly.command';
 import { DepartmentApplicationStateMachine } from '../../domain/state-machines/department-application.state-machine';
 
 class StubCasdoorPort implements MembershipCasdoorPort {
@@ -542,6 +543,51 @@ describe('MEM-003 A7/A8 失败保持原关系与人工重试', () => {
     // 重试建立新段（旧补偿段保留为无关系历史），当前有效段须存在
     const rels = await rig.relRepo.listBySubjectAndRef('c1', 'stu1', 'd2');
     assert.ok(rels.some((r) => r.status === 'CURRENTLY_VALID'));
+  });
+
+  it('ANOMALY 结算：申请收口到失败保持原关系（可重试）；人工修复关系后重试直接收口生效', async () => {
+    // 执行写入失败且补偿未确认 → ANOMALY，关系段转同步异常
+    const rig = makeRig(
+      [[{ target: { kind: 'DEPARTMENT', refId: 'd2' }, ok: false, confirmed: false }]],
+      [[{ target: { kind: 'DEPARTMENT', refId: 'd2' }, ok: false, confirmed: false }]],
+    );
+    const app = await rig.submit.execute({
+      clubId: 'c1',
+      applicantId: 'stu1',
+      type: 'JOIN',
+      targetDeptId: 'd2',
+    });
+    await rig.decide.execute({
+      applicationId: app.applicationId,
+      operatorId: 'deptLeadD2',
+      decision: 'APPROVE',
+    });
+    const failed = await rig.executeApp.execute(app.applicationId, 'leader1');
+    // 不再卡死 EXECUTION_PROCESSING：ANOMALY 映射到失败保持原关系，可人工重试收口
+    assert.equal(failed.status, 'EXEC_FAILED_ORIGINAL_PRESERVED');
+    const segs = await rig.relRepo.listBySubjectAndRef('c1', 'stu1', 'd2');
+    assert.equal(segs[0]?.status, 'SYNC_ANOMALY');
+
+    // 人工通过 resolve-relation-anomaly 按 Casdoor 当前值修复关系段为当前有效
+    const resolve = new ResolveRelationAnomalyCommand(
+      rig.relRepo,
+      rig.port,
+      rig.access,
+      rig.notify,
+    );
+    await resolve.execute({
+      clubId: 'c1',
+      relationId: segs[0].relationId,
+      operatorId: 'leader1',
+      resolution: 'CONFIRM_ACTIVE',
+      riskReviewed: true,
+    });
+
+    // retry 时检测到目标关系已实际生效 → 直接收口生效，不重复执行
+    const done = await rig.executeApp.retry(app.applicationId, 'leader1');
+    assert.equal(done.status, 'EFFECTIVE');
+    const relAfter = await rig.relRepo.listBySubjectAndRef('c1', 'stu1', 'd2');
+    assert.ok(relAfter.some((r) => r.status === 'CURRENTLY_VALID'));
   });
 
   /** 第一次执行失败、随后队列恢复成功的夹具 */
