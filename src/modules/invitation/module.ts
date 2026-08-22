@@ -24,7 +24,15 @@ import { InMemoryInvitationRepository } from './infrastructure/invitation-reposi
 import { ROUTINE_INVITATION_REPOSITORY } from './infrastructure/routine-invitation-repository';
 import { InMemoryRoutineInvitationRepository } from './infrastructure/routine-invitation-repository';
 import { CASDOOR_RELATION_PORT } from './infrastructure/casdoor-relation-port';
-import { DefaultCasdoorRelationPort } from './infrastructure/casdoor-relation-port';
+import { OrgBackedCasdoorRelationPort } from './infrastructure/org-backed-casdoor-relation';
+import { OrganizationModule } from '../organization/module';
+import {
+  GROUP_MAPPING_REGISTRY,
+} from '../organization/application/ports';
+import { CasdoorModule } from '../../platform/casdoor/module';
+import {
+  CASDOOR_WRITE_PORT,
+} from '../../platform/casdoor/contracts/ports';
 
 /**
  * 领域模块：邀请与成员激活（4.5，SRS-SM-INV-001、SRS-SM-MEM-004）。
@@ -40,6 +48,7 @@ import { DefaultCasdoorRelationPort } from './infrastructure/casdoor-relation-po
  * - 重发 = 全新邀请对象，旧邀请不修改保留；接受和退出历史不得删除。
  */
 @Module({
+  imports: [OrganizationModule, CasdoorModule],
   providers: [
     // 领域规则（纯规则）
     InvitationStateMachine,
@@ -48,7 +57,11 @@ import { DefaultCasdoorRelationPort } from './infrastructure/casdoor-relation-po
     // 基础设施端口（生产替换为 PostgreSQL/Casdoor 适配实现）
     { provide: INVITATION_REPOSITORY, useClass: InMemoryInvitationRepository },
     { provide: ROUTINE_INVITATION_REPOSITORY, useClass: InMemoryRoutineInvitationRepository },
-    { provide: CASDOOR_RELATION_PORT, useClass: DefaultCasdoorRelationPort },
+    {
+      provide: CASDOOR_RELATION_PORT,
+      useFactory: (mappings, casdoor) => new OrgBackedCasdoorRelationPort(mappings, casdoor),
+      inject: [GROUP_MAPPING_REGISTRY, CASDOOR_WRITE_PORT],
+    },
     // 应用命令与查询
     CreateInvitationCommand,
     AcceptInvitationCommand,
