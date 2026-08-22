@@ -103,7 +103,9 @@ export class JointTaskEnqueuer {
       taskType: TaskType.JOINT_CHANNEL_AUTO_CLOSE,
       activityId,
       activityRevision,
-      idempotencyKey: `joint-channel-auto-close:${activityId}:${windowId}`,
+      // 同窗口可被延长/重开多次，每次新截止对应独立任务，故以截止时刻参与幂等键，
+      // 避免延长截止后新调度被旧 idempotencyKey 幂等去重而丢失 auto-close。
+      idempotencyKey: `joint-channel-auto-close:${activityId}:${windowId}:${deadline.toISOString()}`,
       notBefore: deadline,
     });
   }

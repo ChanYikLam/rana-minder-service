@@ -246,13 +246,13 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     },
     {
       provide: RESUME_JOINT_CHANNEL_USE_CASE,
-      useFactory: (repo, auth) => new DefaultResumeJointChannelUseCase(repo, auth),
-      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
+      useFactory: (repo, auth, tasks) => new DefaultResumeJointChannelUseCase(repo, auth, tasks),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION, JointTaskEnqueuer],
     },
     {
       provide: EXTEND_JOINT_CHANNEL_USE_CASE,
-      useFactory: (repo, auth) => new DefaultExtendJointChannelUseCase(repo, auth),
-      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
+      useFactory: (repo, auth, tasks) => new DefaultExtendJointChannelUseCase(repo, auth, tasks),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION, JointTaskEnqueuer],
     },
     {
       provide: CLOSE_JOINT_CHANNEL_USE_CASE,
@@ -261,8 +261,8 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     },
     {
       provide: REOPEN_JOINT_CHANNEL_USE_CASE,
-      useFactory: (repo, auth) => new DefaultReopenJointChannelUseCase(repo, auth),
-      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
+      useFactory: (repo, auth, tasks) => new DefaultReopenJointChannelUseCase(repo, auth, tasks),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION, JointTaskEnqueuer],
     },
 
     // ----- 联合申请（JNT-003） -----

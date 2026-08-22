@@ -48,6 +48,7 @@ import {
   requireStringArray,
   requireStringOrNull,
 } from '../http/joint-request-validation';
+import { jointErrors } from '../../application/errors';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 
 @UseGuards(JointAuthGuard)
@@ -346,6 +347,11 @@ export class OrgJointNestController {
     const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
     const jointActivityId = requireString(input.jointActivityId, 'jointActivityId');
     const jointApplicationId = requireString(input.jointApplicationId, 'jointApplicationId');
+    if (jointApplicationId !== applicationId) {
+      throw jointErrors.validation(
+        '路径 applicationId 与请求体 jointApplicationId 不一致，请检查后重试',
+      );
+    }
     const scheduledAt = requireDate(input.scheduledAt, 'scheduledAt');
     const location = requireString(input.location, 'location');
     const method = requireString(input.method, 'method');

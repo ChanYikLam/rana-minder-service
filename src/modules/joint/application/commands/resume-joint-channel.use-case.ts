@@ -9,6 +9,7 @@ import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
 import { assertOrgScope } from '../require-org-scope';
+import type { JointTaskEnqueuer } from '../../infrastructure/joint-task-enqueuer';
 
 export interface ResumeJointChannelInput {
   readonly jointActivityId: string;
@@ -27,6 +28,7 @@ export class DefaultResumeJointChannelUseCase implements ResumeJointChannelUseCa
   constructor(
     private readonly repository: JointRepository,
     private readonly authorization: JointAuthorizationPort,
+    private readonly tasks: JointTaskEnqueuer,
   ) {}
 
   async execute(input: ResumeJointChannelInput): Promise<void> {
@@ -48,9 +50,10 @@ export class DefaultResumeJointChannelUseCase implements ResumeJointChannelUseCa
       throw jointErrors.notFound('联合报名通道');
     }
     const channel = JointChannel.fromSnapshot(channelSnap);
+    const windowId = input.windowId ?? randomUUID();
     if (
       !channel.resume(new JointChannelStateMachine(), {
-        windowId: input.windowId ?? randomUUID(),
+        windowId,
         deadline: input.deadline,
         now: input.now,
       })
@@ -58,5 +61,13 @@ export class DefaultResumeJointChannelUseCase implements ResumeJointChannelUseCa
       throw jointErrors.preconditionFailed('联合报名通道恢复失败');
     }
     await this.repository.saveChannel(channel.toSnapshot(), channelSnap.revisionNumber);
+
+    // 恢复新窗口后须调度 auto-close 到新截止，否则新窗口不会被自动关闭。
+    await this.tasks.scheduleChannelAutoClose(
+      input.jointActivityId,
+      channel.toSnapshot().revisionNumber,
+      windowId,
+      input.deadline,
+    );
   }
 }

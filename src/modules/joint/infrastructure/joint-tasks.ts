@@ -6,6 +6,8 @@
  */
 
 import type { JointRepository } from '../application/ports/joint-repository.port';
+import type { RlsScope } from '../../../shared/db-adapter';
+import { JointUnitOfWork } from './unit-of-work';
 
 import { JointActivity } from '../domain/models/joint-activity';
 import { JointParticipant } from '../domain/models/joint-participant';
@@ -55,7 +57,11 @@ export interface JointTaskPayload {
 
 export interface JointTaskDeps {
   readonly repository: JointRepository;
+  readonly uow: JointUnitOfWork;
 }
+
+/** 任务处理器运行的事务作用域（联合数据首版未启用 RLS，使用 unprotected） */
+const TASK_RLS_SCOPE: RlsScope = { kind: 'unprotected' };
 
 /** 终态/强制结束后的统一归档逻辑 */
 async function archiveJointActivity(
@@ -92,85 +98,95 @@ async function archiveJointActivity(
 }
 
 export function createJointTaskHandlers(deps: JointTaskDeps): Record<string, JointTaskHandler> {
-  const { repository } = deps;
+  const { repository, uow } = deps;
 
   return {
     'joint-confirm-deadline-scan': async ({ activityId }) => {
-      const now = new Date();
-      const activity = await repository.loadActivity(activityId);
-      if (!activity) {
-        return;
-      }
-      const participants = await repository.loadParticipantsByActivity(activityId);
-      const machine = new JointParticipantStateMachine();
-      for (const snap of participants) {
-        if (snap.status !== JointParticipantStatus.CONFIRMED) {
-          continue;
+      await uow.run(TASK_RLS_SCOPE, async () => {
+        const now = new Date();
+        const activity = await repository.loadActivity(activityId);
+        if (!activity) {
+          return;
         }
-        const deadlineExceeded =
-          activity.confirmDeadline !== null && now.getTime() > activity.confirmDeadline.getTime();
-        if (snap.roundId !== activity.confirmRound || deadlineExceeded) {
-          const participant = JointParticipant.fromSnapshot(snap);
-          const ok = participant.markStale(machine, now);
-          if (ok) {
-            await repository.saveParticipant(participant.toSnapshot(), snap.revisionNumber);
+        const participants = await repository.loadParticipantsByActivity(activityId);
+        const machine = new JointParticipantStateMachine();
+        for (const snap of participants) {
+          if (snap.status !== JointParticipantStatus.CONFIRMED) {
+            continue;
+          }
+          const deadlineExceeded =
+            activity.confirmDeadline !== null && now.getTime() > activity.confirmDeadline.getTime();
+          if (snap.roundId !== activity.confirmRound || deadlineExceeded) {
+            const participant = JointParticipant.fromSnapshot(snap);
+            const ok = participant.markStale(machine, now);
+            if (ok) {
+              await repository.saveParticipant(participant.toSnapshot(), snap.revisionNumber);
+            }
           }
         }
-      }
+      });
     },
 
     'joint-channel-auto-close': async ({ activityId }) => {
-      const now = new Date();
-      const channelId = JointChannel.channelId(activityId);
-      const snap = await repository.loadChannel(channelId);
-      if (!snap || snap.status !== JointChannelStatus.OPEN || !snap.currentWindow) {
-        return;
-      }
-      if (snap.currentWindow.deadline.getTime() <= now.getTime()) {
-        const channel = JointChannel.fromSnapshot(snap);
-        const ok = channel.close(new JointChannelStateMachine(), now);
-        if (ok) {
-          await repository.saveChannel(channel.toSnapshot(), snap.revisionNumber);
+      await uow.run(TASK_RLS_SCOPE, async () => {
+        const now = new Date();
+        const channelId = JointChannel.channelId(activityId);
+        const snap = await repository.loadChannel(channelId);
+        if (!snap || snap.status !== JointChannelStatus.OPEN || !snap.currentWindow) {
+          return;
         }
-      }
+        if (snap.currentWindow.deadline.getTime() <= now.getTime()) {
+          const channel = JointChannel.fromSnapshot(snap);
+          const ok = channel.close(new JointChannelStateMachine(), now);
+          if (ok) {
+            await repository.saveChannel(channel.toSnapshot(), snap.revisionNumber);
+          }
+        }
+      });
     },
 
     'joint-archive-terminal': async ({ activityId }) => {
-      const now = new Date();
-      const activity = await repository.loadActivity(activityId);
-      if (!activity || !JointActivity.fromSnapshot(activity).isTerminal()) {
-        return;
-      }
-      await archiveJointActivity(repository, activityId, now);
+      await uow.run(TASK_RLS_SCOPE, async () => {
+        const now = new Date();
+        const activity = await repository.loadActivity(activityId);
+        if (!activity || !JointActivity.fromSnapshot(activity).isTerminal()) {
+          return;
+        }
+        await archiveJointActivity(repository, activityId, now);
+      });
     },
 
     'joint-invitation-timeout': async ({ activityId, invitationId }) => {
-      const now = new Date();
-      // 每个邀请独立调度（payload 携带 invitationId），只超时指定邀请，
-      // 不得按活动批量超时全部待处理邀请（避免误伤未到期邀请）。
-      const conclusions = await repository.loadConclusionsByActivity(activityId);
-      const machine = new JointConclusionStateMachine();
-      for (const snap of conclusions) {
-        if (snap.status !== JointConclusionStatus.INVITE_PENDING) {
-          continue;
+      await uow.run(TASK_RLS_SCOPE, async () => {
+        const now = new Date();
+        // 每个邀请独立调度（payload 携带 invitationId），只超时指定邀请，
+        // 不得按活动批量超时全部待处理邀请（避免误伤未到期邀请）。
+        const conclusions = await repository.loadConclusionsByActivity(activityId);
+        const machine = new JointConclusionStateMachine();
+        for (const snap of conclusions) {
+          if (snap.status !== JointConclusionStatus.INVITE_PENDING) {
+            continue;
+          }
+          if (invitationId !== undefined && snap.invitationId !== invitationId) {
+            continue;
+          }
+          const conclusion = JointConclusion.fromSnapshot(snap);
+          if (conclusion.timeoutInvite(machine, now)) {
+            await repository.saveConclusion(conclusion.toSnapshot(), snap.revisionNumber);
+          }
         }
-        if (invitationId !== undefined && snap.invitationId !== invitationId) {
-          continue;
-        }
-        const conclusion = JointConclusion.fromSnapshot(snap);
-        if (conclusion.timeoutInvite(machine, now)) {
-          await repository.saveConclusion(conclusion.toSnapshot(), snap.revisionNumber);
-        }
-      }
+      });
     },
 
     'joint-force-end-cleanup': async ({ activityId }) => {
-      const now = new Date();
-      const activity = await repository.loadActivity(activityId);
-      if (!activity || activity.status !== JointActivityStatus.FORCE_ENDED) {
-        return;
-      }
-      await archiveJointActivity(repository, activityId, now);
+      await uow.run(TASK_RLS_SCOPE, async () => {
+        const now = new Date();
+        const activity = await repository.loadActivity(activityId);
+        if (!activity || activity.status !== JointActivityStatus.FORCE_ENDED) {
+          return;
+        }
+        await archiveJointActivity(repository, activityId, now);
+      });
     },
   };
 }

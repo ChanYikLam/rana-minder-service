@@ -13,6 +13,7 @@ import {
 } from '../../../platform/tasks/contracts/task-ports';
 import { JOINT_REPOSITORY } from '../tokens';
 import type { JointRepository } from '../application/ports/joint-repository.port';
+import { JointUnitOfWork } from './unit-of-work';
 import { createJointTaskHandlers, registerJointTasks } from './joint-tasks';
 
 @Injectable()
@@ -22,9 +23,13 @@ export class JointTaskRegistrar implements OnModuleInit {
     private readonly registry: TaskProcessorRegistry,
     @Inject(JOINT_REPOSITORY)
     private readonly repository: JointRepository,
+    private readonly uow: JointUnitOfWork,
   ) {}
 
   onModuleInit(): void {
-    registerJointTasks(this.registry, createJointTaskHandlers({ repository: this.repository }));
+    registerJointTasks(
+      this.registry,
+      createJointTaskHandlers({ repository: this.repository, uow: this.uow }),
+    );
   }
 }

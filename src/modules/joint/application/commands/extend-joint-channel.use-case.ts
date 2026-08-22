@@ -8,6 +8,7 @@ import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
 import { assertOrgScope } from '../require-org-scope';
+import type { JointTaskEnqueuer } from '../../infrastructure/joint-task-enqueuer';
 
 export interface ExtendJointChannelInput {
   readonly jointActivityId: string;
@@ -25,6 +26,7 @@ export class DefaultExtendJointChannelUseCase implements ExtendJointChannelUseCa
   constructor(
     private readonly repository: JointRepository,
     private readonly authorization: JointAuthorizationPort,
+    private readonly tasks: JointTaskEnqueuer,
   ) {}
 
   async execute(input: ExtendJointChannelInput): Promise<void> {
@@ -52,5 +54,13 @@ export class DefaultExtendJointChannelUseCase implements ExtendJointChannelUseCa
       throw jointErrors.preconditionFailed('联合报名通道延长失败');
     }
     await this.repository.saveChannel(channel.toSnapshot(), channelSnap.revisionNumber);
+
+    // 延长截止后须重新调度 auto-close 到新截止，否则通道在延长后的截止不会被自动关闭。
+    await this.tasks.scheduleChannelAutoClose(
+      input.jointActivityId,
+      channel.toSnapshot().revisionNumber,
+      channel.toSnapshot().currentWindow?.windowId ?? '',
+      input.deadline,
+    );
   }
 }
