@@ -11,9 +11,8 @@ import {
   TASK_PROCESSOR_REGISTRY,
   type TaskProcessorRegistry,
 } from '../../../platform/tasks/contracts/task-ports';
-import { JOINT_REPOSITORY, JOINT_CONFIG_PORT } from '../tokens';
+import { JOINT_REPOSITORY } from '../tokens';
 import type { JointRepository } from '../application/ports/joint-repository.port';
-import type { JointConfigPort } from '../application/ports/joint-data-access.port';
 import { createJointTaskHandlers, registerJointTasks } from './joint-tasks';
 
 @Injectable()
@@ -23,14 +22,9 @@ export class JointTaskRegistrar implements OnModuleInit {
     private readonly registry: TaskProcessorRegistry,
     @Inject(JOINT_REPOSITORY)
     private readonly repository: JointRepository,
-    @Inject(JOINT_CONFIG_PORT)
-    private readonly config: JointConfigPort,
   ) {}
 
   onModuleInit(): void {
-    registerJointTasks(
-      this.registry,
-      createJointTaskHandlers({ repository: this.repository, config: this.config }),
-    );
+    registerJointTasks(this.registry, createJointTaskHandlers({ repository: this.repository }));
   }
 }

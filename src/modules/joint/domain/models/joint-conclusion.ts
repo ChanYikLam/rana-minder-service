@@ -122,7 +122,9 @@ export class JointConclusion {
     const nextVersion = this.snapshot.version + 1;
     this.snapshot = {
       ...this.snapshot,
-      status: JointConclusionStatus.EDITABLE,
+      // 编辑不改变所处阶段：处于待复核（REVIEW_PENDING）时编辑仍保留待复核标记，
+      // 避免借编辑绕过复核流程；处于可编辑（EDITABLE）时保持不变。
+      status: this.snapshot.status,
       decision: input.decision,
       note: input.note ?? null,
       version: nextVersion,

@@ -39,6 +39,15 @@ import type { JointController } from '../controllers/joint.controller';
 import { JointAuthGuard } from './joint-auth.guard';
 import { toHttpResponse, actorFromRequest } from './joint-response-mapper';
 import { parseJointRequestEnvelope } from '../http/joint-envelope';
+import {
+  requireDate,
+  requireNumber,
+  requireOneOf,
+  requireRecord,
+  requireString,
+  requireStringArray,
+  requireStringOrNull,
+} from '../http/joint-request-validation';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 
 @UseGuards(JointAuthGuard)
@@ -61,18 +70,17 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as {
-      title: string;
-      description?: string | null;
-      confirmDeadline: string;
-      clubIds: string[];
-    };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const title = requireString(input.title, 'title');
+    const confirmDeadline = requireDate(input.confirmDeadline, 'confirmDeadline');
+    const clubIds = requireStringArray(input.clubIds, 'clubIds');
+    const description = requireStringOrNull(input.description, 'description');
     return toHttpResponse(
       await this.controller.initiateActivity(this.actor(request), {
-        title: input.title,
-        description: input.description ?? null,
-        confirmDeadline: new Date(input.confirmDeadline),
-        clubIds: input.clubIds,
+        title,
+        description,
+        confirmDeadline,
+        clubIds,
       }),
     );
   }
@@ -84,11 +92,12 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as { clubId: string };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const clubId = requireString(input.clubId, 'clubId');
     return toHttpResponse(
       await this.controller.proposeParticipation(this.actor(request), {
         activityId,
-        clubId: input.clubId,
+        clubId,
       }),
     );
   }
@@ -100,11 +109,12 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as { clubId: string };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const clubId = requireString(input.clubId, 'clubId');
     return toHttpResponse(
       await this.controller.confirmParticipation(this.actor(request), {
         activityId,
-        clubId: input.clubId,
+        clubId,
       }),
     );
   }
@@ -152,11 +162,12 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as { reason: string };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const reason = requireString(input.reason, 'reason');
     return toHttpResponse(
       await this.controller.forceEndActivity(this.actor(request), {
         activityId,
-        reason: input.reason,
+        reason,
       }),
     );
   }
@@ -199,12 +210,13 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as { suspendedForMs: number };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const suspendedForMs = requireNumber(input.suspendedForMs, 'suspendedForMs');
     return toHttpResponse(
       await this.controller.resumeParticipation(this.actor(request), {
         activityId,
         clubId: participantClubId,
-        suspendedForMs: input.suspendedForMs,
+        suspendedForMs,
       }),
     );
   }
@@ -216,12 +228,14 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as { deadline: string; windowId?: string };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const deadline = requireDate(input.deadline, 'deadline');
+    const windowId = requireStringOrNull(input.windowId, 'windowId') ?? undefined;
     return toHttpResponse(
       await this.controller.openChannel(this.actor(request), {
         jointActivityId: activityId,
-        deadline: new Date(input.deadline),
-        windowId: input.windowId,
+        deadline,
+        windowId,
       }),
     );
   }
@@ -242,12 +256,14 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as { deadline: string; windowId?: string };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const deadline = requireDate(input.deadline, 'deadline');
+    const windowId = requireStringOrNull(input.windowId, 'windowId') ?? undefined;
     return toHttpResponse(
       await this.controller.resumeChannel(this.actor(request), {
         jointActivityId: activityId,
-        deadline: new Date(input.deadline),
-        windowId: input.windowId,
+        deadline,
+        windowId,
       }),
     );
   }
@@ -259,11 +275,12 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as { deadline: string };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const deadline = requireDate(input.deadline, 'deadline');
     return toHttpResponse(
       await this.controller.extendChannel(this.actor(request), {
         jointActivityId: activityId,
-        deadline: new Date(input.deadline),
+        deadline,
       }),
     );
   }
@@ -284,12 +301,14 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as { deadline: string; windowId?: string };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const deadline = requireDate(input.deadline, 'deadline');
+    const windowId = requireStringOrNull(input.windowId, 'windowId') ?? undefined;
     return toHttpResponse(
       await this.controller.reopenChannel(this.actor(request), {
         jointActivityId: activityId,
-        deadline: new Date(input.deadline),
-        windowId: input.windowId,
+        deadline,
+        windowId,
       }),
     );
   }
@@ -301,22 +320,21 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as {
-      jointActivityId: string;
-      jointApplicationId: string;
-      scheduledAt: string;
-      location: string;
-      method: string;
-      id?: string;
-    };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const jointActivityId = requireString(input.jointActivityId, 'jointActivityId');
+    const jointApplicationId = requireString(input.jointApplicationId, 'jointApplicationId');
+    const scheduledAt = requireDate(input.scheduledAt, 'scheduledAt');
+    const location = requireString(input.location, 'location');
+    const method = requireString(input.method, 'method');
+    const id = requireStringOrNull(input.id, 'id');
     return toHttpResponse(
       await this.controller.scheduleInterview(this.actor(request), {
-        jointActivityId: input.jointActivityId,
-        jointApplicationId: input.jointApplicationId,
-        scheduledAt: new Date(input.scheduledAt),
-        location: input.location,
-        method: input.method,
-        id: input.id,
+        jointActivityId,
+        jointApplicationId,
+        scheduledAt,
+        location,
+        method,
+        id: id ?? undefined,
       }),
     );
   }
@@ -348,11 +366,12 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as { reason: string };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const reason = requireString(input.reason, 'reason');
     return toHttpResponse(
       await this.controller.voidInterview(this.actor(request), {
         interviewId,
-        reason: input.reason,
+        reason,
       }),
     );
   }
@@ -364,15 +383,14 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as {
-      clubId: string;
-      values: Record<string, unknown>;
-    };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const clubId = requireString(input.clubId, 'clubId');
+    const values = requireRecord(input.values, 'values');
     return toHttpResponse(
       await this.controller.recordEvaluation(this.actor(request), {
         interviewId,
-        clubId: input.clubId,
-        values: input.values,
+        clubId,
+        values,
       }),
     );
   }
@@ -384,20 +402,19 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as {
-      jointActivityId: string;
-      jointApplicationId: string;
-      clubId: string;
-      decision: 'ADMIT' | 'TRANSFER' | 'REJECT';
-      note?: string | null;
-    };
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const jointActivityId = requireString(input.jointActivityId, 'jointActivityId');
+    const jointApplicationId = requireString(input.jointApplicationId, 'jointApplicationId');
+    const clubId = requireString(input.clubId, 'clubId');
+    const decision = requireOneOf(input.decision, 'decision', ['ADMIT', 'TRANSFER', 'REJECT']);
+    const note = requireStringOrNull(input.note, 'note');
     return toHttpResponse(
       await this.controller.editConclusion(this.actor(request), {
-        jointActivityId: input.jointActivityId,
-        jointApplicationId: input.jointApplicationId,
-        clubId: input.clubId,
-        decision: input.decision,
-        note: input.note ?? null,
+        jointActivityId,
+        jointApplicationId,
+        clubId,
+        decision,
+        note,
       }),
     );
   }

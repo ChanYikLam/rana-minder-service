@@ -19,6 +19,12 @@ import type { JointController } from '../controllers/joint.controller';
 import { JointAuthGuard } from './joint-auth.guard';
 import { toHttpResponse, actorFromRequest } from './joint-response-mapper';
 import { parseJointRequestEnvelope } from '../http/joint-envelope';
+import {
+  requireNumber,
+  requireRecord,
+  requireString,
+  requireStringOrNull,
+} from '../http/joint-request-validation';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 
 @UseGuards(JointAuthGuard)
@@ -55,17 +61,21 @@ export class ApplicantJointNestController {
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
-    const input = parseJointRequestEnvelope(body).input as {
-      formRef: { formId: string; submissionId: string; versionNumber: number };
-      consentSnapshotHash: string;
-      sharedNote?: string | null;
+    const input = requireRecord(parseJointRequestEnvelope(body).input, 'input');
+    const formRefRaw = requireRecord(input.formRef, 'formRef');
+    const formRef = {
+      formId: requireString(formRefRaw.formId, 'formRef.formId'),
+      submissionId: requireString(formRefRaw.submissionId, 'formRef.submissionId'),
+      versionNumber: requireNumber(formRefRaw.versionNumber, 'formRef.versionNumber'),
     };
+    const consentSnapshotHash = requireString(input.consentSnapshotHash, 'consentSnapshotHash');
+    const sharedNote = requireStringOrNull(input.sharedNote, 'sharedNote');
     return toHttpResponse(
       await this.controller.submitApplication(this.actor(request), {
         applicationId,
-        formRef: input.formRef,
-        consentSnapshotHash: input.consentSnapshotHash,
-        sharedNote: input.sharedNote ?? null,
+        formRef,
+        consentSnapshotHash,
+        sharedNote,
       }),
     );
   }

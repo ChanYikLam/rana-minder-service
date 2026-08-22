@@ -22,7 +22,6 @@ import {
   JOINT_AUTHORIZATION,
   JOINT_FORM_PORT,
   JOINT_INVITATION_PORT,
-  JOINT_CONFIG_PORT,
   JOINT_NOTIFICATION_PORT,
   JOINT_AUDIT_PORT,
   JOINT_AUTH_SESSION_PROVIDER,
@@ -75,7 +74,6 @@ import { PostgresJointRepository } from './infrastructure/postgres-joint.reposit
 import { NotWiredJointAuthorization } from './application/ports/joint-authorization.port';
 import { NotWiredJointForm } from './application/ports/joint-form.port';
 import { NotWiredJointInvitation } from './application/ports/joint-invitation.port';
-import { NotWiredJointConfig } from './application/ports/joint-config.port';
 import { NotWiredJointNotification } from './application/ports/joint-notification.port';
 import { NotWiredJointAudit } from './application/ports/joint-audit.port';
 
@@ -173,7 +171,6 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     { provide: JOINT_AUTHORIZATION, useClass: NotWiredJointAuthorization },
     { provide: JOINT_FORM_PORT, useClass: NotWiredJointForm },
     { provide: JOINT_INVITATION_PORT, useClass: NotWiredJointInvitation },
-    { provide: JOINT_CONFIG_PORT, useClass: NotWiredJointConfig },
     { provide: JOINT_NOTIFICATION_PORT, useClass: NotWiredJointNotification },
     { provide: JOINT_AUDIT_PORT, useClass: NotWiredJointAudit },
 

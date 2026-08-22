@@ -6,7 +6,6 @@
  */
 
 import type { JointRepository } from '../application/ports/joint-repository.port';
-import type { JointConfigPort } from '../application/ports/joint-data-access.port';
 
 import { JointActivity } from '../domain/models/joint-activity';
 import { JointParticipant } from '../domain/models/joint-participant';
@@ -50,7 +49,6 @@ export type JointTaskHandler = (payload: { activityId: string }) => Promise<void
 
 export interface JointTaskDeps {
   readonly repository: JointRepository;
-  readonly config: JointConfigPort;
 }
 
 /** 终态/强制结束后的统一归档逻辑 */

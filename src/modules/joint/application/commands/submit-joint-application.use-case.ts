@@ -57,18 +57,12 @@ export class DefaultSubmitJointApplicationUseCase implements SubmitJointApplicat
     const participantSnaps = await this.repository.loadParticipantsByActivity(
       applicationSnap.jointActivityId,
     );
-    let participatingClubIds = participantSnaps
-      .filter((p) => p.status === 'PARTICIPATING')
-      .map((p) => p.clubId);
-    if (participatingClubIds.length === 0) {
-      participatingClubIds = participantSnaps
-        .filter((p) => p.status === 'CONFIRMED')
-        .map((p) => p.clubId);
-    }
+    // 公布即固化参与社团集合（公布后不可新增/退出/替换，紧急停用不删除身份），
+    // 故以活动当前全部参与社团（冻结集合）作为同意哈希与快照来源，不再按
+    // PARTICIPATING/CONFIRMED 状态回溯，避免与公布锁定的集合不一致导致同意哈希错配。
+    const participatingClubIds = participantSnaps.map((p) => p.clubId);
 
-    const expectedConsentHash = ConsentVerifier.computeConsentHash(
-      [...new Set(participatingClubIds)].sort(),
-    );
+    const expectedConsentHash = ConsentVerifier.computeConsentHash(participatingClubIds);
 
     const resolved = await this.form.resolveSubmission({
       formId: input.formRef.formId,
