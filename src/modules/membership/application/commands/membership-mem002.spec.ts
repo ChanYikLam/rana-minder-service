@@ -327,6 +327,31 @@ describe('MEM-002 R1 发起变更（无关系/历史结束 → 变更处理中�
       /IFC-ERR-006/,
     );
   });
+
+  it('结束类变更（退部/免职）拒绝走变更命令：须经 R4 结束入口（防误建加入段）', async () => {
+    const rig = makeRig();
+    await seedValidRelation(rig, 'd1');
+    await assert.rejects(
+      rig.change.execute({
+        clubId: 'c1',
+        subjectId: 'stu1',
+        operatorId: 'leader1',
+        changeType: 'LEAVE_DEPARTMENT',
+        targetRefId: 'd1',
+      }),
+      /IFC-ERR-006/,
+    );
+    await assert.rejects(
+      rig.change.execute({
+        clubId: 'c1',
+        subjectId: 'stu1',
+        operatorId: 'leader1',
+        changeType: 'REVOKE_POSITION',
+        targetRefId: 'p1',
+      }),
+      /IFC-ERR-006/,
+    );
+  });
 });
 
 describe('MEM-002 R2/R3 变更收口（回读确认生效；失败补偿/异常）', () => {
