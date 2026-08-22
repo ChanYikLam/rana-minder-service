@@ -164,11 +164,18 @@ export class InterviewRecord {
   }
 
   resume(now: Date): boolean {
-    return this.transition(
-      new DefaultInterviewRecordStateMachine(),
-      InterviewRecordEvent.RESUME,
-      now,
-    );
+    if (
+      !this.transition(
+        new DefaultInterviewRecordStateMachine(),
+        InterviewRecordEvent.RESUME,
+        now,
+      )
+    ) {
+      return false;
+    }
+    // 恢复后清除暂缓截止，避免残留旧期限（数据一致性）
+    this.snapshot = { ...this.snapshot, holdUntil: null, updatedAt: now };
+    return true;
   }
 
   /** 记录面试官评价（轮次关闭前；应用层鉴权并控制可见性） */

@@ -63,6 +63,8 @@ describe('InterviewRecord (REC-005)', () => {
     assert.equal(iv.status, 'HOLD');
     assert.equal(iv.resume(NOW), true);
     assert.equal(iv.status, 'PENDING_SELECTION');
+    // 恢复后应清除暂缓截止，避免残留旧期限（数据一致性）
+    assert.equal(iv.toSnapshot().holdUntil, null);
   });
 
   it('记录评价（进行中可记录，终态不可）', () => {
