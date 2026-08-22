@@ -1,0 +1,11 @@
+# gitleaks 配置：忽略测试文件中的示例/模拟数据
+# 这两个匹配均为单元测试中的假数据，非真实密钥：
+#   - save-email-config.command.spec.ts: smtpSecret 测试值 'plain-secret-123'
+#   - dispatch-optional-email.command.spec.ts: secretFingerprint 测试值 'fp1234567890'
+
+[allowlist]
+description = "测试用例中的模拟密钥/指纹示例（非真实凭证）"
+regexes = [
+    '''plain-secret-123''',
+    '''fp1234567890''',
+]
