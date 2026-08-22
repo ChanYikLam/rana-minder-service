@@ -59,6 +59,9 @@ export class InterviewWorkflowUseCase {
   ) {}
 
   async schedule(input: ScheduleInterviewInput): Promise<InterviewWorkflowResult> {
+    if (input.scheduledAt < input.now) {
+      throw recruitmentErrors.validation('面试时间不可早于当前时间');
+    }
     const application = await this.repository.loadApplication(input.applicationId);
     if (application === null) {
       throw recruitmentErrors.notFound('招新申请');

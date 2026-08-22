@@ -154,6 +154,22 @@ describe('recruitment interview workflow (REC-005)', () => {
     );
   });
 
+  it('面试时间早于当前时间被拒绝', async () => {
+    await assert.rejects(
+      () =>
+        workflow.schedule({
+          applicationId,
+          roundId: 'round-past',
+          interviewerId: INTERVIEWER,
+          scheduledAt: new Date('2025-12-31T00:00:00Z'),
+          location: null,
+          actor: MANAGER,
+          now: NOW,
+        }),
+      { code: 'REC_VALIDATION' },
+    );
+  });
+
   it('跳轮须从待选择记录、填原因（SKIPPED）', async () => {
     const pending = InterviewRecord.createPending({
       id: 'iv-p',
