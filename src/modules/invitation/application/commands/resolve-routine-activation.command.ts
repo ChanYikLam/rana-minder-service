@@ -102,8 +102,7 @@ export class ResolveRoutineActivationCommand {
       lastError: result.reason ?? 'casdoor-composite-not-confirmed',
       relationTargets: invitation.relationTargets.map((t) => ({
         ...t,
-        confirmed:
-          t.kind === 'GROUP' ? result.groupConfirmed : result.departmentConfirmed,
+        confirmed: t.kind === 'GROUP' ? result.groupConfirmed : result.departmentConfirmed,
       })),
       history: [...invitation.history, { at: now, type: 'SYNC_FAILED', by: 'system' }],
     };
@@ -111,24 +110,16 @@ export class ResolveRoutineActivationCommand {
     return { invitation: retry, activated: false, anomaly: false };
   }
 
-  private async toAnomaly(
-    invitation: RoutineInvitation,
-  ): Promise<ResolveRoutineActivationResult> {
+  private async toAnomaly(invitation: RoutineInvitation): Promise<ResolveRoutineActivationResult> {
     const now = new Date().toISOString();
     const anomaly: RoutineInvitation = {
       ...invitation,
-      status: this.stateMachine.transition(
-        invitation.status,
-        'HIGH_PRIORITY_SYNC_ANOMALY',
-      ),
+      status: this.stateMachine.transition(invitation.status, 'HIGH_PRIORITY_SYNC_ANOMALY'),
       version: invitation.version + 1,
       syncStatus: Sync.ANOMALY,
       attemptCount: invitation.attemptCount + 1,
       lastError: 'unrecoverable-composite-sync',
-      history: [
-        ...invitation.history,
-        { at: now, type: 'HIGH_PRIORITY_ANOMALY', by: 'system' },
-      ],
+      history: [...invitation.history, { at: now, type: 'HIGH_PRIORITY_ANOMALY', by: 'system' }],
     };
     await this.repo.save(anomaly);
     // 通知本人、发送方和超级管理员由通知/审计模块承接（本命令只收口状态；维持最小权限）
