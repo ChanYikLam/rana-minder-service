@@ -64,9 +64,7 @@ import {
   InMemoryEmailTemplateStore,
 } from './infrastructure';
 import { OrgBackedNotificationPrivilegeVerifier } from './infrastructure/org-notification-privilege-verifier';
-import {
-  CURRENT_PERMISSIONS_PORT,
-} from '../organization/application/ports';
+import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
 import { OrganizationModule } from '../organization/module';
 import {
   CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,

@@ -6,9 +6,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type {
-  CurrentPermissionsPort,
-} from '../../organization/application/ports';
+import type { CurrentPermissionsPort } from '../../organization/application/ports';
 import { OrgBackedRecruitmentAuthorization } from './org-recruitment-authorization';
 
 class FakePermissions implements CurrentPermissionsPort {
@@ -53,10 +51,7 @@ describe('OrgBackedRecruitmentAuthorization（REC 授权映射）', () => {
   });
 
   it('非现任成员可提交申请；现任成员拒绝', async () => {
-    assert.equal(
-      await port.canSubmitApplication({ clubId: 'club-acm', subjectId: 'u_new' }),
-      true,
-    );
+    assert.equal(await port.canSubmitApplication({ clubId: 'club-acm', subjectId: 'u_new' }), true);
     assert.equal(
       await port.canSubmitApplication({ clubId: 'club-acm', subjectId: 'u_member' }),
       false,

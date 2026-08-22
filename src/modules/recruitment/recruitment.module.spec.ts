@@ -108,9 +108,7 @@ describe('RecruitmentModule 装配（DI 图 + 失败关闭）', () => {
 
   it('会话认证链路接入前：受保护端点统一 401（RejectAll 失败关闭）', async () => {
     const module = await createModule();
-    const provider = module.get<RecruitmentAuthSessionProvider>(
-      RECRUITMENT_AUTH_SESSION_PROVIDER,
-    );
+    const provider = module.get<RecruitmentAuthSessionProvider>(RECRUITMENT_AUTH_SESSION_PROVIDER);
     assert.equal(await provider.resolveSession({} as never), null);
     const guard = module.get(RecruitmentAuthGuard);
     await assert.rejects(

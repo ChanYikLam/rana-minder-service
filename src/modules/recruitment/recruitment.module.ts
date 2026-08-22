@@ -17,9 +17,7 @@ import { Module } from '@nestjs/common';
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { OrganizationModule } from '../organization/module';
-import {
-  CURRENT_PERMISSIONS_PORT,
-} from '../organization/application/ports';
+import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
 import { DB_ADAPTER } from '../../adapters/tokens';
 
 import {

@@ -10,9 +10,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type {
-  CurrentPermissionsPort,
-} from '../../organization/application/ports';
+import type { CurrentPermissionsPort } from '../../organization/application/ports';
 import { PLATFORM_SCOPE } from '../domain/models/form-scope';
 import { formScopeOf } from '../domain/models/form-scope';
 import { OrgBackedFormDesignPermission } from './org-form-design-permission';
@@ -37,13 +35,8 @@ class FakePermissions implements CurrentPermissionsPort {
 }
 
 describe('OrgBackedFormDesignPermission（FORM-002 映射）', () => {
-  const superadmin = new FakePermissions(
-    new Map(),
-    new Set(['u_root']),
-  );
-  const leader = new FakePermissions(
-    new Map([['u_leader@club-acm', ['club:recruitment:manage']]]),
-  );
+  const superadmin = new FakePermissions(new Map(), new Set(['u_root']));
+  const leader = new FakePermissions(new Map([['u_leader@club-acm', ['club:recruitment:manage']]]));
   const plain = new FakePermissions();
 
   it('platform 作用域：超管可设计，普通主体拒绝', async () => {
@@ -73,10 +66,7 @@ describe('OrgBackedFormDesignPermission（FORM-002 映射）', () => {
   it('department 作用域：fail-closed（ORG-035 契约未落地前不放行）', async () => {
     const port = new OrgBackedFormDesignPermission(leader);
     assert.equal(
-      await port.canDesign(
-        { subjectId: 'u_leader' },
-        formScopeOf('department', 'club-acm'),
-      ),
+      await port.canDesign({ subjectId: 'u_leader' }, formScopeOf('department', 'club-acm')),
       false,
     );
   });
