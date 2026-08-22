@@ -31,6 +31,9 @@ export class DefaultGetJointInterviewUseCase implements GetJointInterviewUseCase
     if (applicationSnap === null) {
       throw jointErrors.notFound('联合申请');
     }
+    if (applicationSnap.applicantId !== input.subjectId) {
+      throw jointErrors.forbidden('无权查看该联合面试');
+    }
     if (
       !(await this.authorization.canViewInterview({
         subjectId: input.subjectId,

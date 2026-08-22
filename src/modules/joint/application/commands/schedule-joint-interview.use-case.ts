@@ -8,6 +8,7 @@ import { JointInterviewStateMachine } from '../../domain/state-machines/joint-in
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface ScheduleJointInterviewInput {
   readonly jointActivityId: string;
@@ -15,6 +16,7 @@ export interface ScheduleJointInterviewInput {
   readonly scheduledAt: Date;
   readonly location: string;
   readonly method: string;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
   readonly id?: string;
@@ -39,11 +41,14 @@ export class DefaultScheduleJointInterviewUseCase implements ScheduleJointInterv
       !(await this.authorization.canManageInvitation({
         activityId: input.jointActivityId,
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'INVITE',
       }))
     ) {
       throw jointErrors.forbidden('仅授权用户可安排联合面试');
     }
+
+    await assertOrgScope(this.repository, input.jointActivityId, input.actingClubId);
 
     const applicationSnap = await this.repository.loadApplication(input.jointApplicationId);
     if (applicationSnap === null) {

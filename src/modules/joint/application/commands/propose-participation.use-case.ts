@@ -7,10 +7,12 @@ import { JointParticipant } from '../../domain/models/joint-participant';
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface ProposeParticipationInput {
   readonly activityId: string;
   readonly clubId: string;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
   readonly id?: string;
@@ -34,10 +36,13 @@ export class DefaultProposeParticipationUseCase implements ProposeParticipationU
     const activity = JointActivity.fromSnapshot(activitySnap);
     activity.assertNotTerminal();
 
+    await assertOrgScope(this.repository, input.activityId, input.actingClubId);
+
     if (
       !(await this.authorization.canManageParticipation({
         activityId: input.activityId,
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'MANAGE_PARTICIPATION',
       }))
     ) {

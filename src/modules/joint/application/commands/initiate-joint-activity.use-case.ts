@@ -18,6 +18,7 @@ export interface InitiateJointActivityInput {
   readonly description?: string | null;
   readonly confirmDeadline: Date;
   readonly clubIds: string[];
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
   readonly id?: string;
@@ -42,6 +43,7 @@ export class DefaultInitiateJointActivityUseCase implements InitiateJointActivit
     if (
       !(await this.authorization.canInitiateJoint({
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'INITIATE',
       }))
     ) {
@@ -49,6 +51,9 @@ export class DefaultInitiateJointActivityUseCase implements InitiateJointActivit
     }
     if (!Array.isArray(input.clubIds) || input.clubIds.length < 2) {
       throw jointErrors.validation('联合活动至少须有两个拟参与社团');
+    }
+    if (!input.clubIds.includes(input.actingClubId)) {
+      throw jointErrors.forbidden('发起组织须为联合活动的参与社团之一');
     }
     const id = input.id ?? randomUUID();
     const activity = JointActivity.createDraft({

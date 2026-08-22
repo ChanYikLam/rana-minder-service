@@ -8,10 +8,12 @@ import { JointChannelStateMachine } from '../../domain/state-machines/joint-chan
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface ReopenJointChannelInput {
   readonly jointActivityId: string;
   readonly deadline: Date;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
   readonly windowId?: string;
@@ -32,11 +34,13 @@ export class DefaultReopenJointChannelUseCase implements ReopenJointChannelUseCa
       !(await this.authorization.canManageInvitation({
         activityId: input.jointActivityId,
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'INVITE',
       }))
     ) {
       throw jointErrors.forbidden('仅授权用户可管理联合报名通道');
     }
+    await assertOrgScope(this.repository, input.jointActivityId, input.actingClubId);
     const channelSnap = await this.repository.loadChannel(
       JointChannel.channelId(input.jointActivityId),
     );

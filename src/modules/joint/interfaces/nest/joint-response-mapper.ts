@@ -35,5 +35,6 @@ export function actorFromRequest(
     subjectId: session.subjectId,
     now: session.now,
     traceId: traceId ?? generateTraceId(),
+    kind: 'user',
   };
 }

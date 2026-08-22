@@ -11,6 +11,7 @@ import { jointErrors } from '../errors';
 
 export interface RestoreFromReviewInput {
   readonly conclusionId: string;
+  readonly actingClubId: string;
   readonly subjectId: string;
   readonly now: Date;
 }
@@ -31,11 +32,14 @@ export class DefaultRestoreFromReviewUseCase implements RestoreFromReviewUseCase
     if (conclusionSnap === null) {
       throw jointErrors.notFound('社团结论');
     }
+    if (input.actingClubId !== conclusionSnap.clubId) {
+      throw jointErrors.forbidden('仅可操作本组织的社团结论');
+    }
     if (
       !(await this.authorization.canRestoreReview({
         subjectId: input.subjectId,
         activityId: conclusionSnap.jointActivityId,
-        clubId: conclusionSnap.clubId,
+        clubId: input.actingClubId,
         action: 'RESTORE_REVIEW',
       }))
     ) {

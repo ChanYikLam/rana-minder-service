@@ -7,9 +7,11 @@ import { JointInterviewStateMachine } from '../../domain/state-machines/joint-in
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface StartJointInterviewInput {
   readonly interviewId: string;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
 }
@@ -28,6 +30,7 @@ export class DefaultStartJointInterviewUseCase implements StartJointInterviewUse
     if (
       !(await this.authorization.canManageInvitation({
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'INVITE',
       }))
     ) {
@@ -37,6 +40,11 @@ export class DefaultStartJointInterviewUseCase implements StartJointInterviewUse
     if (interviewSnap === null) {
       throw jointErrors.notFound('联合面试');
     }
+    const applicationSnap = await this.repository.loadApplication(interviewSnap.jointApplicationId);
+    if (applicationSnap === null) {
+      throw jointErrors.notFound('联合申请');
+    }
+    await assertOrgScope(this.repository, applicationSnap.jointActivityId, input.actingClubId);
     const interview = JointInterview.fromSnapshot(interviewSnap);
     if (!interview.start(new JointInterviewStateMachine(), input.now)) {
       throw jointErrors.preconditionFailed('联合面试开始失败');

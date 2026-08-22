@@ -10,9 +10,9 @@
  * - POST /api/org/:clubId/joint/activities/:activityId/begin-end       进入结束确认
  * - POST /api/org/:clubId/joint/activities/:activityId/end             结束
  * - POST /api/org/:clubId/joint/activities/:activityId/force-end       强制结束
- * - POST /api/org/:clubId/joint/activities/:activityId/participants/:clubId/withdraw
- * - POST /api/org/:clubId/joint/activities/:activityId/participants/:clubId/suspend
- * - POST /api/org/:clubId/joint/activities/:activityId/participants/:clubId/resume
+ * - POST /api/org/:clubId/joint/activities/:activityId/participants/:participantClubId/withdraw
+ * - POST /api/org/:clubId/joint/activities/:activityId/participants/:participantClubId/suspend
+ * - POST /api/org/:clubId/joint/activities/:activityId/participants/:participantClubId/resume
  * - POST /api/org/:clubId/joint/activities/:activityId/channels/open    开放报名通道
  * - POST /api/org/:clubId/joint/activities/:activityId/channels/suspend
  * - POST /api/org/:clubId/joint/activities/:activityId/channels/resume
@@ -81,6 +81,7 @@ export class OrgJointNestController {
         description,
         confirmDeadline,
         clubIds,
+        actingClubId: _clubId,
       }),
     );
   }
@@ -98,6 +99,7 @@ export class OrgJointNestController {
       await this.controller.proposeParticipation(this.actor(request), {
         activityId,
         clubId,
+        actingClubId: _clubId,
       }),
     );
   }
@@ -115,6 +117,7 @@ export class OrgJointNestController {
       await this.controller.confirmParticipation(this.actor(request), {
         activityId,
         clubId,
+        actingClubId: _clubId,
       }),
     );
   }
@@ -125,7 +128,9 @@ export class OrgJointNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.publishActivity(this.actor(request), activityId));
+    return toHttpResponse(
+      await this.controller.publishActivity(this.actor(request), activityId, _clubId),
+    );
   }
 
   @Post('activities/:activityId/cancel')
@@ -134,7 +139,9 @@ export class OrgJointNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.cancelActivity(this.actor(request), activityId));
+    return toHttpResponse(
+      await this.controller.cancelActivity(this.actor(request), activityId, _clubId),
+    );
   }
 
   @Post('activities/:activityId/begin-end')
@@ -143,7 +150,9 @@ export class OrgJointNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.beginEndConfirm(this.actor(request), activityId));
+    return toHttpResponse(
+      await this.controller.beginEndConfirm(this.actor(request), activityId, _clubId),
+    );
   }
 
   @Post('activities/:activityId/end')
@@ -152,7 +161,7 @@ export class OrgJointNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.endActivity(this.actor(request), activityId));
+    return toHttpResponse(await this.controller.endActivity(this.actor(request), activityId, _clubId));
   }
 
   @Post('activities/:activityId/force-end')
@@ -168,45 +177,48 @@ export class OrgJointNestController {
       await this.controller.forceEndActivity(this.actor(request), {
         activityId,
         reason,
+        actingClubId: _clubId,
       }),
     );
   }
 
-  @Post('activities/:activityId/participants/:clubId/withdraw')
+  @Post('activities/:activityId/participants/:participantClubId/withdraw')
   async withdrawParticipation(
     @Param('clubId') _clubId: string,
     @Param('activityId') activityId: string,
-    @Param('clubId') participantClubId: string,
+    @Param('participantClubId') participantClubId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
     return toHttpResponse(
       await this.controller.withdrawParticipation(this.actor(request), {
         activityId,
         clubId: participantClubId,
+        actingClubId: _clubId,
       }),
     );
   }
 
-  @Post('activities/:activityId/participants/:clubId/suspend')
+  @Post('activities/:activityId/participants/:participantClubId/suspend')
   async suspendParticipation(
     @Param('clubId') _clubId: string,
     @Param('activityId') activityId: string,
-    @Param('clubId') participantClubId: string,
+    @Param('participantClubId') participantClubId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
     return toHttpResponse(
       await this.controller.suspendParticipation(this.actor(request), {
         activityId,
         clubId: participantClubId,
+        actingClubId: _clubId,
       }),
     );
   }
 
-  @Post('activities/:activityId/participants/:clubId/resume')
+  @Post('activities/:activityId/participants/:participantClubId/resume')
   async resumeParticipation(
     @Param('clubId') _clubId: string,
     @Param('activityId') activityId: string,
-    @Param('clubId') participantClubId: string,
+    @Param('participantClubId') participantClubId: string,
     @Req() request: Record<string, unknown>,
     @Body() body: unknown,
   ): Promise<ApiSuccess<unknown>> {
@@ -216,6 +228,7 @@ export class OrgJointNestController {
       await this.controller.resumeParticipation(this.actor(request), {
         activityId,
         clubId: participantClubId,
+        actingClubId: _clubId,
         suspendedForMs,
       }),
     );
@@ -236,6 +249,7 @@ export class OrgJointNestController {
         jointActivityId: activityId,
         deadline,
         windowId,
+        actingClubId: _clubId,
       }),
     );
   }
@@ -246,7 +260,9 @@ export class OrgJointNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.suspendChannel(this.actor(request), activityId));
+    return toHttpResponse(
+      await this.controller.suspendChannel(this.actor(request), activityId, _clubId),
+    );
   }
 
   @Post('activities/:activityId/channels/resume')
@@ -264,6 +280,7 @@ export class OrgJointNestController {
         jointActivityId: activityId,
         deadline,
         windowId,
+        actingClubId: _clubId,
       }),
     );
   }
@@ -281,6 +298,7 @@ export class OrgJointNestController {
       await this.controller.extendChannel(this.actor(request), {
         jointActivityId: activityId,
         deadline,
+        actingClubId: _clubId,
       }),
     );
   }
@@ -291,7 +309,9 @@ export class OrgJointNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.closeChannel(this.actor(request), activityId));
+    return toHttpResponse(
+      await this.controller.closeChannel(this.actor(request), activityId, _clubId),
+    );
   }
 
   @Post('activities/:activityId/channels/reopen')
@@ -309,6 +329,7 @@ export class OrgJointNestController {
         jointActivityId: activityId,
         deadline,
         windowId,
+        actingClubId: _clubId,
       }),
     );
   }
@@ -334,6 +355,7 @@ export class OrgJointNestController {
         scheduledAt,
         location,
         method,
+        actingClubId: _clubId,
         id: id ?? undefined,
       }),
     );
@@ -345,7 +367,9 @@ export class OrgJointNestController {
     @Param('interviewId') interviewId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.startInterview(this.actor(request), interviewId));
+    return toHttpResponse(
+      await this.controller.startInterview(this.actor(request), interviewId, _clubId),
+    );
   }
 
   @Post('interviews/:interviewId/complete')
@@ -355,7 +379,7 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
     return toHttpResponse(
-      await this.controller.completeInterview(this.actor(request), interviewId),
+      await this.controller.completeInterview(this.actor(request), interviewId, _clubId),
     );
   }
 
@@ -372,6 +396,7 @@ export class OrgJointNestController {
       await this.controller.voidInterview(this.actor(request), {
         interviewId,
         reason,
+        actingClubId: _clubId,
       }),
     );
   }
@@ -390,6 +415,7 @@ export class OrgJointNestController {
       await this.controller.recordEvaluation(this.actor(request), {
         interviewId,
         clubId,
+        actingClubId: _clubId,
         values,
       }),
     );
@@ -413,6 +439,7 @@ export class OrgJointNestController {
         jointActivityId,
         jointApplicationId,
         clubId,
+        actingClubId: _clubId,
         decision,
         note,
       }),
@@ -425,7 +452,9 @@ export class OrgJointNestController {
     @Param('conclusionId') conclusionId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.sendInvitation(this.actor(request), conclusionId));
+    return toHttpResponse(
+      await this.controller.sendInvitation(this.actor(request), conclusionId, _clubId),
+    );
   }
 
   @Post('conclusions/:conclusionId/restore')
@@ -435,7 +464,7 @@ export class OrgJointNestController {
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
     return toHttpResponse(
-      await this.controller.restoreFromReview(this.actor(request), conclusionId),
+      await this.controller.restoreFromReview(this.actor(request), conclusionId, _clubId),
     );
   }
 
@@ -478,6 +507,6 @@ export class OrgJointNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.getChannel(this.actor(request), activityId));
+    return toHttpResponse(await this.controller.getChannel(this.actor(request), activityId, _clubId));
   }
 }

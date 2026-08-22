@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { JointApplication } from '../../domain/models/joint-application';
+import { JointChannel } from '../../domain/models/joint-channel';
 import type { JointRepository } from '../ports/joint-repository.port';
 import { jointErrors } from '../errors';
 
@@ -43,6 +44,13 @@ export class DefaultCreateJointApplicationUseCase implements CreateJointApplicat
     }
     if (activitySnap.status !== 'PUBLISHED' && activitySnap.status !== 'INVITING') {
       throw jointErrors.preconditionFailed('仅已公布或邀请阶段的联合活动可创建申请');
+    }
+
+    const channelSnap = await this.repository.loadChannel(
+      JointChannel.channelId(input.jointActivityId),
+    );
+    if (channelSnap === null || !JointChannel.fromSnapshot(channelSnap).isOpen(input.now)) {
+      throw jointErrors.preconditionFailed('报名通道未开放或已截止，无法创建申请');
     }
 
     const id = input.id ?? randomUUID();

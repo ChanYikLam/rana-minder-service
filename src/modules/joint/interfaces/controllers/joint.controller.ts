@@ -7,7 +7,7 @@
 
 import type { JointUnitOfWork } from '../../infrastructure/unit-of-work';
 import type { RlsScope } from '../../../../shared/db-adapter';
-import type { ActorContext } from './actor-context';
+import { systemActor, type ActorContext } from './actor-context';
 import { toApiError, type ApiErrorResult } from '../http/joint-error-http';
 
 import type { InitiateJointActivityUseCase } from '../../application/commands/initiate-joint-activity.use-case';
@@ -118,6 +118,7 @@ export class JointController {
       readonly description?: string | null;
       readonly confirmDeadline: Date;
       readonly clubIds: string[];
+      readonly actingClubId: string;
     },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
@@ -126,44 +127,82 @@ export class JointController {
         description: input.description ?? null,
         confirmDeadline: input.confirmDeadline,
         clubIds: input.clubIds,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
     );
   }
 
-  publishActivity(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
+  publishActivity(
+    actor: ActorContext,
+    activityId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.publishActivityUseCase.execute({ activityId, actor: actor.subjectId, now: actor.now }),
+      this.publishActivityUseCase.execute({
+        activityId,
+        actingClubId,
+        actor: actor.subjectId,
+        now: actor.now,
+      }),
     );
   }
 
-  cancelActivity(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
+  cancelActivity(
+    actor: ActorContext,
+    activityId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.cancelActivityUseCase.execute({ activityId, actor: actor.subjectId, now: actor.now }),
+      this.cancelActivityUseCase.execute({
+        activityId,
+        actingClubId,
+        actor: actor.subjectId,
+        now: actor.now,
+      }),
     );
   }
 
-  beginEndConfirm(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
+  beginEndConfirm(
+    actor: ActorContext,
+    activityId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.beginEndConfirmUseCase.execute({ activityId, actor: actor.subjectId, now: actor.now }),
+      this.beginEndConfirmUseCase.execute({
+        activityId,
+        actingClubId,
+        actor: actor.subjectId,
+        now: actor.now,
+      }),
     );
   }
 
-  endActivity(actor: ActorContext, activityId: string): Promise<ControllerResult<unknown>> {
+  endActivity(
+    actor: ActorContext,
+    activityId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.endActivityUseCase.execute({ activityId, actor: actor.subjectId, now: actor.now }),
+      this.endActivityUseCase.execute({
+        activityId,
+        actingClubId,
+        actor: actor.subjectId,
+        now: actor.now,
+      }),
     );
   }
 
   forceEndActivity(
     actor: ActorContext,
-    input: { readonly activityId: string; readonly reason: string },
+    input: { readonly activityId: string; readonly reason: string; readonly actingClubId: string },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.forceEndActivityUseCase.execute({
         activityId: input.activityId,
         reason: input.reason,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -173,12 +212,13 @@ export class JointController {
   // ----- 参与社团（JNT-002） -----
   proposeParticipation(
     actor: ActorContext,
-    input: { readonly activityId: string; readonly clubId: string },
+    input: { readonly activityId: string; readonly clubId: string; readonly actingClubId: string },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.proposeParticipationUseCase.execute({
         activityId: input.activityId,
         clubId: input.clubId,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -187,12 +227,13 @@ export class JointController {
 
   confirmParticipation(
     actor: ActorContext,
-    input: { readonly activityId: string; readonly clubId: string },
+    input: { readonly activityId: string; readonly clubId: string; readonly actingClubId: string },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.confirmParticipationUseCase.execute({
         activityId: input.activityId,
         clubId: input.clubId,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -201,12 +242,13 @@ export class JointController {
 
   withdrawParticipation(
     actor: ActorContext,
-    input: { readonly activityId: string; readonly clubId: string },
+    input: { readonly activityId: string; readonly clubId: string; readonly actingClubId: string },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.withdrawParticipationUseCase.execute({
         activityId: input.activityId,
         clubId: input.clubId,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -215,12 +257,13 @@ export class JointController {
 
   suspendParticipation(
     actor: ActorContext,
-    input: { readonly activityId: string; readonly clubId: string },
+    input: { readonly activityId: string; readonly clubId: string; readonly actingClubId: string },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.suspendParticipationUseCase.execute({
         activityId: input.activityId,
         clubId: input.clubId,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -232,6 +275,7 @@ export class JointController {
     input: {
       readonly activityId: string;
       readonly clubId: string;
+      readonly actingClubId: string;
       readonly suspendedForMs: number;
     },
   ): Promise<ControllerResult<unknown>> {
@@ -239,6 +283,7 @@ export class JointController {
       this.resumeParticipationUseCase.execute({
         activityId: input.activityId,
         clubId: input.clubId,
+        actingClubId: input.actingClubId,
         suspendedForMs: input.suspendedForMs,
         actor: actor.subjectId,
         now: actor.now,
@@ -252,6 +297,7 @@ export class JointController {
     input: {
       readonly jointActivityId: string;
       readonly deadline: Date;
+      readonly actingClubId: string;
       readonly windowId?: string;
     },
   ): Promise<ControllerResult<unknown>> {
@@ -260,16 +306,22 @@ export class JointController {
         jointActivityId: input.jointActivityId,
         deadline: input.deadline,
         windowId: input.windowId,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
     );
   }
 
-  suspendChannel(actor: ActorContext, jointActivityId: string): Promise<ControllerResult<unknown>> {
+  suspendChannel(
+    actor: ActorContext,
+    jointActivityId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.suspendChannelUseCase.execute({
         jointActivityId,
+        actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -281,6 +333,7 @@ export class JointController {
     input: {
       readonly jointActivityId: string;
       readonly deadline: Date;
+      readonly actingClubId: string;
       readonly windowId?: string;
     },
   ): Promise<ControllerResult<unknown>> {
@@ -289,6 +342,7 @@ export class JointController {
         jointActivityId: input.jointActivityId,
         deadline: input.deadline,
         windowId: input.windowId,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -297,21 +351,35 @@ export class JointController {
 
   extendChannel(
     actor: ActorContext,
-    input: { readonly jointActivityId: string; readonly deadline: Date },
+    input: {
+      readonly jointActivityId: string;
+      readonly deadline: Date;
+      readonly actingClubId: string;
+    },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.extendChannelUseCase.execute({
         jointActivityId: input.jointActivityId,
         deadline: input.deadline,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
     );
   }
 
-  closeChannel(actor: ActorContext, jointActivityId: string): Promise<ControllerResult<unknown>> {
+  closeChannel(
+    actor: ActorContext,
+    jointActivityId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.closeChannelUseCase.execute({ jointActivityId, actor: actor.subjectId, now: actor.now }),
+      this.closeChannelUseCase.execute({
+        jointActivityId,
+        actingClubId,
+        actor: actor.subjectId,
+        now: actor.now,
+      }),
     );
   }
 
@@ -320,6 +388,7 @@ export class JointController {
     input: {
       readonly jointActivityId: string;
       readonly deadline: Date;
+      readonly actingClubId: string;
       readonly windowId?: string;
     },
   ): Promise<ControllerResult<unknown>> {
@@ -328,6 +397,7 @@ export class JointController {
         jointActivityId: input.jointActivityId,
         deadline: input.deadline,
         windowId: input.windowId,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -379,6 +449,7 @@ export class JointController {
       readonly scheduledAt: Date;
       readonly location: string;
       readonly method: string;
+      readonly actingClubId: string;
       readonly id?: string;
     },
   ): Promise<ControllerResult<unknown>> {
@@ -389,6 +460,7 @@ export class JointController {
         scheduledAt: input.scheduledAt,
         location: input.location,
         method: input.method,
+        actingClubId: input.actingClubId,
         id: input.id,
         actor: actor.subjectId,
         now: actor.now,
@@ -396,16 +468,30 @@ export class JointController {
     );
   }
 
-  startInterview(actor: ActorContext, interviewId: string): Promise<ControllerResult<unknown>> {
+  startInterview(
+    actor: ActorContext,
+    interviewId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
-      this.startInterviewUseCase.execute({ interviewId, actor: actor.subjectId, now: actor.now }),
+      this.startInterviewUseCase.execute({
+        interviewId,
+        actingClubId,
+        actor: actor.subjectId,
+        now: actor.now,
+      }),
     );
   }
 
-  completeInterview(actor: ActorContext, interviewId: string): Promise<ControllerResult<unknown>> {
+  completeInterview(
+    actor: ActorContext,
+    interviewId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.completeInterviewUseCase.execute({
         interviewId,
+        actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -414,12 +500,17 @@ export class JointController {
 
   voidInterview(
     actor: ActorContext,
-    input: { readonly interviewId: string; readonly reason: string },
+    input: {
+      readonly interviewId: string;
+      readonly reason: string;
+      readonly actingClubId: string;
+    },
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.voidInterviewUseCase.execute({
         interviewId: input.interviewId,
         reason: input.reason,
+        actingClubId: input.actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -431,6 +522,7 @@ export class JointController {
     input: {
       readonly interviewId: string;
       readonly clubId: string;
+      readonly actingClubId: string;
       readonly values: Record<string, unknown>;
     },
   ): Promise<ControllerResult<unknown>> {
@@ -438,6 +530,7 @@ export class JointController {
       this.recordEvaluationUseCase.execute({
         interviewId: input.interviewId,
         clubId: input.clubId,
+        actingClubId: input.actingClubId,
         values: input.values,
         subjectId: actor.subjectId,
         now: actor.now,
@@ -452,6 +545,7 @@ export class JointController {
       readonly jointActivityId: string;
       readonly jointApplicationId: string;
       readonly clubId: string;
+      readonly actingClubId: string;
       readonly decision: 'ADMIT' | 'TRANSFER' | 'REJECT';
       readonly note?: string | null;
     },
@@ -461,6 +555,7 @@ export class JointController {
         jointActivityId: input.jointActivityId,
         jointApplicationId: input.jointApplicationId,
         clubId: input.clubId,
+        actingClubId: input.actingClubId,
         decision: input.decision,
         note: input.note ?? null,
         editorId: actor.subjectId,
@@ -469,10 +564,15 @@ export class JointController {
     );
   }
 
-  sendInvitation(actor: ActorContext, conclusionId: string): Promise<ControllerResult<unknown>> {
+  sendInvitation(
+    actor: ActorContext,
+    conclusionId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.sendInvitationUseCase.execute({
         conclusionId,
+        actingClubId,
         actor: actor.subjectId,
         now: actor.now,
       }),
@@ -484,7 +584,7 @@ export class JointController {
     invitationId: string,
   ): Promise<ControllerResult<unknown>> {
     const now = new Date();
-    const actor = { subjectId: 'invitation-webhook', now, traceId: '' } as ActorContext;
+    const actor = systemActor(now);
     return this.run(actor, () =>
       this.handleInvitationAcceptedUseCase.execute({ conclusionId, invitationId, now }),
     );
@@ -495,16 +595,21 @@ export class JointController {
     invitationId: string,
   ): Promise<ControllerResult<unknown>> {
     const now = new Date();
-    const actor = { subjectId: 'invitation-webhook', now, traceId: '' } as ActorContext;
+    const actor = systemActor(now);
     return this.run(actor, () =>
       this.handleInvitationRejectedUseCase.execute({ conclusionId, invitationId, now }),
     );
   }
 
-  restoreFromReview(actor: ActorContext, conclusionId: string): Promise<ControllerResult<unknown>> {
+  restoreFromReview(
+    actor: ActorContext,
+    conclusionId: string,
+    actingClubId: string,
+  ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.restoreFromReviewUseCase.execute({
         conclusionId,
+        actingClubId,
         subjectId: actor.subjectId,
         now: actor.now,
       }),
@@ -563,8 +668,18 @@ export class JointController {
     );
   }
 
-  getChannel(actor: ActorContext, jointActivityId: string): Promise<ControllerResult<unknown>> {
-    return this.run(actor, () => this.getChannelUseCase.execute({ jointActivityId }));
+  getChannel(
+    actor: ActorContext,
+    jointActivityId: string,
+    clubId?: string,
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.getChannelUseCase.execute({
+        jointActivityId,
+        subjectId: actor.subjectId,
+        clubId,
+      }),
+    );
   }
 
   getInterview(actor: ActorContext, interviewId: string): Promise<ControllerResult<unknown>> {

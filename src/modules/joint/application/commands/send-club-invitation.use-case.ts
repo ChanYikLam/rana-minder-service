@@ -15,6 +15,7 @@ import {
 
 export interface SendClubInvitationInput {
   readonly conclusionId: string;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
 }
@@ -35,6 +36,7 @@ export class DefaultSendClubInvitationUseCase implements SendClubInvitationUseCa
     if (
       !(await this.authorization.canManageInvitation({
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'INVITE',
       }))
     ) {
@@ -43,6 +45,9 @@ export class DefaultSendClubInvitationUseCase implements SendClubInvitationUseCa
     const conclusionSnap = await this.repository.loadConclusion(input.conclusionId);
     if (conclusionSnap === null) {
       throw jointErrors.notFound('社团结论');
+    }
+    if (input.actingClubId !== conclusionSnap.clubId) {
+      throw jointErrors.forbidden('仅可操作本组织的社团结论');
     }
     if (conclusionSnap.decision == null) {
       throw jointErrors.preconditionFailed('未填写结论前禁止发送邀请');

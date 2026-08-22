@@ -8,11 +8,13 @@ import { JointConclusionStateMachine } from '../../domain/state-machines/joint-c
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface EditClubConclusionInput {
   readonly jointActivityId: string;
   readonly jointApplicationId: string;
   readonly clubId: string;
+  readonly actingClubId: string;
   readonly decision: JointConclusionDecision;
   readonly note?: string | null;
   readonly editorId: string;
@@ -35,11 +37,15 @@ export class DefaultEditClubConclusionUseCase implements EditClubConclusionUseCa
   ) {}
 
   async execute(input: EditClubConclusionInput): Promise<EditClubConclusionResult> {
+    if (input.actingClubId !== input.clubId) {
+      throw jointErrors.forbidden('仅可编辑本组织的社团结论');
+    }
+    await assertOrgScope(this.repository, input.jointActivityId, input.actingClubId);
     if (
       !(await this.authorization.canEditConclusion({
         subjectId: input.editorId,
         activityId: input.jointActivityId,
-        clubId: input.clubId,
+        clubId: input.actingClubId,
         action: 'EDIT_CONCLUSION',
       }))
     ) {

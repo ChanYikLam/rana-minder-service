@@ -368,8 +368,8 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     },
     {
       provide: GET_JOINT_CHANNEL_QUERY,
-      useFactory: (repo) => new DefaultGetJointChannelUseCase(repo),
-      inject: [JOINT_REPOSITORY],
+      useFactory: (repo, auth) => new DefaultGetJointChannelUseCase(repo, auth),
+      inject: [JOINT_REPOSITORY, JOINT_AUTHORIZATION],
     },
     {
       provide: GET_JOINT_INTERVIEW_QUERY,

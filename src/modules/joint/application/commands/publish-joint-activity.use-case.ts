@@ -9,9 +9,11 @@ import { JointParticipantStateMachine } from '../../domain/state-machines/joint-
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface PublishJointActivityInput {
   readonly activityId: string;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
 }
@@ -32,10 +34,13 @@ export class DefaultPublishJointActivityUseCase implements PublishJointActivityU
       throw jointErrors.notFound('联合活动');
     }
 
+    await assertOrgScope(this.repository, input.activityId, input.actingClubId);
+
     if (
       !(await this.authorization.canPublish({
         activityId: input.activityId,
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'PUBLISH',
       }))
     ) {

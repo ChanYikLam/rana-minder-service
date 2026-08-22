@@ -27,6 +27,9 @@ export class DefaultGetJointApplicationUseCase implements GetJointApplicationUse
     if (snap === null) {
       throw jointErrors.notFound('联合申请');
     }
+    if (snap.applicantId !== input.subjectId) {
+      throw jointErrors.forbidden('无权查看该联合申请');
+    }
     if (
       !(await this.authorization.canViewApplication({
         subjectId: input.subjectId,

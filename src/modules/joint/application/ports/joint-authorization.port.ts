@@ -26,6 +26,7 @@ export interface JointAuthorizationInput {
     | 'VIEW_CONCLUSIONS'
     | 'VIEW_APPLICATIONS'
     | 'VIEW_PARTICIPANTS'
+    | 'VIEW_CHANNEL'
     | 'RECORD_EVALUATION'
     | 'EDIT_CONCLUSION'
     | 'RESTORE_REVIEW';
@@ -45,6 +46,7 @@ export interface JointAuthorizationPort {
   canViewConclusions(input: JointAuthorizationInput): Promise<boolean>;
   canViewApplications(input: JointAuthorizationInput): Promise<boolean>;
   canViewParticipants(input: JointAuthorizationInput): Promise<boolean>;
+  canViewChannel(input: JointAuthorizationInput): Promise<boolean>;
   canRecordEvaluation(input: JointAuthorizationInput): Promise<boolean>;
   canEditConclusion(input: JointAuthorizationInput): Promise<boolean>;
   canRestoreReview(input: JointAuthorizationInput): Promise<boolean>;
@@ -88,6 +90,9 @@ export class NotWiredJointAuthorization implements JointAuthorizationPort {
     return false;
   }
   async canViewParticipants(): Promise<boolean> {
+    return false;
+  }
+  async canViewChannel(): Promise<boolean> {
     return false;
   }
   async canRecordEvaluation(): Promise<boolean> {

@@ -27,6 +27,9 @@ export class DefaultListClubConclusionsUseCase implements ListClubConclusionsUse
     if (applicationSnap === null) {
       throw jointErrors.notFound('联合申请');
     }
+    if (applicationSnap.applicantId !== input.subjectId) {
+      throw jointErrors.forbidden('无权查看该社团结论列表');
+    }
     if (
       !(await this.authorization.canViewConclusions({
         subjectId: input.subjectId,

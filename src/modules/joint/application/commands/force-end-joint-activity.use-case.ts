@@ -8,9 +8,11 @@ import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
 import type { JointTaskEnqueuer } from '../../infrastructure/joint-task-enqueuer';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface ForceEndJointActivityInput {
   readonly activityId: string;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly reason: string;
   readonly now: Date;
@@ -33,10 +35,13 @@ export class DefaultForceEndJointActivityUseCase implements ForceEndJointActivit
       throw jointErrors.notFound('联合活动');
     }
 
+    await assertOrgScope(this.repository, input.activityId, input.actingClubId);
+
     if (
       !(await this.authorization.canCancelOrForceEnd({
         activityId: input.activityId,
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'FORCE_END',
       }))
     ) {

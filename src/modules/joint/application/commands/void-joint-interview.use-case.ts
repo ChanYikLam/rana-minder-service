@@ -9,10 +9,12 @@ import { JointConclusionStateMachine } from '../../domain/state-machines/joint-c
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface VoidJointInterviewInput {
   readonly interviewId: string;
   readonly reason: string;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
 }
@@ -31,6 +33,7 @@ export class DefaultVoidJointInterviewUseCase implements VoidJointInterviewUseCa
     if (
       !(await this.authorization.canManageInvitation({
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'INVITE',
       }))
     ) {
@@ -40,6 +43,11 @@ export class DefaultVoidJointInterviewUseCase implements VoidJointInterviewUseCa
     if (interviewSnap === null) {
       throw jointErrors.notFound('联合面试');
     }
+    const applicationSnap = await this.repository.loadApplication(interviewSnap.jointApplicationId);
+    if (applicationSnap === null) {
+      throw jointErrors.notFound('联合申请');
+    }
+    await assertOrgScope(this.repository, applicationSnap.jointActivityId, input.actingClubId);
     const interview = JointInterview.fromSnapshot(interviewSnap);
     if (!interview.voidInterview(new JointInterviewStateMachine(), input.reason, input.now)) {
       throw jointErrors.preconditionFailed('联合面试作废失败');

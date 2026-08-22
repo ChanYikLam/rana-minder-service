@@ -9,10 +9,12 @@ import { JointParticipantStateMachine } from '../../domain/state-machines/joint-
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface ConfirmParticipationRoundInput {
   readonly activityId: string;
   readonly clubId: string;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
 }
@@ -38,10 +40,13 @@ export class DefaultConfirmParticipationRoundUseCase implements ConfirmParticipa
       throw jointErrors.notFound('参与社团关系');
     }
 
+    await assertOrgScope(this.repository, input.activityId, input.actingClubId);
+
     if (
       !(await this.authorization.canConfirmRound({
         activityId: input.activityId,
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'CONFIRM_ROUND',
       }))
     ) {

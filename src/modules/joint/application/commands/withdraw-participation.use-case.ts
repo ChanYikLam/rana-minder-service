@@ -7,10 +7,12 @@ import { JointParticipantStateMachine } from '../../domain/state-machines/joint-
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import { assertOrgScope } from '../require-org-scope';
 
 export interface WithdrawParticipationInput {
   readonly activityId: string;
   readonly clubId: string;
+  readonly actingClubId: string;
   readonly actor: string;
   readonly now: Date;
 }
@@ -32,10 +34,13 @@ export class DefaultWithdrawParticipationUseCase implements WithdrawParticipatio
       throw jointErrors.notFound('参与社团关系');
     }
 
+    await assertOrgScope(this.repository, input.activityId, input.actingClubId);
+
     if (
       !(await this.authorization.canManageParticipation({
         activityId: input.activityId,
         subjectId: input.actor,
+        clubId: input.actingClubId,
         action: 'MANAGE_PARTICIPATION',
       }))
     ) {
