@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { InvitationPolicy } from '../../domain/services/invitation-policy';
 import { INVITATION_REPOSITORY } from '../../infrastructure/invitation-repository';
 import type { InvitationRepository } from '../../infrastructure/invitation-repository';
 
@@ -16,12 +17,18 @@ export interface InvitationStatusView {
   readonly version: number;
 }
 
-/** 邀请状态查询失败（IFC-ERR-006） */
+/** 邀请状态查询失败（IFC-ERR-006 / IFC-ERR-003 当前无权） */
 export class InvitationStatusQueryError extends Error {
-  constructor(message: string) {
-    super(`IFC-ERR-006: ${message}`);
+  constructor(code: 'IFC-ERR-006' | 'IFC-ERR-003', message: string) {
+    super(`${code}: ${message}`);
     this.name = 'InvitationStatusQueryError';
   }
+}
+
+/** 查看者上下文（调用方注入当前登录者，用于访问控制） */
+export interface InvitationViewerContext {
+  readonly principalId: string;
+  readonly roles: readonly string[];
 }
 
 /**
@@ -29,15 +36,33 @@ export class InvitationStatusQueryError extends Error {
  *
  * 返回真实状态；接受后若 Casdoor 回读未确认，页面显示
  * "成员身份生效处理中"，不得开放成员权限（REC-026、ORG-027）。
+ *
+ * 访问控制（IFC-ERR-003）：传入 {@link InvitationViewerContext} 时，仅
+ * - 邀请指定本人；或
+ * - 发出社团的负责人/人事管理员
+ * 可查看真实状态，避免按 invitationId 枚举他人邀请造成信息泄露。
  */
 @Injectable()
 export class InvitationStatusQuery {
-  constructor(@Inject(INVITATION_REPOSITORY) private readonly repo: InvitationRepository) {}
+  constructor(
+    @Inject(INVITATION_REPOSITORY) private readonly repo: InvitationRepository,
+    private readonly policy: InvitationPolicy = new InvitationPolicy(),
+  ) {}
 
-  async getStatus(invitationId: string): Promise<InvitationStatusView> {
+  async getStatus(
+    invitationId: string,
+    viewer?: InvitationViewerContext,
+  ): Promise<InvitationStatusView> {
     const invitation = await this.repo.load(invitationId);
     if (invitation === null) {
-      throw new InvitationStatusQueryError('邀请不存在');
+      throw new InvitationStatusQueryError('IFC-ERR-006', '邀请不存在');
+    }
+    if (viewer !== undefined) {
+      // 本人 或 发出社团负责人/人事 可查看；其余无权（IFC-ERR-003）
+      const isInvitee = viewer.principalId === invitation.inviteeId;
+      if (!isInvitee) {
+        this.policy.assertCanIssue(viewer.roles);
+      }
     }
     return {
       invitationId: invitation.invitationId,

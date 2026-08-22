@@ -383,4 +383,45 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
     assert.equal(out.activated, false);
     assert.notEqual(out.invitation.activation?.status, 'ACTIVATED');
   });
+
+  it('状态查询访问控制：本人/负责人/人事可查看；部门负责人与成员无权（IFC-ERR-003）', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    // 本人可查看
+    const bySelf = await rig.status.getStatus(inv.invitationId, {
+      principalId: 'stu1',
+      roles: ['MEMBER'],
+    });
+    assert.equal(bySelf.invitationId, inv.invitationId);
+    // 负责人/人事可查看
+    await rig.status.getStatus(inv.invitationId, {
+      principalId: 'hr1',
+      roles: ['HR_ADMIN'],
+    });
+    await rig.status.getStatus(inv.invitationId, {
+      principalId: 'leader1',
+      roles: ['CLUB_LEADER'],
+    });
+    // 部门负责人/成员（非本人）无权
+    await assert.rejects(
+      rig.status.getStatus(inv.invitationId, {
+        principalId: 'dep1',
+        roles: ['DEPARTMENT_LEADER'],
+      }),
+      /IFC-ERR-003/,
+    );
+    await assert.rejects(
+      rig.status.getStatus(inv.invitationId, { principalId: 'other', roles: ['MEMBER'] }),
+      /IFC-ERR-003/,
+    );
+  });
+
+  it('创建校验加固：有效期须晚于当前时间（IFC-ERR-006）', async () => {
+    const rig = makeRig();
+    // 过去时间：拒绝
+    await assert.rejects(
+      rig.create.execute({ ...createInput, inviteeId: 'stu9', expiresAt: '2000-01-01T00:00:00.000Z' }),
+      /有效期必须晚于当前时间/,
+    );
+  });
 });

@@ -59,6 +59,13 @@ export class ReissueInvitationCommand {
     if (!Number.isFinite(Date.parse(input.newExpiresAt))) {
       throw new ReissueInvitationError('IFC-ERR-006', '无效的新有效期');
     }
+    if (Date.parse(input.newExpiresAt) <= Date.now()) {
+      throw new ReissueInvitationError('IFC-ERR-006', '新有效期必须晚于当前时间');
+    }
+    // 防御重发链数据异常：被重发的旧邀请缺少结论关联时不允许重发（REC-024/REC-045）
+    if ((old.decisionRef ?? '').trim().length === 0) {
+      throw new ReissueInvitationError('IFC-ERR-006', '原邀请缺少已复核的部门录取决定，无法重发');
+    }
     // 同社团同对象最多一份待处理邀请（重新校验；MEM-018）
     const pending = await this.repo.findPending(old.clubId, old.inviteeId);
     if (pending !== null) {

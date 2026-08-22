@@ -48,11 +48,16 @@ export class CreateInvitationCommand {
 
   async execute(input: CreateInvitationInput): Promise<Invitation> {
     this.policy.assertCanIssue(input.issuerRoles);
-    if (input.decisionRef.trim().length === 0) {
+    // 空值安全校验：调用方可能误传 undefined/空串，避免 trim() 抛裸 TypeError
+    if ((input.decisionRef ?? '').trim().length === 0) {
       throw new CreateInvitationError('IFC-ERR-006', '需要已复核的部门录取决定');
     }
-    if (!Number.isFinite(Date.parse(input.expiresAt))) {
+    const expires = Date.parse(input.expiresAt);
+    if (!Number.isFinite(expires)) {
       throw new CreateInvitationError('IFC-ERR-006', '无效的有效期');
+    }
+    if (expires <= Date.now()) {
+      throw new CreateInvitationError('IFC-ERR-006', '有效期必须晚于当前时间');
     }
     // 同社团同对象最多一份待处理邀请（MEM-018：重复待处理 → IFC-ERR-009 幂等冲突）
     const existing = await this.repo.findPending(input.clubId, input.inviteeId);

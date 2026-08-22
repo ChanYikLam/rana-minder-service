@@ -29,6 +29,17 @@ export class ResolveActivationError extends Error {
 }
 
 /**
+ * 对 Casdoor 返回的技术原因做基础脱敏（落库前调用）：
+ * - 过滤常见敏感字段（token/密钥/密码/凭据）；
+ * - 控制长度，避免异常堆栈/长 URL 膨胀历史记录。
+ */
+function sanitizeReason(reason: string): string {
+  const SENSITIVE = /(token|secret|password|passwd|credential|authorization|bearer\s+\S+)/gi;
+  const clipped = reason.length > 200 ? `${reason.slice(0, 200)}…` : reason;
+  return clipped.replace(SENSITIVE, '[redacted]');
+}
+
+/**
  * 成员身份生效意图解析（REC-026、ORG-027、MEM-002）。
  *
  * - Casdoor 写入并**定向回读确认**成功 → 激活（ACTIVATED），成员权限才生效；
@@ -89,7 +100,7 @@ export class ResolveActivationCommand {
         lastError:
           result.ok && result.confirmed
             ? undefined
-            : (result.reason ?? 'casdoor-write-readback-not-confirmed'),
+            : sanitizeReason(result.reason ?? 'casdoor-write-readback-not-confirmed'),
       },
     };
     // 单胜者：并发激活任务只一个成功（版本比较并交换，IFC-GEN-007）
