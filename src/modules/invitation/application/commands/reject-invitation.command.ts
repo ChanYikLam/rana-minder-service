@@ -23,7 +23,9 @@ export class RejectInvitationError extends Error {
  * 申请人拒绝（SRS-SM-INV-001：待处理→已拒绝）。
  *
  * - 仅邀请指定本人；仅待处理可拒绝；
- * - 拒绝后按当前资格重新发出**新邀请**（旧邀请不修改保留）；
+ * - 仅记录拒绝终态并保留不可变历史（旧邀请不修改）；
+ *   拒绝后如需继续招募，由调用方基于新资格调用 {@link ReissueInvitationCommand}
+ *   创建全新邀请对象（REC-024 拒绝后可重发），本命令不自动重发；
  * - 与接受/撤回/过期竞争只一个成功（compareAndSwap）。
  */
 @Injectable()
