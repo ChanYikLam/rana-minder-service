@@ -8,6 +8,10 @@ import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointInvitationPort } from '../ports/joint-invitation.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import { jointErrors } from '../errors';
+import {
+  INVITATION_TIMEOUT_DEFAULT_MS,
+  type JointTaskEnqueuer,
+} from '../../infrastructure/joint-task-enqueuer';
 
 export interface RestoreFromReviewInput {
   readonly conclusionId: string;
@@ -25,6 +29,7 @@ export class DefaultRestoreFromReviewUseCase implements RestoreFromReviewUseCase
     private readonly repository: JointRepository,
     private readonly invitation: JointInvitationPort,
     private readonly authorization: JointAuthorizationPort,
+    private readonly tasks: JointTaskEnqueuer,
   ) {}
 
   async execute(input: RestoreFromReviewInput): Promise<void> {
@@ -54,6 +59,15 @@ export class DefaultRestoreFromReviewUseCase implements RestoreFromReviewUseCase
     }
     if (conclusionSnap.invitationId !== null) {
       await this.invitation.restoreFrozenInvitation(conclusionSnap.invitationId);
+      // 恢复后重新调度邀请超时，否则原超时任务已触发（超时/作废场景）后
+      // 恢复的邀请将永不再超时；复用 invitationId 作为幂等键。
+      const notBefore = new Date(input.now.getTime() + INVITATION_TIMEOUT_DEFAULT_MS);
+      await this.tasks.scheduleInvitationTimeout(
+        conclusionSnap.jointActivityId,
+        conclusion.toSnapshot().revisionNumber,
+        conclusionSnap.invitationId,
+        notBefore,
+      );
     }
     await this.repository.saveConclusion(conclusion.toSnapshot(), conclusionSnap.revisionNumber);
   }

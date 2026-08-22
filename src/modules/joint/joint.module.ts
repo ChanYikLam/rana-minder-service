@@ -328,9 +328,9 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     },
     {
       provide: RESTORE_FROM_REVIEW_USE_CASE,
-      useFactory: (repo, invitation, auth) =>
-        new DefaultRestoreFromReviewUseCase(repo, invitation, auth),
-      inject: [JOINT_REPOSITORY, JOINT_INVITATION_PORT, JOINT_AUTHORIZATION],
+      useFactory: (repo, invitation, auth, tasks) =>
+        new DefaultRestoreFromReviewUseCase(repo, invitation, auth, tasks),
+      inject: [JOINT_REPOSITORY, JOINT_INVITATION_PORT, JOINT_AUTHORIZATION, JointTaskEnqueuer],
     },
 
     // ----- 任务式（TASK，无授权） -----
