@@ -185,6 +185,10 @@ function validateRows(
 ): void {
   const items = field.items ?? [];
   rows.forEach((row, index) => {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+      errors[`${field.id}[${index}]`] = ['子表行必须是对象'];
+      return;
+    }
     for (const item of items) {
       const key = `${field.id}[${index}].${item.id}`;
       const raw = (row as Record<string, unknown>)[item.id];

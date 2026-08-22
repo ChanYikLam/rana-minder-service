@@ -252,7 +252,6 @@ describe('ReviseSubmissionUseCase / ListSubmissions（FORM-002）', () => {
     });
     const revised = await h.revise.execute({
       submissionId: result.submissionId,
-      revisedBy: 'u-1',
       values: { name: '张三丰' },
       actor: 'u-1',
       now: NOW,
