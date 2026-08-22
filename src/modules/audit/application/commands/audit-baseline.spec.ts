@@ -153,8 +153,16 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
 
   it('部门负责人查询结果强制限定在对象白名单内（防结果越权）', async () => {
     const rig = makeRig();
-    await rig.writer.write({ ...baseEvent, target: { objectType: 'MEMBERSHIP', objectId: 'o1' }, actorId: 'u1' });
-    await rig.writer.write({ ...baseEvent, target: { objectType: 'MEMBERSHIP', objectId: 'o2' }, actorId: 'u1' });
+    await rig.writer.write({
+      ...baseEvent,
+      target: { objectType: 'MEMBERSHIP', objectId: 'o1' },
+      actorId: 'u1',
+    });
+    await rig.writer.write({
+      ...baseEvent,
+      target: { objectType: 'MEMBERSHIP', objectId: 'o2' },
+      actorId: 'u1',
+    });
     // 白名单仅含 o1：即使 filter.objectId 传 o1，也拿不到 o2 的记录
     const rows = await rig.query.search(
       { principalId: 'd1', roles: ['DEPARTMENT_LEADER'], accessibleObjectIds: ['o1'] },

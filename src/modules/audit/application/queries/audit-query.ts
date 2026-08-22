@@ -40,16 +40,15 @@ export class AuditQuery {
       // 部门负责人：查询结果强制限定在其对象白名单内（即使 filter.objectId
       // 被篡改为白名单外对象，也拿不到数据，防止横向越权）
       const allowed = new Set(scope.allowedObjectIds);
-      events = events.filter((e) => e.target?.objectId !== undefined && allowed.has(e.target.objectId));
+      events = events.filter(
+        (e) => e.target?.objectId !== undefined && allowed.has(e.target.objectId),
+      );
     }
     return events;
   }
 
   /** 查询权限（AUD-004）：超管全平台；负责人/人事本社团；部门负责人仅业务对象；成员/面试官拒绝 */
-  private assertCanRead(
-    principal: AuditQueryPrincipal,
-    filter: AuditQueryFilter,
-  ): ReadScope {
+  private assertCanRead(principal: AuditQueryPrincipal, filter: AuditQueryFilter): ReadScope {
     if (principal.roles.includes('SUPER_ADMIN')) {
       return {}; // 超管可查全平台（每次特权访问产生审计由调用方/AuditWriter 记录）
     }
