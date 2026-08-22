@@ -10,7 +10,7 @@
  * 全部受保护端点 401 IFC-ERR-001）；接入后替换 AUTH_SESSION_PROVIDER 绑定即可。
  */
 
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
@@ -101,7 +101,7 @@ import { AccountAccessNestController } from './interfaces/nest/account-access.ne
 import { NameCorrectionNestController } from './interfaces/nest/name-correction.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule],
+  imports: [AdaptersModule, forwardRef(() => ObservabilityModule)],
   controllers: [ProfilesNestController, AccountAccessNestController, NameCorrectionNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
@@ -410,6 +410,7 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     APPLY_NAME_CORRECTION_WRITE_USE_CASE,
     AUTH_SESSION_PROVIDER,
     AuthGuard,
+    SUPER_ADMIN_VERIFIER,
   ],
 })
 export class IdentityModule {}

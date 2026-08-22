@@ -48,6 +48,15 @@ import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
 import { NotificationModule } from './modules/notification';
 import { InvitationModule } from './modules/invitation/module';
+import { DB_STATUS_PORT, TASK_SUMMARY_PORT } from './platform/observability/status-page/tokens';
+import {
+  NestOpsTelemetry,
+  OPS_TELEMETRY,
+} from './platform/observability/status-page/ops-telemetry';
+import { SECURITY_LOGGER } from './platform/observability/logging/tokens';
+import { PostgresTaskSummaryPort } from './platform/observability/status-page/task-summary';
+import { TASK_REPOSITORY } from './platform/tasks/contracts';
+import type { TaskRepository } from './platform/tasks/contracts';
 
 @Module({
   imports: [
@@ -67,6 +76,19 @@ import { InvitationModule } from './modules/invitation/module';
     InvitationModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    {
+      // T6：状态页任务积压区接线。聚合 TASK_REPOSITORY 的 backlogSummary，只读展示。
+      provide: TASK_SUMMARY_PORT,
+      useFactory: (repo: TaskRepository) => new PostgresTaskSummaryPort(repo),
+      inject: [TASK_REPOSITORY],
+    },
+    {
+      // T7：数据库连通经 OpsTelemetry 汇入脱敏日志（外部依赖结果待 T3 真实适配器）。
+      provide: OPS_TELEMETRY,
+      useFactory: (db, logger) => new NestOpsTelemetry(db, logger),
+      inject: [DB_STATUS_PORT, SECURITY_LOGGER],
+    },
+  ],
 })
 export class AppModule {}

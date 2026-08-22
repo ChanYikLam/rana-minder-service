@@ -37,7 +37,7 @@ export class StatusPageController {
   @Get()
   @HttpCode(200)
   async getStatus(actor?: StatusPageActor): Promise<StatusSummaryView> {
-    this.authorizer.assertSuperAdmin(actor);
+    await this.authorizer.assertSuperAdminAsync(actor);
     return this.query.execute(new Date());
   }
 }
