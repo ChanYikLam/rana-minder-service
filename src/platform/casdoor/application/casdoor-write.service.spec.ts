@@ -392,4 +392,73 @@ describe('CasdoorWriteService', () => {
     assert.deepEqual(lowGroup?.memberIds ?? [], []);
     assert.deepEqual(highGroup?.memberIds ?? [], []);
   });
+
+  it('同时需要新增和移除成员时分别执行 add 与 remove（CAS-WR-002/003）', async () => {
+    const store = makeStore();
+    const recording = new RecordingWritePort(store);
+    const service = new CasdoorWriteService(recording, clock);
+
+    const conclusion = await service.writeGroupMembership({
+      commandId: 'cmd-both',
+      idempotencyKey: 'idem-both',
+      groupRef: group.ref,
+      originalMemberIds: ['a', 'b'],
+      targetMemberIds: ['a', 'c'],
+      requestedAt: fixedNow.toISOString(),
+    });
+
+    assert.equal(conclusion.kind, 'CONFIRMED');
+    // add 与 remove 都必须被调用，不能因 if/else 而静默跳过 remove
+    assert.ok(recording.calls.some((c) => c.startsWith('add:')));
+    assert.ok(recording.calls.some((c) => c.startsWith('remove:')));
+    // 最终关系收敛到目标集合
+    const readback = await store.readbackGroupMembers({
+      ref: group.ref,
+      requestId: 'check-both',
+      trackingId: 't',
+    });
+    assert.deepEqual([...(readback.value ?? [])].sort(), ['a', 'c']);
+  });
+
+  it('同时新增和移除时其中一个依赖不可用 → DEPENDENCY_UNAVAILABLE', async () => {
+    const store = makeStore();
+    const recording = new (class extends RecordingWritePort {
+      private removeAttempt = 0;
+      override async removeGroupMembers(request: {
+        ref: GroupStableRef;
+        userIds: readonly string[];
+        requestId: string;
+        trackingId: string;
+      }): Promise<ExternalResult<void>> {
+        this.removeAttempt += 1;
+        if (this.removeAttempt === 1) {
+          return {
+            status: 'DEPENDENCY_UNAVAILABLE',
+            value: null,
+            evidence: { observedAt: fixedNow.toISOString(), attemptId: request.requestId },
+            error: {
+              kind: 'DEPENDENCY_UNAVAILABLE',
+              code: 'CAS-ERR-UNAVAILABLE',
+              message: 'unavailable',
+              retryable: true,
+              trackingId: request.trackingId,
+            },
+          };
+        }
+        return super.removeGroupMembers(request);
+      }
+    })(store);
+    const svc = new CasdoorWriteService(recording, clock);
+
+    const conclusion = await svc.writeGroupMembership({
+      commandId: 'cmd-both-unavail',
+      idempotencyKey: 'idem-both-unavail',
+      groupRef: group.ref,
+      originalMemberIds: ['a', 'b'],
+      targetMemberIds: ['a', 'c'],
+      requestedAt: fixedNow.toISOString(),
+    });
+
+    assert.equal(conclusion.kind, 'DEPENDENCY_UNAVAILABLE');
+  });
 });

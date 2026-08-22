@@ -1,7 +1,15 @@
 # 领域模块 · 组织与授权
 
-> 更新日期：2026-08-12
-> 状态机：`SRS-SM-ORG-001`（社团接入，10 条转换；IFC-SM-004）、`SRS-SM-ORG-002`（Group 关系命令，8 条转换；IFC-SM-005）、`SRS-SM-ORG-003`（预约管理命令，13 条转换；IFC-SM-006）
+> 更新日期：2026-08-20
+> 状态机：`SRS-SM-ORG-001`（社团接入，10 条转换；IFC-SM-004）、`SRS-SM-ORG-002`（Group 关系命令，8 条转换；IFC-SM-005）、`SRS-SM-ORG-003`（预约管理命令，13 条转换；IFC-SM-006）、`SRS-SM-ORG-004`（受控批量，8 条转换；骨架）
+
+## 实现状态（2026-08-20，分支 `feat/organization-module`）
+
+- **建成**：ORG-001 社团接入/启停/修复/重绑/重新接入、ORG-002 Group 关系命令、ORG-003 预约管理命令的状态机与用例骨架；ORG-004 受控批量仅状态机骨架＋端口；权限模板（内置模板/差异预览/发布）、当前权限计算、最后负责人连续性、冻结期限顺延等领域服务。
+- **端口化依赖**：Casdoor、身份鉴权、job 调度、通知、对账、PG 持久化经 `application/ports` 注入；实际装配使用 `infrastructure/in-memory/*` 桩，真实适配器由对应基础设施模块替换（ADR-009/014/004）。
+- **HTTP 入口**：`interfaces/controllers/`（`AdminClubsController`、`AdminPermissionTemplatesController`、`OrgWorkspaceController`），路由见[接口清单-HTTP端点-v1.0](../../../docs/specification/接口清单-HTTP端点-v1.0.md) §15.1/15.2/15.3 与 §4/5 org 路由。
+- **测试**：`*.spec.ts` 共 11 个文件（3×状态机 + 批次、4×领域服务、2×用例、1×模块装配冒烟），经 `pnpm test` 全绿；`pnpm typecheck/lint/format:check` 通过。
+- 与上方“关键组件”的对照：真实适配器（`CasdoorGroupAdapter`/`RlsContextSetter`/`TaskWriter`）尚未实现；当前等价物为 in-memory 桩与端口令牌。
 
 ## 事务边界对照（IFC-TX-001~008）
 
