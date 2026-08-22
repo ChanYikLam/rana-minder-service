@@ -54,6 +54,9 @@ export class DefaultScheduleJointInterviewUseCase implements ScheduleJointInterv
     if (applicationSnap === null) {
       throw jointErrors.notFound('联合申请');
     }
+    if (applicationSnap.jointActivityId !== input.jointActivityId) {
+      throw jointErrors.preconditionFailed('联合申请不属于该联合活动，无法关联面试');
+    }
     if (applicationSnap.status !== 'SUBMITTED') {
       throw jointErrors.preconditionFailed('仅已提交的联合申请可安排面试');
     }

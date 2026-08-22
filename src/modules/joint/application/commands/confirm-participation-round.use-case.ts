@@ -42,6 +42,10 @@ export class DefaultConfirmParticipationRoundUseCase implements ConfirmParticipa
 
     await assertOrgScope(this.repository, input.activityId, input.actingClubId);
 
+    if (input.clubId !== input.actingClubId) {
+      throw jointErrors.forbidden('仅能操作本组织参与关系');
+    }
+
     if (
       !(await this.authorization.canConfirmRound({
         activityId: input.activityId,

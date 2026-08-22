@@ -36,6 +36,10 @@ export class DefaultWithdrawParticipationUseCase implements WithdrawParticipatio
 
     await assertOrgScope(this.repository, input.activityId, input.actingClubId);
 
+    if (input.clubId !== input.actingClubId) {
+      throw jointErrors.forbidden('仅能操作本组织参与关系');
+    }
+
     if (
       !(await this.authorization.canManageParticipation({
         activityId: input.activityId,
