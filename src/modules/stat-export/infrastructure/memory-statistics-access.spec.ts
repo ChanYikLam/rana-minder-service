@@ -18,16 +18,12 @@ describe('MemoryStatisticsAuthorizationPort', () => {
   const seed: MemoryStatisticsAuthorizationSeed = {
     superAdminUserIds: ['u_admin'],
     clubScopes: {
-      u_leader: [
-        { clubId: 'club-acm', level: 'club' },
-      ],
+      u_leader: [{ clubId: 'club-acm', level: 'club' }],
       u_dept_head: [
         { clubId: 'club-acm', level: 'department', departmentIds: ['dept-tech'] },
         { clubId: 'club-design', level: 'club' },
       ],
-      u_personnel: [
-        { clubId: 'club-acm', level: 'club' },
-      ],
+      u_personnel: [{ clubId: 'club-acm', level: 'club' }],
     },
   };
 

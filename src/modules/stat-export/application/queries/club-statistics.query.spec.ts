@@ -20,7 +20,10 @@ import { InMemoryStatisticsSource } from '../../infrastructure/in-memory-statist
 import { InMemoryStatisticsAuditPort } from '../../infrastructure/memory-statistics-access';
 import { ClubStatisticsQuery } from './club-statistics.query';
 import { StatisticsAccessError } from '../statistics-errors';
-import type { MembershipFact, AdmissionAcceptanceFact } from '../../domain/models/statistics-specification';
+import type {
+  MembershipFact,
+  AdmissionAcceptanceFact,
+} from '../../domain/models/statistics-specification';
 import type { StatisticsPrincipal } from '../ports/statistics-authorization.port';
 
 // ===========================================================================
@@ -44,24 +47,89 @@ function setupSource() {
   source.seedClubProfile({ clubId: 'club-other', forcedSuspension: false });
 
   const members: MembershipFact[] = [
-    { userId: 'u1', studentNo: 'S001', departmentId: 'dept-tech', departmentName: '技术部', positionId: null, academicYear: '2025-2026' },
-    { userId: 'u1', studentNo: 'S001', departmentId: 'dept-prod', departmentName: '产品部', positionId: null, academicYear: '2025-2026' }, // 多部门
-    { userId: 'u2', studentNo: 'S002', departmentId: 'dept-tech', departmentName: '技术部', positionId: null, academicYear: '2025-2026' },
-    { userId: 'u3', studentNo: 'S003', departmentId: 'dept-prod', departmentName: '产品部', positionId: null, academicYear: '2024-2025' }, // 前学年
+    {
+      userId: 'u1',
+      studentNo: 'S001',
+      departmentId: 'dept-tech',
+      departmentName: '技术部',
+      positionId: null,
+      academicYear: '2025-2026',
+    },
+    {
+      userId: 'u1',
+      studentNo: 'S001',
+      departmentId: 'dept-prod',
+      departmentName: '产品部',
+      positionId: null,
+      academicYear: '2025-2026',
+    }, // 多部门
+    {
+      userId: 'u2',
+      studentNo: 'S002',
+      departmentId: 'dept-tech',
+      departmentName: '技术部',
+      positionId: null,
+      academicYear: '2025-2026',
+    },
+    {
+      userId: 'u3',
+      studentNo: 'S003',
+      departmentId: 'dept-prod',
+      departmentName: '产品部',
+      positionId: null,
+      academicYear: '2024-2025',
+    }, // 前学年
   ];
   source.seedMembershipFacts('club-acm', members);
 
   const history: AdmissionAcceptanceFact[] = [
-    { userId: 'u1', studentNo: 'S001', recruitmentActivityId: 'rec-1', activityName: '2025秋招', scope: 'normal', acceptedAt: '2025-09-01', departmentId: 'dept-tech', departmentName: '技术部', academicYear: '2025-2026' },
-    { userId: 'u2', studentNo: 'S002', recruitmentActivityId: 'rec-2', activityName: '2025联合', scope: 'joint', acceptedAt: '2025-10-01', departmentId: 'dept-tech', departmentName: '技术部', academicYear: '2025-2026' },
-    { userId: 'u4', studentNo: 'S004', recruitmentActivityId: 'rec-1', activityName: '2025秋招', scope: 'normal', acceptedAt: '2025-09-02', departmentId: 'dept-prod', departmentName: '产品部', academicYear: '2025-2026' },
+    {
+      userId: 'u1',
+      studentNo: 'S001',
+      recruitmentActivityId: 'rec-1',
+      activityName: '2025秋招',
+      scope: 'normal',
+      acceptedAt: '2025-09-01',
+      departmentId: 'dept-tech',
+      departmentName: '技术部',
+      academicYear: '2025-2026',
+    },
+    {
+      userId: 'u2',
+      studentNo: 'S002',
+      recruitmentActivityId: 'rec-2',
+      activityName: '2025联合',
+      scope: 'joint',
+      acceptedAt: '2025-10-01',
+      departmentId: 'dept-tech',
+      departmentName: '技术部',
+      academicYear: '2025-2026',
+    },
+    {
+      userId: 'u4',
+      studentNo: 'S004',
+      recruitmentActivityId: 'rec-1',
+      activityName: '2025秋招',
+      scope: 'normal',
+      acceptedAt: '2025-09-02',
+      departmentId: 'dept-prod',
+      departmentName: '产品部',
+      academicYear: '2025-2026',
+    },
   ];
   source.seedAdmissionHistory('club-acm', history);
 
   // 另一个社团的成员（隔离用）
   source.seedClubProfile({ clubId: 'club-intro', forcedSuspension: false });
   source.seedMembershipFacts('club-intro', [
-    { userId: 'u10', studentNo: 'S010', departmentId: 'dept-intro', departmentName: '介绍部', positionId: null, academicYear: '2025-2026' },
+    {
+      userId: 'u10',
+      studentNo: 'S010',
+      departmentId: 'dept-intro',
+      departmentName: '介绍部',
+      positionId: null,
+      academicYear: '2025-2026',
+    },
   ]);
 
   return source;
@@ -240,7 +308,11 @@ describe('ClubStatisticsQuery — drilldown（下钻）', () => {
       userId: 'u_leader',
       clubScopes: [{ clubId: 'club-acm', level: 'club', departmentIds: [] }],
     });
-    const view = await query.drilldown({ principal, clubId: 'club-acm', metric: 'current_members' });
+    const view = await query.drilldown({
+      principal,
+      clubId: 'club-acm',
+      metric: 'current_members',
+    });
     assert.equal(view.metric, 'current_members');
     assert.ok(view.rows.length > 0);
     // 不含 rank/score/percentile
@@ -259,7 +331,11 @@ describe('ClubStatisticsQuery — drilldown（下钻）', () => {
       userId: 'u_leader',
       clubScopes: [{ clubId: 'club-acm', level: 'club', departmentIds: [] }],
     });
-    const view = await query.drilldown({ principal, clubId: 'club-acm', metric: 'admission_history' });
+    const view = await query.drilldown({
+      principal,
+      clubId: 'club-acm',
+      metric: 'admission_history',
+    });
     assert.equal(view.metric, 'admission_history');
     assert.ok(view.rows.length > 0);
   });
@@ -272,8 +348,8 @@ describe('ClubStatisticsQuery — drilldown（下钻）', () => {
       userId: 'u_leader',
       clubScopes: [{ clubId: 'club-acm', level: 'club', departmentIds: [] }],
     });
-    await assert.rejects(
-      () => query.drilldown({ principal, clubId: 'club-acm', metric: 'leaderboard' }),
+    await assert.rejects(() =>
+      query.drilldown({ principal, clubId: 'club-acm', metric: 'leaderboard' }),
     );
   });
 
@@ -299,7 +375,11 @@ describe('ClubStatisticsQuery — drilldown（下钻）', () => {
       userId: 'u_dept',
       clubScopes: [{ clubId: 'club-acm', level: 'department', departmentIds: ['dept-tech'] }],
     });
-    const view = await query.drilldown({ principal, clubId: 'club-acm', metric: 'current_members' });
+    const view = await query.drilldown({
+      principal,
+      clubId: 'club-acm',
+      metric: 'current_members',
+    });
     for (const row of view.rows) {
       assert.equal(row.departmentId, 'dept-tech', '部门负责人只看到技术部');
     }

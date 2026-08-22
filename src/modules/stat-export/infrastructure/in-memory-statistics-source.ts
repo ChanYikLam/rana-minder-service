@@ -55,12 +55,18 @@ export class InMemoryStatisticsSource implements StatisticsSourcePort {
 
   /** 种子社团成员事实 */
   seedMembershipFacts(clubId: string, facts: readonly MembershipFact[]): void {
-    this.membershipsByClub.set(clubId, facts.map((f) => ({ ...f })));
+    this.membershipsByClub.set(
+      clubId,
+      facts.map((f) => ({ ...f })),
+    );
   }
 
   /** 种子社团录取历史 */
   seedAdmissionHistory(clubId: string, facts: readonly AdmissionAcceptanceFact[]): void {
-    this.admissionsByClub.set(clubId, facts.map((f) => ({ ...f })));
+    this.admissionsByClub.set(
+      clubId,
+      facts.map((f) => ({ ...f })),
+    );
   }
 
   /** 种子普通招新活动引用 */
@@ -70,7 +76,10 @@ export class InMemoryStatisticsSource implements StatisticsSourcePort {
 
   /** 种子漏斗事实 */
   seedFunnelFacts(activityId: string, facts: readonly NormalFunnelFact[]): void {
-    this.funnelFactsByActivity.set(activityId, facts.map((f) => ({ ...f })));
+    this.funnelFactsByActivity.set(
+      activityId,
+      facts.map((f) => ({ ...f })),
+    );
   }
 
   /** 种子联合活动引用 */
@@ -80,7 +89,10 @@ export class InMemoryStatisticsSource implements StatisticsSourcePort {
 
   /** 种子联合结论事实 */
   seedJointConclusionFacts(activityId: string, facts: readonly JointConclusionFact[]): void {
-    this.jointConclusionsByActivity.set(activityId, facts.map((f) => ({ ...f })));
+    this.jointConclusionsByActivity.set(
+      activityId,
+      facts.map((f) => ({ ...f })),
+    );
   }
 
   /** 种子平台全量成员 */

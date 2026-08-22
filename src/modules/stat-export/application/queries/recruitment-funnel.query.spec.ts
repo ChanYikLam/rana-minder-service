@@ -24,13 +24,50 @@ function setupSource() {
   source.seedClubProfile({ clubId: 'club-other', forcedSuspension: false });
 
   // 普通招新活动
-  source.seedNormalActivity({ activityId: 'rec-normal-1', clubId: 'club-acm', academicYear: '2025-2026' });
+  source.seedNormalActivity({
+    activityId: 'rec-normal-1',
+    clubId: 'club-acm',
+    academicYear: '2025-2026',
+  });
 
   // 漏斗事实
   source.seedFunnelFacts('rec-normal-1', [
-    { applicationId: 'app-1', applicantId: 'u1', appliedAt: '2025-06-01', departmentId: 'dept-tech', departmentName: '技术部', attendedInterview: true, invitedAt: '2025-06-10', invitationAcceptedAt: '2025-06-15', orderedChoiceCount: 2, acceptsAdjustment: true },
-    { applicationId: 'app-2', applicantId: 'u2', appliedAt: '2025-06-02', departmentId: 'dept-tech', departmentName: '技术部', attendedInterview: true, invitedAt: '2025-06-11', invitationAcceptedAt: null, orderedChoiceCount: 1, acceptsAdjustment: false },
-    { applicationId: 'app-3', applicantId: 'u3', appliedAt: '2025-06-03', departmentId: 'dept-prod', departmentName: '产品部', attendedInterview: false, invitedAt: null, invitationAcceptedAt: null, orderedChoiceCount: 0, acceptsAdjustment: null },
+    {
+      applicationId: 'app-1',
+      applicantId: 'u1',
+      appliedAt: '2025-06-01',
+      departmentId: 'dept-tech',
+      departmentName: '技术部',
+      attendedInterview: true,
+      invitedAt: '2025-06-10',
+      invitationAcceptedAt: '2025-06-15',
+      orderedChoiceCount: 2,
+      acceptsAdjustment: true,
+    },
+    {
+      applicationId: 'app-2',
+      applicantId: 'u2',
+      appliedAt: '2025-06-02',
+      departmentId: 'dept-tech',
+      departmentName: '技术部',
+      attendedInterview: true,
+      invitedAt: '2025-06-11',
+      invitationAcceptedAt: null,
+      orderedChoiceCount: 1,
+      acceptsAdjustment: false,
+    },
+    {
+      applicationId: 'app-3',
+      applicantId: 'u3',
+      appliedAt: '2025-06-03',
+      departmentId: 'dept-prod',
+      departmentName: '产品部',
+      attendedInterview: false,
+      invitedAt: null,
+      invitationAcceptedAt: null,
+      orderedChoiceCount: 0,
+      acceptsAdjustment: null,
+    },
   ]);
 
   return source;
@@ -42,7 +79,11 @@ describe('RecruitmentFunnelQuery — 角色（STAT-002）', () => {
     const audit = new InMemoryStatisticsAuditPort();
     const query = new RecruitmentFunnelQuery(source, audit, new StatisticsSpecification());
     const view = await query.funnel({
-      principal: { userId: 'u_leader', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-acm', level: 'club', departmentIds: [] }] },
+      principal: {
+        userId: 'u_leader',
+        isPlatformSuperAdmin: false,
+        clubScopes: [{ clubId: 'club-acm', level: 'club', departmentIds: [] }],
+      },
       clubId: 'club-acm',
       activityId: 'rec-normal-1',
     });
@@ -60,7 +101,11 @@ describe('RecruitmentFunnelQuery — 角色（STAT-002）', () => {
     const query = new RecruitmentFunnelQuery(source, audit, new StatisticsSpecification());
     // 部门负责人仅技术部
     const view = await query.funnel({
-      principal: { userId: 'u_dept', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-acm', level: 'department', departmentIds: ['dept-tech'] }] },
+      principal: {
+        userId: 'u_dept',
+        isPlatformSuperAdmin: false,
+        clubScopes: [{ clubId: 'club-acm', level: 'department', departmentIds: ['dept-tech'] }],
+      },
       clubId: 'club-acm',
       activityId: 'rec-normal-1',
     });
@@ -76,11 +121,12 @@ describe('RecruitmentFunnelQuery — 角色（STAT-002）', () => {
     const audit = new InMemoryStatisticsAuditPort();
     const query = new RecruitmentFunnelQuery(source, audit, new StatisticsSpecification());
     await assert.rejects(
-      () => query.funnel({
-        principal: { userId: 'u_member', isPlatformSuperAdmin: false, clubScopes: [] },
-        clubId: 'club-acm',
-        activityId: 'rec-normal-1',
-      }),
+      () =>
+        query.funnel({
+          principal: { userId: 'u_member', isPlatformSuperAdmin: false, clubScopes: [] },
+          clubId: 'club-acm',
+          activityId: 'rec-normal-1',
+        }),
       (e: StatisticsAccessError) => e.code === 'IFC-ERR-003',
     );
   });
@@ -90,8 +136,18 @@ describe('RecruitmentFunnelQuery — 角色（STAT-002）', () => {
     // club-other 没有 seed 任何活动
     const audit = new InMemoryStatisticsAuditPort();
     const query = new RecruitmentFunnelQuery(source, audit, new StatisticsSpecification());
-    source.seedNormalActivity({ activityId: 'other-activity', clubId: 'club-other', academicYear: '2025-2026' });
-    const principal = { userId: 'u_leader', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-acm', level: 'club' as const, departmentIds: [] as readonly string[] }] };
+    source.seedNormalActivity({
+      activityId: 'other-activity',
+      clubId: 'club-other',
+      academicYear: '2025-2026',
+    });
+    const principal = {
+      userId: 'u_leader',
+      isPlatformSuperAdmin: false,
+      clubScopes: [
+        { clubId: 'club-acm', level: 'club' as const, departmentIds: [] as readonly string[] },
+      ],
+    };
     // 活动存在但不是 club-acm 的
     await assert.rejects(
       () => query.funnel({ principal, clubId: 'club-acm', activityId: 'other-activity' }),
@@ -103,7 +159,13 @@ describe('RecruitmentFunnelQuery — 角色（STAT-002）', () => {
     const source = setupSource();
     const audit = new InMemoryStatisticsAuditPort();
     const query = new RecruitmentFunnelQuery(source, audit, new StatisticsSpecification());
-    const principal = { userId: 'u_leader', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-acm', level: 'club' as const, departmentIds: [] as readonly string[] }] };
+    const principal = {
+      userId: 'u_leader',
+      isPlatformSuperAdmin: false,
+      clubScopes: [
+        { clubId: 'club-acm', level: 'club' as const, departmentIds: [] as readonly string[] },
+      ],
+    };
     await assert.rejects(
       () => query.funnel({ principal, clubId: 'club-acm', activityId: 'nonexistent' }),
       (e: StatisticsAccessError) => e.code === 'IFC-ERR-015',
@@ -113,10 +175,24 @@ describe('RecruitmentFunnelQuery — 角色（STAT-002）', () => {
   it('紧急停用社团：拒绝 IFC-ERR-006', async () => {
     const source = setupSource();
     source.seedClubProfile({ clubId: 'club-suspended', forcedSuspension: true });
-    source.seedNormalActivity({ activityId: 'susp-act', clubId: 'club-suspended', academicYear: '2025-2026' });
+    source.seedNormalActivity({
+      activityId: 'susp-act',
+      clubId: 'club-suspended',
+      academicYear: '2025-2026',
+    });
     const audit = new InMemoryStatisticsAuditPort();
     const query = new RecruitmentFunnelQuery(source, audit, new StatisticsSpecification());
-    const principal = { userId: 'u_leader', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-suspended', level: 'club' as const, departmentIds: [] as readonly string[] }] };
+    const principal = {
+      userId: 'u_leader',
+      isPlatformSuperAdmin: false,
+      clubScopes: [
+        {
+          clubId: 'club-suspended',
+          level: 'club' as const,
+          departmentIds: [] as readonly string[],
+        },
+      ],
+    };
     await assert.rejects(
       () => query.funnel({ principal, clubId: 'club-suspended', activityId: 'susp-act' }),
       (e: StatisticsAccessError) => e.code === 'IFC-ERR-006',

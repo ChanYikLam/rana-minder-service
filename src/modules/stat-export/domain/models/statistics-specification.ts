@@ -111,7 +111,7 @@ export interface SummaryItem {
 
 export interface SplitHistoryView {
   readonly admissionHistory: {
-    readonly totalAccepted: number;       // 事件计数（非去重人数）
+    readonly totalAccepted: number; // 事件计数（非去重人数）
     readonly normalTotal: number;
     readonly jointTotal: number;
     readonly byActivity: ReadonlyArray<{
@@ -163,10 +163,10 @@ export interface JointConclusionStatsView {
 // ---------------------------------------------------------------------------
 
 export type CaliberViolationReason =
-  | 'MIXED_SCOPE_CALIBER'       // 普通/联合混合
-  | 'HISTORY_CURRENT_MIXED'     // 录取历史与当前成员混同
-  | 'LEADERBOARD_FORBIDDEN'     // 排行榜被禁止
-  | 'RANKED_OUTPUT_FORBIDDEN';  // 输出含排名/评分
+  | 'MIXED_SCOPE_CALIBER' // 普通/联合混合
+  | 'HISTORY_CURRENT_MIXED' // 录取历史与当前成员混同
+  | 'LEADERBOARD_FORBIDDEN' // 排行榜被禁止
+  | 'RANKED_OUTPUT_FORBIDDEN'; // 输出含排名/评分
 
 export class StatisticsCaliberError extends Error {
   constructor(
@@ -195,25 +195,54 @@ export type ExportDatasetType = (typeof EXPORT_DATASET_TYPES)[number];
 /** 字段基线：联系方式不在默认导出范围内、秘密标识永不出现 */
 export const EXPORT_FIELD_GROUPS: Record<ExportDatasetType, readonly string[]> = {
   club_summary: ['metric', 'value', 'scope', 'academicYear', 'trend', 'trendValue'],
-  current_members: ['userId', 'studentNo', 'departmentId', 'departmentName', 'positionId', 'academicYear'],
+  current_members: [
+    'userId',
+    'studentNo',
+    'departmentId',
+    'departmentName',
+    'positionId',
+    'academicYear',
+  ],
   admission_history: [
-    'userId', 'studentNo', 'recruitmentActivityId', 'activityName',
-    'scope', 'acceptedAt', 'departmentId', 'departmentName', 'academicYear',
+    'userId',
+    'studentNo',
+    'recruitmentActivityId',
+    'activityName',
+    'scope',
+    'acceptedAt',
+    'departmentId',
+    'departmentName',
+    'academicYear',
   ],
   recruitment_funnel: [
-    'stage', 'count', 'applicantsWithChoices', 'totalChoiceCount',
-    'adjustmentAccepts', 'adjustmentDeclines', 'adjustmentUnspecified',
+    'stage',
+    'count',
+    'applicantsWithChoices',
+    'totalChoiceCount',
+    'adjustmentAccepts',
+    'adjustmentDeclines',
+    'adjustmentUnspecified',
   ],
   joint_conclusions: [
-    'jointActivityId', 'clubId', 'clubName', 'conclusion',
-    'total', 'accepted', 'rejected', 'pending',
+    'jointActivityId',
+    'clubId',
+    'clubName',
+    'conclusion',
+    'total',
+    'accepted',
+    'rejected',
+    'pending',
   ],
 };
 
 /** 绝不允许出现在导出中的字段（秘密标识等） */
 const NEVER_EXPORT_FIELDS = new Set([
-  'idCard', 'secretFlag', 'internalNote', 'secretMark',
-  'phone', 'email', // EXP-002：默认不导出联系方式
+  'idCard',
+  'secretFlag',
+  'internalNote',
+  'secretMark',
+  'phone',
+  'email', // EXP-002：默认不导出联系方式
 ]);
 
 // ---------------------------------------------------------------------------
@@ -236,7 +265,10 @@ function matchesMembership(fact: MembershipFact, filters: StatisticsFilters | un
   return true;
 }
 
-function matchesAdmission(fact: AdmissionAcceptanceFact, filters: StatisticsFilters | undefined): boolean {
+function matchesAdmission(
+  fact: AdmissionAcceptanceFact,
+  filters: StatisticsFilters | undefined,
+): boolean {
   if (!filters) return true;
   if (filters.academicYear && fact.academicYear !== filters.academicYear) return false;
   if (filters.departmentId && fact.departmentId !== filters.departmentId) return false;
@@ -257,7 +289,10 @@ function matchesFunnel(fact: NormalFunnelFact, filters: StatisticsFilters | unde
   return true;
 }
 
-function matchesJointConclusion(fact: JointConclusionFact, filters: StatisticsFilters | undefined): boolean {
+function matchesJointConclusion(
+  fact: JointConclusionFact,
+  filters: StatisticsFilters | undefined,
+): boolean {
   if (!filters) return true;
   if (filters.departmentId && fact.departmentId !== filters.departmentId) return false;
   return true;
@@ -353,21 +388,34 @@ export class StatisticsSpecification {
     membershipFacts: ReadonlyArray<MembershipFact>,
     filters?: StatisticsFilters,
   ): SplitHistoryView {
-    const historyFiltered = filters ? historyFacts.filter((h) => matchesAdmission(h, filters)) : historyFacts;
-    const memberFiltered = filters ? membershipFacts.filter((m) => matchesMembership(m, filters)) : membershipFacts;
+    const historyFiltered = filters
+      ? historyFacts.filter((h) => matchesAdmission(h, filters))
+      : historyFacts;
+    const memberFiltered = filters
+      ? membershipFacts.filter((m) => matchesMembership(m, filters))
+      : membershipFacts;
 
     // 历史：按范围split normal/joint分别计数事件（非去重——接受事件可重复）
     const normalHistory = historyFiltered.filter((h) => h.scope === 'normal');
     const jointHistory = historyFiltered.filter((h) => h.scope === 'joint');
 
     // 按活动聚合
-    const byActivityMap = new Map<string, {
-      id: string; name: string | null;
-      normal: number; joint: number;
-    }>();
+    const byActivityMap = new Map<
+      string,
+      {
+        id: string;
+        name: string | null;
+        normal: number;
+        joint: number;
+      }
+    >();
     for (const h of historyFiltered) {
-      const entry = byActivityMap.get(h.recruitmentActivityId)
-        ?? { id: h.recruitmentActivityId, name: h.activityName ?? null, normal: 0, joint: 0 };
+      const entry = byActivityMap.get(h.recruitmentActivityId) ?? {
+        id: h.recruitmentActivityId,
+        name: h.activityName ?? null,
+        normal: 0,
+        joint: 0,
+      };
       if (h.scope === 'normal') entry.normal += 1;
       else entry.joint += 1;
       byActivityMap.set(h.recruitmentActivityId, entry);
@@ -379,9 +427,26 @@ export class StatisticsSpecification {
         normalTotal: normalHistory.length,
         jointTotal: jointHistory.length,
         byActivity: [...byActivityMap.values()].flatMap((e) => {
-          const items: Array<{ recruitmentActivityId: string; activityName: string | null; accepted: number; scope: StatScopeKind }> = [];
-          if (e.normal > 0) items.push({ recruitmentActivityId: e.id, activityName: e.name, accepted: e.normal, scope: 'normal' });
-          if (e.joint > 0) items.push({ recruitmentActivityId: e.id, activityName: e.name, accepted: e.joint, scope: 'joint' });
+          const items: Array<{
+            recruitmentActivityId: string;
+            activityName: string | null;
+            accepted: number;
+            scope: StatScopeKind;
+          }> = [];
+          if (e.normal > 0)
+            items.push({
+              recruitmentActivityId: e.id,
+              activityName: e.name,
+              accepted: e.normal,
+              scope: 'normal',
+            });
+          if (e.joint > 0)
+            items.push({
+              recruitmentActivityId: e.id,
+              activityName: e.name,
+              accepted: e.joint,
+              scope: 'joint',
+            });
           return items;
         }),
       },
@@ -397,8 +462,13 @@ export class StatisticsSpecification {
 
   /** 排行榜/评分/排名相关视图标识，命中即禁止（STAT-001）。 */
   private static readonly FORBIDDEN_VIEW_TOKENS = [
-    'leaderboard', 'ranking', 'ranking_list', 'top_members',
-    'member_score', 'person_rank', 'scoreboard',
+    'leaderboard',
+    'ranking',
+    'ranking_list',
+    'top_members',
+    'member_score',
+    'person_rank',
+    'scoreboard',
   ];
 
   /**
@@ -496,9 +566,18 @@ export class StatisticsSpecification {
 
     const filtered = filters ? facts.filter((f) => matchesJointConclusion(f, filters)) : facts;
 
-    const byClub = new Map<string, { id: string; name: string | null; accepted: number; rejected: number; pending: number }>();
+    const byClub = new Map<
+      string,
+      { id: string; name: string | null; accepted: number; rejected: number; pending: number }
+    >();
     for (const f of filtered) {
-      const entry = byClub.get(f.clubId) ?? { id: f.clubId, name: f.clubName ?? null, accepted: 0, rejected: 0, pending: 0 };
+      const entry = byClub.get(f.clubId) ?? {
+        id: f.clubId,
+        name: f.clubName ?? null,
+        accepted: 0,
+        rejected: 0,
+        pending: 0,
+      };
       if (f.conclusion === 'accepted') entry.accepted += 1;
       else if (f.conclusion === 'rejected') entry.rejected += 1;
       else entry.pending += 1;

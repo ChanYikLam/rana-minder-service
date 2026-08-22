@@ -9,9 +9,16 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { StatisticsSpecification, type StatisticsFilters } from '../../domain/models/statistics-specification';
+import {
+  StatisticsSpecification,
+  type StatisticsFilters,
+} from '../../domain/models/statistics-specification';
 import { STATISTICS_SOURCE, type StatisticsSourcePort } from '../ports/statistics-source.port';
-import { STATISTICS_AUDIT_PORT, type StatisticsAuditPort, type StatisticsPrincipal } from '../ports/statistics-authorization.port';
+import {
+  STATISTICS_AUDIT_PORT,
+  type StatisticsAuditPort,
+  type StatisticsPrincipal,
+} from '../ports/statistics-authorization.port';
 import { requireClubScope } from '../statistics-scope';
 import { statisticsErrors } from '../statistics-errors';
 
@@ -88,12 +95,18 @@ export class RecruitmentFunnelQuery {
     const facts = await this.source.loadNormalFunnelFacts(activityId);
 
     // 作用域过滤（部门负责人仅见本部门事实）
-    const scopedFacts = scope.kind === 'department'
-      ? facts.filter((f) => f.departmentId !== null && scope.departmentIds.includes(f.departmentId))
-      : facts;
+    const scopedFacts =
+      scope.kind === 'department'
+        ? facts.filter(
+            (f) => f.departmentId !== null && scope.departmentIds.includes(f.departmentId),
+          )
+        : facts;
 
     // 口径计算
-    const { stages, orderedChoices, adjustment } = this.spec.recruitmentFunnel(scopedFacts, filters);
+    const { stages, orderedChoices, adjustment } = this.spec.recruitmentFunnel(
+      scopedFacts,
+      filters,
+    );
 
     // 审计
     await this.audit.record({
@@ -125,9 +138,7 @@ export class RecruitmentFunnelQuery {
     if (principal.isPlatformSuperAdmin) return;
     const profile = await this.source.loadClubProfile(clubId);
     if (profile !== null && profile.forcedSuspension) {
-      throw statisticsErrors.precondition(
-        `社团 ${clubId} 处于紧急停用状态，统计撤权（STAT-002）`,
-      );
+      throw statisticsErrors.precondition(`社团 ${clubId} 处于紧急停用状态，统计撤权（STAT-002）`);
     }
   }
 }

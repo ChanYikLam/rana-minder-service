@@ -10,17 +10,21 @@
  * → IFC-ERR-* → HTTP 状态，带 supportId。
  */
 
-import {
-  Controller, Get, Inject, Param, Query,
-} from '@nestjs/common';
+import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
 import { HttpException } from '@nestjs/common';
 
 import { StatisticsActor, type RequestActor } from './statistics-actor';
 import { StatisticsSpecification } from '../../domain/models/statistics-specification';
-import { ClubStatisticsQuery, type ClubStatisticsInput } from '../../application/queries/club-statistics.query';
+import {
+  ClubStatisticsQuery,
+  type ClubStatisticsInput,
+} from '../../application/queries/club-statistics.query';
 import { RecruitmentFunnelQuery } from '../../application/queries/recruitment-funnel.query';
 import { JointActivityStatisticsQuery } from '../../application/queries/joint-activity-statistics.query';
-import { STATISTICS_AUTHORIZATION_PORT, type StatisticsAuthorizationPort } from '../../application/ports/statistics-authorization.port';
+import {
+  STATISTICS_AUTHORIZATION_PORT,
+  type StatisticsAuthorizationPort,
+} from '../../application/ports/statistics-authorization.port';
 import { StatisticsAccessError } from '../../application/statistics-errors';
 import { StatisticsCaliberError } from '../../domain/models/statistics-specification';
 import { IFC_ERROR_HTTP_STATUS } from '../../../../common/contracts/api-error';
@@ -76,7 +80,11 @@ export class StatisticsController {
     @Query('limit') limitRaw?: string,
   ) {
     return this.catchErrors(async () => {
-      if (!metric) throw new StatisticsAccessError('IFC-ERR-005', '缺少必填查询参数 metric（支持：current_members, admission_history）');
+      if (!metric)
+        throw new StatisticsAccessError(
+          'IFC-ERR-005',
+          '缺少必填查询参数 metric（支持：current_members, admission_history）',
+        );
       this.spec.assertLeaderboardClosed(metric);
 
       const principal = await this.authz.resolvePrincipal(actor.userId);
@@ -142,9 +150,7 @@ export class StatisticsController {
   // -----------------------------------------------------------------------
 
   @Get('admin/stats')
-  async platformSummary(
-    @StatisticsActor() actor: RequestActor,
-  ) {
+  async platformSummary(@StatisticsActor() actor: RequestActor) {
     return this.catchErrors(async () => {
       const principal = await this.authz.resolvePrincipal(actor.userId);
       return this.clubStats.platformSummary(principal);
@@ -192,7 +198,11 @@ export class StatisticsController {
     from?: string;
     to?: string;
   }) {
-    const filters: { academicYear?: string; departmentId?: string; timeRange?: { from: string; to: string } } = {};
+    const filters: {
+      academicYear?: string;
+      departmentId?: string;
+      timeRange?: { from: string; to: string };
+    } = {};
     if (q.academicYear) filters.academicYear = q.academicYear;
     if (q.departmentId) filters.departmentId = q.departmentId;
     if (q.from && q.to) filters.timeRange = { from: q.from, to: q.to };

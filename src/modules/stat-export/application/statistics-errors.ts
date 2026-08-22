@@ -10,8 +10,7 @@ import type { ApiErrorCode } from '../../../common/contracts/api-error';
 /** 统计域应用层允许的错误码子集 */
 export type StatisticsErrorCode = Extract<
   ApiErrorCode,
-  | 'IFC-ERR-003' | 'IFC-ERR-004' | 'IFC-ERR-005'
-  | 'IFC-ERR-006' | 'IFC-ERR-015'
+  'IFC-ERR-003' | 'IFC-ERR-004' | 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-015'
 >;
 
 /** 统计访问错误：携带稳定 IFC 错误码和安全的可披露消息 */
@@ -29,14 +28,9 @@ export class StatisticsAccessError extends Error {
 
 /** 便捷工厂 */
 export const statisticsErrors = {
-  forbidden: (message: string) =>
-    new StatisticsAccessError('IFC-ERR-003', message),
-  scopeMismatch: (message: string) =>
-    new StatisticsAccessError('IFC-ERR-004', message),
-  validation: (message: string) =>
-    new StatisticsAccessError('IFC-ERR-005', message),
-  precondition: (message: string) =>
-    new StatisticsAccessError('IFC-ERR-006', message),
-  notVisible: (message: string) =>
-    new StatisticsAccessError('IFC-ERR-015', message),
+  forbidden: (message: string) => new StatisticsAccessError('IFC-ERR-003', message),
+  scopeMismatch: (message: string) => new StatisticsAccessError('IFC-ERR-004', message),
+  validation: (message: string) => new StatisticsAccessError('IFC-ERR-005', message),
+  precondition: (message: string) => new StatisticsAccessError('IFC-ERR-006', message),
+  notVisible: (message: string) => new StatisticsAccessError('IFC-ERR-015', message),
 };

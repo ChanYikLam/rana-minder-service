@@ -24,11 +24,14 @@ export interface MemoryStatisticsAuthorizationSeed {
   readonly superAdminUserIds?: readonly string[];
   /** 按 userId → 作用域清单；未登记的用户视为普通成员/申请人（空作用域） */
   readonly clubScopes?: Readonly<
-    Record< string, ReadonlyArray<{
-      clubId: string;
-      level: 'club' | 'department';
-      departmentIds?: readonly string[];
-    }>>
+    Record<
+      string,
+      ReadonlyArray<{
+        clubId: string;
+        level: 'club' | 'department';
+        departmentIds?: readonly string[];
+      }>
+    >
   >;
 }
 
@@ -58,11 +61,14 @@ export class MemoryStatisticsAuthorizationPort implements StatisticsAuthorizatio
     const map = new Map<string, readonly StatisticsClubScope[]>();
     if (seed.clubScopes) {
       for (const [userId, scopes] of Object.entries(seed.clubScopes)) {
-        map.set(userId, scopes.map((s) => ({
-          clubId: s.clubId,
-          level: s.level,
-          departmentIds: s.departmentIds ? [...s.departmentIds] : [],
-        })));
+        map.set(
+          userId,
+          scopes.map((s) => ({
+            clubId: s.clubId,
+            level: s.level,
+            departmentIds: s.departmentIds ? [...s.departmentIds] : [],
+          })),
+        );
       }
     }
     this.scopes = map;

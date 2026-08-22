@@ -20,8 +20,11 @@ import type { StatisticsPrincipal } from '../../application/ports/statistics-aut
 describe('StatisticsController', () => {
   it('错误映射：IFC-ERR-003 → 403 HttpException', async () => {
     const controller = buildController({
-      resolvePrincipal: async () => ({ userId: 'u', isPlatformSuperAdmin: false, clubScopes: [] } as StatisticsPrincipal),
-      clubSummaryImpl: async () => { throw statisticsErrors.forbidden('无权'); },
+      resolvePrincipal: async () =>
+        ({ userId: 'u', isPlatformSuperAdmin: false, clubScopes: [] }) as StatisticsPrincipal,
+      clubSummaryImpl: async () => {
+        throw statisticsErrors.forbidden('无权');
+      },
     });
     try {
       await controller.clubSummary({ userId: 'u' }, 'club-1');
@@ -35,8 +38,15 @@ describe('StatisticsController', () => {
 
   it('错误映射：IFC-ERR-005（caliber violation）→ 422', async () => {
     const controller = buildController({
-      resolvePrincipal: async () => ({ userId: 'u', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-1', level: 'club', departmentIds: [] }] } as StatisticsPrincipal),
-      clubSummaryImpl: async () => { throw new Error('should not reach'); }, // will be stopped by drilldown endpoint
+      resolvePrincipal: async () =>
+        ({
+          userId: 'u',
+          isPlatformSuperAdmin: false,
+          clubScopes: [{ clubId: 'club-1', level: 'club', departmentIds: [] }],
+        }) as StatisticsPrincipal,
+      clubSummaryImpl: async () => {
+        throw new Error('should not reach');
+      }, // will be stopped by drilldown endpoint
     });
     // 用 drilldown 端点触发 leaderboard 拒绝（controller 层 assertLeaderboardClosed 前）
     try {
@@ -51,8 +61,15 @@ describe('StatisticsController', () => {
 
   it('错误映射：IFC-ERR-015 → 404', async () => {
     const controller = buildController({
-      resolvePrincipal: async () => ({ userId: 'u', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-1', level: 'club', departmentIds: [] }] } as StatisticsPrincipal),
-      clubSummaryImpl: async () => { throw statisticsErrors.notVisible('不存在'); },
+      resolvePrincipal: async () =>
+        ({
+          userId: 'u',
+          isPlatformSuperAdmin: false,
+          clubScopes: [{ clubId: 'club-1', level: 'club', departmentIds: [] }],
+        }) as StatisticsPrincipal,
+      clubSummaryImpl: async () => {
+        throw statisticsErrors.notVisible('不存在');
+      },
     });
     try {
       await controller.clubSummary({ userId: 'u' }, 'club-unknown');
@@ -76,7 +93,11 @@ describe('StatisticsController', () => {
         generatedAt: new Date().toISOString(),
         summary: [],
         departmentDistribution: [],
-        caliber: { normalAndJointSeparated: true, leaderboardProvided: false, admissionHistorySeparateFromCurrent: true },
+        caliber: {
+          normalAndJointSeparated: true,
+          leaderboardProvided: false,
+          admissionHistorySeparateFromCurrent: true,
+        },
       }),
     });
     const result = await controller.clubSummary({ userId: 'u_user' }, 'club-acm');
@@ -86,8 +107,10 @@ describe('StatisticsController', () => {
 
   it('未预料异常 → 500 IFC-ERR-016', async () => {
     const controller = buildController({
-      resolvePrincipal: async () => { throw new Error('unexpected diag'); },
-      clubSummaryImpl: async () => ({ clubId: 'x' } as any),
+      resolvePrincipal: async () => {
+        throw new Error('unexpected diag');
+      },
+      clubSummaryImpl: async () => ({ clubId: 'x' }) as any,
     });
     try {
       await controller.clubSummary({ userId: 'u' }, 'club-1');

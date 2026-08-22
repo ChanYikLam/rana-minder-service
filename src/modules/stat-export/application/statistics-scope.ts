@@ -11,9 +11,7 @@
  * - 普通成员/申请人：无作用域 → 拒绝访问。
  */
 
-import type {
-  StatisticsPrincipal,
-} from './ports/statistics-authorization.port';
+import type { StatisticsPrincipal } from './ports/statistics-authorization.port';
 import { statisticsErrors } from './statistics-errors';
 
 // ---------------------------------------------------------------------------
@@ -120,9 +118,7 @@ export function requireJointScope(
 ): ConvergedJointScope {
   const scope = convergeJointScope(principal, participantClubIds);
   if (scope === null) {
-    throw statisticsErrors.forbidden(
-      `用户 ${principal.userId} 无权查看该联合活动统计（STAT-002）`,
-    );
+    throw statisticsErrors.forbidden(`用户 ${principal.userId} 无权查看该联合活动统计（STAT-002）`);
   }
   return scope;
 }

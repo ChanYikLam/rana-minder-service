@@ -12,9 +12,16 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { StatisticsSpecification, type StatisticsFilters } from '../../domain/models/statistics-specification';
+import {
+  StatisticsSpecification,
+  type StatisticsFilters,
+} from '../../domain/models/statistics-specification';
 import { STATISTICS_SOURCE, type StatisticsSourcePort } from '../ports/statistics-source.port';
-import { STATISTICS_AUDIT_PORT, type StatisticsAuditPort, type StatisticsPrincipal } from '../ports/statistics-authorization.port';
+import {
+  STATISTICS_AUDIT_PORT,
+  type StatisticsAuditPort,
+  type StatisticsPrincipal,
+} from '../ports/statistics-authorization.port';
 import { requireJointScope } from '../statistics-scope';
 import { statisticsErrors } from '../statistics-errors';
 
@@ -87,14 +94,15 @@ export class JointActivityStatisticsQuery {
     const facts = await this.source.loadJointConclusionFacts(jointActivityId);
 
     // 部门作用域过滤：本社团的 facts 按部门过滤；其他社团的 facts 全部保留（STAT-002）
-    const scopedFacts = scope.kind === 'department' && scope.clubId
-      ? facts.filter((f) => {
-        if (f.clubId === scope.clubId) {
-          return f.departmentId !== null && scope.departmentIds.includes(f.departmentId);
-        }
-        return true; // 其他社团结论全部可见
-      })
-      : facts;
+    const scopedFacts =
+      scope.kind === 'department' && scope.clubId
+        ? facts.filter((f) => {
+            if (f.clubId === scope.clubId) {
+              return f.departmentId !== null && scope.departmentIds.includes(f.departmentId);
+            }
+            return true; // 其他社团结论全部可见
+          })
+        : facts;
 
     // 精确结论（不做小样本模糊化）
     const conclusion = this.spec.jointConclusionStats(scopedFacts, filters);

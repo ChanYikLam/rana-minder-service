@@ -32,11 +32,56 @@ function setupSource() {
   });
 
   source.seedJointConclusionFacts('joint-design-fair', [
-    { jointActivityId: 'joint-design-fair', clubId: 'club-acm', clubName: 'ACM 社', applicantId: 'u1', departmentId: 'dept-tech', departmentName: '技术部', conclusion: 'accepted', concludedAt: '2025-10-01' },
-    { jointActivityId: 'joint-design-fair', clubId: 'club-acm', clubName: 'ACM 社', applicantId: 'u2', departmentId: 'dept-prod', departmentName: '产品部', conclusion: 'accepted', concludedAt: '2025-10-01' },
-    { jointActivityId: 'joint-design-fair', clubId: 'club-design', clubName: '设计社', applicantId: 'u3', departmentId: 'dept-art', departmentName: '美术部', conclusion: 'rejected', concludedAt: '2025-10-01' },
-    { jointActivityId: 'joint-design-fair', clubId: 'club-design', clubName: '设计社', applicantId: 'u4', departmentId: 'dept-art', departmentName: '美术部', conclusion: 'pending', concludedAt: null },
-    { jointActivityId: 'joint-design-fair', clubId: 'club-acm', clubName: 'ACM 社', applicantId: 'u5', departmentId: 'dept-tech', departmentName: '技术部', conclusion: 'accepted', concludedAt: '2025-10-01' },
+    {
+      jointActivityId: 'joint-design-fair',
+      clubId: 'club-acm',
+      clubName: 'ACM 社',
+      applicantId: 'u1',
+      departmentId: 'dept-tech',
+      departmentName: '技术部',
+      conclusion: 'accepted',
+      concludedAt: '2025-10-01',
+    },
+    {
+      jointActivityId: 'joint-design-fair',
+      clubId: 'club-acm',
+      clubName: 'ACM 社',
+      applicantId: 'u2',
+      departmentId: 'dept-prod',
+      departmentName: '产品部',
+      conclusion: 'accepted',
+      concludedAt: '2025-10-01',
+    },
+    {
+      jointActivityId: 'joint-design-fair',
+      clubId: 'club-design',
+      clubName: '设计社',
+      applicantId: 'u3',
+      departmentId: 'dept-art',
+      departmentName: '美术部',
+      conclusion: 'rejected',
+      concludedAt: '2025-10-01',
+    },
+    {
+      jointActivityId: 'joint-design-fair',
+      clubId: 'club-design',
+      clubName: '设计社',
+      applicantId: 'u4',
+      departmentId: 'dept-art',
+      departmentName: '美术部',
+      conclusion: 'pending',
+      concludedAt: null,
+    },
+    {
+      jointActivityId: 'joint-design-fair',
+      clubId: 'club-acm',
+      clubName: 'ACM 社',
+      applicantId: 'u5',
+      departmentId: 'dept-tech',
+      departmentName: '技术部',
+      conclusion: 'accepted',
+      concludedAt: '2025-10-01',
+    },
   ]);
 
   return source;
@@ -48,7 +93,11 @@ describe('JointActivityStatisticsQuery — 角色（STAT-002）', () => {
     const audit = new InMemoryStatisticsAuditPort();
     const query = new JointActivityStatisticsQuery(source, audit, new StatisticsSpecification());
     const view = await query.statistics({
-      principal: { userId: 'u_acm_leader', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-acm', level: 'club', departmentIds: [] }] },
+      principal: {
+        userId: 'u_acm_leader',
+        isPlatformSuperAdmin: false,
+        clubScopes: [{ clubId: 'club-acm', level: 'club', departmentIds: [] }],
+      },
       jointActivityId: 'joint-design-fair',
     });
     assert.equal(view.jointActivityId, 'joint-design-fair');
@@ -76,7 +125,11 @@ describe('JointActivityStatisticsQuery — 角色（STAT-002）', () => {
     const audit = new InMemoryStatisticsAuditPort();
     const query = new JointActivityStatisticsQuery(source, audit, new StatisticsSpecification());
     const view = await query.statistics({
-      principal: { userId: 'u_acm_dept', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-acm', level: 'department', departmentIds: ['dept-tech'] }] },
+      principal: {
+        userId: 'u_acm_dept',
+        isPlatformSuperAdmin: false,
+        clubScopes: [{ clubId: 'club-acm', level: 'department', departmentIds: ['dept-tech'] }],
+      },
       jointActivityId: 'joint-design-fair',
     });
     // 仅 tech 部门：u1 + u5 accepted
@@ -98,10 +151,15 @@ describe('JointActivityStatisticsQuery — 角色（STAT-002）', () => {
     const audit = new InMemoryStatisticsAuditPort();
     const query = new JointActivityStatisticsQuery(source, audit, new StatisticsSpecification());
     await assert.rejects(
-      () => query.statistics({
-        principal: { userId: 'u_other_leader', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-other', level: 'club', departmentIds: [] }] },
-        jointActivityId: 'joint-design-fair',
-      }),
+      () =>
+        query.statistics({
+          principal: {
+            userId: 'u_other_leader',
+            isPlatformSuperAdmin: false,
+            clubScopes: [{ clubId: 'club-other', level: 'club', departmentIds: [] }],
+          },
+          jointActivityId: 'joint-design-fair',
+        }),
       (e: StatisticsAccessError) => e.code === 'IFC-ERR-003',
     );
   });
@@ -111,10 +169,11 @@ describe('JointActivityStatisticsQuery — 角色（STAT-002）', () => {
     const audit = new InMemoryStatisticsAuditPort();
     const query = new JointActivityStatisticsQuery(source, audit, new StatisticsSpecification());
     await assert.rejects(
-      () => query.statistics({
-        principal: { userId: 'u_member', isPlatformSuperAdmin: false, clubScopes: [] },
-        jointActivityId: 'joint-design-fair',
-      }),
+      () =>
+        query.statistics({
+          principal: { userId: 'u_member', isPlatformSuperAdmin: false, clubScopes: [] },
+          jointActivityId: 'joint-design-fair',
+        }),
       (e: StatisticsAccessError) => e.code === 'IFC-ERR-003',
     );
   });
@@ -139,10 +198,15 @@ describe('JointActivityStatisticsQuery — 角色（STAT-002）', () => {
     const audit = new InMemoryStatisticsAuditPort();
     const query = new JointActivityStatisticsQuery(source, audit, new StatisticsSpecification());
     await assert.rejects(
-      () => query.statistics({
-        principal: { userId: 'u_acm_leader', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-acm', level: 'club', departmentIds: [] }] },
-        jointActivityId: 'nonexistent',
-      }),
+      () =>
+        query.statistics({
+          principal: {
+            userId: 'u_acm_leader',
+            isPlatformSuperAdmin: false,
+            clubScopes: [{ clubId: 'club-acm', level: 'club', departmentIds: [] }],
+          },
+          jointActivityId: 'nonexistent',
+        }),
       (e: StatisticsAccessError) => e.code === 'IFC-ERR-015',
     );
   });
@@ -157,10 +221,15 @@ describe('JointActivityStatisticsQuery — 角色（STAT-002）', () => {
     const audit = new InMemoryStatisticsAuditPort();
     const query = new JointActivityStatisticsQuery(source, audit, new StatisticsSpecification());
     await assert.rejects(
-      () => query.statistics({
-        principal: { userId: 'u_susp_leader', isPlatformSuperAdmin: false, clubScopes: [{ clubId: 'club-suspended', level: 'club', departmentIds: [] }] },
-        jointActivityId: 'joint-susp',
-      }),
+      () =>
+        query.statistics({
+          principal: {
+            userId: 'u_susp_leader',
+            isPlatformSuperAdmin: false,
+            clubScopes: [{ clubId: 'club-suspended', level: 'club', departmentIds: [] }],
+          },
+          jointActivityId: 'joint-susp',
+        }),
       (e: StatisticsAccessError) => e.code === 'IFC-ERR-006',
     );
   });

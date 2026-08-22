@@ -32,8 +32,12 @@ describe('InMemoryStatisticsSource', () => {
   it('种子后返回克隆（外部修改不影响源）', async () => {
     const source = new InMemoryStatisticsSource();
     const fact: MembershipFact = {
-      userId: 'u1', studentNo: 'S001', departmentId: 'dept-a',
-      departmentName: '技术部', positionId: null, academicYear: '2025-2026',
+      userId: 'u1',
+      studentNo: 'S001',
+      departmentId: 'dept-a',
+      departmentName: '技术部',
+      positionId: null,
+      academicYear: '2025-2026',
     };
     source.seedMembershipFacts('club-1', [fact]);
 
@@ -74,7 +78,14 @@ describe('InMemoryStatisticsSource', () => {
 
   it('读取全平台数据', async () => {
     const source = new InMemoryStatisticsSource();
-    const m: MembershipFact = { userId: 'u1', studentNo: 'S001', departmentId: null, departmentName: null, positionId: null, academicYear: '2025-2026' };
+    const m: MembershipFact = {
+      userId: 'u1',
+      studentNo: 'S001',
+      departmentId: null,
+      departmentName: null,
+      positionId: null,
+      academicYear: '2025-2026',
+    };
     source.seedPlatformMembershipFacts([m]);
     const loaded = await source.loadPlatformMembershipFacts();
     assert.equal(loaded.length, 1);

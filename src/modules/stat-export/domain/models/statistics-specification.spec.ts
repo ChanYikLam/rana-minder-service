@@ -29,7 +29,14 @@ function membership(
   deptName: string | null = '技术部',
   year = '2025-2026',
 ): MembershipFact {
-  return { userId, studentNo, departmentId: deptId, departmentName: deptName, positionId: null, academicYear: year };
+  return {
+    userId,
+    studentNo,
+    departmentId: deptId,
+    departmentName: deptName,
+    positionId: null,
+    academicYear: year,
+  };
 }
 
 function admission(
@@ -43,8 +50,14 @@ function admission(
   activityName = '2025秋招',
 ): AdmissionAcceptanceFact {
   return {
-    userId, studentNo, recruitmentActivityId: activityId, activityName,
-    scope, acceptedAt: '2025-09-01', departmentId: deptId, departmentName: deptName,
+    userId,
+    studentNo,
+    recruitmentActivityId: activityId,
+    activityName,
+    scope,
+    acceptedAt: '2025-09-01',
+    departmentId: deptId,
+    departmentName: deptName,
     academicYear: year,
   };
 }
@@ -61,10 +74,16 @@ function funnel(
   deptName: string | null = '技术部',
 ): NormalFunnelFact {
   return {
-    applicationId: appId, applicantId, appliedAt: '2025-06-01',
-    departmentId: deptId, departmentName: deptName,
-    attendedInterview: attended, invitedAt: invited, invitationAcceptedAt: accepted,
-    orderedChoiceCount: choices, acceptsAdjustment: adjust,
+    applicationId: appId,
+    applicantId,
+    appliedAt: '2025-06-01',
+    departmentId: deptId,
+    departmentName: deptName,
+    attendedInterview: attended,
+    invitedAt: invited,
+    invitationAcceptedAt: accepted,
+    orderedChoiceCount: choices,
+    acceptsAdjustment: adjust,
   };
 }
 
@@ -76,9 +95,14 @@ function jointConclusion(
   conclusion: 'accepted' | 'rejected' | 'pending' = 'accepted',
 ): JointConclusionFact {
   return {
-    jointActivityId: jointId, clubId, clubName, applicantId,
-    departmentId: null, departmentName: null,
-    conclusion, concludedAt: '2025-10-01',
+    jointActivityId: jointId,
+    clubId,
+    clubName,
+    applicantId,
+    departmentId: null,
+    departmentName: null,
+    conclusion,
+    concludedAt: '2025-10-01',
   };
 }
 
@@ -114,7 +138,11 @@ describe('StatisticsSpecification — 普通/联合不混合', () => {
     // 历史含两个 normal + 一个 joint，但没有混合的 "totalAccepted" 既是 normal 又是 joint —— 提供的 totalAccepted 是总事件计数，但 normalTotal/jointTotal 分别列出
     assert.equal(view.admissionHistory.normalTotal, 2, 'normal 录取事件 2');
     assert.equal(view.admissionHistory.jointTotal, 1, 'joint 录取事件 1');
-    assert.equal(view.admissionHistory.totalAccepted, 3, 'totalAccepted = 3 事件计数（非混合，只是总计数）');
+    assert.equal(
+      view.admissionHistory.totalAccepted,
+      3,
+      'totalAccepted = 3 事件计数（非混合，只是总计数）',
+    );
     assert.ok('currentMembers' in view, 'currentMembers 键存在');
   });
 
@@ -151,7 +179,7 @@ describe('StatisticsSpecification — 普通/联合不混合', () => {
 
 describe('StatisticsSpecification — 多部门去重', () => {
   const memberships: MembershipFact[] = [
-    membership('u1', 'S001', 'dept-tech', '技术部'),   // S001 在两个部门
+    membership('u1', 'S001', 'dept-tech', '技术部'), // S001 在两个部门
     membership('u1', 'S001', 'dept-prod', '产品部'),
     membership('u2', 'S002', 'dept-tech', '技术部'),
     membership('u3', 'S003', 'dept-prod', '产品部'),
@@ -221,9 +249,7 @@ describe('StatisticsSpecification — 排行榜关闭', () => {
   });
 
   it('assertNoRankedOutput: 不含排名字段不抛', () => {
-    assert.doesNotThrow(() =>
-      spec.assertNoRankedOutput([{ userId: 'u1', studentNo: 'S001' }]),
-    );
+    assert.doesNotThrow(() => spec.assertNoRankedOutput([{ userId: 'u1', studentNo: 'S001' }]));
   });
 });
 
@@ -266,8 +292,14 @@ describe('StatisticsSpecification — 录取历史与当前成员分算', () => 
     const rec1 = byAct.find((a) => a.recruitmentActivityId === 'rec-1');
     assert.ok(rec1);
     // rec-1 同时有 normal 和 joint；byActivity 会分别为 scope 拆开
-    assert.equal(byAct.filter((a) => a.recruitmentActivityId === 'rec-1' && a.scope === 'normal').length, 1);
-    assert.equal(byAct.filter((a) => a.recruitmentActivityId === 'rec-1' && a.scope === 'joint').length, 1);
+    assert.equal(
+      byAct.filter((a) => a.recruitmentActivityId === 'rec-1' && a.scope === 'normal').length,
+      1,
+    );
+    assert.equal(
+      byAct.filter((a) => a.recruitmentActivityId === 'rec-1' && a.scope === 'joint').length,
+      1,
+    );
   });
 });
 
@@ -277,10 +309,10 @@ describe('StatisticsSpecification — 录取历史与当前成员分算', () => 
 
 describe('StatisticsSpecification — 招新漏斗', () => {
   const facts: NormalFunnelFact[] = [
-    funnel('a1', 'u1', true, '2025-06-10', '2025-06-15', 3, true, 'dept-tech', '技术部'),  // 全流程
-    funnel('a2', 'u2', true, '2025-06-11', null, 1, false),                                 // 邀请未接受
-    funnel('a3', 'u3', false, null, null, 2, null),                                          // 未参加面试
-    funnel('a4', 'u4', false, null, null, 0, null),                                          // 无志愿
+    funnel('a1', 'u1', true, '2025-06-10', '2025-06-15', 3, true, 'dept-tech', '技术部'), // 全流程
+    funnel('a2', 'u2', true, '2025-06-11', null, 1, false), // 邀请未接受
+    funnel('a3', 'u3', false, null, null, 2, null), // 未参加面试
+    funnel('a4', 'u4', false, null, null, 0, null), // 无志愿
   ];
 
   const { stages, orderedChoices, adjustment } = spec.recruitmentFunnel(facts);
@@ -358,7 +390,11 @@ describe('StatisticsSpecification — 导出字段基线', () => {
   });
 
   it('请求子集 → 交集', () => {
-    const { fields, rejected } = spec.clampExportFields('current_members', ['userId', 'studentNo', 'phone']);
+    const { fields, rejected } = spec.clampExportFields('current_members', [
+      'userId',
+      'studentNo',
+      'phone',
+    ]);
     assert.ok(fields.includes('userId'));
     assert.ok(fields.includes('studentNo'));
     assert.ok(!fields.includes('phone'), 'phone 应被拒绝');
@@ -366,7 +402,11 @@ describe('StatisticsSpecification — 导出字段基线', () => {
   });
 
   it('越权字段（不在基线中）被拒绝并列入 rejected', () => {
-    const { fields, rejected } = spec.clampExportFields('club_summary', ['metric', 'nonexistent_field', 'secretFlag']);
+    const { fields, rejected } = spec.clampExportFields('club_summary', [
+      'metric',
+      'nonexistent_field',
+      'secretFlag',
+    ]);
     assert.ok(fields.includes('metric'));
     assert.ok(!fields.includes('nonexistent_field'));
     assert.ok(!fields.includes('secretFlag'));
@@ -399,7 +439,10 @@ describe('StatisticsSpecification — 导出字段基线', () => {
   });
 
   it('clampExportFields: 拒绝 secretFlag 即使请求', () => {
-    const { fields, rejected } = spec.clampExportFields('current_members', ['userId', 'secretFlag']);
+    const { fields, rejected } = spec.clampExportFields('current_members', [
+      'userId',
+      'secretFlag',
+    ]);
     assert.ok(fields.includes('userId'));
     assert.ok(!fields.includes('secretFlag'));
     assert.ok(rejected.includes('secretFlag'));
@@ -431,7 +474,9 @@ describe('StatisticsSpecification — 筛选条件', () => {
       membership('u1', 'S001', 'dept-a', 'A部', '2024-2025'),
       membership('u2', 'S002', 'dept-a', 'A部', '2025-2026'),
     ];
-    const view = spec.splitAdmissionHistoryAndCurrent(history, memberships, { academicYear: '2024-2025' });
+    const view = spec.splitAdmissionHistoryAndCurrent(history, memberships, {
+      academicYear: '2024-2025',
+    });
     assert.equal(view.admissionHistory.normalTotal, 1);
     assert.equal(view.currentMembers.total, 1);
   });

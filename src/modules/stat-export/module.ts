@@ -15,9 +15,15 @@ import { Module } from '@nestjs/common';
 
 import { StatisticsSpecification } from './domain/models/statistics-specification';
 import { STATISTICS_SOURCE } from './application/ports/statistics-source.port';
-import { STATISTICS_AUTHORIZATION_PORT, STATISTICS_AUDIT_PORT } from './application/ports/statistics-authorization.port';
+import {
+  STATISTICS_AUTHORIZATION_PORT,
+  STATISTICS_AUDIT_PORT,
+} from './application/ports/statistics-authorization.port';
 import { InMemoryStatisticsSource } from './infrastructure/in-memory-statistics-source';
-import { InMemoryStatisticsAuditPort, MemoryStatisticsAuthorizationPort } from './infrastructure/memory-statistics-access';
+import {
+  InMemoryStatisticsAuditPort,
+  MemoryStatisticsAuthorizationPort,
+} from './infrastructure/memory-statistics-access';
 import { ClubStatisticsQuery } from './application/queries/club-statistics.query';
 import { RecruitmentFunnelQuery } from './application/queries/recruitment-funnel.query';
 import { JointActivityStatisticsQuery } from './application/queries/joint-activity-statistics.query';
@@ -35,7 +41,10 @@ export const STATISTICS_SPECIFICATION = Symbol('STATISTICS_SPECIFICATION');
 
     // 基础设施端口（内存桩，后续替换为 PostgreSQL 实现）
     { provide: STATISTICS_SOURCE, useClass: InMemoryStatisticsSource },
-    { provide: STATISTICS_AUTHORIZATION_PORT, useFactory: () => new MemoryStatisticsAuthorizationPort({}) },
+    {
+      provide: STATISTICS_AUTHORIZATION_PORT,
+      useFactory: () => new MemoryStatisticsAuthorizationPort({}),
+    },
     { provide: STATISTICS_AUDIT_PORT, useClass: InMemoryStatisticsAuditPort },
 
     // 应用查询用例

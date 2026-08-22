@@ -14,9 +14,17 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { StatisticsSpecification, type StatisticsFilters } from '../../domain/models/statistics-specification';
+import {
+  StatisticsSpecification,
+  type StatisticsFilters,
+} from '../../domain/models/statistics-specification';
 import { STATISTICS_SOURCE, type StatisticsSourcePort } from '../ports/statistics-source.port';
-import { STATISTICS_AUDIT_PORT, type StatisticsAuditPort, type StatisticsPrincipal, type StatisticsAccessAction } from '../ports/statistics-authorization.port';
+import {
+  STATISTICS_AUDIT_PORT,
+  type StatisticsAuditPort,
+  type StatisticsPrincipal,
+  type StatisticsAccessAction,
+} from '../ports/statistics-authorization.port';
 import { requireClubScope } from '../statistics-scope';
 import { statisticsErrors } from '../statistics-errors';
 
@@ -101,16 +109,24 @@ export class ClubStatisticsQuery {
     ]);
 
     // 按作用域过滤事实
-    const scopedMemberships = scope.kind === 'department'
-      ? memberships.filter((m) => m.departmentId !== null && scope.departmentIds.includes(m.departmentId))
-      : memberships;
-    const scopedHistory = scope.kind === 'department'
-      ? history.filter((h) => h.departmentId !== null && scope.departmentIds.includes(h.departmentId))
-      : history;
+    const scopedMemberships =
+      scope.kind === 'department'
+        ? memberships.filter(
+            (m) => m.departmentId !== null && scope.departmentIds.includes(m.departmentId),
+          )
+        : memberships;
+    const scopedHistory =
+      scope.kind === 'department'
+        ? history.filter(
+            (h) => h.departmentId !== null && scope.departmentIds.includes(h.departmentId),
+          )
+        : history;
 
     // 口径计算
     const { admissionHistory } = this.spec.splitAdmissionHistoryAndCurrent(
-      scopedHistory, scopedMemberships, filters,
+      scopedHistory,
+      scopedMemberships,
+      filters,
     );
     const dist = this.spec.departmentDistribution(scopedMemberships, filters);
     const currentTotal = this.spec.uniqueStudentCount(scopedMemberships, filters);
@@ -120,7 +136,11 @@ export class ClubStatisticsQuery {
     const historyByYear = this.groupHistoryByYear(scopedHistory);
     const currentYear = filters?.academicYear ?? undefined;
     const memberTrend = this.spec.computeTrend(currentYear, currentTotal, memberByYear);
-    const historyTrend = this.spec.computeTrend(currentYear, admissionHistory.totalAccepted, historyByYear);
+    const historyTrend = this.spec.computeTrend(
+      currentYear,
+      admissionHistory.totalAccepted,
+      historyByYear,
+    );
 
     // 审计
     await this.audit.record({
@@ -197,15 +217,18 @@ export class ClubStatisticsQuery {
 
     if (metric === 'current_members') {
       const memberships = await this.source.loadMembershipFacts(clubId);
-      const scoped = scope.kind === 'department'
-        ? memberships.filter((m) => m.departmentId !== null && scope.departmentIds.includes(m.departmentId))
-        : memberships;
+      const scoped =
+        scope.kind === 'department'
+          ? memberships.filter(
+              (m) => m.departmentId !== null && scope.departmentIds.includes(m.departmentId),
+            )
+          : memberships;
       const filtered = filters
         ? scoped.filter((m) => {
-          if (filters.departmentId && m.departmentId !== filters.departmentId) return false;
-          if (filters.academicYear && m.academicYear !== filters.academicYear) return false;
-          return true;
-        })
+            if (filters.departmentId && m.departmentId !== filters.departmentId) return false;
+            if (filters.academicYear && m.academicYear !== filters.academicYear) return false;
+            return true;
+          })
         : scoped;
 
       // 稳定排序：学号升序（非评分/排名序列）
@@ -235,19 +258,22 @@ export class ClubStatisticsQuery {
 
     if (metric === 'admission_history') {
       const history = await this.source.loadAdmissionHistory(clubId);
-      const scoped = scope.kind === 'department'
-        ? history.filter((h) => h.departmentId !== null && scope.departmentIds.includes(h.departmentId))
-        : history;
+      const scoped =
+        scope.kind === 'department'
+          ? history.filter(
+              (h) => h.departmentId !== null && scope.departmentIds.includes(h.departmentId),
+            )
+          : history;
       const filtered = filters
         ? scoped.filter((h) => {
-          if (filters.departmentId && h.departmentId !== filters.departmentId) return false;
-          if (filters.academicYear && h.academicYear !== filters.academicYear) return false;
-          if (filters.timeRange) {
-            if (h.acceptedAt < filters.timeRange.from) return false;
-            if (h.acceptedAt > filters.timeRange.to) return false;
-          }
-          return true;
-        })
+            if (filters.departmentId && h.departmentId !== filters.departmentId) return false;
+            if (filters.academicYear && h.academicYear !== filters.academicYear) return false;
+            if (filters.timeRange) {
+              if (h.acceptedAt < filters.timeRange.from) return false;
+              if (h.acceptedAt > filters.timeRange.to) return false;
+            }
+            return true;
+          })
         : scoped;
 
       const sorted = [...filtered].sort((a, b) => a.acceptedAt.localeCompare(b.acceptedAt));
@@ -278,7 +304,9 @@ export class ClubStatisticsQuery {
     }
 
     // 未知度量名
-    throw statisticsErrors.validation(`未知下钻度量："${metric}"（支持：current_members, admission_history）`);
+    throw statisticsErrors.validation(
+      `未知下钻度量："${metric}"（支持：current_members, admission_history）`,
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -316,8 +344,18 @@ export class ClubStatisticsQuery {
       generatedAt: now,
       summary: [
         { label: '全平台当前成员总数', value: currentTotal, trend: 'flat', trendValue: 0 },
-        { label: '全平台录取历史（普通）', value: admissionHistory.normalTotal, trend: 'flat', trendValue: 0 },
-        { label: '全平台录取历史（联合）', value: admissionHistory.jointTotal, trend: 'flat', trendValue: 0 },
+        {
+          label: '全平台录取历史（普通）',
+          value: admissionHistory.normalTotal,
+          trend: 'flat',
+          trendValue: 0,
+        },
+        {
+          label: '全平台录取历史（联合）',
+          value: admissionHistory.jointTotal,
+          trend: 'flat',
+          trendValue: 0,
+        },
       ],
       departmentDistribution: dist.map((d) => ({
         departmentId: d.departmentId,
@@ -340,13 +378,13 @@ export class ClubStatisticsQuery {
     if (principal.isPlatformSuperAdmin) return; // 超管不受停用限制
     const profile = await this.source.loadClubProfile(clubId);
     if (profile !== null && profile.forcedSuspension) {
-      throw statisticsErrors.precondition(
-        `社团 ${clubId} 处于紧急停用状态，统计撤权（STAT-002）`,
-      );
+      throw statisticsErrors.precondition(`社团 ${clubId} 处于紧急停用状态，统计撤权（STAT-002）`);
     }
   }
 
-  private groupMembersByYear(memberships: readonly { academicYear: string }[]): Map<string, number> {
+  private groupMembersByYear(
+    memberships: readonly { academicYear: string }[],
+  ): Map<string, number> {
     const map = new Map<string, number>();
     for (const m of memberships) {
       map.set(m.academicYear, (map.get(m.academicYear) ?? 0) + 1);

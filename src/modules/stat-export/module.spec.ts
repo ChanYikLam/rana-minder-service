@@ -11,7 +11,10 @@ import { Test } from '@nestjs/testing';
 import { StatExportModule, STATISTICS_SPECIFICATION } from './module';
 import { StatisticsSpecification } from './domain/models/statistics-specification';
 import { STATISTICS_SOURCE } from './application/ports/statistics-source.port';
-import { STATISTICS_AUTHORIZATION_PORT, STATISTICS_AUDIT_PORT } from './application/ports/statistics-authorization.port';
+import {
+  STATISTICS_AUTHORIZATION_PORT,
+  STATISTICS_AUDIT_PORT,
+} from './application/ports/statistics-authorization.port';
 import { ClubStatisticsQuery } from './application/queries/club-statistics.query';
 import { RecruitmentFunnelQuery } from './application/queries/recruitment-funnel.query';
 import { JointActivityStatisticsQuery } from './application/queries/joint-activity-statistics.query';
