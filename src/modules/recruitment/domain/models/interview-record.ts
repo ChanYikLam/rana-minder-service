@@ -165,11 +165,7 @@ export class InterviewRecord {
 
   resume(now: Date): boolean {
     if (
-      !this.transition(
-        new DefaultInterviewRecordStateMachine(),
-        InterviewRecordEvent.RESUME,
-        now,
-      )
+      !this.transition(new DefaultInterviewRecordStateMachine(), InterviewRecordEvent.RESUME, now)
     ) {
       return false;
     }
