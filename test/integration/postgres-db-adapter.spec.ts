@@ -121,7 +121,7 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
     // 提交后上下文失效：新事务不再携带上个事务的 subjectId。
     // 注意：PG 自定义 GUC（app.*）一旦在某连接被引用，current_setting(..., true)
     // 在该连接后续会话中返回空串 '' 而非 NULL（连接池复用时普遍如此）。因此这里断言
-    // “不再等于 u-1”（即无残留上下文），而非严格等于 null。
+    // “不再等于 u-1”（即无残留上下文），并可进一步断言回落为空串 ''。
     const tx2 = await db.beginTransaction();
     try {
       const rows2 = await db.query<{ ctx: string | null }>(
@@ -130,6 +130,7 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
         [],
       );
       assert.notEqual(rows2[0].ctx, 'u-1');
+      assert.equal(rows2[0].ctx, '');
       await db.commit(tx2);
     } finally {
       // 无论断言成败都收口事务，避免连接泄漏导致 pool.end() 挂起（CI 10 分钟超时）。
