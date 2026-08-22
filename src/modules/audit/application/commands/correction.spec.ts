@@ -2,9 +2,16 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { InMemoryCorrectionRepository } from '../../infrastructure/correction-repository';
 import { SaveCorrectionDraftCommand, SubmitCorrectionCommand } from './correction-submit.command';
-import { DecideCorrectionCommand, WithdrawCorrectionCommand, MarkOverdueCommand } from './correction-decide.command';
+import {
+  DecideCorrectionCommand,
+  WithdrawCorrectionCommand,
+  MarkOverdueCommand,
+} from './correction-decide.command';
 import { CorrectionStatusQuery } from '../queries/correction-status.query';
-import { CorrectionStateMachine } from '../../domain/state-machines/correction-state-machine';
+import {
+  CorrectionStateMachine,
+  CorrectionStatus,
+} from '../../domain/state-machines/correction-state-machine';
 import { CorrectionPolicy } from '../../domain/services/correction-policy';
 
 const makeRig = () => {
@@ -23,7 +30,13 @@ const makeRig = () => {
 const draftInput = {
   applicantId: 'stu1',
   authorId: 'stu1', // 作者=本人（资料纠错）
-  targetRecord: { objectType: 'PROFILE', objectId: 'stu1', ownerClubId: 'c1', fieldKey: 'name', recordVersion: 3 },
+  targetRecord: {
+    objectType: 'PROFILE',
+    objectId: 'stu1',
+    ownerClubId: 'c1',
+    fieldKey: 'name',
+    recordVersion: 3,
+  },
   objectiveErrorType: 'WRONG_NAME' as const,
   expectedCorrection: '姓名应为张三',
   evidenceRefs: ['ev-1'],
@@ -36,13 +49,13 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
   it('草稿保存→提交；单纯不认同主观评价拒绝提交（IFC-ERR-006）', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute(draftInput);
-    assert.equal(draft.status, 'DRAFT');
+    assert.equal(draft.status, CorrectionStatus.DRAFT);
     const submitted = await rig.submit.execute({
       correctionId: draft.correctionId,
       applicantId: 'stu1',
       objectiveDescription: '姓名应为张三（客观错误）',
     });
-    assert.equal(submitted.status, 'PENDING');
+    assert.equal(submitted.status, CorrectionStatus.PENDING);
     // 主观评价争议 → 拒绝
     const draft2 = await rig.save.execute(draftInput);
     await assert.rejects(
@@ -58,7 +71,11 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
   it('作者回避：原作者不得单独批准自己的错误（IFC-ERR-003）', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute({ ...draftInput, authorId: 'stu1' });
-    await rig.submit.execute({ correctionId: draft.correctionId, applicantId: 'stu1', objectiveDescription: '姓名错误' });
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
     // 作者本人（即原作者 stu1）作为处理人批准 → 拒绝
     await assert.rejects(
       rig.decide.execute({
@@ -78,13 +95,17 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
       oldValue: '张四',
       newValue: '张三',
     });
-    assert.equal(decided.status, 'APPROVED');
+    assert.equal(decided.status, CorrectionStatus.APPROVED);
   });
 
   it('处理角色：部门负责人不能处理正式纠错；跨社团改写拒绝；负责人/人事/超管可处理', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute(draftInput);
-    await rig.submit.execute({ correctionId: draft.correctionId, applicantId: 'stu1', objectiveDescription: '姓名错误' });
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
     // 部门负责人 → 拒绝
     await assert.rejects(
       rig.decide.execute({
@@ -97,7 +118,11 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
     );
     // 跨社团（c2 负责人处理 c1 记录）→ 拒绝
     const draft2 = await rig.save.execute(draftInput);
-    await rig.submit.execute({ correctionId: draft2.correctionId, applicantId: 'stu1', objectiveDescription: '姓名错误' });
+    await rig.submit.execute({
+      correctionId: draft2.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
     await assert.rejects(
       rig.decide.execute({
         correctionId: draft2.correctionId,
@@ -114,15 +139,24 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
       approve: false,
       reason: '经核实资料无误',
     });
-    assert.equal(rejected.status, 'REJECTED');
+    assert.equal(rejected.status, CorrectionStatus.REJECTED);
   });
 
   it('驳回必填原因（IFC-ERR-005）', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute(draftInput);
-    await rig.submit.execute({ correctionId: draft.correctionId, applicantId: 'stu1', objectiveDescription: '姓名错误' });
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
     await assert.rejects(
-      rig.decide.execute({ correctionId: draft.correctionId, decider: leader, approve: false, reason: '  ' }),
+      rig.decide.execute({
+        correctionId: draft.correctionId,
+        decider: leader,
+        approve: false,
+        reason: '  ',
+      }),
       /驳回必须填写原因/,
     );
   });
@@ -130,7 +164,11 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
   it('批准只追加：原值/新值/处理人/时间入历史，原记录保留（AUD-001）', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute(draftInput);
-    await rig.submit.execute({ correctionId: draft.correctionId, applicantId: 'stu1', objectiveDescription: '姓名错误' });
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
     const decided = await rig.decide.execute({
       correctionId: draft.correctionId,
       decider: leader,
@@ -144,7 +182,12 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
     assert.ok(decided.history.some((h) => h.type === 'APPROVED'));
     // 终态不可覆盖：再次决定（驳回）拒绝
     await assert.rejects(
-      rig.decide.execute({ correctionId: draft.correctionId, decider: leader, approve: false, reason: 'x' }),
+      rig.decide.execute({
+        correctionId: draft.correctionId,
+        decider: leader,
+        approve: false,
+        reason: 'x',
+      }),
       /终态不可覆盖/,
     );
     const view = await rig.status.getStatus(draft.correctionId);
@@ -154,7 +197,11 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
   it('撤回：仅原提交人；处理角色代撤拒绝；待处理/逾期待处理可撤回', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute(draftInput);
-    await rig.submit.execute({ correctionId: draft.correctionId, applicantId: 'stu1', objectiveDescription: '姓名错误' });
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
     // 处理角色代撤 → 拒绝
     await assert.rejects(
       rig.withdraw.execute({ correctionId: draft.correctionId, applicantId: 'hr1' }),
@@ -162,8 +209,11 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
     );
     // 逾期后可撤回
     await rig.markOverdue.execute({ correctionId: draft.correctionId });
-    const withdrawn = await rig.withdraw.execute({ correctionId: draft.correctionId, applicantId: 'stu1' });
-    assert.equal(withdrawn.status, 'WITHDRAWN');
+    const withdrawn = await rig.withdraw.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+    });
+    assert.equal(withdrawn.status, CorrectionStatus.WITHDRAWN);
     // 撤回后保留历史
     assert.ok(withdrawn.history.some((h) => h.type === 'WITHDRAWN'));
   });
@@ -171,9 +221,13 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
   it('逾期只标记不自动处置：不批准不驳回不改业务记录；逾期后仍可决定', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute(draftInput);
-    await rig.submit.execute({ correctionId: draft.correctionId, applicantId: 'stu1', objectiveDescription: '姓名错误' });
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
     const overdue = await rig.markOverdue.execute({ correctionId: draft.correctionId });
-    assert.equal(overdue!.status, 'OVERDUE_PENDING');
+    assert.equal(overdue!.status, CorrectionStatus.OVERDUE_PENDING);
     assert.equal(overdue!.decision, null); // 不自动决定
     assert.ok(overdue!.overdueMarkedAt !== null);
     // 逾期后仍可决定
@@ -185,21 +239,25 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
       oldValue: '张四',
       newValue: '张三',
     });
-    assert.equal(decided.status, 'APPROVED');
+    assert.equal(decided.status, CorrectionStatus.APPROVED);
   });
 
   it('单胜者：决定与撤回按申请版本竞争只一个成功', async () => {
     const rig = makeRig();
     const draft = await rig.save.execute(draftInput);
-    await rig.submit.execute({ correctionId: draft.correctionId, applicantId: 'stu1', objectiveDescription: '姓名错误' });
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
     const pending = await rig.repo.load(draft.correctionId);
     // 先撤回（用旧版本 CAS 模拟并发决定失败）
     await rig.withdraw.execute({ correctionId: draft.correctionId, applicantId: 'stu1' });
     const stale = { ...pending! };
-    const decided = { ...stale, status: 'APPROVED' as const, version: stale.version + 1 };
+    const decided = { ...stale, status: CorrectionStatus.APPROVED, version: stale.version + 1 };
     const swapped = await rig.repo.compareAndSwap(stale, decided);
     assert.equal(swapped, false); // 撤回已提交 → 决定失败（单胜者）
     const after = await rig.repo.load(draft.correctionId);
-    assert.equal(after!.status, 'WITHDRAWN');
+    assert.equal(after!.status, CorrectionStatus.WITHDRAWN);
   });
 });

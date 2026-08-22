@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { Correction } from '../../domain/models/correction';
+import { CorrectionStatus } from '../../domain/state-machines/correction-state-machine';
 import { CORRECTION_REPOSITORY } from '../../infrastructure/correction-repository';
 import type { CorrectionRepository } from '../../infrastructure/correction-repository';
 
@@ -22,9 +22,7 @@ export interface CorrectionStatusView {
  */
 @Injectable()
 export class CorrectionStatusQuery {
-  constructor(
-    @Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository,
-  ) {}
+  constructor(@Inject(CORRECTION_REPOSITORY) private readonly repo: CorrectionRepository) {}
 
   async getStatus(correctionId: string): Promise<CorrectionStatusView> {
     const correction = await this.repo.load(correctionId);
@@ -34,13 +32,15 @@ export class CorrectionStatusQuery {
     return {
       correctionId: correction.correctionId,
       status: correction.status,
-      overdue: correction.status === 'OVERDUE_PENDING' || correction.overdueMarkedAt !== null,
+      overdue:
+        correction.status === CorrectionStatus.OVERDUE_PENDING ||
+        correction.overdueMarkedAt !== null,
       objectiveErrorType: correction.objectiveErrorType,
       submittedAt: correction.submittedAt,
       decision:
         correction.decision !== null
           ? {
-              approved: correction.status === 'APPROVED',
+              approved: correction.status === CorrectionStatus.APPROVED,
               decidedBy: correction.decision.decidedBy,
               decidedAt: correction.decision.decidedAt,
             }

@@ -41,10 +41,7 @@ export class CorrectionPolicy {
   assertObjectiveError(description: string): void {
     const subjective = /不认同|主观|不喜欢|觉得不好|评价不公/.test(description);
     if (subjective) {
-      throw new CorrectionPreconditionError(
-        'IFC-ERR-006',
-        '单纯不认同主观评价不属于事实错误',
-      );
+      throw new CorrectionPreconditionError('IFC-ERR-006', '单纯不认同主观评价不属于事实错误');
     }
   }
 
@@ -77,15 +74,10 @@ export class CorrectionPolicy {
     if (decider.roles.includes(SUPER_ADMIN_ROLE)) {
       return;
     }
-    const isHandler = decider.roles.some(
-      (r) => r === CLUB_LEADER_ROLE || r === HR_ADMIN_ROLE,
-    );
+    const isHandler = decider.roles.some((r) => r === CLUB_LEADER_ROLE || r === HR_ADMIN_ROLE);
     if (!isHandler) {
+      // 无负责人/人事处理角色（含仅部门负责人角色）不能处理正式纠错
       throw new CorrectionForbiddenError('仅社团负责人/人事可处理纠错');
-    }
-    if (decider.roles.includes('DEPARTMENT_LEADER') && !isHandler) {
-      // 部门负责人不能处理活动结束后正式纠错（仅部门负责人角色 → 无权）
-      throw new CorrectionForbiddenError('部门负责人不能处理正式纠错');
     }
     // 无单一作者共同事实：任一参与社团负责人/人事可处理
     if (COMMON_FACT_OBJECT_TYPES.includes(target.objectType)) {

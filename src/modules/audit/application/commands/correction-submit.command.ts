@@ -1,6 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { CorrectionStateMachine } from '../../domain/state-machines/correction-state-machine';
+import {
+  CorrectionStateMachine,
+  CorrectionStatus,
+} from '../../domain/state-machines/correction-state-machine';
 import type { Correction } from '../../domain/models/correction';
 import { CorrectionPolicy } from '../../domain/services/correction-policy';
 import type { ObjectiveErrorType } from '../../domain/models/correction';
@@ -106,10 +109,10 @@ export class SubmitCorrectionCommand {
     if (correction.applicantId !== input.applicantId) {
       throw new CorrectionCommandError('IFC-ERR-006', '仅原提交人可提交');
     }
-    if (correction.status === 'PENDING') {
+    if (correction.status === CorrectionStatus.PENDING) {
       return correction; // 幂等
     }
-    if (correction.status !== 'DRAFT') {
+    if (correction.status !== CorrectionStatus.DRAFT) {
       throw new CorrectionCommandError('IFC-ERR-007', '仅草稿状态可提交');
     }
     // 客观错误判定：主观评价争议拒绝
@@ -117,7 +120,7 @@ export class SubmitCorrectionCommand {
     const now = new Date().toISOString();
     const submitted: Correction = {
       ...correction,
-      status: this.stateMachine.transition('DRAFT', 'PENDING'),
+      status: this.stateMachine.transition('DRAFT', CorrectionStatus.PENDING),
       version: correction.version + 1,
       submittedAt: now,
       history: [...correction.history, { at: now, type: 'SUBMITTED', by: input.applicantId }],

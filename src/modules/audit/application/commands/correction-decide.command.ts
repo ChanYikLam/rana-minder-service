@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { CorrectionStateMachine } from '../../domain/state-machines/correction-state-machine';
+import {
+  CorrectionStateMachine,
+  CorrectionStatus,
+} from '../../domain/state-machines/correction-state-machine';
 import type { Correction, CorrectionDecision } from '../../domain/models/correction';
 import { CorrectionPolicy } from '../../domain/services/correction-policy';
 import { CORRECTION_REPOSITORY } from '../../infrastructure/correction-repository';
@@ -25,7 +28,10 @@ export interface DecideCorrectionInput {
 
 /** 前置失败 */
 export class DecideCorrectionError extends Error {
-  constructor(code: 'IFC-ERR-003' | 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-007', message: string) {
+  constructor(
+    code: 'IFC-ERR-003' | 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-007',
+    message: string,
+  ) {
     super(`${code}: ${message}`);
     this.name = 'DecideCorrectionError';
   }
@@ -57,7 +63,11 @@ export class DecideCorrectionCommand {
     }
     // 处理资格（作者回避 + 处理角色 + 联合边界）
     this.policy.assertCanDecide(
-      { principalId: input.decider.principalId, roles: input.decider.roles, clubId: input.decider.clubId },
+      {
+        principalId: input.decider.principalId,
+        roles: input.decider.roles,
+        clubId: input.decider.clubId,
+      },
       {
         objectType: correction.targetRecord.objectType,
         ownerClubId: correction.targetRecord.ownerClubId,
@@ -68,16 +78,19 @@ export class DecideCorrectionCommand {
       this.policy.assertRejectionReason(input.reason);
     }
     // 幂等/终态：相同决定 → 返回原结果；不同决定 → 终态不可覆盖（AUD-002）
-    if (correction.status === 'APPROVED' || correction.status === 'REJECTED') {
-      const sameDecision = (correction.status === 'APPROVED') === input.approve;
+    if (
+      correction.status === CorrectionStatus.APPROVED ||
+      correction.status === CorrectionStatus.REJECTED
+    ) {
+      const sameDecision = (correction.status === CorrectionStatus.APPROVED) === input.approve;
       if (sameDecision) {
         return correction;
       }
       throw new DecideCorrectionError('IFC-ERR-007', '终态不可覆盖，新证据需新申请');
     }
     if (
-      correction.status !== 'PENDING' &&
-      correction.status !== 'OVERDUE_PENDING'
+      correction.status !== CorrectionStatus.PENDING &&
+      correction.status !== CorrectionStatus.OVERDUE_PENDING
     ) {
       throw new DecideCorrectionError('IFC-ERR-007', '仅待处理/逾期待处理可决定');
     }
@@ -92,7 +105,10 @@ export class DecideCorrectionCommand {
     };
     const decided: Correction = {
       ...correction,
-      status: this.stateMachine.transition(correction.status, input.approve ? 'APPROVED' : 'REJECTED'),
+      status: this.stateMachine.transition(
+        correction.status,
+        input.approve ? CorrectionStatus.APPROVED : CorrectionStatus.REJECTED,
+      ),
       version: correction.version + 1,
       decision,
       history: [
@@ -140,16 +156,19 @@ export class WithdrawCorrectionCommand {
     if (correction.applicantId !== input.applicantId) {
       throw new DecideCorrectionError('IFC-ERR-003', '仅原提交人可撤回纠错申请');
     }
-    if (correction.status === 'WITHDRAWN') {
+    if (correction.status === CorrectionStatus.WITHDRAWN) {
       return correction; // 幂等
     }
-    if (correction.status !== 'PENDING' && correction.status !== 'OVERDUE_PENDING') {
+    if (
+      correction.status !== CorrectionStatus.PENDING &&
+      correction.status !== CorrectionStatus.OVERDUE_PENDING
+    ) {
       throw new DecideCorrectionError('IFC-ERR-007', '仅待处理/逾期待处理可撤回');
     }
     const now = new Date().toISOString();
     const withdrawn: Correction = {
       ...correction,
-      status: this.stateMachine.transition(correction.status, 'WITHDRAWN'),
+      status: this.stateMachine.transition(correction.status, CorrectionStatus.WITHDRAWN),
       version: correction.version + 1,
       history: [...correction.history, { at: now, type: 'WITHDRAWN', by: input.applicantId }],
     };
@@ -183,16 +202,19 @@ export class MarkOverdueCommand {
     if (correction === null) {
       return null;
     }
-    if (correction.status === 'OVERDUE_PENDING') {
+    if (correction.status === CorrectionStatus.OVERDUE_PENDING) {
       return correction; // 幂等
     }
-    if (correction.status !== 'PENDING') {
+    if (correction.status !== CorrectionStatus.PENDING) {
       return correction; // 已决定/已撤回：不转换
     }
     const now = new Date().toISOString();
     const overdue: Correction = {
       ...correction,
-      status: this.stateMachine.transition('PENDING', 'OVERDUE_PENDING'),
+      status: this.stateMachine.transition(
+        CorrectionStatus.PENDING,
+        CorrectionStatus.OVERDUE_PENDING,
+      ),
       version: correction.version + 1,
       overdueMarkedAt: now,
       history: [...correction.history, { at: now, type: 'MARKED_OVERDUE', by: 'system' }],
