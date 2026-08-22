@@ -4,24 +4,27 @@
  * 明确退信或连续失败 24 小时后进入永久失败并保留投递证据。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ChannelDeliveryAttemptRepository } from '../../infrastructure';
 import { NotificationStateMachine } from '../../domain';
+import { CHANNEL_DELIVERY_ATTEMPT_REPOSITORY } from '../../tokens';
 
 @Injectable()
 export class MarkPermanentFailureCommand {
   private readonly logger = new Logger(MarkPermanentFailureCommand.name);
   private readonly stateMachine = new NotificationStateMachine();
 
-  constructor(private readonly attemptRepository: ChannelDeliveryAttemptRepository) {}
+  constructor(
+    @Inject(CHANNEL_DELIVERY_ATTEMPT_REPOSITORY)
+    private readonly attemptRepository: ChannelDeliveryAttemptRepository,
+  ) {}
 
   /**
    * 标记永久失败。
    * 每个任务只进入一次永久失败；人工重发新建尝试（NTF-007）。
    */
   async execute(attemptId: string): Promise<void> {
-    const attempts = await this.attemptRepository.findRetryableAttempts(100);
-    const attempt = attempts.find((a) => a.attemptId === attemptId);
+    const attempt = await this.attemptRepository.findAttemptById(attemptId);
     if (!attempt) {
       this.logger.warn(`无可标记为永久失败的尝试: ${attemptId}`);
       return;

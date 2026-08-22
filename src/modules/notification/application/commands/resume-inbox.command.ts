@@ -5,9 +5,10 @@
  * 恢复只补投渠道，不重复执行业务。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { NotificationRepository } from '../../infrastructure';
 import { NotificationStateMachine } from '../../domain';
+import { NOTIFICATION_REPOSITORY } from '../../tokens';
 
 export interface ResumeInboxResult {
   readonly resumedFactCount: number;
@@ -18,7 +19,10 @@ export class ResumeInboxCommand {
   private readonly logger = new Logger(ResumeInboxCommand.name);
   private readonly stateMachine = new NotificationStateMachine();
 
-  constructor(private readonly repository: NotificationRepository) {}
+  constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
+    private readonly repository: NotificationRepository,
+  ) {}
 
   /**
    * 恢复站内信投递。

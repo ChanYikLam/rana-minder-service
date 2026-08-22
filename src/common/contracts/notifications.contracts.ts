@@ -16,6 +16,12 @@ export type NotificationKind =
   | 'transition'
   | 'correction';
 
+/** 站内信呈现子状态（NTF-003：已读/未读/已处理/隐藏） */
+export type NotificationPresentationStatus = 'read' | 'unread' | 'processed' | 'hidden';
+
+/** 有期限通知当前办理状态（NTF-003：可处理/已处理/已撤回/已过期） */
+export type NotificationDeadlineStatus = 'actionable' | 'processed' | 'withdrawn' | 'expired';
+
 /** GET /api/notifications 响应 item */
 export interface NotificationItem {
   id: string;
@@ -24,9 +30,28 @@ export interface NotificationItem {
   title: string;
   body: string;
   read: boolean;
+  /** 呈现子状态：已读/未读/已处理/隐藏（NTF-003） */
+  status: NotificationPresentationStatus;
+  /** 有期限通知当前办理状态（可处理/已处理/已撤回/已过期；无期限为 null） */
+  deadlineStatus: NotificationDeadlineStatus | null;
+  /** 有期限通知的截止时间 */
+  deadlineAt: string | null;
   createdAt: string;
+  readAt: string | null;
+  processedAt: string | null;
+  hiddenAt: string | null;
   link: string | null;
   clubName: string | null;
+}
+
+/** GET /api/notifications 查询参数（类型筛选/未读筛选/隐藏列表，NTF-003） */
+export interface NotificationListQuery {
+  /** 按通知类型筛选（8 类 kind） */
+  kind?: NotificationKind | null;
+  /** 仅未读 */
+  unreadOnly?: boolean;
+  /** 包含隐藏列表（默认主列表不展示隐藏） */
+  includeHidden?: boolean;
 }
 
 /** GET /api/notifications 响应 data */
@@ -88,6 +113,12 @@ export interface NotificationKillSwitchState {
 export interface NotificationKillSwitchInput {
   active: boolean;
   reason?: string;
+  /** 预计恢复时间（关闭时必须设置） */
+  expectedRecoveryAt?: string;
+  /** 二次确认（关闭时必须为 true） */
+  confirmed?: boolean;
+  /** 操作者展示名称 */
+  operatorName?: string;
 }
 
 /** SMTP 配置（脱敏，不含密钥） */

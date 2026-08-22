@@ -65,7 +65,21 @@ export class InMemoryObjectStore implements ObjectStorePort {
   ): Promise<ObjectOpResult> {
     const bytes = await this.read(source);
     if (bytes === null) {
-      return { ok: false, reason: '源对象缺失' };
+      // 源对象缺失的两种情形需区分处理：
+      // 1) 前次晋升已成功写入权威原件区并删除隔离源（copy-then-delete），但数据库在
+      //    持久化前失败，调用方重试晋升——此时权威原件区已存在正确副本，应视为幂等成功，
+      //    否则会因源缺失而永久卡在 CHECKING，无法收敛到 AVAILABLE（IFC-FIL-002 恢复能力）；
+      // 2) 源对象真不存在且目标也缺失——确属异常，返回失败。
+      const existing = await this.read(target);
+      if (existing !== null && this.sha256Hex(existing) === expectedSha256) {
+        return { ok: true };
+      }
+      // 源缺失且目标摘要不匹配（目标已被污染/异常）或源与目标均缺失——均不得伪装成功。
+      // 区分原因便于排障：目标存在但内容不符属异常状态；两者均缺失才是真正的源缺失。
+      return {
+        ok: false,
+        reason: existing !== null ? '目标对象摘要不匹配（晋升异常）' : '源对象缺失',
+      };
     }
     // 可信摘要必须非空：空摘要视为失败（不得跳过核验，DATA-FIL-003）
     if (expectedSha256.length === 0) {
@@ -75,7 +89,15 @@ export class InMemoryObjectStore implements ObjectStorePort {
       return { ok: false, reason: '内容摘要核验失败' };
     }
     // 只写一次写入权威原件区（与隔离区独立语义，但共享 create-only 防覆盖）
-    return this.putOnce(target, bytes);
+    const result = await this.putOnce(target, bytes);
+    if (!result.ok) {
+      return result;
+    }
+    // 晋升成功后删除隔离源（copy-then-delete 语义，与 S3 晋升后清理一致）：
+    // 晋升即权威原件区已有只写一次副本，隔离区残留字节失去引用，若不删除将
+    // 成为永不清理的孤儿对象（违反 FORM-009 数据生命周期收敛）。
+    this.bucket(source.bucketRole).delete(this.keyOf(source));
+    return { ok: true };
   }
 
   async read(location: ObjectLocation): Promise<Uint8Array | null> {
@@ -84,10 +106,9 @@ export class InMemoryObjectStore implements ObjectStorePort {
 
   async deleteAndVerify(location: ObjectLocation): Promise<ObjectOpResult> {
     const bucket = this.bucket(location.bucketRole);
-    const deleted = bucket.delete(this.keyOf(location));
-    if (!deleted) {
-      return { ok: false, reason: '对象不存在或已删除' };
-    }
+    // 幂等删除：对象不存在（先前已删除/清理重试）也视为删除成功，回读核验读不到即可；
+    // 与 S3 DeleteObject 语义一致（删除不存在的 key 成功），保证清理/正式删除任务可收敛到终态。
+    bucket.delete(this.keyOf(location));
     // 回读核验：删除后读不到
     const stillThere = bucket.has(this.keyOf(location));
     return { ok: !stillThere, reason: stillThere ? '回读核验失败' : undefined };

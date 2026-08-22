@@ -109,29 +109,36 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
   it('RLS 上下文随事务提交自动失效（事务级隔离）', async () => {
     const db = adapter!;
     const tx = await db.beginTransaction();
-    await db.setRlsContext(tx, { kind: 'single', subjectId: 'u-1' });
-    // 事务内 SET LOCAL 上下文生效
-    const rows = await db.query<{ ctx: string | null }>(
-      tx,
-      "SELECT current_setting('app.subject_id', true) AS ctx",
-      [],
-    );
-    assert.equal(rows[0].ctx, 'u-1');
-    await db.commit(tx);
+    try {
+      await db.setRlsContext(tx, { kind: 'single', subjectId: 'u-1' });
+      // 事务内 SET LOCAL 上下文生效
+      const rows = await db.query<{ ctx: string | null }>(
+        tx,
+        "SELECT current_setting('app.subject_id', true) AS ctx",
+        [],
+      );
+      assert.equal(rows[0].ctx, 'u-1');
+    } finally {
+      await db.commit(tx);
+    }
     // 提交后上下文失效（新事务不再有该值）。
-    // 注意：PG 对自定义 GUC（app.*）在事务提交后会还原为历史值——本会话从未全局 SET 过
-    // 该变量，故还原为 ''（空串）而非 NULL；两者都表示“无 RLS 上下文”，关键是绝不能再
-    // 残留原 subject 'u-1'。
+    // 注意：对“曾用 SET LOCAL 设置、提交后被重置”的自定义 GUC，PostgreSQL 会
+    // 在复用连接上返回空串 ''（而非 NULL；全新连接才返回 NULL）。两者都表示
+    // RLS 上下文已随事务提交失效，故统一按“无 subject_id 泄漏”断言。
     const tx2 = await db.beginTransaction();
-    const rows2 = await db.query<{ ctx: string | null }>(
-      tx2,
-      "SELECT current_setting('app.subject_id', true) AS ctx",
-      [],
-    );
-    assert.ok(
-      rows2[0].ctx === null || rows2[0].ctx === '',
-      `RLS 上下文应随事务提交失效，实际仍残留: ${JSON.stringify(rows2[0].ctx)}`,
-    );
-    await db.commit(tx2);
+    try {
+      const rows2 = await db.query<{ ctx: string | null }>(
+        tx2,
+        "SELECT current_setting('app.subject_id', true) AS ctx",
+        [],
+      );
+      assert.ok(
+        rows2[0].ctx === null || rows2[0].ctx === '',
+        `提交后 RLS 上下文应失效，实际得到: ${JSON.stringify(rows2[0].ctx)}`,
+      );
+    } finally {
+      // 无论断言成败都收口事务，避免连接泄漏导致 pool.end() 挂起（CI 10 分钟超时）。
+      await db.rollback(tx2);
+    }
   });
 });

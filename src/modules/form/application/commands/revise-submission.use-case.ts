@@ -20,7 +20,6 @@ import { formErrors } from '../errors';
 
 export interface ReviseSubmissionInput {
   readonly submissionId: string;
-  readonly revisedBy: string;
   readonly values: Record<string, unknown>;
   readonly actor: string;
   readonly now: Date;

@@ -47,6 +47,7 @@ import { AdaptersModule } from './adapters/adapters.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
 import { NotificationModule } from './modules/notification';
+import { InvitationModule } from './modules/invitation/module';
 import { TASK_SUMMARY_PORT } from './platform/observability/status-page/tokens';
 import { PostgresTaskSummaryPort } from './platform/observability/status-page/task-summary';
 import { TASK_REPOSITORY } from './platform/tasks/contracts';
@@ -67,6 +68,7 @@ import type { TaskRepository } from './platform/tasks/contracts';
     IdentityModule,
     FormModule,
     NotificationModule,
+    InvitationModule,
   ],
   controllers: [],
   providers: [

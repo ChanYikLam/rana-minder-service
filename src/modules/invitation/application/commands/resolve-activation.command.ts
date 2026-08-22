@@ -1,0 +1,125 @@
+import { Inject, Injectable } from '@nestjs/common';
+import type { Invitation } from '../../domain/models/invitation';
+import { ActivationStatus } from '../../domain/models/invitation';
+import { CASDOOR_RELATION_PORT } from '../../infrastructure/casdoor-relation-port';
+import type { CasdoorRelationPort } from '../../infrastructure/casdoor-relation-port';
+import { INVITATION_REPOSITORY } from '../../infrastructure/invitation-repository';
+import type { InvitationRepository } from '../../infrastructure/invitation-repository';
+
+/** 激活解析输入（系统任务：Casdoor 写后定向读回确认；REC-026、ORG-027） */
+export interface ResolveActivationInput {
+  readonly invitationId: string;
+  /** 15 分钟仍失败（调用方任务计时传入） */
+  readonly deadlineExceeded: boolean;
+}
+
+/** 激活解析结果 */
+export interface ResolveActivationResult {
+  readonly invitation: Invitation;
+  /** 是否已生效（回读确认完成） */
+  readonly activated: boolean;
+}
+
+/** 激活解析前置失败（IFC-ERR-006） */
+export class ResolveActivationError extends Error {
+  constructor(message: string) {
+    super(`IFC-ERR-006: ${message}`);
+    this.name = 'ResolveActivationError';
+  }
+}
+
+/**
+ * 对 Casdoor 返回的技术原因做基础脱敏（落库前调用）：
+ * - 过滤常见敏感字段（token/密钥/密码/凭据）；
+ * - 控制长度，避免异常堆栈/长 URL 膨胀历史记录。
+ */
+function sanitizeReason(reason: string): string {
+  const SENSITIVE = /(token|secret|password|passwd|credential|authorization|bearer\s+\S+)/gi;
+  const clipped = reason.length > 200 ? `${reason.slice(0, 200)}…` : reason;
+  return clipped.replace(SENSITIVE, '[redacted]');
+}
+
+/**
+ * 成员身份生效意图解析（REC-026、ORG-027、MEM-002）。
+ *
+ * - Casdoor 写入并**定向回读确认**成功 → 激活（ACTIVATED），成员权限才生效；
+ * - 回读未确认 → 保持 PROCESSING（页面显示"成员身份生效处理中"，不开放权限）；
+ * - **15 分钟仍失败** → 同步失败待重试（保持已接受、成员未生效、通知申请人与
+ *   管理员——通知由调用方/审计占位）；
+ * - 接受事实不回滚；无需本人再次接受（先回读后重试）。
+ */
+@Injectable()
+export class ResolveActivationCommand {
+  constructor(
+    @Inject(INVITATION_REPOSITORY) private readonly repo: InvitationRepository,
+    @Inject(CASDOOR_RELATION_PORT) private readonly casdoor: CasdoorRelationPort,
+  ) {}
+
+  async execute(input: ResolveActivationInput): Promise<ResolveActivationResult> {
+    const invitation = await this.repo.load(input.invitationId);
+    if (invitation === null) {
+      throw new ResolveActivationError('邀请不存在');
+    }
+    if (invitation.status !== 'ACCEPTED' || invitation.activation === null) {
+      throw new ResolveActivationError('邀请未接受或不存在生效意图');
+    }
+    const activation = invitation.activation;
+    if (activation.status === ActivationStatus.ACTIVATED) {
+      return { invitation, activated: true }; // 幂等
+    }
+
+    // 先回读后重试：写入并定向回读确认
+    const result = await this.casdoor.writeAndReadBackGroup(
+      invitation.clubId,
+      invitation.inviteeId,
+    );
+    const now = new Date().toISOString();
+    const nextAttempt = activation.attemptCount + 1;
+
+    let nextStatus: ActivationStatus;
+    if (result.ok && result.confirmed) {
+      nextStatus = ActivationStatus.ACTIVATED; // 回读确认完成 → 成员权限生效
+    } else if (
+      input.deadlineExceeded ||
+      activation.status === ActivationStatus.SYNC_FAILED_PENDING_RETRY
+    ) {
+      // 15 分钟仍失败 → 保持已接受、成员未生效；
+      // 已进入同步失败待重试后不可回退到 PROCESSING（状态单调），直到回读确认成功
+      nextStatus = ActivationStatus.SYNC_FAILED_PENDING_RETRY;
+    } else {
+      nextStatus = ActivationStatus.PROCESSING; // 未到期：保持处理中
+    }
+
+    const updated: Invitation = {
+      ...invitation,
+      // 单胜者：递增版本号，保证并发激活任务只一个成功（IFC-GEN-007）。
+      // compareAndSwap 依赖版本比较，若不递增则两个并发任务基于同一版本都会成功，
+      // 后写覆盖先写，单胜者保护失效。
+      version: invitation.version + 1,
+      activation: {
+        ...activation,
+        status: nextStatus,
+        attemptCount: nextAttempt,
+        lastAttemptAt: now,
+        lastError:
+          result.ok && result.confirmed
+            ? undefined
+            : sanitizeReason(result.reason ?? 'casdoor-write-readback-not-confirmed'),
+      },
+    };
+    // 单胜者：并发激活任务只一个成功（版本比较并交换，IFC-GEN-007）
+    const swapped = await this.repo.compareAndSwap(invitation, updated);
+    if (!swapped) {
+      // 竞争失败：另一激活任务已推进 → 重新加载返回最新状态（收敛语义，非错误）
+      const latest = await this.repo.load(input.invitationId);
+      if (latest === null) {
+        throw new ResolveActivationError('邀请不存在');
+      }
+      return {
+        invitation: latest,
+        activated: latest.activation?.status === ActivationStatus.ACTIVATED,
+      };
+    }
+    return { invitation: updated, activated: nextStatus === ActivationStatus.ACTIVATED };
+  }
+}
