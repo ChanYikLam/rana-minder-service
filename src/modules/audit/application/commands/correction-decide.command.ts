@@ -74,9 +74,8 @@ export class DecideCorrectionCommand {
       },
     );
     this.policy.assertNotSelfDecision(input.decider.principalId, correction.authorId);
-    if (!input.approve) {
-      this.policy.assertRejectionReason(input.reason);
-    }
+    // 决定必填原因（驳回必填；批准为变更原因）
+    this.policy.assertReason(input.reason);
     // 幂等/终态：相同决定 → 返回原结果；不同决定 → 终态不可覆盖（AUD-002）
     if (
       correction.status === CorrectionStatus.APPROVED ||
@@ -212,7 +211,7 @@ export class MarkOverdueCommand {
     const overdue: Correction = {
       ...correction,
       status: this.stateMachine.transition(
-        CorrectionStatus.PENDING,
+        correction.status,
         CorrectionStatus.OVERDUE_PENDING,
       ),
       version: correction.version + 1,

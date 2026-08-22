@@ -94,10 +94,10 @@ export class CorrectionPolicy {
     throw new CorrectionForbiddenError('跨社团改写他人记录');
   }
 
-  /** 驳回必填原因（IFC-ERR-005） */
-  assertRejectionReason(reason: string): void {
+  /** 决定必填原因（IFC-ERR-005）：驳回必填原因；批准也须填写变更原因（AUD-001） */
+  assertReason(reason: string): void {
     if (reason.trim().length === 0) {
-      throw new CorrectionPreconditionError('IFC-ERR-005', '驳回必须填写原因');
+      throw new CorrectionPreconditionError('IFC-ERR-005', '必须填写决定原因');
     }
   }
 }

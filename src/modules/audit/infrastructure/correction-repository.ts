@@ -5,9 +5,11 @@ import type { Correction } from '../domain/models/correction';
 export const CORRECTION_REPOSITORY = Symbol('CORRECTION_REPOSITORY');
 
 /**
- * 纠错权威仓储（PostgreSQL 适配；SRS-SM-AUD-001）。
+ * 纠错权威仓储接口（SRS-SM-AUD-001）。
  *
  * 纠错链只追加；原值/原附件/原操作历史保留（AUD-001）。
+ * 生产环境应由 PostgreSQL 适配器实现；当前 `InMemoryCorrectionRepository`
+ * 仅为开发期占位（进程内存储，重启即失）。
  */
 export interface CorrectionRepository {
   save(correction: Correction): Promise<void>;

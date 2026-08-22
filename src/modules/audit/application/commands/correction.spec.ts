@@ -158,7 +158,17 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
         approve: false,
         reason: '  ',
       }),
-      /驳回必须填写原因/,
+      /必须填写决定原因/,
+    );
+    // 批准也须填写变更原因
+    await assert.rejects(
+      rig.decide.execute({
+        correctionId: draft.correctionId,
+        decider: leader,
+        approve: true,
+        reason: '  ',
+      }),
+      /必须填写决定原因/,
     );
   });
 

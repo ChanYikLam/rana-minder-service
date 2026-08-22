@@ -40,7 +40,7 @@ export interface SubmitCorrectionInput {
 
 /** 前置失败 */
 export class CorrectionCommandError extends Error {
-  constructor(code: 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-007', message: string) {
+  constructor(code: 'IFC-ERR-003' | 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-007', message: string) {
     super(`${code}: ${message}`);
     this.name = 'CorrectionCommandError';
   }
@@ -113,7 +113,7 @@ export class SubmitCorrectionCommand {
       throw new CorrectionCommandError('IFC-ERR-006', '纠错申请不存在');
     }
     if (correction.applicantId !== input.applicantId) {
-      throw new CorrectionCommandError('IFC-ERR-006', '仅原提交人可提交');
+      throw new CorrectionCommandError('IFC-ERR-003', '仅原提交人可提交');
     }
     if (correction.status === CorrectionStatus.PENDING) {
       return correction; // 幂等
