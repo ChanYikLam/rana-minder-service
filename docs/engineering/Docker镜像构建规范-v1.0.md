@@ -142,4 +142,4 @@ docker compose -f docker-compose.dev.yml up -d
 | postgres 初始化脚本 | 已落地（scripts/dev/postgres-init.sql，挂载 init 自动执行） |
 | CI 阶段 8 门禁 | 已同步（Dockerfile＋package.json 双条件，三处配置） |
 | DEP-Q-003 | **已冻结**：运行阶段 node:24-slim ＋ 构建阶段 node:24（§2 DOCK-011），Dockerfile 已同步 |
-| 生产部署编排 | 不属本文件范围（部署运维手册体系另行收口） |
+| 生产部署编排 | 已落地仓库根 `docker-compose.yml`（官方单机：app＋worker＋PostgreSQL＋MinIO＋Casdoor；只读挂载、--read-only、进程探针）；详参该文件头注释与部署运维手册 §13 |

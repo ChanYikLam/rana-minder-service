@@ -1,0 +1,147 @@
+# ============================================================
+# RanaMinder Service 官方单机部署编排（生产/测试）
+# 权威依据：ADR-010（单文件外置配置与 Docker 只读挂载）、ADR-012（分级部署与恢复优先）、
+#          ADR-013（Node 24 / NestJS 双入口）、部署运维与恢复手册 §13（标准部署边界）、
+#          Docker镜像构建规范-v1.0.md（DOCK-040~043）
+#
+# 说明：
+#   - 本编排承载「应用 + 后台任务 + PostgreSQL + MinIO + Casdoor」的官方单机档位，
+#     支持同一程序按需拆分部署（OPS-TOPO-004/005）。
+#   - 真实配置在部署项目目录（如 ./config.yaml），以只读卷挂载到 /etc/ranaminder/config.yaml；
+#     **真实配置绝不进入源码/镜像/本文件**（ADR-010）。
+#   - 应用与后台任务共用同一镜像（单镜像双入口），以启动命令区分职责（DOCK-003/DOCK-030）。
+#
+# 用法：
+#   # 1. 复制示例配置并填写真实内容
+#   cp config.example.yaml config.yaml
+#   # 2. 启动
+#   RANAMINDER_IMAGE=${CNB_DOCKER_REGISTRY:-cnb.cool/your-org}/ranaminder-service:${VERSION} \
+#     docker compose up -d
+# ============================================================
+
+name: ranaminder
+
+# 镜像 tag：发布流程打 v* 版本 tag 时构建并推送至制品库（DOCK-060/061，非 latest）。
+# 通过环境变量注入；默认给一个明确的占位版本，禁止浮动 latest。
+x-app-image: &app-image
+  image: "${RANAMINDER_IMAGE:-ghcr.io/ranaminder/ranaminder-service:CHANGE_ME}"
+
+# 应用公共运行参数：只读根文件系统 + 临时 /tmp 写入（DOCK-042）
+x-app-common: &app-common
+  <<: *app-image
+  restart: unless-stopped
+  # 根文件系统只读 + 临时写入目录（DOCK-042）；配置以只读卷挂载（ADR-010/DOCK-041）
+  read_only: true
+  tmpfs:
+    - /tmp
+  volumes:
+    # 只读挂载真实配置到固定受控位置（ADR-010 §2.5）；
+    # 应用无持久化写路径（状态在 PG/MinIO），临时写入仅 /tmp（DOCK-042）
+    - ./config.yaml:/etc/ranaminder/config.yaml:ro
+  environment:
+    NODE_ENV: production
+    TZ: UTC
+    # 配置路径由加载器读取 RANAMINDER_CONFIG_FILE（src/config/config.loader.ts），
+    # 与默认路径 /etc/ranaminder/config.yaml 保持一致，显式受控（ADR-010）。
+    RANAMINDER_CONFIG_FILE: /etc/ranaminder/config.yaml
+  # 应用由启动判定（配置校验/依赖就绪）自行阻断或降级（部署运维手册 §8）；
+  # 这里仅提供依赖服务就绪顺序，不对应用作臆造端点的硬性健康检查（DOCK-043）。
+  depends_on:
+    postgres:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+    casdoor:
+      condition: service_healthy
+
+services:
+  # ---- HTTP 应用入口（node dist/main.js）----
+  app:
+    <<: *app-common
+    container_name: ranaminder-app
+    ports:
+      # 宿主机 3000 -> 容器 3000；生产经反向代理对外（OPS-CFG-006 HTTPS）
+      - "${APP_HTTP_PORT:-3000}:3000"
+    # 进程探针：仅证明进程存活，真实健康判定由应用启动逻辑与内置状态页负责（DOCK-043）。
+    # 使用 /proc/1/cmdline（Debian slim 自带 grep，无需额外安装 procps/pgrep）。
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q 'dist/main.js' /proc/1/cmdline || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ---- 后台任务入口（node dist/main.worker.js）----
+  worker:
+    <<: *app-common
+    container_name: ranaminder-worker
+    # 单镜像双入口：以命令覆盖启动后台任务（DOCK-003/DOCK-030）
+    command: ["node", "dist/main.worker.js"]
+    # 无监听端口，进程存活探针（DOCK-030/DOCK-043）。
+    # 使用 /proc/1/cmdline（Debian slim 自带 grep，无需额外安装 procps/pgrep）。
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q 'dist/main.worker.js' /proc/1/cmdline || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ---- 权威数据库 PostgreSQL 18 ----
+  postgres:
+    image: postgres:18
+    container_name: ranaminder-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${PG_USER:-ranaminder}"
+      POSTGRES_PASSWORD: "${PG_PASSWORD:?must set PG_PASSWORD}"
+      POSTGRES_DB: "${PG_DB:-ranaminder}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 首次初始化自动执行扩展脚本（pg_trgm / btree_gist；不装 pgcrypto）
+      - ./scripts/dev/postgres-init.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-ranaminder} -d ${PG_DB:-ranaminder}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ---- S3 兼容对象存储 MinIO ----
+  minio:
+    # 生产环境必须锁定具体 release tag（非 latest，ADR-013）
+    image: minio/minio:${MINIO_TAG:-RELEASE.2024-08-17T01-24-54Z}
+    container_name: ranaminder-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:?must set MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?must set MINIO_ROOT_PASSWORD}"
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- Casdoor（学校既有 v3.108.0 精确兼容基线）----
+  casdoor:
+    # Docker Hub 镜像 tag 不含 v 前缀（源码 git tag 为 v3.108.0，镜像 tag 为 3.108.0）
+    image: casbin/casdoor:3.108.0
+    container_name: ranaminder-casdoor
+    restart: unless-stopped
+    ports:
+      - "${CASDOOR_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  pgdata:
+  miniodata:
