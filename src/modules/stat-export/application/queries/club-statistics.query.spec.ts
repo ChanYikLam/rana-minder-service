@@ -293,6 +293,83 @@ describe('ClubStatisticsQuery — summary 角色（STAT-002）', () => {
     const view = await query.summary({ principal, clubId: 'club-suspended' });
     assert.ok(view);
   });
+
+  it('当前成员总数趋势：前学年多部门按学号去重后再对比（STAT-001）', async () => {
+    const source = new InMemoryStatisticsSource();
+    source.seedClubProfile({ clubId: 'club-trend', forcedSuspension: false });
+    // 前学年 2024-2025：uA(S100) 属 tech+prod（多部门）、uB(S101) 属 tech
+    // 非去重计数 = 3，按学号去重 = 2
+    source.seedMembershipFacts('club-trend', [
+      {
+        userId: 'uA',
+        studentNo: 'S100',
+        departmentId: 'dept-tech',
+        departmentName: '技术部',
+        positionId: null,
+        academicYear: '2024-2025',
+      },
+      {
+        userId: 'uA',
+        studentNo: 'S100',
+        departmentId: 'dept-prod',
+        departmentName: '产品部',
+        positionId: null,
+        academicYear: '2024-2025',
+      },
+      {
+        userId: 'uB',
+        studentNo: 'S101',
+        departmentId: 'dept-tech',
+        departmentName: '技术部',
+        positionId: null,
+        academicYear: '2024-2025',
+      },
+      // 当前学年 2025-2026：uC/uD/uE 各单部门，去重 = 3
+      {
+        userId: 'uC',
+        studentNo: 'S102',
+        departmentId: 'dept-tech',
+        departmentName: '技术部',
+        positionId: null,
+        academicYear: '2025-2026',
+      },
+      {
+        userId: 'uD',
+        studentNo: 'S103',
+        departmentId: 'dept-prod',
+        departmentName: '产品部',
+        positionId: null,
+        academicYear: '2025-2026',
+      },
+      {
+        userId: 'uE',
+        studentNo: 'S104',
+        departmentId: 'dept-intro',
+        departmentName: '介绍部',
+        positionId: null,
+        academicYear: '2025-2026',
+      },
+    ]);
+    source.seedAdmissionHistory('club-trend', []);
+    const audit = new InMemoryStatisticsAuditPort();
+    const query = new ClubStatisticsQuery(source, audit, new StatisticsSpecification());
+    const principal = makePrincipal({
+      userId: 'u_leader',
+      clubScopes: [{ clubId: 'club-trend', level: 'club', departmentIds: [] }],
+    });
+
+    const view = await query.summary({
+      principal,
+      clubId: 'club-trend',
+      filters: { academicYear: '2025-2026' },
+    });
+    const currentItem = view.summary.find((s) => s.label === '当前成员总数');
+    assert.ok(currentItem);
+    assert.equal(currentItem.value, 3, '当前学年去重后 3 人');
+    // 前学年按学号去重 = 2（S100 双部门只计 1），故趋势应为 up、delta = 3 - 2 = 1
+    assert.equal(currentItem.trend, 'up', '趋势应由前学年去重基准计算');
+    assert.equal(currentItem.trendValue, 1, 'trendValue = 当前去重 3 - 前学年去重 2');
+  });
 });
 
 // ===========================================================================

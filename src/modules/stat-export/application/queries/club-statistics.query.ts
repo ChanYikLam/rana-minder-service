@@ -390,13 +390,25 @@ export class ClubStatisticsQuery {
     }
   }
 
+  /**
+   * 按学年分桶统计成员数，且与 `uniqueStudentCount` 保持同一去重口径（STAT-001）：
+   * 每个学年只计「按学号去重后的学生数」。多部门成员在同一学年只计一次，
+   * 避免 `memberTrend` 以非去重计数与前学年（去重）对比，导致趋势基准不一致。
+   */
   private groupMembersByYear(
-    memberships: readonly { academicYear: string }[],
+    memberships: readonly { academicYear: string; studentNo: string }[],
   ): Map<string, number> {
-    const map = new Map<string, number>();
+    const buckets = new Map<string, Set<string>>();
     for (const m of memberships) {
-      map.set(m.academicYear, (map.get(m.academicYear) ?? 0) + 1);
+      let set = buckets.get(m.academicYear);
+      if (set === undefined) {
+        set = new Set();
+        buckets.set(m.academicYear, set);
+      }
+      set.add(m.studentNo);
     }
+    const map = new Map<string, number>();
+    for (const [year, set] of buckets) map.set(year, set.size);
     return map;
   }
 
