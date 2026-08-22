@@ -130,8 +130,7 @@
           script: |
             set -e
             if ! command -v trivy >/dev/null 2>&1; then
-              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.54.1/trivy_0.54.1_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
-              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.3
             fi
             # 扫描已构建镜像；HIGH/CRITICAL 漏洞使扫描失败（镜像层、OS 包、应用依赖）
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
@@ -245,8 +244,7 @@
           script: |
             set -e
             if ! command -v trivy >/dev/null 2>&1; then
-              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.54.1/trivy_0.54.1_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
-              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.3
             fi
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
               ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT}
@@ -354,8 +352,7 @@
           script: |
             set -e
             if ! command -v trivy >/dev/null 2>&1; then
-              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.54.1/trivy_0.54.1_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
-              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.3
             fi
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
               ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
