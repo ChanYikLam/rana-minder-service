@@ -18,6 +18,9 @@ import { Module } from '@nestjs/common';
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { OrganizationModule } from '../organization/module';
+import { IdentityModule } from '../identity/identity.module';
+import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
+import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import {
   CURRENT_PERMISSIONS_PORT,
 } from '../organization/application/ports';
@@ -97,11 +100,15 @@ import { AdminFormsNestController } from './interfaces/nest/admin-forms.nest.con
 import { FormSubmissionNestController } from './interfaces/nest/form-submission.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule, OrganizationModule],
+  imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule],
   controllers: [OrgFormsNestController, AdminFormsNestController, FormSubmissionNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
-    { provide: FORM_AUTH_SESSION_PROVIDER, useClass: RejectAllFormAuthSessionProvider },
+    {
+      provide: FORM_AUTH_SESSION_PROVIDER,
+      useFactory: (identitySession) => adaptSessionProvider(identitySession),
+      inject: [AUTH_SESSION_PROVIDER],
+    },
     FormAuthGuard,
     // ----- 工作单元（ambient 事务 + RLS 单目标上下文）-----
     {
