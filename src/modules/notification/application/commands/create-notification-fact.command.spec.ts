@@ -15,6 +15,7 @@ import {
   InMemoryEmailAdapter,
   InMemoryChannelDeliveryAttemptRepository,
   InMemoryTemplateSnapshotService,
+  InMemoryKillSwitchRepository,
 } from '../../infrastructure';
 import type { CreateNotificationFactInput } from '../../domain';
 
@@ -43,7 +44,8 @@ describe('CreateNotificationFactCommand (NTF-003 去重)', () => {
     const attemptRepository = new InMemoryChannelDeliveryAttemptRepository();
     const templateService = new InMemoryTemplateSnapshotService();
     const resolver = new DefaultRecipientSnapshotResolver();
-    const command = new CreateNotificationFactCommand(repository, resolver);
+    const killSwitches = new InMemoryKillSwitchRepository();
+    const command = new CreateNotificationFactCommand(repository, resolver, killSwitches);
     return { repository, inboxAdapter, emailAdapter, attemptRepository, templateService, command };
   }
 

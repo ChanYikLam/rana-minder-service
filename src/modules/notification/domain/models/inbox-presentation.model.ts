@@ -3,6 +3,10 @@
  *
  * 站内信呈现是通知事实在收件人视角的投影。权益通知不可物理删除，
  * 但可归入已处理或隐藏列表。同一逻辑事件的重复投递只对应一条站内信。
+ *
+ * 有期限通知的当前办理状态（可处理/已处理/已撤回/已过期）在查询时
+ * 按 `resolveEffectiveDeadlineStatus` 推导：已处理/已撤回为终态不被时间
+ * 覆盖，其余在超过期限后显示已过期；过期后保留历史（需求发现 08）。
  */
 
 /** 站内信呈现子状态 */
@@ -21,8 +25,10 @@ export interface InboxPresentationModel {
   readonly recipientId: string;
   /** 呈现子状态 */
   readonly status: InboxPresentationStatus;
-  /** 有期限通知的办理状态（可选） */
+  /** 有期限通知的办理状态（可选；终态不被时间覆盖） */
   readonly deadlineStatus: DeadlineStatus | null;
+  /** 有期限通知的截止时间（可选） */
+  readonly deadlineAt: string | null;
   /** 通知类型 */
   readonly eventType: string;
   /** 标题 */
@@ -37,19 +43,28 @@ export interface InboxPresentationModel {
   readonly deliveredAt: string;
   /** 已读时间 */
   readonly readAt: string | null;
+  /** 已处理时间 */
+  readonly processedAt: string | null;
+  /** 隐藏时间 */
+  readonly hiddenAt: string | null;
   /** 呈现版本 */
   readonly version: number;
 }
 
 /**
- * 验证是否可以标记为特定子状态。
+ * 验证是否可以标记为特定子状态（NTF-003）。
  * 返回 null 表示合法，否则返回拒绝原因。
+ *
+ * 规则：
+ * - 已处理/已隐藏为终态，不可逆回其他状态；
+ * - 已读可幂等重复（重复标记不报错）；
+ * - 未投递（UNREAD 且未生成）不在此校验，由状态机在命令层把关。
  */
 export function validatePresentationStatusTransition(
   current: InboxPresentationStatus,
   target: InboxPresentationStatus,
 ): string | null {
-  // 已处理或隐藏不可逆回未读
+  // 已处理或隐藏不可逆回未读/已读
   if (current === 'PROCESSED' && target !== 'PROCESSED') {
     return '已处理的通知不可逆回' + target;
   }
@@ -57,4 +72,22 @@ export function validatePresentationStatusTransition(
     return '已隐藏的通知不可逆回' + target;
   }
   return null;
+}
+
+/**
+ * 推导有期限通知的当前办理状态（NTF-003）。
+ *
+ * - 已处理/已撤回为终态，保持原状态（过期后保留历史）；
+ * - 其余状态在超过截止时间后显示已过期；
+ * - 未存储状态且未过期时显示可处理。
+ */
+export function resolveEffectiveDeadlineStatus(
+  stored: DeadlineStatus | null,
+  deadlineAt: string | null,
+  now: string,
+): DeadlineStatus | null {
+  if (!deadlineAt) return stored;
+  if (stored === 'PROCESSED' || stored === 'WITHDRAWN') return stored;
+  if (deadlineAt <= now) return 'EXPIRED';
+  return stored ?? 'ACTIONABLE';
 }

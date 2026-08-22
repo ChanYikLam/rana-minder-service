@@ -43,6 +43,13 @@
 ## 核心逻辑摘要
 
 - SRS-SM-NTF-001：`新建（NEW） -> 已创建＋待投递（CREATED_PENDING_DELIVERY）/ 已创建＋暂停投递（CREATED_PAUSED_DELIVERY） -> 已投递（DELIVERED）`；已投递下分呈现子状态：已读（READ）/已处理（PROCESSED）/隐藏（HIDDEN）；邮件为可选渠道子状态：待投递/已投递/失败重试/永久失败。权益通知不可物理删除，有期限通知显示可处理/已处理/已撤回/已过期，过期保留历史（NTF-003）。
+
+## 4.3.2 站内信收件箱与紧急关闭
+
+> 更新日期：2026-08-21
+
+- **收件箱能力（NTF-003）**：已读/未读/全部标记已读（`MarkPresentationStatusCommand`、`MarkAllReadCommand`）、类型筛选与隐藏列表（`NotificationQueryService` + `InboxListFilter`）、跳转业务页（`link` 每次打开重新鉴权）；权益通知不可物理删除，可归入已处理/隐藏；有期限通知在查询时按 `resolveEffectiveDeadlineStatus` 展示当前可处理/已处理/已撤回/已过期（已处理/已撤回为终态不被时间覆盖）。
+- **紧急关闭（NTF-001、SRS-FAIL-009、IFC-NTF-001、XCC-FAIL-009）**：超管按全平台或指定社团关闭（`ApplyKillSwitchCommand`），必须填原因、二次确认、设预计恢复时间并写入特权审计（`PrivilegedAuditWriter`）；关闭期间通知事实与收件人快照仍保存、新事实标记暂停投递（`CreateNotificationFactCommand` 感知关闭范围）；恢复（`ResumeKillSwitchCommand`）按原事件时间升序补投、逻辑事件＋收件人去重、只补投渠道不重放业务、范围隔离；平台级端点 `/api/admin/notifications/kill-switch`，社团级 `/api/org/:clubId/notifications/kill-switch`（接口清单 §15.9/§14.4）。
 - 收件人在业务事件发生时形成快照，后续换届不改变历史收件人；通知只关联逻辑事件与最少摘要，业务对象状态只在打开时实时读取（NTF-001 至 003）。
 - 事务边界归属：通知事实保存为第 2 类（IFC-TX-002 边界 2）--通知事实、逻辑事件 ID、收件人快照与最少摘要同事务原子保存，保存失败则权益命令整体回滚（IFC-ERR-016 内部提交失败）；通知投递（含投递失败）为第 5 类（IFC-TX-005 边界 5：通知渠道投递）--渠道意图、任务与模板/发件身份快照可靠保存，投递失败不回滚已提交业务、恢复只补投渠道、不得重执行业务或冒充已读，永久失败保留投递证据，结果不确定先回读再收口（NTF-001 至 003、NTF-007、IFC-ERR-013 外部结果不确定）。
 - 紧急关闭站内信：超管填写原因、预计恢复时间、影响预览并二次确认后按范围暂停投递并写特权审计；通知事实仍保存、权益业务可继续、默认邮件仍按配置尝试；恢复后按原事件时间升序补投，不同范围/收件人按分区、租约与逻辑事件幂等并行，不得重复执行业务（NTF-001、IFC-NTF-001、NFR-006）。

@@ -18,8 +18,8 @@ export interface ChannelDeliveryAttemptModel {
   readonly attemptId: string;
   /** 所属通知事实标识 */
   readonly factId: string;
-  /** 收件人快照标识 */
-  readonly snapshotId: string;
+  /** 收件人快照标识（投递尝试可回溯收件人快照，保证关联完整性） */
+  readonly snapshotId: string | null;
   /** 渠道类型 */
   readonly channel: ChannelType;
   /** 渠道消息 ID（外部投递标识，用于幂等） */
@@ -34,6 +34,12 @@ export interface ChannelDeliveryAttemptModel {
   readonly templateVersionId: string | null;
   /** 发件身份快照 */
   readonly senderIdentity: string | null;
+  /** 邮件标题快照（重试时复用，避免空内容，NTF-002 最少摘要） */
+  readonly emailSubject: string | null;
+  /** 邮件正文快照（重试时复用，避免空内容，NTF-002 最少摘要） */
+  readonly emailBody: string | null;
+  /** 首次失败时间（连续失败 24 小时停止重试的窗口起点，NTF-007） */
+  readonly firstFailedAt: string | null;
   /** 响应类别 */
   readonly responseCategory: ChannelResponseCategory | null;
   /** 脱敏错误信息 */
@@ -104,9 +110,20 @@ export function shouldStopEmailRetry(input: {
 }): boolean {
   if (input.responseCategory === 'BOUNCE') return true;
   if (input.responseCategory === 'PERMANENT_FAILURE') return true;
-  // 连续失败 24 小时后停止
+  // 连续失败 24 小时后停止：窗口从首次失败时刻起算（NTF-007）
   const firstFailure = new Date(input.firstFailureAt).getTime();
   const now = new Date(input.now).getTime();
   const hours = (now - firstFailure) / (1000 * 60 * 60);
   return hours >= 24;
+}
+
+/**
+ * 计算下次重试时间（指数退避，最多 6 小时）。
+ * attemptNumber 为刚失败的尝试序号：第 1 次失败后等 2 分钟，
+ * 之后按 2^N 递增（2、4、8…分钟），封顶 6 小时（NTF-007）。
+ * 所有邮件投递/重试路径共用本函数，避免退避口径不一致。
+ */
+export function computeNextRetryAt(attemptNumber: number, now: string): string {
+  const minutes = Math.min(2 ** attemptNumber, 60 * 6);
+  return new Date(new Date(now).getTime() + minutes * 60 * 1000).toISOString();
 }

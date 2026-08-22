@@ -166,7 +166,7 @@ describe('收件人快照解析 (NTF-002)', () => {
     assert.equal(result.recipients.length, 0);
   });
 
-  it('收件人快照记录去重键（逻辑事件＋收件人唯一，NTF-003）', () => {
+  it('收件人快照去重键由命令层以 逻辑事件＋收件人 生成（NTF-003、DATA-NTF-001）', () => {
     const result = resolver.resolve({
       logicalEventId: 'evt-004',
       eventType: 'conclusion',
@@ -175,6 +175,8 @@ describe('收件人快照解析 (NTF-002)', () => {
       operatorId: 'op-001',
       targetStudentId: 'student-001',
     });
-    assert.equal(result.recipients[0].dedupKey, 'evt-004\u0000student-001');
+    // 解析器不生成去重键（避免多份口径不一致），由命令层重建
+    assert.equal(result.recipients[0].dedupKey, '');
+    assert.equal(result.recipients[0].recipientId, 'student-001');
   });
 });

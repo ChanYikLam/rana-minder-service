@@ -8,10 +8,14 @@ import {
 
 /**
  * 通知投递后台任务处理器。
- * 接入 notification 模块的 DeliverInboxCommand 和 RetryChannelDeliveryCommand。
+ * 接入 notification 模块的 DeliverInboxCommand 和 RetryChannelDeliveryCommand
+ * （类 Token 注入，由 TasksModule 引入 NotificationModule 提供）。
  *
  * 渠道投递失败不回滚已生效业务（NTF-001、IFC-TX-005）；
- * 续重试失败投递并允许人工补发，补发只重发通知不重执行原业务。
+ * 持续重试失败投递并允许人工补发，补发只重发通知不重执行原业务。
+ *
+ * 投递/重试命令失败时向上抛出，由任务管道进入失败重试/人工介入，
+ * 不静默吞掉（IFC-ERR-008 版本冲突等必须可见可重试）。
  */
 @Injectable()
 export class NotificationDeliveryHandler implements TaskHandler {
