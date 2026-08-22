@@ -46,10 +46,18 @@ export class ResolveRoutineActivationCommand {
     if (invitation === null) {
       throw new Error('IFC-ERR-006: 邀请不存在');
     }
+    // 幂等：系统任务重复触发（重放）时，已收口的邀请直接返回既有结果，避免抛 IFC-ERR-007 崩溃
+    if (invitation.status === 'ACTIVATED') {
+      return { invitation, activated: true, anomaly: false };
+    }
+    if (invitation.status === 'HIGH_PRIORITY_SYNC_ANOMALY') {
+      return { invitation, activated: false, anomaly: true };
+    }
     if (
       invitation.status !== 'ACCEPTED_PENDING_ACTIVATION' &&
       invitation.status !== 'SYNC_FAILED_PENDING_RETRY'
     ) {
+      // 其他终态（已拒绝/已撤回/已过期/目标已成为成员）：激活流程不可达
       throw new Error('IFC-ERR-007: 邀请不在待生效/重试状态');
     }
     // 无法确认且无法补偿到非成员 → 高优先级同步异常：

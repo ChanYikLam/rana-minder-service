@@ -452,4 +452,56 @@ describe('4.5.2 常规入社邀请（MEM-004、SRS-SM-MEM-004）', () => {
       },
     );
   });
+
+  it('resolve 幂等：已生效后重复触发返回已激活（不抛 IFC-ERR-007，系统任务重放安全）', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    const first = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: false,
+    });
+    assert.equal(first.activated, true);
+    assert.equal(first.invitation.status, 'ACTIVATED');
+    // 重复触发（重放）：应幂等返回已激活，而非抛 IFC-ERR-007
+    const second = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: false,
+    });
+    assert.equal(second.activated, true);
+    assert.equal(second.anomaly, false);
+    assert.equal(second.invitation.status, 'ACTIVATED');
+    assert.equal(second.invitation.version, first.invitation.version); // 不产生多余写入
+  });
+
+  it('resolve 幂等：已升级为高优先级异常后重复触发返回异常（不抛 IFC-ERR-007）', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    const first = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: true,
+    });
+    assert.equal(first.anomaly, true);
+    assert.equal(first.invitation.status, 'HIGH_PRIORITY_SYNC_ANOMALY');
+    // 重复触发（重放）：应幂等返回异常结果，而非抛 IFC-ERR-007
+    const second = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: true,
+    });
+    assert.equal(second.anomaly, true);
+    assert.equal(second.activated, false);
+    assert.equal(second.invitation.status, 'HIGH_PRIORITY_SYNC_ANOMALY');
+    assert.equal(second.invitation.version, first.invitation.version); // 不产生多余写入
+  });
 });
