@@ -32,7 +32,7 @@
  * 规则保持 `Object.freeze` 不可变，便于在测试中辨别误改。
  */
 
-import { Module, MiddlewareConsumer, NestModule, type Provider } from '@nestjs/common';
+import { forwardRef, Module, MiddlewareConsumer, NestModule, type Provider } from '@nestjs/common';
 
 import { REDACTION_RULES, RETENTION_RULES, TRACE_ID_GENERATOR } from './domain/services/tokens';
 import {
@@ -101,9 +101,13 @@ import { ProcessAppStatusPort } from './status-page/app-status';
 import { NotWiredDbStatusPort } from './status-page/db-status';
 import { NotWiredTaskSummaryPort } from './status-page/task-summary';
 import { NotWiredDepLatestPort } from './status-page/dep-latest';
-import { RejectAllStatusPageAuthorizer } from './status-page/status-page-authorizer';
+import { IdentityStatusPageAuthorizer } from './status-page/status-page-authorizer';
 import { DefaultStatusSummaryQueryService } from './status-page/status-summary-query.service';
 import { StatusPageController } from './status-page/page-controller';
+
+import { IdentityModule } from '../../modules/identity/identity.module';
+import { SUPER_ADMIN_VERIFIER } from '../../modules/identity/tokens';
+import type { SuperAdminVerifierPort } from '../../modules/identity/application/ports/super-admin-verifier.port';
 
 import { TraceMiddleware } from './interfaces/trace.middleware';
 
@@ -258,8 +262,10 @@ const DEP_LATEST_PORT_PROVIDER: Provider = {
 
 const STATUS_PAGE_AUTHORIZER_PROVIDER: Provider = {
   provide: STATUS_PAGE_AUTHORIZER,
-  // fail-closed：身份模块接入前一律拒绝；接入后由 useClass 替换为身份判定实现。
-  useFactory: () => new RejectAllStatusPageAuthorizer(),
+  // T5：状态页限定为当前有效超管。委托 identity/authorization 的超管核验器
+  // （fail-closed：无法核验一律拒绝）。
+  useFactory: (verifier: SuperAdminVerifierPort) => new IdentityStatusPageAuthorizer(verifier),
+  inject: [SUPER_ADMIN_VERIFIER],
 };
 
 const STATUS_SUMMARY_QUERY_PROVIDER: Provider = {
@@ -290,7 +296,7 @@ const BACKUP_REPORT_SERVICE_PROVIDER: Provider = {
 };
 
 @Module({
-  imports: [],
+  imports: [forwardRef(() => IdentityModule)],
   controllers: [StatusPageController],
   providers: [
     REDACTION_RULES_PROVIDER,
