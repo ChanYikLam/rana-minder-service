@@ -171,6 +171,16 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
       }),
       /仅参与社团/,
     );
+    // 联合共同事实未提供参与社团集合 → 拒绝（防无关社团越权，AUD-010）
+    await assert.rejects(
+      rig.decide.execute({
+        correctionId: draft.correctionId,
+        decider: { principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' },
+        approve: false,
+        reason: '经核实排期无误',
+      }),
+      /联合共同事实须指定参与社团集合/,
+    );
     // 参与社团之一 → 成功
     const decided = await rig.decide.execute({
       correctionId: draft.correctionId,

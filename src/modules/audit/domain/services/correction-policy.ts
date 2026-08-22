@@ -64,7 +64,8 @@ export class CorrectionPolicy {
    * - 部门负责人不能处理活动结束后正式纠错；
    * - 联合活动中某社团评分/评语/结论：仅该社团负责人/人事/超管；
    *   其他社团只能看结果（决定命令拒绝）；
-   * - 无单一作者共同事实（JOINT_SCHEDULE 等）：任一参与社团负责人/人事可处理。
+   * - 无单一作者共同事实（JOINT_SCHEDULE 等）：须提供参与社团集合，
+   *   任一参与社团负责人/人事可处理（未提供参与集合时拒绝，防无关社团越权）。
    */
   assertCanDecide(
     decider: {
@@ -90,15 +91,15 @@ export class CorrectionPolicy {
     }
     // 无单一作者共同事实（如联合排期）：任一参与社团负责人/人事可处理（AUD-010）
     if (COMMON_FACT_OBJECT_TYPES.includes(target.objectType)) {
-      // 仍需来自某参与社团（至少提供 clubId），避免无社团归属的负责人任意放行
+      // 联合共同事实须提供参与社团集合，否则无法判定处理人归属，拒绝（防止无关社团越权）
+      if (target.participantClubIds === undefined || target.participantClubIds.length === 0) {
+        throw new CorrectionForbiddenError('联合共同事实须指定参与社团集合');
+      }
+      // 处理人须来自某参与社团
       if (decider.clubId === undefined || decider.clubId.length === 0) {
         throw new CorrectionForbiddenError('跨社团改写他人记录');
       }
-      // 若提供了参与社团集合，须校验处理人归属在集合内（防止无关社团越权处理联合记录）
-      if (
-        target.participantClubIds !== undefined &&
-        !target.participantClubIds.includes(decider.clubId)
-      ) {
+      if (!target.participantClubIds.includes(decider.clubId)) {
         throw new CorrectionForbiddenError('仅参与社团可处理联合记录纠错');
       }
       return;

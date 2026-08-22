@@ -18,7 +18,7 @@ export interface DecideCorrectionInput {
     /** 当前社团（本社团处理） */
     readonly clubId?: string;
   };
-  /** 无单一作者共同事实（联合排期等）的参与社团集合（可选；提供时校验处理人归属） */
+  /** 无单一作者共同事实（联合排期等）的参与社团集合；此类记录**必须**提供（联合共同事实须指定参与社团集合） */
   readonly participantClubIds?: readonly string[];
   /** approve=true 批准；false 驳回 */
   readonly approve: boolean;
