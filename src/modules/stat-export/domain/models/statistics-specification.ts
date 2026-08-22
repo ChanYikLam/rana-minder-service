@@ -250,11 +250,12 @@ const NEVER_EXPORT_FIELDS = new Set([
 // ---------------------------------------------------------------------------
 
 function matchesFilters(
-  fact: { academicYear?: string },
+  fact: { academicYear?: string; departmentId?: string | null },
   filters: StatisticsFilters | undefined,
 ): boolean {
   if (!filters) return true;
   if (filters.academicYear && fact.academicYear !== filters.academicYear) return false;
+  if (filters.departmentId && fact.departmentId !== filters.departmentId) return false;
   return true;
 }
 
@@ -347,7 +348,11 @@ export class StatisticsSpecification {
    * 按学号去重计数（社团总人数 / 平台总人数，STAT-001 多部门去重）。
    */
   uniqueStudentCount(
-    facts: ReadonlyArray<{ readonly studentNo: string; readonly academicYear?: string }>,
+    facts: ReadonlyArray<{
+      readonly studentNo: string;
+      readonly academicYear?: string;
+      readonly departmentId?: string | null;
+    }>,
     filters?: StatisticsFilters,
   ): number {
     const filtered = filters ? facts.filter((f) => matchesFilters(f, filters)) : facts;

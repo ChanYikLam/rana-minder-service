@@ -203,6 +203,17 @@ describe('StatisticsSpecification — 多部门去重', () => {
     assert.equal(spec.uniqueStudentCount([]), 0);
   });
 
+  it('uniqueStudentCount: 按 departmentId 筛选（与 departmentDistribution 口径一致）', () => {
+    const ms = [
+      membership('u1', 'S001', 'dept-a'),
+      membership('u1', 'S001', 'dept-b'), // 多部门
+      membership('u2', 'S002', 'dept-a'),
+      membership('u3', 'S003', 'dept-b'),
+    ];
+    assert.equal(spec.uniqueStudentCount(ms, { departmentId: 'dept-a' }), 2);
+    assert.equal(spec.uniqueStudentCount(ms, { departmentId: 'dept-b' }), 2);
+  });
+
   it('departmentDistribution: 空集合返回空数组', () => {
     assert.equal(spec.departmentDistribution([]).length, 0);
   });
