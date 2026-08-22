@@ -61,7 +61,7 @@ export class AuditWriter {
       oldValue: oldDiff,
       newValue: newDiff,
       outcome: input.outcome,
-      failureReason: input.failureReason,
+      failureReason: this.sanitizer.sanitizeMessage(input.failureReason),
       requestId: input.requestId,
     };
     try {

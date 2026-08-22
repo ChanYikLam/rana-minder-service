@@ -18,7 +18,6 @@ const SENSITIVE_FIELD_WORDS: readonly string[] = [
   'verifycode',
   'captcha',
   'attachmentbody',
-  'content',
 ];
 
 /** 归一化字段名（去分隔符转小写；smtpSecret → smtpsecret） */
@@ -79,5 +78,30 @@ export class AuditSanitizer {
       }
     }
     return diffs.length > 0 ? diffs.join(';') : null;
+  }
+
+  /**
+   * 自由文本（如失败原因）脱敏：截断超长文本，并抹掉常见的 `key=value` 敏感键值
+   * 与 URL 查询串中的凭证，防止错误信息把令牌/密码/密钥带进审计（AUD-003 敏感不落盘）。
+   */
+  sanitizeMessage(message: string | null | undefined): string | undefined {
+    if (message === null || message === undefined) {
+      return undefined;
+    }
+    let text = message;
+    // 抹掉 key=value / key:value 形式的敏感键值（覆盖 token/secret/password/key/code 等）
+    text = text.replace(
+      /([&;\s,"'])([a-z0-9_-]{0,40}(?:token|secret|password|passwd|apikey|key|code|credential))\s*[=:]\s*[^&;\s,"']+/gi,
+      (_m, sep: string, name: string) => `${sep}${name}=<REDACTED>`,
+    );
+    // 抹掉 URL 查询串里的凭证参数
+    text = text.replace(
+      /([?&])(?:token|access_token|secret|password|key|code|verifycode)=[^&\s]*/gi,
+      '$1<REDACTED>',
+    );
+    if (text.length > 256) {
+      text = `${text.slice(0, 256)}…(truncated:${message.length})`;
+    }
+    return text;
   }
 }

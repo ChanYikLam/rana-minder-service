@@ -68,6 +68,40 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.ok(v.includes('normalField=普通字段'), '普通字段保留');
   });
 
+  it('失败原因脱敏：错误信息中的令牌/密码不落盘，超长文本截断', async () => {
+    const rig = makeRig();
+    const event = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '调用下游失败 token=abc123&secret=xyz，详见 https://x.com/a?access_token=SECRETTOK',
+    });
+    assert.ok(event.failureReason, '失败原因应保留');
+    assert.ok(!event.failureReason?.includes('abc123'), '令牌不得落盘');
+    assert.ok(!event.failureReason?.includes('xyz'), '密钥不得落盘');
+    assert.ok(!event.failureReason?.includes('SECRETTOK'), 'URL 查询串凭证不得落盘');
+    // 超长文本截断
+    const long = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: 'e'.repeat(500),
+    });
+    assert.ok((long.failureReason?.length ?? 0) < 300, '超长失败原因应截断');
+    assert.ok(long.failureReason?.includes('truncated'), '应带截断标记');
+  });
+
+  it('仓储查询 limit<=0 返回空，缺省/正数返回最近 N 条', async () => {
+    const rig = makeRig();
+    await rig.writer.write({ ...baseEvent, actorId: 'u1' });
+    await rig.writer.write({ ...baseEvent, actorId: 'u2' });
+    await rig.writer.write({ ...baseEvent, actorId: 'u3' });
+    assert.equal((await rig.repo.query({ limit: 0 })).length, 0);
+    assert.equal((await rig.repo.query({ limit: -1 })).length, 0);
+    const lastTwo = await rig.repo.query({ limit: 2 });
+    assert.equal(lastTwo.length, 2);
+    assert.equal(lastTwo[1]?.actorId, 'u3');
+  });
+
   it('审计只追加不可篡改：仓储无修改/删除方法；查询按条件过滤', async () => {
     const rig = makeRig();
     await rig.writer.write({
@@ -115,12 +149,15 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
       {},
     );
     assert.equal(c1.length, 1);
-    // 本社团负责人/人事未指定 clubId 也应仅限本社团（防跨社团越权）
+    // 本社团负责人/人事未指定 clubId 也应仅限本社团（防跨社团越权）：
+    // 写入另一社团的记录，未带 clubId 过滤时也不得泄漏出来
+    await rig.writer.write({ ...baseEvent, actorId: 'u9', scope: { kind: 'CLUB', clubId: 'c9' } });
     const c1NoFilter = await rig.query.search(
       { principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' },
       {},
     );
     assert.equal(c1NoFilter.length, 1);
+    assert.equal(c1NoFilter[0]?.actorId, 'u1');
     // 无社团作用域的负责人/人事 → 拒绝
     await assert.rejects(
       rig.query.search({ principalId: 'hr3', roles: ['HR_ADMIN'] }, {}),

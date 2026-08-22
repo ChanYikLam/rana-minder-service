@@ -39,6 +39,11 @@ export class InMemoryAuditRepository implements AuditRepository {
   }
 
   async query(filter: AuditQueryFilter): Promise<readonly AuditEvent[]> {
+    // limit <= 0 视为不返回任何记录；limit 缺省时取最近 100 条
+    const limit = filter.limit ?? 100;
+    if (limit <= 0) {
+      return [];
+    }
     return this.events
       .filter((e) => {
         if (filter.from !== undefined && e.occurredAt < filter.from) return false;
@@ -51,6 +56,6 @@ export class InMemoryAuditRepository implements AuditRepository {
         if (filter.eventType !== undefined && e.eventType !== filter.eventType) return false;
         return true;
       })
-      .slice(-(filter.limit ?? 100));
+      .slice(-limit);
   }
 }
