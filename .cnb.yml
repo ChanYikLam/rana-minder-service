@@ -39,7 +39,7 @@
               curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
               tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
             fi
-            gitleaks detect --source . --no-banner --redact
+            gitleaks detect --source . --no-banner --redact --config .gitleaks.toml
         # 阶段 11：文档一致性（相对链接检查）
         - name: 11-文档链接一致性
           script: |
@@ -150,7 +150,7 @@
               curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
               tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
             fi
-            gitleaks detect --source . --no-banner --redact
+            gitleaks detect --source . --no-banner --redact --config .gitleaks.toml
         - name: 11-文档链接一致性
           script: |
             bash scripts/ci/check-docs-links.sh
@@ -251,7 +251,7 @@
               curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
               tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
             fi
-            gitleaks detect --source . --no-banner --redact
+            gitleaks detect --source . --no-banner --redact --config .gitleaks.toml
         - name: 11-文档链接一致性
           if: '[[ "$CNB_BRANCH" == v* ]]'
           script: |

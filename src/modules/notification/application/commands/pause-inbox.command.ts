@@ -5,9 +5,10 @@
  * 关闭期间如何展示和恢复补投按 SRS-FAIL-009 处理。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { NotificationRepository } from '../../infrastructure';
 import { NotificationStateMachine } from '../../domain';
+import { NOTIFICATION_REPOSITORY } from '../../tokens';
 
 export interface PauseInboxResult {
   readonly pausedFactCount: number;
@@ -18,7 +19,10 @@ export class PauseInboxCommand {
   private readonly logger = new Logger(PauseInboxCommand.name);
   private readonly stateMachine = new NotificationStateMachine();
 
-  constructor(private readonly repository: NotificationRepository) {}
+  constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
+    private readonly repository: NotificationRepository,
+  ) {}
 
   /**
    * 暂停站内信投递。

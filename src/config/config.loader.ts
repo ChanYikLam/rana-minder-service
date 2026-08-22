@@ -28,6 +28,7 @@ import type {
   MailConfig,
   ObservabilityConfig,
   JobConfig,
+  ExternalServiceConfig,
 } from './configuration';
 
 export class ConfigLoadError extends Error {
@@ -48,6 +49,9 @@ interface RawConfig {
   readonly casdoor?: Partial<CasdoorConfig>;
   readonly storage?: Partial<StorageConfig>;
   readonly mail?: Partial<MailConfig>;
+  readonly fileCheck?: Partial<ExternalServiceConfig>;
+  readonly notify?: Partial<ExternalServiceConfig>;
+  readonly backup?: Partial<ExternalServiceConfig>;
   readonly observability?: Partial<ObservabilityConfig>;
   readonly job?: Partial<JobConfig>;
 }
@@ -90,6 +94,9 @@ function buildConfig(raw: RawConfig, env: NodeJS.ProcessEnv): RanaMinderConfig {
     casdoor: buildCasdoor(raw.casdoor, env),
     storage: buildStorage(raw.storage, env),
     mail: buildMail(raw.mail, env),
+    fileCheck: buildExternalService(raw.fileCheck, env, 'FILECHECK'),
+    notify: buildExternalService(raw.notify, env, 'NOTIFY'),
+    backup: buildExternalService(raw.backup, env, 'BACKUP'),
     observability: buildObservability(raw.observability, env),
     job: buildJob(raw.job, env),
   };
@@ -210,6 +217,21 @@ function buildMail(raw: Partial<MailConfig> | undefined, env: NodeJS.ProcessEnv)
     ),
     userRef: optionalString(raw?.userRef, env.MAIL_USER_REF, env.MAIL_USER),
     passwordRef: optionalString(raw?.passwordRef, env.MAIL_PASSWORD_REF, env.MAIL_PASSWORD),
+  };
+}
+
+function buildExternalService(
+  raw: Partial<ExternalServiceConfig> | undefined,
+  env: NodeJS.ProcessEnv,
+  service: 'FILECHECK' | 'NOTIFY' | 'BACKUP',
+): ExternalServiceConfig {
+  return {
+    // endpoint 可为空：适配器 fail-closed，仅在 ADAPTERS_*_REAL=1 且配置了端点时才启用真实实现。
+    endpoint:
+      typeof raw?.endpoint === 'string' && raw.endpoint.length > 0
+        ? raw.endpoint
+        : (env[`${service}_ENDPOINT`] ?? ''),
+    tokenRef: optionalString(raw?.tokenRef, env[`${service}_TOKEN_REF`], env[`${service}_TOKEN`]),
   };
 }
 

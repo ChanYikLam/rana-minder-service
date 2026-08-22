@@ -5,12 +5,7 @@
  * 收件人名单在业务事件发生时形成快照，后续换届不改变历史收件人。
  */
 
-import {
-  type RecipientSnapshot,
-  type RecipientResolveInput,
-  type RecipientResolveResult,
-  buildDedupKey,
-} from '../models';
+import type { RecipientSnapshot, RecipientResolveInput, RecipientResolveResult } from '../models';
 
 /**
  * 收件人解析器接口。
@@ -50,8 +45,8 @@ export class DefaultRecipientSnapshotResolver implements RecipientResolver {
         recipientId: input.targetStudentId,
         reason: '本人',
         scope: input.scope,
-        // 与 recipient-snapshot.model 统一的去重键：逻辑事件＋收件人唯一（NTF-003）
-        dedupKey: buildDedupKey(input.logicalEventId, input.targetStudentId),
+        // 由命令层以 逻辑事件＋收件人 重建去重键（NTF-003、DATA-NTF-001）
+        dedupKey: '',
       });
     }
 

@@ -29,9 +29,16 @@ tasks/
 
 ## 当前实现边界
 
-- 开发期均为内存桩（`InMemoryTaskRepository` / `InMemoryTransactionOutboxStore` /
-  `InMemoryIdempotencyStore` / `InMemoryBatchStore`）；真实 PostgreSQL 任务表、
-  租约竞争原子条件更新与 `src/adapters` 外部调用在 infrastructure 任务中替换。
+- **任务表与租约（T1 已完成）**：`TASK_REPOSITORY` 已绑定 `PostgresTaskRepository`
+  （`infrastructure/postgres-task-repository.ts`），表结构见迁移
+  `20260822120000_create-job-task-tables.ts`（`job_tasks`）。领取/续租/完成/过期重领使用
+  单条条件 UPDATE 原子竞争（`DATA-CON-006`）；旧租约令牌提交必须失败（`SEC-VER-011`）；
+  并发竞争与旧令牌拒绝用例见 `test/integration/job-task-lease.spec.ts`。
+  运行时依赖真实 DB（`DB_ADAPTER`，连接池/RLS 在 T2 接线）。
+  `InMemoryTaskRepository` 保留为契约参考/单测基准。
+- **尚未接线（后续任务）**：事务发件箱/幂等存储/批次存储仍为内存桩
+  （`InMemoryTransactionOutboxStore` / `InMemoryIdempotencyStore` / `InMemoryBatchStore`）；
+  `src/adapters` 真实外部调用在 infrastructure 任务中替换。
 - `executors/handlers/` 中的处理器为薄壳；`DerivedRebuildTaskHandler` 已把
   `RecomputeIntent` 交给 read-model 的 `RefreshHandler` 消费（接力 C）。
 - 任务积压/异常状态经 `TASK_OPS_TELEMETRY_PORT` 上报（接力 B，ops 模块接入后替换）。

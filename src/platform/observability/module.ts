@@ -32,7 +32,7 @@
  * 规则保持 `Object.freeze` 不可变，便于在测试中辨别误改。
  */
 
-import { Module, MiddlewareConsumer, NestModule, type Provider } from '@nestjs/common';
+import { forwardRef, Module, MiddlewareConsumer, NestModule, type Provider } from '@nestjs/common';
 
 import { REDACTION_RULES, RETENTION_RULES, TRACE_ID_GENERATOR } from './domain/services/tokens';
 import {
@@ -102,10 +102,16 @@ import { NotWiredDbStatusPort, PostgresDbStatusPort } from './status-page/db-sta
 import { DB_ADAPTER } from '../../adapters/tokens';
 import { realDbEnabled } from '../../adapters/adapters.module';
 import { NotWiredTaskSummaryPort } from './status-page/task-summary';
-import { NotWiredDepLatestPort } from './status-page/dep-latest';
-import { RejectAllStatusPageAuthorizer } from './status-page/status-page-authorizer';
+import { RecorderDepLatestPort } from './status-page/recorder-dep-latest.port';
+import { DEP_LATEST_RECORDER } from '../../adapters/tokens';
+import type { DepLatestRecorder } from '../../adapters/dep-latest/dep-latest-recorder';
+import { IdentityStatusPageAuthorizer } from './status-page/status-page-authorizer';
 import { DefaultStatusSummaryQueryService } from './status-page/status-summary-query.service';
 import { StatusPageController } from './status-page/page-controller';
+
+import { IdentityModule } from '../../modules/identity/identity.module';
+import { SUPER_ADMIN_VERIFIER } from '../../modules/identity/tokens';
+import type { SuperAdminVerifierPort } from '../../modules/identity/application/ports/super-admin-verifier.port';
 
 import { TraceMiddleware } from './interfaces/trace.middleware';
 
@@ -252,18 +258,24 @@ const DB_STATUS_PORT_PROVIDER: Provider = {
 
 const TASK_SUMMARY_PORT_PROVIDER: Provider = {
   provide: TASK_SUMMARY_PORT,
+  // 默认保持 NotWired 桩（fail-closed）。真实积压在 AppModule 组合根按需覆盖（T6）。
   useFactory: () => new NotWiredTaskSummaryPort(),
 };
 
 const DEP_LATEST_PORT_PROVIDER: Provider = {
   provide: DEP_LATEST_PORT,
-  useFactory: () => new NotWiredDepLatestPort(),
+  // T3 接线：从全局 adapters 模块注入 DepLatestRecorder，桥接为 DepLatestPort；
+  // 未启用真实适配器时记录器无数据 → 返回 unknown（ADR-011 不伪造健康）。
+  useFactory: (recorder: DepLatestRecorder) => new RecorderDepLatestPort(recorder),
+  inject: [DEP_LATEST_RECORDER],
 };
 
 const STATUS_PAGE_AUTHORIZER_PROVIDER: Provider = {
   provide: STATUS_PAGE_AUTHORIZER,
-  // fail-closed：身份模块接入前一律拒绝；接入后由 useClass 替换为身份判定实现。
-  useFactory: () => new RejectAllStatusPageAuthorizer(),
+  // T5：状态页限定为当前有效超管。委托 identity/authorization 的超管核验器
+  // （fail-closed：无法核验一律拒绝）。
+  useFactory: (verifier: SuperAdminVerifierPort) => new IdentityStatusPageAuthorizer(verifier),
+  inject: [SUPER_ADMIN_VERIFIER],
 };
 
 const STATUS_SUMMARY_QUERY_PROVIDER: Provider = {
@@ -294,7 +306,7 @@ const BACKUP_REPORT_SERVICE_PROVIDER: Provider = {
 };
 
 @Module({
-  imports: [],
+  imports: [forwardRef(() => IdentityModule)],
   controllers: [StatusPageController],
   providers: [
     REDACTION_RULES_PROVIDER,
