@@ -864,6 +864,20 @@ export class NotificationController {
     }
   }
 
+  /**
+   * 从渠道尝试的发件身份提取作用域标识（供外发箱展示）。
+   * 新投递路径 senderIdentity 为"展示名 <发信账号>"（NTF-008），仅旧格式
+   * （纯作用域标识）可回退为 clubId；含 < > 的展示名格式返回 null，
+   * 避免把发件人展示名误当作社团标识。
+   */
+  private senderScopeIdFromIdentity(senderIdentity: string | null): string | null {
+    if (!senderIdentity || senderIdentity === 'platform') return null;
+    if (senderIdentity.includes('<') || senderIdentity.includes('>') || senderIdentity.includes('@')) {
+      return null;
+    }
+    return senderIdentity;
+  }
+
   private toTemplateView(template: {
     templateId: string;
     kind: NotificationKind;
@@ -904,10 +918,9 @@ export class NotificationController {
         subject: attempt.emailSubject ?? '',
         body: attempt.emailBody ?? '',
         kind: 'system' as NotificationKind,
-        clubId:
-          attempt.senderIdentity && attempt.senderIdentity !== 'platform'
-            ? attempt.senderIdentity
-            : null,
+        // senderIdentity 在新投递路径下是"展示名 <发信账号>"格式（NTF-008），
+        // 无法作为社团标识使用；仅旧格式（纯作用域标识，不含 < >）才作为 clubId 回退。
+        clubId: this.senderScopeIdFromIdentity(attempt.senderIdentity),
         sentAt: attempt.completedAt ?? attempt.createdAt,
       })),
     };

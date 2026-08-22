@@ -110,6 +110,78 @@ describe('MarkPermanentFailureCommand（NTF-007 停止重试与提示义务）',
     assert.equal(adminNotice.targetId, attempt.attemptId);
   });
 
+  it('仅通知本次邮件投递失败的收件人，不误告同一事实的其他收件人（NTF-007）', async () => {
+    const { fact, snapshots } = await repo.saveFactWithSnapshots(
+      {
+        logicalEventId: 'evt-multi',
+        sourceObjectId: 'app-multi',
+        sourceObjectVersion: 1,
+        sourceCommandId: 'cmd-multi',
+        eventType: 'conclusion',
+        eventTime: new Date().toISOString(),
+        summary: '招新结论：通过',
+        targetObjectRef: null,
+        deadlineAt: null,
+        scope: { type: 'CLUB', clubId: 'club-1' },
+      },
+      [
+        {
+          snapshotId: '',
+          factId: '',
+          recipientId: 'student-a',
+          reason: '本人',
+          dedupKey: 'evt-multi\u0000student-a',
+          scope: { type: 'CLUB', clubId: 'club-1' },
+          createdAt: new Date().toISOString(),
+        },
+        {
+          snapshotId: '',
+          factId: '',
+          recipientId: 'student-b',
+          reason: '本人',
+          dedupKey: 'evt-multi\u0000student-b',
+          scope: { type: 'CLUB', clubId: 'club-1' },
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    );
+    const multi = await attempts.saveAttempt({
+      attemptId: 'att-multi',
+      factId: fact.factId,
+      snapshotId: snapshots[0].snapshotId,
+      recipientId: 'student-a',
+      channel: 'EMAIL',
+      channelMessageId: null,
+      attemptNumber: 3,
+      status: 'FAILED_RETRY',
+      targetAddress: 'student-a@student.edu',
+      templateVersionId: null,
+      senderIdentity: '动漫社 <club@x.edu>',
+      emailSubject: '结果通知',
+      emailBody: '<p>通过</p>',
+      firstFailedAt: new Date(Date.now() - 25 * 3600 * 1000).toISOString(),
+      responseCategory: 'TEMPORARY_FAILURE',
+      sanitizedError: null,
+      nextRetryAt: null,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      version: 1,
+    });
+    await command.execute(multi.attemptId);
+
+    // 只有 student-a（邮件投递失败的收件人）收到提示，student-b 不受影响
+    const noticeA = await inbox.listForUser('student-a', { includeHidden: true }, null, 10);
+    assert.ok(
+      noticeA.some((p) => p.eventType === 'system'),
+      '受影响收件人必须收到站内信提示',
+    );
+    const noticeB = await inbox.listForUser('student-b', { includeHidden: true }, null, 10);
+    assert.ok(
+      !noticeB.some((p) => p.eventType === 'system'),
+      '未受影响收件人不得收到提示',
+    );
+  });
+
   it('重复执行幂等：不产生重复站内信提示', async () => {
     const attempt = await seedEmailAttempt();
     await command.execute(attempt.attemptId);

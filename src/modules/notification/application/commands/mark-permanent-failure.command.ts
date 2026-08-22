@@ -88,6 +88,7 @@ export class MarkPermanentFailureCommand {
       await this.notifyUserAndAdmins(
         attempt.attemptId,
         attempt.factId,
+        attempt.recipientId ?? null,
         options?.responseCategory ?? attempt.responseCategory,
       );
     }
@@ -97,6 +98,7 @@ export class MarkPermanentFailureCommand {
   private async notifyUserAndAdmins(
     attemptId: string,
     factId: string,
+    failedRecipientId: string | null,
     responseCategory: string | null,
   ): Promise<void> {
     const fact = await this.repository.findFactById(factId);
@@ -106,8 +108,13 @@ export class MarkPermanentFailureCommand {
     }
     const snapshots = await this.repository.findSnapshotsByFactId(factId);
 
-    // 站内信提示：为每位收件人创建系统事实＋唯一呈现（去重键幂等）
-    for (const snapshot of snapshots) {
+    // 站内信提示：仅为本次邮件投递永久失败的收件人创建系统事实＋唯一呈现
+    // （NTF-007 只提示受影响收件人，不得误告其他收件人；去重键幂等）
+    const affectedSnapshots =
+      failedRecipientId != null
+        ? snapshots.filter((s) => s.recipientId === failedRecipientId)
+        : snapshots;
+    for (const snapshot of affectedSnapshots) {
       try {
         const now = new Date().toISOString();
         const noticeDedupKey = 'email-permfail\u0000' + attemptId + '\u0000' + snapshot.recipientId;

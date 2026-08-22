@@ -37,7 +37,8 @@ function resolveKey(): Buffer {
       '缺少 EMAIL_SECRET_CIPHER_KEY 主密钥：生产/非开发环境必须显式配置发信密钥加密主密钥',
     );
   }
-  // 口令 → 32 字节密钥（scrypt 派生，对齐项目令牌 scrypt 纵深防御口径）
+  // 主密钥材料 → 32 字节密钥：生产要求配置高熵随机密钥（hex/base64 32 字节），
+  // 直接取 SHA-256 派生即可；若采用低熵口令必须自行预派生后再注入。
   return createHash('sha256').update(material).digest();
 }
 
