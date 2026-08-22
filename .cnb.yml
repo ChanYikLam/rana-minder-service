@@ -358,12 +358,12 @@
           script: |
             npm run build
             npm run build:worker
-        # 阶段 8：镜像构建并推送（Tag 即版本号，非 latest）
-        - name: 8-镜像构建推送
+        # 阶段 8：镜像构建（Tag 即版本号，非 latest）；推送移至阶段 8e（扫描/SBOM 通过后才 push，
+        # 确保发布门在危险镜像进入制品库前拦截，避免“先 push 后扫描”使门禁落空）
+        - name: 8-镜像构建
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} .
-            docker push ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
         # 阶段 8b：发布镜像安全扫描（trivy；HIGH/CRITICAL 失败即阻断发布，DEP-003 / SRS-NFR-022/023 / OPS-REL）
         # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
         # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
@@ -405,6 +405,12 @@
             commit: $CNB_COMMIT
             attachments:
               - "./artifacts/ranaminder-sbom.spdx.json"
+        # 阶段 8e：推送发布镜像（仅在前序 8b 扫描、8c SBOM、8d 归档均成功后执行）
+        # 危险镜像不会进入制品库；扫描失败时流水线在此前中断，实现真正的“扫描失败阻断发布”
+        - name: 8e-镜像推送
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
+            docker push ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
         - name: 10-依赖审计与许可证登记
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f pnpm-lock.yaml ]'
           script: |
@@ -422,6 +428,6 @@
             echo "3) OPS-VER-001~024 部署/升级/恢复演练：人工门，见 docs/operations/部署运维与恢复手册-v1.0.md"
             echo "4) 生产 DDL 与迁移评审：人工门"
             echo "5) 秘密扫描/依赖审计/许可证：本流水线已执行（上方阶段日志即证据）"
-            echo "6) 镜像与版本锁定（非 latest）：本流水线已执行（阶段 8 日志即证据）"
-            echo "7) 镜像安全扫描（trivy HIGH/CRITICAL 失败门）：本流水线已执行（阶段 8b 日志即证据）"
-            echo "8) 镜像 SBOM（第三方依赖/许可证清单，DEP-003）：本流水线已生成（阶段 8c 日志即证据）"
+            echo "6) 镜像与版本锁定（非 latest）：本流水线已执行（阶段 8 构建、阶段 8e 推送日志即证据）"
+            echo "7) 镜像安全扫描（trivy HIGH/CRITICAL 失败门）：本流水线已执行且先于推送（阶段 8b 日志即证据）"
+            echo "8) 镜像 SBOM（第三方依赖/许可证清单，DEP-003）：本流水线已生成并归档（阶段 8c 日志与 8d 附件即证据）"
