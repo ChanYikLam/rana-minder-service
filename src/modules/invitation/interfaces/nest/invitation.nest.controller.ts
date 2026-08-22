@@ -11,7 +11,17 @@
  * 错误映射：IFC-ERR-006→404、IFC-ERR-003→403、IFC-ERR-007→422。
  */
 
-import { Body, Controller, Get, HttpException, HttpStatus, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpException,
+  HttpStatus,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 import { InvitationAuthGuard, invitationSessionFromRequest } from './invitation-auth.guard';
 
@@ -19,9 +29,18 @@ import { AcceptInvitationCommand } from '../../application/commands/accept-invit
 import { RejectInvitationCommand } from '../../application/commands/reject-invitation.command';
 import { AcceptInvitationError } from '../../application/commands/accept-invitation.command';
 import { RejectInvitationError } from '../../application/commands/reject-invitation.command';
-import { InvitationStatusQuery, InvitationStatusQueryError } from '../../application/queries/invitation-status.query';
-import { AcceptRoutineInvitationCommand, AcceptRoutineError } from '../../application/commands/accept-routine-invitation.command';
-import { RejectRoutineInvitationCommand, RoutineRejectError } from '../../application/commands/routine-reject-withdraw.command';
+import {
+  InvitationStatusQuery,
+  InvitationStatusQueryError,
+} from '../../application/queries/invitation-status.query';
+import {
+  AcceptRoutineInvitationCommand,
+  AcceptRoutineError,
+} from '../../application/commands/accept-routine-invitation.command';
+import {
+  RejectRoutineInvitationCommand,
+  RoutineRejectError,
+} from '../../application/commands/routine-reject-withdraw.command';
 import { RoutineInvitationStatusQuery } from '../../application/queries/routine-status.query';
 
 @UseGuards(InvitationAuthGuard)
@@ -159,7 +178,10 @@ export class InvitationNestController {
       return new HttpException({ code, message: '当前无权操作' }, HttpStatus.FORBIDDEN);
     }
     if (code === 'IFC-ERR-007' || code === 'IFC-ERR-009') {
-      return new HttpException({ code, message: '状态不允许或冲突' }, HttpStatus.UNPROCESSABLE_ENTITY);
+      return new HttpException(
+        { code, message: '状态不允许或冲突' },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
     }
     return new HttpException(
       { code: 'IFC-ERR-500', message: '内部错误' },

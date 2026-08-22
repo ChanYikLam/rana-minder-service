@@ -96,9 +96,7 @@ import { AccountAccessController } from './interfaces/controllers/account-access
 import { NameCorrectionController } from './interfaces/controllers/name-correction.controller';
 
 import { RejectAllAuthSessionProvider } from './interfaces/nest/auth-session';
-import {
-  OidcAuthSessionProvider,
-} from './interfaces/nest/oidc-session-provider';
+import { OidcAuthSessionProvider } from './interfaces/nest/oidc-session-provider';
 import { CasdoorSessionController } from './interfaces/nest/casdoor-session.controller';
 import { createHash } from 'node:crypto';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../config';
@@ -109,7 +107,12 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
 
 @Module({
   imports: [AdaptersModule, forwardRef(() => ObservabilityModule)],
-  controllers: [ProfilesNestController, AccountAccessNestController, NameCorrectionNestController, CasdoorSessionController],
+  controllers: [
+    ProfilesNestController,
+    AccountAccessNestController,
+    NameCorrectionNestController,
+    CasdoorSessionController,
+  ],
   providers: [
     // ----- 会话（条件装配：Casdoor endpoint 配置时启用 OIDC；否则 fail-closed）-----
     {

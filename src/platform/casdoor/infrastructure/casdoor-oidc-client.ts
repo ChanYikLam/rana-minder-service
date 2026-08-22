@@ -194,9 +194,7 @@ export class CasdoorOidcClient {
       userinfo_endpoint: String(doc['userinfo_endpoint'] ?? ''),
       jwks_uri: String(doc['jwks_uri'] ?? ''),
       end_session_endpoint:
-        typeof doc['end_session_endpoint'] === 'string'
-          ? doc['end_session_endpoint']
-          : undefined,
+        typeof doc['end_session_endpoint'] === 'string' ? doc['end_session_endpoint'] : undefined,
     };
     return this.discovery;
   }

@@ -13,11 +13,7 @@ import { HttpException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import { FormModule } from './form.module';
-import {
-  FORM_DESIGN_PERMISSION,
-  FORM_FILL_PERMISSION,
-  FORM_AUTH_SESSION_PROVIDER,
-} from './tokens';
+import { FORM_DESIGN_PERMISSION, FORM_FILL_PERMISSION, FORM_AUTH_SESSION_PROVIDER } from './tokens';
 import { FormAuthGuard } from './interfaces/nest/form-auth.guard';
 import { OrgBackedFormDesignPermission } from './infrastructure/org-form-design-permission';
 import { OrgBackedFormFillPermission } from './infrastructure/org-form-fill-permission';
@@ -26,14 +22,26 @@ import { RANA_MINDER_CONFIG, type RanaMinderConfig, ConfigurationModule } from '
 const stubConfig: RanaMinderConfig = {
   server: { port: 3000, host: '0.0.0.0', gracefulShutdownTimeoutMs: 10000 },
   database: {
-    host: 'localhost', port: 5432, name: 'ranaminder', user: 'ranaminder',
-    schema: 'app', ssl: false, passwordRef: '',
+    host: 'localhost',
+    port: 5432,
+    name: 'ranaminder',
+    user: 'ranaminder',
+    schema: 'app',
+    ssl: false,
+    passwordRef: '',
   },
   casdoor: {
-    endpoint: '', clientId: '', organization: '', redirectUri: '', clientSecretRef: '',
+    endpoint: '',
+    clientId: '',
+    organization: '',
+    redirectUri: '',
+    clientSecretRef: '',
   },
   storage: {
-    endpoint: '', region: 'us-east-1', accessKeyRef: '', secretKeyRef: '',
+    endpoint: '',
+    region: 'us-east-1',
+    accessKeyRef: '',
+    secretKeyRef: '',
     buckets: { quarantine: 'q', primary: 'p', derived: 'd' },
   },
   mail: { host: '', port: 25, fromAddress: '' },

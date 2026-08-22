@@ -6,7 +6,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { GroupMappingRegistry, GroupMappingRecord } from '../../organization/application/ports';
+import type {
+  GroupMappingRegistry,
+  GroupMappingRecord,
+} from '../../organization/application/ports';
 import type { CasdoorWritePort } from '../../../platform/casdoor/contracts/ports';
 import { ExternalStatus } from '../../../platform/casdoor/contracts/external-result';
 import type { ExternalResult } from '../../../platform/casdoor/contracts/external-result';
@@ -37,8 +40,7 @@ function fakeRegistry(): GroupMappingRegistry {
   return {
     save: async () => undefined,
     findByRef: async () => null,
-    listByClub: async (clubId: string) =>
-      clubId === 'club-acm' ? records : [],
+    listByClub: async (clubId: string) => (clubId === 'club-acm' ? records : []),
     listAll: async () => records,
   };
 }
@@ -52,8 +54,18 @@ function fakeCasdoor(script: WriteScript): CasdoorWritePort {
   return {
     addGroupMembers: async (): Promise<ExternalResult<void>> =>
       script.writeOk
-        ? ({ status: ExternalStatus.TRUSTED_CURRENT, value: null as never, evidence: { observedAt: new Date().toISOString() }, error: null })
-        : ({ status: ExternalStatus.DEPENDENCY_UNAVAILABLE, value: null, evidence: { observedAt: new Date().toISOString() }, error: null }),
+        ? {
+            status: ExternalStatus.TRUSTED_CURRENT,
+            value: null as never,
+            evidence: { observedAt: new Date().toISOString() },
+            error: null,
+          }
+        : {
+            status: ExternalStatus.DEPENDENCY_UNAVAILABLE,
+            value: null,
+            evidence: { observedAt: new Date().toISOString() },
+            error: null,
+          },
     removeGroupMembers: async (): Promise<ExternalResult<void>> => ({
       status: ExternalStatus.TRUSTED_CURRENT,
       value: null as never,
@@ -68,8 +80,18 @@ function fakeCasdoor(script: WriteScript): CasdoorWritePort {
     }),
     readbackGroupMembers: async (): Promise<ExternalResult<readonly string[]>> =>
       script.readbackMembers === null
-        ? ({ status: ExternalStatus.UNCERTAIN, value: null, evidence: { observedAt: new Date().toISOString() }, error: null })
-        : ({ status: ExternalStatus.TRUSTED_CURRENT, value: script.readbackMembers, evidence: { observedAt: new Date().toISOString() }, error: null }),
+        ? {
+            status: ExternalStatus.UNCERTAIN,
+            value: null,
+            evidence: { observedAt: new Date().toISOString() },
+            error: null,
+          }
+        : {
+            status: ExternalStatus.TRUSTED_CURRENT,
+            value: script.readbackMembers,
+            evidence: { observedAt: new Date().toISOString() },
+            error: null,
+          },
     readbackUser: async (): Promise<ExternalResult<never>> => ({
       status: ExternalStatus.NOT_FOUND,
       value: null,
@@ -124,9 +146,11 @@ describe('OrgBackedCasdoorRelationPort（REC-026/ORG-027）', () => {
     const base = fakeCasdoor({ writeOk: true, readbackMembers: ['u_1001'] });
     const originalReadback = base.readbackGroupMembers.bind(base);
     const scripted: CasdoorWritePort = Object.assign({}, base, {
-      readbackGroupMembers: async (
-        req: { ref: { owner: string; name: string }; requestId: string; trackingId: string },
-      ): Promise<ExternalResult<readonly string[]>> => {
+      readbackGroupMembers: async (req: {
+        ref: { owner: string; name: string };
+        requestId: string;
+        trackingId: string;
+      }): Promise<ExternalResult<readonly string[]>> => {
         call += 1;
         if (call === 2) {
           return {

@@ -13,7 +13,9 @@
 
 import type { AuthSessionProvider } from '../modules/identity/interfaces/nest/auth-session';
 
-export interface MinimalSessionProvider<S extends { readonly subjectId: string; readonly now: Date }> {
+export interface MinimalSessionProvider<
+  S extends { readonly subjectId: string; readonly now: Date },
+> {
   resolveSession(request: unknown): Promise<S | null>;
 }
 

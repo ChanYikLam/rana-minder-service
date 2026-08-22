@@ -13,10 +13,14 @@
  */
 
 import type { DbAdapter } from '../../../shared/db-adapter';
-import type { Invitation, MemberActivationIntention, InvitationHistoryEvent } from '../domain/models/invitation';
+import type {
+  Invitation,
+  MemberActivationIntention,
+  InvitationHistoryEvent,
+} from '../domain/models/invitation';
 import type { RoutineInvitation } from '../domain/models/routine-invitation';
-import { INVITATION_REPOSITORY, type InvitationRepository } from './invitation-repository';
-import { ROUTINE_INVITATION_REPOSITORY, type RoutineInvitationRepository } from './routine-invitation-repository';
+import type { InvitationRepository } from './invitation-repository';
+import type { RoutineInvitationRepository } from './routine-invitation-repository';
 import { Injectable } from '@nestjs/common';
 
 interface InvitationRow {
@@ -84,9 +88,10 @@ export class PostgresInvitationRepository implements InvitationRepository {
   async save(invitation: Invitation): Promise<void> {
     const tx = await this.db.beginTransaction();
     try {
-      await this.db.query(
-        tx,
-        `INSERT INTO public.invitations (
+      await this.db
+        .query(
+          tx,
+          `INSERT INTO public.invitations (
            invitation_id, kind, invitee_id, club_id, issuer_id, decision_ref,
            reissued_from_id, status, version, created_at, expires_at, accepted_at,
            activation_json, history_json
@@ -97,25 +102,26 @@ export class PostgresInvitationRepository implements InvitationRepository {
            accepted_at = EXCLUDED.accepted_at,
            activation_json = EXCLUDED.activation_json,
            history_json = EXCLUDED.history_json`,
-        [
-          invitation.invitationId,
-          invitation.kind,
-          invitation.inviteeId,
-          invitation.clubId,
-          invitation.issuerId,
-          invitation.decisionRef,
-          invitation.reissuedFromId,
-          invitation.status,
-          invitation.version,
-          toDate(invitation.createdAt),
-          toDate(invitation.expiresAt),
-          invitation.acceptedAt === null ? null : toDate(invitation.acceptedAt),
-          JSON.stringify(invitation.activation ?? null),
-          JSON.stringify(invitation.history),
-        ],
-      ).catch((error: unknown) => {
-        throw mapUniqueViolation(error);
-      });
+          [
+            invitation.invitationId,
+            invitation.kind,
+            invitation.inviteeId,
+            invitation.clubId,
+            invitation.issuerId,
+            invitation.decisionRef,
+            invitation.reissuedFromId,
+            invitation.status,
+            invitation.version,
+            toDate(invitation.createdAt),
+            toDate(invitation.expiresAt),
+            invitation.acceptedAt === null ? null : toDate(invitation.acceptedAt),
+            JSON.stringify(invitation.activation ?? null),
+            JSON.stringify(invitation.history),
+          ],
+        )
+        .catch((error: unknown) => {
+          throw mapUniqueViolation(error);
+        });
       await this.db.commit(tx);
     } catch (error) {
       await this.db.rollback(tx).catch(() => undefined);
@@ -202,9 +208,10 @@ export class PostgresRoutineInvitationRepository implements RoutineInvitationRep
   async save(invitation: RoutineInvitation): Promise<void> {
     const tx = await this.db.beginTransaction();
     try {
-      await this.db.query(
-        tx,
-        `INSERT INTO public.routine_invitations (
+      await this.db
+        .query(
+          tx,
+          `INSERT INTO public.routine_invitations (
            routine_invitation_id, invitee_id, club_id, department_id, issuer_id,
            status, version, created_at, expires_at, accepted_at, activated_at,
            relation_targets, sync_status, attempt_count, last_error, history_json
@@ -219,27 +226,28 @@ export class PostgresRoutineInvitationRepository implements RoutineInvitationRep
            attempt_count = EXCLUDED.attempt_count,
            last_error = EXCLUDED.last_error,
            history_json = EXCLUDED.history_json`,
-        [
-          invitation.routineInvitationId,
-          invitation.inviteeId,
-          invitation.clubId,
-          invitation.initialDepartmentId,
-          invitation.issuerId,
-          invitation.status,
-          invitation.version,
-          toDate(invitation.createdAt),
-          toDate(invitation.expiresAt),
-          invitation.acceptedAt === null ? null : toDate(invitation.acceptedAt),
-          invitation.activatedAt === null ? null : toDate(invitation.activatedAt),
-          JSON.stringify(invitation.relationTargets),
-          JSON.stringify(invitation.syncStatus ?? null),
-          invitation.attemptCount,
-          invitation.lastError ?? null,
-          JSON.stringify(invitation.history),
-        ],
-      ).catch((error: unknown) => {
-        throw mapUniqueViolation(error);
-      });
+          [
+            invitation.routineInvitationId,
+            invitation.inviteeId,
+            invitation.clubId,
+            invitation.initialDepartmentId,
+            invitation.issuerId,
+            invitation.status,
+            invitation.version,
+            toDate(invitation.createdAt),
+            toDate(invitation.expiresAt),
+            invitation.acceptedAt === null ? null : toDate(invitation.acceptedAt),
+            invitation.activatedAt === null ? null : toDate(invitation.activatedAt),
+            JSON.stringify(invitation.relationTargets),
+            JSON.stringify(invitation.syncStatus ?? null),
+            invitation.attemptCount,
+            invitation.lastError ?? null,
+            JSON.stringify(invitation.history),
+          ],
+        )
+        .catch((error: unknown) => {
+          throw mapUniqueViolation(error);
+        });
       await this.db.commit(tx);
     } catch (error) {
       await this.db.rollback(tx).catch(() => undefined);
@@ -349,7 +357,9 @@ function rowToInvitation(row: InvitationRow): Invitation {
         lastError:
           typeof activationRaw['lastError'] === 'string' ? activationRaw['lastError'] : undefined,
         lastAttemptAt:
-          typeof activationRaw['lastAttemptAt'] === 'string' ? activationRaw['lastAttemptAt'] : undefined,
+          typeof activationRaw['lastAttemptAt'] === 'string'
+            ? activationRaw['lastAttemptAt']
+            : undefined,
       }
     : null;
   return {

@@ -20,10 +20,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { GroupMappingRegistry } from '../../organization/application/ports';
 import type { CasdoorWritePort } from '../../../platform/casdoor/contracts/ports';
-import type {
-  CasdoorRelationResult,
-  CasdoorCompositeResult,
-} from './casdoor-relation-port';
+import type { CasdoorRelationResult, CasdoorCompositeResult } from './casdoor-relation-port';
 
 export class OrgBackedCasdoorRelationPort {
   constructor(
@@ -31,10 +28,7 @@ export class OrgBackedCasdoorRelationPort {
     private readonly casdoor: CasdoorWritePort,
   ) {}
 
-  async writeAndReadBackGroup(
-    clubId: string,
-    principalId: string,
-  ): Promise<CasdoorRelationResult> {
+  async writeAndReadBackGroup(clubId: string, principalId: string): Promise<CasdoorRelationResult> {
     const ref = await this.findClubGroupRef(clubId);
     if (!ref) {
       return { ok: false, confirmed: false, reason: 'CAS-BACK-CLUB_GROUP_NOT_FOUND' };
@@ -57,10 +51,7 @@ export class OrgBackedCasdoorRelationPort {
       };
     }
 
-    const groupResult = await this.writeAndReadbackSingle(
-      clubRef,
-      principalId,
-    );
+    const groupResult = await this.writeAndReadbackSingle(clubRef, principalId);
     if (!groupResult.confirmed) {
       return {
         groupConfirmed: false,
@@ -83,10 +74,7 @@ export class OrgBackedCasdoorRelationPort {
       };
     }
 
-    const deptResult = await this.writeAndReadbackSingle(
-      deptRef,
-      principalId,
-    );
+    const deptResult = await this.writeAndReadbackSingle(deptRef, principalId);
     return {
       groupConfirmed: true,
       departmentConfirmed: deptResult.confirmed,
@@ -137,9 +125,7 @@ export class OrgBackedCasdoorRelationPort {
     };
   }
 
-  private async findClubGroupRef(
-    clubId: string,
-  ): Promise<GroupStableRef | null> {
+  private async findClubGroupRef(clubId: string): Promise<GroupStableRef | null> {
     const all = await this.mappings.listByClub(clubId);
     return this.findGroupByPurpose(all, 'CLUB', null);
   }
@@ -149,9 +135,7 @@ export class OrgBackedCasdoorRelationPort {
     purpose: string,
     departmentId: string | null,
   ): GroupStableRef | null {
-    const found = mappings.find(
-      (m) => m.purpose === purpose && m.departmentId === departmentId,
-    );
+    const found = mappings.find((m) => m.purpose === purpose && m.departmentId === departmentId);
     return found ? found.ref : null;
   }
 }
