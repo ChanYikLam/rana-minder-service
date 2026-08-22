@@ -87,7 +87,6 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
   });
 
   it('事务同成同败：审计写入失败 → 业务操作整体失败（AUD-003/IFC-TX-006）', async () => {
-    const rig = makeRig();
     // 注入失败仓储（append 抛错）
     const failingRepo = {
       append: async () => {
@@ -108,6 +107,14 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     // 本社团负责人/人事
     const c1 = await rig.query.search({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' }, {});
     assert.equal(c1.length, 1);
+    // 本社团负责人/人事未指定 clubId 也应仅限本社团（防跨社团越权）
+    const c1NoFilter = await rig.query.search({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' }, {});
+    assert.equal(c1NoFilter.length, 1);
+    // 无社团作用域的负责人/人事 → 拒绝
+    await assert.rejects(
+      rig.query.search({ principalId: 'hr3', roles: ['HR_ADMIN'] }, {}),
+      /须携带社团作用域/,
+    );
     // 跨社团查询 → 拒绝
     await assert.rejects(
       rig.query.search({ principalId: 'hr2', roles: ['HR_ADMIN'], clubId: 'c2' }, { clubId: 'c1' }),

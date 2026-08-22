@@ -47,8 +47,8 @@ export class AuditWriter {
   ) {}
 
   async write(input: AuditWriteInput): Promise<AuditEvent> {
-    const oldDiff = this.sanitizer.sanitizeObject(input.oldValues).oldValue;
-    const newDiff = this.sanitizer.sanitizeObject(input.newValues).oldValue;
+    const oldDiff = this.sanitizer.sanitizeObject(input.oldValues);
+    const newDiff = this.sanitizer.sanitizeObject(input.newValues);
     const event: AuditEvent = {
       auditId: randomUUID(),
       eventType: input.eventType,

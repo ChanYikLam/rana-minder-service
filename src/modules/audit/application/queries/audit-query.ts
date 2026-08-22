@@ -36,10 +36,16 @@ export class AuditQuery {
     const isClubHandler = principal.roles.some(
       (r) => r === 'CLUB_LEADER' || r === 'HR_ADMIN',
     );
-    if (isClubHandler && principal.clubId !== undefined) {
-      // 本社团负责人/人事：只能查本社团
+    if (isClubHandler) {
+      if (principal.clubId === undefined) {
+        throw new Error('IFC-ERR-003: 本社团负责人/人事须携带社团作用域才能查询审计');
+      }
+      // 本社团负责人/人事：只能查本社团；未指定 clubId 视为查询本社团
       if (filter.clubId !== undefined && filter.clubId !== principal.clubId) {
         throw new Error('IFC-ERR-003: 只能查询本社团审计');
+      }
+      if (filter.clubId === undefined) {
+        filter = { ...filter, clubId: principal.clubId };
       }
       return;
     }

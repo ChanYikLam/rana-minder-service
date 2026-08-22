@@ -60,10 +60,10 @@ export class AuditSanitizer {
     }
   }
 
-  /** 全对象脱敏（只保留脱敏差异；用于旧值/新值落盘） */
-  sanitizeObject(input: Record<string, unknown> | null | undefined): { oldValue: string | null; newValue: string | null } {
+  /** 全对象脱敏（只保留脱敏差异；用于旧值/新值落盘；返回脱敏后的差异字符串，无差异则 null） */
+  sanitizeObject(input: Record<string, unknown> | null | undefined): string | null {
     if (input === null || input === undefined) {
-      return { oldValue: null, newValue: null };
+      return null;
     }
     const diffs: string[] = [];
     for (const [key, value] of Object.entries(input)) {
@@ -72,6 +72,6 @@ export class AuditSanitizer {
         diffs.push(`${key}=${s.display}`);
       }
     }
-    return { oldValue: diffs.length > 0 ? diffs.join(';') : null, newValue: null };
+    return diffs.length > 0 ? diffs.join(';') : null;
   }
 }

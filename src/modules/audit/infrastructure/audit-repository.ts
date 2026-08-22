@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { AuditEvent } from '../domain/models/audit-event';
+import type { AuditEvent, AuditEventType } from '../domain/models/audit-event';
 
 /** 审计仓储注入令牌（AuditRepository 为接口，注入须用显式 token） */
 export const AUDIT_REPOSITORY = Symbol('AUDIT_REPOSITORY');
@@ -25,7 +25,7 @@ export interface AuditQueryFilter {
   readonly clubId?: string;
   readonly objectType?: string;
   readonly objectId?: string;
-  readonly eventType?: string;
+  readonly eventType?: AuditEventType;
   readonly limit?: number;
 }
 
