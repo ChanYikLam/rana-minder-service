@@ -70,8 +70,7 @@ describe('config.loader 占位符 fail-closed', () => {
     try {
       assert.throws(
         () => loadConfig({ configFilePath: file }),
-        (e: unknown) =>
-          e instanceof ConfigLoadError && /CHANGE_ME/.test((e as Error).message),
+        (e: unknown) => e instanceof ConfigLoadError && /CHANGE_ME/.test((e as Error).message),
       );
     } finally {
       cleanupTemp(file);
@@ -79,9 +78,7 @@ describe('config.loader 占位符 fail-closed', () => {
   });
 
   it('非秘密必填项（casdoor.clientId）仍为 CHANGE_ME 时也拒绝', () => {
-    const file = writeTempConfig(
-      GOOD_CONFIG.replace('clientId: myclient', 'clientId: CHANGE_ME'),
-    );
+    const file = writeTempConfig(GOOD_CONFIG.replace('clientId: myclient', 'clientId: CHANGE_ME'));
     try {
       assert.throws(
         () => loadConfig({ configFilePath: file }),
