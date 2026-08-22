@@ -158,6 +158,13 @@ export class AuditSanitizer {
       /(^|[&;\s,"':])([a-z0-9_-]{0,40}(?:token|secret|password|passwd|apikey|key|code|credential))\s*[=:]\s*[^&;\s,"':]+/gi,
       (_m, sep: string, name: string) => `${sep}${name}=<REDACTED>`,
     );
+    // 抹掉 Authorization 认证头里的凭证正文（Bearer/Basic/Digest token）
+    text = text.replace(
+      /([a-z-]*authorization)\s*:\s*(?:bearer|basic|digest|token)?\s*[^\s,;，。：:"]+/gi,
+      (_m, header: string) => `${header}: <REDACTED>`,
+    );
+    // 抹掉 Cookie / Set-Cookie 里的会话凭证值
+    text = text.replace(/(cookie|set-cookie)\s*:\s*[^\s,;，。：:"]+/gi, '$1: <REDACTED>');
     // 抹掉 URL 查询串里的凭证参数
     text = text.replace(
       /([?&])(?:token|access_token|secret|password|key|code|verifycode)=[^&\s]*/gi,

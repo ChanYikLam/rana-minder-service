@@ -117,6 +117,15 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
       failureReason: 'client_secret=xyz failed',
     });
     assert.ok(!noSep.failureReason?.includes('xyz'), '无分隔符密钥不得落盘');
+    // 认证头里的令牌/会话值（Authorization Bearer / Cookie）不得落盘
+    const auth = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '下游 401，Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc，set-cookie: session=abcd1234',
+    });
+    assert.ok(!auth.failureReason?.includes('eyJhbGciOiJIUzI1NiJ9.abc'), 'Bearer 令牌不得落盘');
+    assert.ok(!auth.failureReason?.includes('abcd1234'), 'Cookie 会话值不得落盘');
     // 超长文本截断
     const long = await rig.writer.write({
       ...baseEvent,
