@@ -36,7 +36,9 @@ RUN groupadd --gid 10001 ranaminder && \
 
 # 生产依赖独立安装（锁文件驱动；不复制构建期 node_modules，DOCK-021）
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-RUN corepack enable && pnpm install --prod --frozen-lockfile && pnpm store prune
+RUN corepack enable && pnpm install --prod --frozen-lockfile && pnpm store prune && \
+    # 运行阶段不需要 npm 命令，移除基础镜像内置 npm 以消除其依赖层 HIGH/CRITICAL 漏洞（DOCK-061 发布门）
+    rm -rf /usr/local/lib/node_modules/npm
 
 # 编译产物（源码、docs、test 等不进入运行阶段，见 .dockerignore）
 COPY --from=build /app/dist ./dist
