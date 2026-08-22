@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
 import { BucketRole } from '../../domain/models/file-model';
@@ -37,6 +38,16 @@ export class FormalDeleteError extends Error {
 
 /** 独立二次确认凭据最小长度（AUD-008：防任意短字符串绕过二次确认语义） */
 export const MIN_CONFIRMATION_CODE_LENGTH = 6;
+
+/**
+ * 计算独立二次确认凭据的审计存证指纹（GOV-008 脱敏/防泄露）。
+ *
+ * 凭据仅在 execute 入口经核验端口消费，删除清单持久化时**只存 SHA-256 哈希**
+ * 而非明文，避免一次性令牌在后续查询/日志输出中被泄露或重放。
+ */
+export function fingerprintConfirmation(confirmationCode: string): string {
+  return createHash('sha256').update(confirmationCode).digest('hex');
+}
 
 /**
  * 正式删除排队（IFC-FIL-008、IFC-TX-007）。
@@ -148,7 +159,10 @@ export class QueueFormalDeleteCommand {
     const manifest: DeleteManifest = {
       fileId: file.fileId,
       reason: input.reason,
-      confirmationCode,
+      // 审计存证：仅持久化一次性确认凭据的 SHA-256 哈希指纹，**不落明文**（GOV-008 脱敏/防泄露）。
+      // 凭据本身已在 execute 入口经 confirm.verify 核验并消费，落库仅为审计可追溯，
+      // 保存哈希可避免一次性令牌被后续查询/日志泄露或重放。
+      confirmationCode: fingerprintConfirmation(confirmationCode),
       initiatedBy: input.initiator.principalId,
       initiatedAt: now,
       accessRevoked: true,

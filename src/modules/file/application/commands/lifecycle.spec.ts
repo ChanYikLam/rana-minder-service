@@ -10,7 +10,7 @@ import { PromoteFileCommand } from './promote-file.command';
 import { ReplaceDraftFileCommand } from './replace-draft-file.command';
 import { RemoveDraftFileCommand } from './remove-draft-file.command';
 import { CleanupOrphansCommand } from './cleanup-orphans.command';
-import { QueueFormalDeleteCommand } from './queue-formal-delete.command';
+import { QueueFormalDeleteCommand, fingerprintConfirmation } from './queue-formal-delete.command';
 import { DeleteManifestHandler } from './delete-manifest.handler';
 import type { FormalDeleteConfirmPort } from '../../infrastructure/formal-delete-confirm-port';
 import type { CleanupReferenceGuardPort } from '../../infrastructure/cleanup-reference-guard-port';
@@ -221,7 +221,8 @@ describe('4.2.3 替换、删除与数据生命周期（IFC-FIL-006~009）', () =
       confirmationCode: 'CONF-001',
     });
     assert.equal(manifest.accessRevoked, true);
-    assert.equal(manifest.confirmationCode, 'CONF-001');
+    assert.equal(manifest.confirmationCode, fingerprintConfirmation('CONF-001'));
+    assert.notEqual(manifest.confirmationCode, 'CONF-001', '存证不得落明文（GOV-008 哈希指纹）');
     assert.ok(manifest.items.length >= 1);
     const after = await rig.repo.load(file.fileId);
     assert.equal(after!.state, FileState.PENDING_CLEANUP);

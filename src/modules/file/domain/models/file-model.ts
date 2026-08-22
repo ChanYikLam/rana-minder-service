@@ -145,7 +145,11 @@ export interface DeleteManifest {
   readonly fileId: string;
   /** 删除原因（超管二次确认；AUD-008） */
   readonly reason: string;
-  /** 独立二次确认凭据（AUD-008：超管删除需独立确认码/审计令牌，审计存证） */
+  /**
+   * 独立二次确认凭据的审计存证（AUD-008：超管删除需独立确认码/审计令牌）。
+   * 为防泄露/重放，此处持久化的是凭据的 **SHA-256 哈希指纹**而非明文（GOV-008 脱敏口径），
+   * 明文仅在核验入口一次性消费。
+   */
   readonly confirmationCode: string;
   readonly initiatedBy: string;
   readonly initiatedAt: string;
