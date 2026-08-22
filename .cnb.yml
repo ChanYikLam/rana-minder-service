@@ -124,6 +124,30 @@
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
+        # 阶段 8b：镜像安全扫描（trivy；HIGH/CRITICAL 为失败门，DEP-003 / SRS-NFR-022/023）
+        - name: 8b-镜像安全扫描
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! command -v trivy >/dev/null 2>&1; then
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.54.1/trivy_0.54.1_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+            fi
+            # 扫描已构建镜像；HIGH/CRITICAL 漏洞使扫描失败（镜像层、OS 包、应用依赖）
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT}
+        # 阶段 8c：镜像 SBOM 生成与复核（DEP-003 第三方依赖清单，供发布归档）
+        - name: 8c-镜像SBOM与许可证复核
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! command -v syft >/dev/null 2>&1; then
+              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+            fi
+            # 生成镜像 SBOM 并输出（发布门证据归档用，不推送产物）
+            syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
+            echo "镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
+            wc -c /tmp/ranaminder-sbom.spdx.json
         # 阶段 10：依赖审计与许可证登记（DEP-003）
         - name: 10-依赖审计与许可证登记
           if: "[ -f pnpm-lock.yaml ]"
@@ -215,6 +239,28 @@
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
+        # 阶段 8b：镜像安全扫描（trivy；HIGH/CRITICAL 为失败门，DEP-003 / SRS-NFR-022/023）
+        - name: 8b-镜像安全扫描
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! command -v trivy >/dev/null 2>&1; then
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.54.1/trivy_0.54.1_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+            fi
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT}
+        # 阶段 8c：镜像 SBOM 生成与复核（DEP-003 第三方依赖清单，供发布归档）
+        - name: 8c-镜像SBOM与许可证复核
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! command -v syft >/dev/null 2>&1; then
+              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+            fi
+            syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
+            echo "镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
+            wc -c /tmp/ranaminder-sbom.spdx.json
         - name: 10-依赖审计与许可证登记
           if: "[ -f pnpm-lock.yaml ]"
           script: |
@@ -302,6 +348,28 @@
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} .
             docker push ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
+        # 阶段 8b：发布镜像安全扫描（trivy；HIGH/CRITICAL 失败即阻断发布，DEP-003 / SRS-NFR-022/023 / OPS-REL）
+        - name: 8b-镜像安全扫描
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
+            set -e
+            if ! command -v trivy >/dev/null 2>&1; then
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.54.1/trivy_0.54.1_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+            fi
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
+        # 阶段 8c：发布镜像 SBOM 生成（DEP-003 第三方依赖/许可证清单，发布门证据归档）
+        - name: 8c-镜像SBOM生成
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
+            set -e
+            if ! command -v syft >/dev/null 2>&1; then
+              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+            fi
+            syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
+            echo "发布镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
+            wc -c /tmp/ranaminder-sbom.spdx.json
         - name: 10-依赖审计与许可证登记
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f pnpm-lock.yaml ]'
           script: |
@@ -320,3 +388,5 @@
             echo "4) 生产 DDL 与迁移评审：人工门"
             echo "5) 秘密扫描/依赖审计/许可证：本流水线已执行（上方阶段日志即证据）"
             echo "6) 镜像与版本锁定（非 latest）：本流水线已执行（阶段 8 日志即证据）"
+            echo "7) 镜像安全扫描（trivy HIGH/CRITICAL 失败门）：本流水线已执行（阶段 8b 日志即证据）"
+            echo "8) 镜像 SBOM（第三方依赖/许可证清单，DEP-003）：本流水线已生成（阶段 8c 日志即证据）"
