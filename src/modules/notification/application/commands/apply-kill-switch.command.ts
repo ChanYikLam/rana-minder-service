@@ -9,6 +9,7 @@
  * - 超管鉴权由接口层守卫执行，本命令只负责业务与审计事实。
  */
 
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   KillSwitchRepository,
@@ -127,7 +128,10 @@ export class ApplyKillSwitchCommand {
       if (!progressed) break;
     }
 
-    const switchId = `ks-${now}-${input.scope.toLowerCase()}-${input.clubId ?? 'platform'}`;
+    // switchId 用 UUIDv7 保证全局唯一（模型注释要求）。避免用毫秒时间戳拼接：
+    // 同 scope+clubId 快速「关→恢→关」或同一毫秒并发关闭会产生相同 ID，
+    // 导致仓储按 scope 覆盖旧关闭/审计历史（数据完整性）。
+    const switchId = randomUUID();
     const state: KillSwitchStateModel = {
       switchId,
       scope: input.scope,
