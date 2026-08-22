@@ -65,11 +65,12 @@ function rowToRecord(row: TaskRecordRow): TaskRecord {
     lease: (row.lease as TaskLease | null) ?? null,
     attempts: row.attempts,
     maxAttempts: row.max_attempts,
-    notBefore: row.not_before,
+    // pg 将 timestamptz 列默认解析为 Date 对象；统一规范为 ISO 字符串以符合 TaskRecord 契约。
+    notBefore: new Date(row.not_before).toISOString(),
     failure: (row.failure as TaskFailure | null) ?? null,
     resultRef: row.result_ref,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
   };
 }
 
@@ -281,7 +282,7 @@ export class PostgresTaskRepository implements TaskRepository {
                 not_before = COALESCE($7::timestamptz, not_before),
                 updated_at = COALESCE($8::timestamptz, updated_at)
           WHERE task_id = $1
-            AND (lease IS NULL OR (lease->>'leaseVersion')::int = $9)
+            AND (lease->>'leaseVersion')::int = $9
           RETURNING ${RECORD_COLUMNS}`,
         [
           taskId,
