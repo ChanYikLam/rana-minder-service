@@ -420,7 +420,11 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
     const rig = makeRig();
     // 过去时间：拒绝
     await assert.rejects(
-      rig.create.execute({ ...createInput, inviteeId: 'stu9', expiresAt: '2000-01-01T00:00:00.000Z' }),
+      rig.create.execute({
+        ...createInput,
+        inviteeId: 'stu9',
+        expiresAt: '2000-01-01T00:00:00.000Z',
+      }),
       /有效期必须晚于当前时间/,
     );
   });
