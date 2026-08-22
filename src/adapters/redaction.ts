@@ -38,7 +38,12 @@ export function redactMessage(input: string, maxLength = 400): string {
 
 /** 是否包含疑似敏感内容（用于拒绝将原始响应写入错误）。 */
 export function looksSensitive(input: string): boolean {
-  return SENSITIVE_SUBSTRINGS.some((re) => re.test(input));
+  return SENSITIVE_SUBSTRINGS.some((re) => {
+    // 带 g 标志的正则 test() 会维护 lastIndex 状态，反复调用同一正则实例时
+    // 结果不稳定（漏判敏感内容）。这里每次检测前重置 lastIndex，确保幂等。
+    re.lastIndex = 0;
+    return re.test(input);
+  });
 }
 
 /** 从原始错误构造脱敏摘要（用于 ExternalError.message）。 */

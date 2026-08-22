@@ -192,7 +192,12 @@ export class HttpCasdoorAdapter implements CasdoorAdapter {
   async updateUser(userId: string, patch: CasdoorUserPatch): Promise<ExternalResult<void>> {
     const attemptId = this.attemptId();
     const ts = this.now();
-    if (!userId || (!patch.email && !patch.phone && !patch.college && !patch.grade)) {
+    const hasAnyField =
+      patch.email !== undefined ||
+      patch.phone !== undefined ||
+      patch.college !== undefined ||
+      patch.grade !== undefined;
+    if (!userId || !hasAnyField) {
       return externalFailure(
         'NON_RETRYABLE',
         {
