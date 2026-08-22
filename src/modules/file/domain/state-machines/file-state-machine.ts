@@ -72,6 +72,7 @@ const TRANSITIONS: Readonly<Record<FileState, readonly FileState[]>> = {
     FileState.BOUND_TO_SUBMISSION,
     FileState.PENDING_CLEANUP,
     FileState.QUARANTINED_FAILED, // 后续检查失败（补检）→ 隔离
+    FileState.TEMPORARY_UPLOAD, // 替换（IFC-FIL-006）：新版本重新上传检查，旧版本受控清理
   ],
   [FileState.BOUND_TO_SUBMISSION]: [FileState.PENDING_CLEANUP],
   [FileState.PENDING_CLEANUP]: [FileState.CLEANED, FileState.FORMALLY_DELETED],

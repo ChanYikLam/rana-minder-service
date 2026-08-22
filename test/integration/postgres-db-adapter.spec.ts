@@ -137,7 +137,8 @@ describe('PostgresDbAdapter（T2 真实连接）', { skip }, () => {
         `提交后 RLS 上下文应失效，实际得到: ${JSON.stringify(rows2[0].ctx)}`,
       );
     } finally {
-      await db.commit(tx2);
+      // 无论断言成败都收口事务，避免连接泄漏导致 pool.end() 挂起（CI 10 分钟超时）。
+      await db.rollback(tx2);
     }
   });
 });

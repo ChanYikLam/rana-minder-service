@@ -101,13 +101,13 @@ describe('PostgresFormSubmissionRepository（FakeDbAdapter 全链路）', () => 
     });
   });
 
-  it('id 冲突：insert 重复 → 拒绝', async () => {
+  it('同提交者同版本重复 insert：唯一约束命中 → 拒绝', async () => {
     const h = createHarness();
     await h.uow.run({ kind: 'single', subjectId: 'u-1' }, async () => {
       await h.repository.insert(createSubmission('s-1'));
       await assert.rejects(
-        h.repository.insert(createSubmission('s-1')),
-        /提交记录已存在，请勿重复提交/,
+        h.repository.insert(createSubmission('s-2')),
+        /该提交者已提交过当前版本，请走修订/,
       );
     });
   });
