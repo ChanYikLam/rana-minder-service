@@ -819,6 +819,9 @@ export class NotificationController {
     @Param('kind') kind: string,
     @Body() input: (EmailTemplateSaveInput & { to?: string }) | undefined,
   ): Promise<EmailTemplateTestResult> {
+    // 模板测试邮件会使用该社团 SMTP 账号向任意地址发信（潜在滥用向量），
+    // 与预览/保存/回滚一致：需社团模板管理权限（club:config:manage）或超管。
+    this.assertOrgReadAccess(request, clubId);
     try {
       // 发信账号来自该社团自己的已验证配置（不能借用，NTF-006）
       const config = await this.emailConfigs.findByClub(clubId);

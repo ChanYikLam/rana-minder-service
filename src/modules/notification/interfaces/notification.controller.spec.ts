@@ -327,6 +327,35 @@ describe('NotificationController 邮件模板（NTF-005：保存校验/预览/�
     );
   });
 
+  it('模板测试邮件需社团权限；无权限者被拒（不借社团 SMTP 发信）', async () => {
+    const { controller, emailConfigs } = harness;
+    // 配置一个已验证的社团发信账号
+    await emailConfigs.save({
+      clubId: 'club-1',
+      smtpHost: 'smtp.club.example',
+      smtpPort: 587,
+      smtpUser: 'club@example.com',
+      fromName: '社团',
+      encryption: 'tls',
+      secretCiphertext: 'x',
+      secretFingerprint: 'fp',
+      verified: true,
+      lastTestPassedAt: null,
+      keyRotatedAt: null,
+      savedAt: new Date().toISOString(),
+    });
+    // 无任何权限的已登录用户不可用社团 SMTP 账号发测试邮件（Broken Access Control）
+    await assert.rejects(
+      () =>
+        controller.testClubTemplate(authedRequest('attacker'), 'club-1', 'conclusion', {
+          subject: 'x',
+          htmlBody: '<p>hi</p>',
+          to: 'anyone@example.com',
+        }),
+      (error: unknown) => (error as Error).message.includes('无权'),
+    );
+  });
+
   it('预览：草稿安全时渲染白名单变量；草稿危险时返回违规', async () => {
     const { controller } = harness;
     const ok = await controller.previewClubTemplate(
