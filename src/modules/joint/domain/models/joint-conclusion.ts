@@ -196,7 +196,13 @@ export class JointConclusion {
     if (this.snapshot.inviteStatus === 'ACCEPTED') {
       throw new JointDomainError('JNT_CON_LOCKED', '已锁定结论不受面试作废影响');
     }
-    return this.transition(machine, JointConclusionEvent.TO_REVIEW, now);
+    const ok = this.transition(machine, JointConclusionEvent.TO_REVIEW, now);
+    if (ok) {
+      // 进入待复核后邀请不再处于待处理，复位为 NONE，避免已作废面试的结论
+      // 仍能被 handleInvitationAccepted 误接受（其校验 inviteStatus === 'PENDING'）。
+      this.snapshot = { ...this.snapshot, inviteStatus: 'NONE' };
+    }
+    return ok;
   }
 
   /** 邀请超时：未接受的邀请回退到可编辑＋待复核（保留 invitationId 以便沿用原冻结剩余时长） */

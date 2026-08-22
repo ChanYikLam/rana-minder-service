@@ -54,6 +54,9 @@ export class DefaultSendClubInvitationUseCase implements SendClubInvitationUseCa
     if (conclusionSnap.decision == null) {
       throw jointErrors.preconditionFailed('未填写结论前禁止发送邀请');
     }
+    if (conclusionSnap.decision === 'REJECT') {
+      throw jointErrors.preconditionFailed('结论为不录取，禁止发送加入邀请');
+    }
     const applicationSnap = await this.repository.loadApplication(
       conclusionSnap.jointApplicationId,
     );

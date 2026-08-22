@@ -54,7 +54,10 @@ export class JointConclusionStateMachine {
         }
         return { allowed: false };
       case JointConclusionEvent.TO_REVIEW:
-        if (currentState === JointConclusionStatus.EDITABLE) {
+        if (
+          currentState === JointConclusionStatus.EDITABLE ||
+          currentState === JointConclusionStatus.INVITE_PENDING
+        ) {
           return { allowed: true, nextState: JointConclusionStatus.REVIEW_PENDING };
         }
         return { allowed: false };
