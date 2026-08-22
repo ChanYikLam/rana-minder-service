@@ -92,6 +92,10 @@ export class ResolveActivationCommand {
 
     const updated: Invitation = {
       ...invitation,
+      // 单胜者：递增版本号，保证并发激活任务只一个成功（IFC-GEN-007）。
+      // compareAndSwap 依赖版本比较，若不递增则两个并发任务基于同一版本都会成功，
+      // 后写覆盖先写，单胜者保护失效。
+      version: invitation.version + 1,
       activation: {
         ...activation,
         status: nextStatus,

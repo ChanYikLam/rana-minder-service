@@ -29,6 +29,8 @@ export class InvitationStatusQueryError extends Error {
 export interface InvitationViewerContext {
   readonly principalId: string;
   readonly roles: readonly string[];
+  /** 查看者所属社团（用于校验是否为邀请所属社团的负责人/人事） */
+  readonly clubId: string;
 }
 
 /**
@@ -61,7 +63,8 @@ export class InvitationStatusQuery {
       // 本人 或 发出社团负责人/人事 可查看；其余无权（IFC-ERR-003）
       const isInvitee = viewer.principalId === invitation.inviteeId;
       if (!isInvitee) {
-        this.policy.assertCanIssue(viewer.roles);
+        // 仅邀请所属社团的负责人/人事可查看，防止跨社团信息泄露
+        this.policy.assertCanIssueForClub(viewer.roles, viewer.clubId, invitation.clubId);
       }
     }
     return {

@@ -10,6 +10,8 @@ export interface WithdrawInvitationInput {
   readonly invitationId: string;
   readonly principalId: string;
   readonly principalRoles: readonly string[];
+  /** 操作者所属社团（必须与邀请所属社团一致，防止跨社团越权） */
+  readonly principalClubId: string;
 }
 
 /** 前置失败（IFC-ERR-003/006/007） */
@@ -41,6 +43,12 @@ export class WithdrawInvitationCommand {
     if (invitation === null) {
       throw new WithdrawInvitationError('IFC-ERR-006', '邀请不存在');
     }
+    // 社团归属校验：仅邀请所属社团的负责人/人事可撤回（IFC-ERR-003）
+    this.policy.assertCanIssueForClub(
+      input.principalRoles,
+      input.principalClubId,
+      invitation.clubId,
+    );
     if (invitation.status === 'WITHDRAWN') {
       return invitation; // 幂等
     }

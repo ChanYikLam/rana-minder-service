@@ -11,6 +11,8 @@ import type { InvitationRepository } from '../../infrastructure/invitation-repos
 export interface CreateInvitationInput {
   readonly issuerId: string;
   readonly issuerRoles: readonly string[];
+  /** 发出方所属社团（必须与目标 clubId 一致，防止跨社团发文） */
+  readonly issuerClubId: string;
   readonly inviteeId: string;
   readonly clubId: string;
   /** 已复核部门录取决定（REC-045 复核前置） */
@@ -47,7 +49,8 @@ export class CreateInvitationCommand {
   ) {}
 
   async execute(input: CreateInvitationInput): Promise<Invitation> {
-    this.policy.assertCanIssue(input.issuerRoles);
+    // 仅目标社团的负责人/人事可发邀请（IFC-ERR-003）
+    this.policy.assertCanIssueForClub(input.issuerRoles, input.issuerClubId, input.clubId);
     // 空值安全校验：调用方可能误传 undefined/空串，避免 trim() 抛裸 TypeError
     if ((input.decisionRef ?? '').trim().length === 0) {
       throw new CreateInvitationError('IFC-ERR-006', '需要已复核的部门录取决定');

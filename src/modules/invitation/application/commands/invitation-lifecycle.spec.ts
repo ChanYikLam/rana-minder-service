@@ -65,6 +65,7 @@ const makeRig = () => {
 const createInput = {
   issuerId: 'hr1',
   issuerRoles: ['HR_ADMIN'],
+  issuerClubId: 'c1',
   inviteeId: 'stu1',
   clubId: 'c1',
   decisionRef: 'dec-1',
@@ -135,6 +136,7 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
         invitationId: inv.invitationId,
         principalId: 'hr1',
         principalRoles: ['HR_ADMIN'],
+        principalClubId: 'c1',
       }),
       /仅待处理邀请可撤回/,
     );
@@ -149,6 +151,7 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
       invitationId: inv.invitationId,
       principalId: 'hr1',
       principalRoles: ['HR_ADMIN'],
+      principalClubId: 'c1',
     });
     const stale = { ...loaded1! }; // 旧版本
     const accepted = { ...stale, status: 'ACCEPTED' as const, version: stale.version + 1 };
@@ -221,6 +224,7 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
       oldInvitationId: inv.invitationId,
       issuerId: 'hr1',
       issuerRoles: ['HR_ADMIN'],
+      issuerClubId: 'c1',
       newExpiresAt: '2099-02-01T00:00:00.000Z',
       eligibilityOk: true,
     });
@@ -244,6 +248,7 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
         oldInvitationId: acceptedInv.invitationId,
         issuerId: 'hr1',
         issuerRoles: ['HR_ADMIN'],
+        issuerClubId: 'c1',
         newExpiresAt: '2099-02-01T00:00:00.000Z',
         eligibilityOk: true,
       }),
@@ -391,27 +396,48 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
     const bySelf = await rig.status.getStatus(inv.invitationId, {
       principalId: 'stu1',
       roles: ['MEMBER'],
+      clubId: 'c1',
     });
     assert.equal(bySelf.invitationId, inv.invitationId);
-    // 负责人/人事可查看
+    // 负责人/人事可查看（同社团）
     await rig.status.getStatus(inv.invitationId, {
       principalId: 'hr1',
       roles: ['HR_ADMIN'],
+      clubId: 'c1',
     });
     await rig.status.getStatus(inv.invitationId, {
       principalId: 'leader1',
       roles: ['CLUB_LEADER'],
+      clubId: 'c1',
     });
     // 部门负责人/成员（非本人）无权
     await assert.rejects(
       rig.status.getStatus(inv.invitationId, {
         principalId: 'dep1',
         roles: ['DEPARTMENT_LEADER'],
+        clubId: 'c1',
       }),
       /IFC-ERR-003/,
     );
     await assert.rejects(
-      rig.status.getStatus(inv.invitationId, { principalId: 'other', roles: ['MEMBER'] }),
+      rig.status.getStatus(inv.invitationId, { principalId: 'other', roles: ['MEMBER'], clubId: 'c1' }),
+      /IFC-ERR-003/,
+    );
+    // 跨社团越权：他社团负责人/人事不得查看本社团邀请
+    await assert.rejects(
+      rig.status.getStatus(inv.invitationId, {
+        principalId: 'leaderB',
+        roles: ['CLUB_LEADER'],
+        clubId: 'c2',
+      }),
+      /IFC-ERR-003/,
+    );
+    await assert.rejects(
+      rig.status.getStatus(inv.invitationId, {
+        principalId: 'hrB',
+        roles: ['HR_ADMIN'],
+        clubId: 'c2',
+      }),
       /IFC-ERR-003/,
     );
   });
@@ -427,5 +453,66 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
       }),
       /有效期必须晚于当前时间/,
     );
+  });
+
+  it('跨社团越权防护：他社团负责人/人事不得发/撤/重发本社团邀请（IFC-ERR-003）', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    // 他社团负责人发本社团邀请 → 拒绝
+    await assert.rejects(
+      rig.create.execute({ ...createInput, inviteeId: 'stu9', issuerClubId: 'c2' }),
+      /IFC-ERR-003/,
+    );
+    // 他社团负责人撤回本社团邀请 → 拒绝
+    await assert.rejects(
+      rig.withdraw.execute({
+        invitationId: inv.invitationId,
+        principalId: 'leaderB',
+        principalRoles: ['CLUB_LEADER'],
+        principalClubId: 'c2',
+      }),
+      /IFC-ERR-003/,
+    );
+    // 他社团负责人重发本社团邀请 → 拒绝
+    await assert.rejects(
+      rig.reissue.execute({
+        oldInvitationId: inv.invitationId,
+        issuerId: 'leaderB',
+        issuerRoles: ['CLUB_LEADER'],
+        issuerClubId: 'c2',
+        newExpiresAt: '2099-02-01T00:00:00.000Z',
+        eligibilityOk: true,
+      }),
+      /IFC-ERR-003/,
+    );
+  });
+
+  it('激活解析：单胜者版本递增，并发激活任务只一个成功（IFC-GEN-007）', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    await rig.accept.execute({
+      invitationId: inv.invitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+    });
+    const loaded = await rig.repo.load(inv.invitationId);
+    const before = loaded!.version;
+    // 首次激活成功（回读确认）
+    const first = await rig.resolveActivation.execute({
+      invitationId: inv.invitationId,
+      deadlineExceeded: false,
+    });
+    assert.equal(first.activated, true);
+    // 版本递增：激活解析会推进 version，保证后续 CAS 能识别并发
+    const after = await rig.repo.load(inv.invitationId);
+    assert.equal(after!.version, before + 1);
+    // 幂等：已激活再次解析直接返回，不推进版本
+    const again = await rig.resolveActivation.execute({
+      invitationId: inv.invitationId,
+      deadlineExceeded: false,
+    });
+    assert.equal(again.activated, true);
+    const final = await rig.repo.load(inv.invitationId);
+    assert.equal(final!.version, before + 1);
   });
 });

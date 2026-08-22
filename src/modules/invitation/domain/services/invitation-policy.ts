@@ -38,6 +38,22 @@ export class InvitationPolicy {
     }
   }
 
+  /**
+   * 发出/撤回/重发/查看：仅目标社团的负责人/人事（REC-024）。
+   * 除角色校验外，还须校验操作者**属于目标社团**，防止跨社团越权
+   * （A 社团负责人撤回/重发/查看 B 社团邀请，IFC-ERR-003）。
+   */
+  assertCanIssueForClub(
+    roles: readonly string[],
+    principalClubId: string,
+    clubId: string,
+  ): void {
+    this.assertCanIssue(roles);
+    if (principalClubId !== clubId) {
+      throw new InvitationForbiddenError('仅邀请所属社团的负责人/人事可操作');
+    }
+  }
+
   /** 接受/拒绝：仅邀请指定本人 */
   assertIsInvitee(principalId: string, inviteeId: string): void {
     if (principalId !== inviteeId) {

@@ -11,6 +11,8 @@ export interface ReissueInvitationInput {
   readonly oldInvitationId: string;
   readonly issuerId: string;
   readonly issuerRoles: readonly string[];
+  /** 操作者所属社团（必须与旧邀请所属社团一致，防止跨社团越权） */
+  readonly issuerClubId: string;
   /** 新有效期（重新创建；平台范围由调用方校验） */
   readonly newExpiresAt: string;
   /** 当前资格/结论仍允许（调用方复核） */
@@ -53,6 +55,8 @@ export class ReissueInvitationCommand {
     if (old === null) {
       throw new ReissueInvitationError('IFC-ERR-006', '原邀请不存在');
     }
+    // 社团归属校验：仅邀请所属社团的负责人/人事可重发（IFC-ERR-003）
+    this.policy.assertCanIssueForClub(input.issuerRoles, input.issuerClubId, old.clubId);
     if (!this.stateMachine.canReissue(old.status)) {
       throw new ReissueInvitationError('IFC-ERR-007', '当前状态不可重发（已接受不可重发）');
     }
