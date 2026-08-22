@@ -44,13 +44,13 @@ export class RejectInvitationCommand {
     if (invitation.status === 'REJECTED') {
       return invitation; // 幂等（本人重复拒绝）
     }
-    if (invitation.status !== 'PENDING') {
+    if (!this.stateMachine.canTransition(invitation.status, 'REJECTED')) {
       throw new RejectInvitationError('IFC-ERR-007', '邀请不在待处理状态，无法拒绝');
     }
     const now = new Date().toISOString();
     const rejected: Invitation = {
       ...invitation,
-      status: this.stateMachine.transition('PENDING', 'REJECTED'),
+      status: this.stateMachine.transition(invitation.status, 'REJECTED'),
       version: invitation.version + 1,
       history: [...invitation.history, { at: now, type: 'REJECTED', by: input.principalId }],
     };

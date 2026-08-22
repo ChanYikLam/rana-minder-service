@@ -299,4 +299,29 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
     assert.equal(third.activated, true);
     assert.equal(third.invitation.activation?.status, 'ACTIVATED');
   });
+
+  it('激活解析：CAS 竞争失败时重新加载返回最新状态（单胜者收敛、不抛错）', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    await rig.accept.execute({
+      invitationId: inv.invitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+    });
+    // 模拟并发激活任务已推进：仓储 compareAndSwap 永远失败
+    class FailingCasRepo extends InMemoryInvitationRepository {
+      override async compareAndSwap(): Promise<boolean> {
+        return false;
+      }
+    }
+    const failingRepo = new FailingCasRepo();
+    const loaded = await rig.repo.load(inv.invitationId);
+    await failingRepo.save(loaded!); // 已接受但回读未确认（PROCESSING）
+    const casdoor = new StubCasdoorPort({ ok: false, confirmed: false, reason: 'write-timeout' });
+    const resolve = new ResolveActivationCommand(failingRepo, casdoor);
+    // 竞争失败：不抛错，重新加载返回当前（未激活）状态
+    const out = await resolve.execute({ invitationId: inv.invitationId, deadlineExceeded: true });
+    assert.equal(out.activated, false);
+    assert.notEqual(out.invitation.activation?.status, 'ACTIVATED');
+  });
 });

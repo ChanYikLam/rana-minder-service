@@ -55,7 +55,7 @@ export class AcceptInvitationCommand {
     if (!input.eligibilityOk) {
       throw new AcceptInvitationError('IFC-ERR-006', '账号/资料/资格校验未通过');
     }
-    if (invitation.status !== 'PENDING') {
+    if (!this.stateMachine.canTransition(invitation.status, 'ACCEPTED')) {
       throw new AcceptInvitationError('IFC-ERR-007', '邀请不在待处理状态，无法接受');
     }
     if (Date.parse(invitation.expiresAt) < Date.now()) {
@@ -65,7 +65,7 @@ export class AcceptInvitationCommand {
     const now = new Date().toISOString();
     const accepted: Invitation = {
       ...invitation,
-      status: this.stateMachine.transition('PENDING', 'ACCEPTED'),
+      status: this.stateMachine.transition(invitation.status, 'ACCEPTED'),
       version: invitation.version + 1,
       acceptedAt: now,
       activation: {

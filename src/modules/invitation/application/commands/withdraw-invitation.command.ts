@@ -44,13 +44,13 @@ export class WithdrawInvitationCommand {
     if (invitation.status === 'WITHDRAWN') {
       return invitation; // 幂等
     }
-    if (invitation.status !== 'PENDING') {
+    if (!this.stateMachine.canTransition(invitation.status, 'WITHDRAWN')) {
       throw new WithdrawInvitationError('IFC-ERR-007', '仅待处理邀请可撤回');
     }
     const now = new Date().toISOString();
     const withdrawn: Invitation = {
       ...invitation,
-      status: this.stateMachine.transition('PENDING', 'WITHDRAWN'),
+      status: this.stateMachine.transition(invitation.status, 'WITHDRAWN'),
       version: invitation.version + 1,
       history: [...invitation.history, { at: now, type: 'WITHDRAWN', by: input.principalId }],
     };

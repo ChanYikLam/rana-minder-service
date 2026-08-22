@@ -36,13 +36,13 @@ export class ForceInvalidateInvitationCommand {
     if (invitation.status === 'ACCEPTED') {
       return invitation; // 已接受不受影响（REC-030、JNT-019）
     }
-    if (invitation.status !== 'PENDING') {
+    if (!this.stateMachine.canTransition(invitation.status, 'FORCE_INVALIDATED')) {
       return invitation; // 已拒绝/已撤回/已过期：不转换
     }
     const now = new Date().toISOString();
     const invalidated: Invitation = {
       ...invitation,
-      status: this.stateMachine.transition('PENDING', 'FORCE_INVALIDATED'),
+      status: this.stateMachine.transition(invitation.status, 'FORCE_INVALIDATED'),
       version: invitation.version + 1,
       history: [
         ...invitation.history,

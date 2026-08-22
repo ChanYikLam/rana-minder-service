@@ -92,7 +92,19 @@ export class ResolveActivationCommand {
             : (result.reason ?? 'casdoor-write-readback-not-confirmed'),
       },
     };
-    await this.repo.save(updated);
+    // 单胜者：并发激活任务只一个成功（版本比较并交换，IFC-GEN-007）
+    const swapped = await this.repo.compareAndSwap(invitation, updated);
+    if (!swapped) {
+      // 竞争失败：另一激活任务已推进 → 重新加载返回最新状态（收敛语义，非错误）
+      const latest = await this.repo.load(input.invitationId);
+      if (latest === null) {
+        throw new ResolveActivationError('邀请不存在');
+      }
+      return {
+        invitation: latest,
+        activated: latest.activation?.status === ActivationStatus.ACTIVATED,
+      };
+    }
     return { invitation: updated, activated: nextStatus === ActivationStatus.ACTIVATED };
   }
 }

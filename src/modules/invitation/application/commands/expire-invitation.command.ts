@@ -35,13 +35,13 @@ export class ExpireInvitationCommand {
     if (!input.expiryAllowed) {
       return invitation; // 期限冻结：不得到期
     }
-    if (invitation.status !== 'PENDING') {
+    if (!this.stateMachine.canTransition(invitation.status, 'EXPIRED')) {
       return invitation; // 已接受/已拒绝/已撤回等：不转换
     }
     const now = new Date().toISOString();
     const expired: Invitation = {
       ...invitation,
-      status: this.stateMachine.transition('PENDING', 'EXPIRED'),
+      status: this.stateMachine.transition(invitation.status, 'EXPIRED'),
       version: invitation.version + 1,
       history: [...invitation.history, { at: now, type: 'EXPIRED', by: 'system' }],
     };

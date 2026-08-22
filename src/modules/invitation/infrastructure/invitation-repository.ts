@@ -13,7 +13,12 @@ export const INVITATION_REPOSITORY = Symbol('INVITATION_REPOSITORY');
 export interface InvitationRepository {
   save(invitation: Invitation): Promise<void>;
   load(invitationId: string): Promise<Invitation | null>;
-  /** 同社团同对象最多一份待处理邀请（创建幂等/约束；MEM-018） */
+  /** 同社团同对象最多一份待处理邀请（创建幂等/约束；MEM-018）
+   *
+   * 注意：这是“检查后写入”（findPending → save）非原子。开发期占位仓储可接受，
+   * 生产 PostgreSQL 适配器必须依赖 `(club_id, invitee_id) WHERE status='PENDING'`
+   * 部分唯一索引作为兜底，否则并发创建会击穿幂等约束（IFC-ERR-009）。
+   */
   findPending(clubId: string, inviteeId: string): Promise<Invitation | null>;
   /** 单胜者竞争：期望版本匹配才提交（接受/撤回/过期/强制失效只一个成功，IFC-GEN-007） */
   compareAndSwap(current: Invitation, next: Invitation): Promise<boolean>;
