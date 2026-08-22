@@ -3,6 +3,11 @@ import { InitiateUploadCommand } from './application/commands/initiate-upload.co
 import { CompleteUploadCommand } from './application/commands/complete-upload.command';
 import { AskFileCheckCommand } from './application/commands/ask-file-check.command';
 import { PromoteFileCommand } from './application/commands/promote-file.command';
+import { ReplaceDraftFileCommand } from './application/commands/replace-draft-file.command';
+import { RemoveDraftFileCommand } from './application/commands/remove-draft-file.command';
+import { CleanupOrphansCommand } from './application/commands/cleanup-orphans.command';
+import { QueueFormalDeleteCommand } from './application/commands/queue-formal-delete.command';
+import { DeleteManifestHandler } from './application/commands/delete-manifest.handler';
 import { FileStatusQuery } from './application/queries/file-status.query';
 import { FileAccessQuery } from './application/queries/file-access.query';
 import { FileStateMachine } from './domain/state-machines/file-state-machine';
@@ -20,6 +25,10 @@ import { SIGNED_URL_PROVIDER } from './infrastructure/signed-url-provider';
 import { DefaultSignedUrlProvider } from './infrastructure/signed-url-provider';
 import { ACCESS_AUDIT_PORT } from './infrastructure/access-audit-port';
 import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
+import { FORMAL_DELETE_CONFIRM_PORT } from './infrastructure/formal-delete-confirm-port';
+import { LogOnlyFormalDeleteConfirm } from './infrastructure/formal-delete-confirm-port';
+import { CLEANUP_REFERENCE_GUARD } from './infrastructure/cleanup-reference-guard-port';
+import { LogOnlyCleanupReferenceGuard } from './infrastructure/cleanup-reference-guard-port';
 
 /**
  * 领域模块：文件（4.2，SRS-SM-FILE-001）。
@@ -49,11 +58,18 @@ import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
     { provide: FILE_CHECK_PORT, useClass: ApplicationFileCheck },
     { provide: SIGNED_URL_PROVIDER, useClass: DefaultSignedUrlProvider },
     { provide: ACCESS_AUDIT_PORT, useClass: LogOnlyAccessAudit },
+    { provide: FORMAL_DELETE_CONFIRM_PORT, useClass: LogOnlyFormalDeleteConfirm },
+    { provide: CLEANUP_REFERENCE_GUARD, useClass: LogOnlyCleanupReferenceGuard },
     // 应用命令与查询
     InitiateUploadCommand,
     CompleteUploadCommand,
     AskFileCheckCommand,
     PromoteFileCommand,
+    ReplaceDraftFileCommand,
+    RemoveDraftFileCommand,
+    CleanupOrphansCommand,
+    QueueFormalDeleteCommand,
+    DeleteManifestHandler,
     FileStatusQuery,
     FileAccessQuery,
   ],
@@ -62,6 +78,11 @@ import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
     CompleteUploadCommand,
     AskFileCheckCommand,
     PromoteFileCommand,
+    ReplaceDraftFileCommand,
+    RemoveDraftFileCommand,
+    CleanupOrphansCommand,
+    QueueFormalDeleteCommand,
+    DeleteManifestHandler,
     FileStatusQuery,
     FileAccessQuery,
     FILE_REPOSITORY,
@@ -69,6 +90,8 @@ import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
     FILE_CHECK_PORT,
     SIGNED_URL_PROVIDER,
     ACCESS_AUDIT_PORT,
+    FORMAL_DELETE_CONFIRM_PORT,
+    CLEANUP_REFERENCE_GUARD,
   ],
 })
 export class FileModule {}

@@ -40,6 +40,8 @@ export interface NotificationFactModel {
   readonly summary: string;
   /** 当前办理对象引用（业务链接，每次打开重新鉴权） */
   readonly targetObjectRef: string | null;
+  /** 有期限通知的截止时间（可选；用于站内信展示可处理/已处理/已撤回/已过期） */
+  readonly deadlineAt: string | null;
   /** 作用域：社团标识或平台标识 */
   readonly scope: NotificationScope;
   /** 创建时间 */
@@ -64,6 +66,14 @@ export interface CreateNotificationFactInput {
   readonly eventTime: string;
   readonly summary: string;
   readonly targetObjectRef: string | null;
+  /** 有期限通知的截止时间（可选） */
+  readonly deadlineAt?: string | null;
+  /**
+   * 初始投递状态（可选）。
+   * 站内信紧急关闭期间创建的事实标记为暂停投递（SRS-FAIL-009）；
+   * 默认待投递。
+   */
+  readonly initialStatus?: 'CREATED_PENDING_DELIVERY' | 'CREATED_PAUSED_DELIVERY';
   readonly scope: NotificationScope;
 }
 

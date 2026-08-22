@@ -70,7 +70,6 @@ export class FormSubmissionController {
     return this.guarded(actor, () =>
       this.reviseUseCase.execute({
         submissionId,
-        revisedBy: actor.subjectId,
         values: body.values,
         actor: actor.subjectId,
         now: actor.now,

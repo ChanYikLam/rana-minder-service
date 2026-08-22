@@ -2,10 +2,11 @@
  * 人工补发命令（NTF-007、SRS-SM-NTF-001 转换 10）。
  *
  * 人工重发只重发通知，不重执行原业务。
- * 新建关联原通知事实的邮件尝试，旧投递记录保留。
+ * 新建关联原通知事实的邮件尝试，旧投递记录保留；
+ * 尝试保存收件人快照引用与内容快照，失败可重试且不产生空邮件。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   ChannelDeliveryAttemptRepository,
   EmailAdapter,
@@ -13,7 +14,13 @@ import type {
   TemplateSnapshotService,
 } from '../../infrastructure';
 import type { ChannelDeliveryAttemptModel } from '../../domain';
-import { NotificationStateMachine } from '../../domain';
+import { computeNextRetryAt, NotificationStateMachine } from '../../domain';
+import {
+  CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
+  EMAIL_ADAPTER,
+  NOTIFICATION_REPOSITORY,
+  TEMPLATE_SNAPSHOT_SERVICE,
+} from '../../tokens';
 
 @Injectable()
 export class ManualResendCommand {
@@ -21,9 +28,13 @@ export class ManualResendCommand {
   private readonly stateMachine = new NotificationStateMachine();
 
   constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
     private readonly repository: NotificationRepository,
+    @Inject(CHANNEL_DELIVERY_ATTEMPT_REPOSITORY)
     private readonly attemptRepository: ChannelDeliveryAttemptRepository,
+    @Inject(EMAIL_ADAPTER)
     private readonly emailAdapter: EmailAdapter,
+    @Inject(TEMPLATE_SNAPSHOT_SERVICE)
     private readonly templateService: TemplateSnapshotService,
   ) {}
 
@@ -48,11 +59,17 @@ export class ManualResendCommand {
 
     const templateVersionId = await this.templateService.snapshotTemplate(eventType, 'EMAIL');
 
+    // 回溯收件人快照，保证投递尝试与快照的关联完整性（DATA-NTF-001）。
+    // 人工补发不传入收件人标识，取该事实的首条收件人快照作为关联引用；
+    // 若确实需要精确定位收件人，应由调用方传入 recipientId 匹配。
+    const snapshots = await this.repository.findSnapshotsByFactId(factId);
+    const snapshot = snapshots[0] ?? null;
+
     const now = new Date().toISOString();
     const newAttempt: ChannelDeliveryAttemptModel = {
       attemptId: `manual-resend-${factId}-${Date.now()}`,
       factId,
-      snapshotId: '',
+      snapshotId: snapshot?.snapshotId ?? null,
       channel: 'EMAIL',
       channelMessageId: null,
       attemptNumber: 1,
@@ -60,6 +77,10 @@ export class ManualResendCommand {
       targetAddress: targetEmail,
       templateVersionId,
       senderIdentity: fact.scope.type === 'CLUB' ? fact.scope.clubId : 'platform',
+      // 内容快照（NTF-002 最少摘要）：重试时复用，避免空邮件
+      emailSubject: fact.summary.slice(0, 100),
+      emailBody: fact.summary,
+      firstFailedAt: null,
       responseCategory: null,
       sanitizedError: null,
       nextRetryAt: null,
@@ -70,11 +91,12 @@ export class ManualResendCommand {
 
     await this.attemptRepository.saveAttempt(newAttempt);
 
+    let latestAttempt: ChannelDeliveryAttemptModel = newAttempt;
     try {
       const result = await this.emailAdapter.send({
         to: targetEmail,
-        subject: fact.summary.slice(0, 100),
-        body: fact.summary,
+        subject: newAttempt.emailSubject ?? fact.summary.slice(0, 100),
+        body: newAttempt.emailBody ?? fact.summary,
         senderIdentity: newAttempt.senderIdentity ?? '',
         templateVersionId,
       });
@@ -87,15 +109,33 @@ export class ManualResendCommand {
         });
         this.logger.log(`人工补发完成: factId=${factId}, targetEmail=${targetEmail}`);
         return delivered;
+      } else if (result.status === 'BOUNCE') {
+        latestAttempt = await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+          status: 'PERMANENT_FAILURE',
+          responseCategory: 'BOUNCE',
+          sanitizedError: result.sanitizedError,
+          completedAt: new Date().toISOString(),
+        });
+      } else {
+        // TEMPORARY_FAILURE / UNCERTAIN：进入失败重试，记录首次失败时间（NTF-007）
+        latestAttempt = await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+          status: 'FAILED_RETRY',
+          responseCategory:
+            result.status === 'UNCERTAIN' ? ('UNCERTAIN' as const) : ('TEMPORARY_FAILURE' as const),
+          firstFailedAt: now,
+          sanitizedError: result.sanitizedError,
+          nextRetryAt: computeNextRetryAt(1, now),
+        });
       }
     } catch (error) {
-      await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
+      latestAttempt = await this.attemptRepository.updateAttempt(newAttempt.attemptId, {
         status: 'FAILED_RETRY',
+        firstFailedAt: now,
         sanitizedError: (error as Error).message,
       });
     }
 
     this.logger.log(`人工补发完成: factId=${factId}, targetEmail=${targetEmail}`);
-    return newAttempt;
+    return latestAttempt;
   }
 }

@@ -4,10 +4,14 @@
  * 邮件是可选附加渠道。邮件资格判定：事件允许邮件、
  * 本次/活动配置未关闭、用户未退订、邮箱已验证、发信账号有效。
  * 邮件失败不回滚业务；临时失败自动重试；
- * 明确退信或连续失败 24 小时后停止重试。
+ * 明确退信或连续失败 24 小时后停止重试（窗口从首次失败起算）。
+ *
+ * 投递尝试保存：收件人快照引用（snapshotId）、发件身份、模板版本、
+ * 邮件标题/正文最少摘要快照与首次失败时间，保证重试可回溯且不产生
+ * 空邮件（DATA-NTF-001、NTF-002、NTF-007）。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   ChannelDeliveryAttemptRepository,
   EmailAdapter,
@@ -16,9 +20,16 @@ import type {
 } from '../../infrastructure';
 import {
   type ChannelDeliveryAttemptModel,
+  computeNextRetryAt,
   evaluateEmailEligibility,
   NotificationStateMachine,
 } from '../../domain';
+import {
+  CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
+  EMAIL_ADAPTER,
+  NOTIFICATION_REPOSITORY,
+  TEMPLATE_SNAPSHOT_SERVICE,
+} from '../../tokens';
 
 @Injectable()
 export class CreateEmailAttemptCommand {
@@ -26,9 +37,13 @@ export class CreateEmailAttemptCommand {
   private readonly stateMachine = new NotificationStateMachine();
 
   constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
     private readonly repository: NotificationRepository,
+    @Inject(CHANNEL_DELIVERY_ATTEMPT_REPOSITORY)
     private readonly attemptRepository: ChannelDeliveryAttemptRepository,
+    @Inject(EMAIL_ADAPTER)
     private readonly emailAdapter: EmailAdapter,
+    @Inject(TEMPLATE_SNAPSHOT_SERVICE)
     private readonly templateService: TemplateSnapshotService,
   ) {}
 
@@ -69,6 +84,16 @@ export class CreateEmailAttemptCommand {
       return null;
     }
 
+    // 回溯收件人快照，保证投递尝试与快照的关联完整性（DATA-NTF-001）
+    const snapshots = await this.repository.findSnapshotsByFactId(input.factId);
+    const snapshot = snapshots.find((s) => s.recipientId === input.recipientId);
+    if (!snapshot) {
+      this.logger.warn(
+        `收件人快照不存在: factId=${input.factId}, recipientId=${input.recipientId}`,
+      );
+      return null;
+    }
+
     // 冻结模板版本
     const templateVersionId = await this.templateService.snapshotTemplate(input.eventType, 'EMAIL');
 
@@ -76,7 +101,7 @@ export class CreateEmailAttemptCommand {
     const attempt: ChannelDeliveryAttemptModel = {
       attemptId: `email-attempt-${input.factId}-${input.recipientId}-${Date.now()}`,
       factId: input.factId,
-      snapshotId: '', // 关联收件人快照
+      snapshotId: snapshot.snapshotId,
       channel: 'EMAIL',
       channelMessageId: null,
       attemptNumber: 1,
@@ -84,6 +109,10 @@ export class CreateEmailAttemptCommand {
       targetAddress: input.recipientEmail,
       templateVersionId,
       senderIdentity: fact.scope.type === 'CLUB' ? fact.scope.clubId : 'platform',
+      // 内容快照（NTF-002 最少摘要）：重试时复用，避免空邮件
+      emailSubject: fact.summary.slice(0, 100),
+      emailBody: fact.summary,
+      firstFailedAt: null,
       responseCategory: null,
       sanitizedError: null,
       nextRetryAt: null,
@@ -99,8 +128,8 @@ export class CreateEmailAttemptCommand {
     try {
       const result = await this.emailAdapter.send({
         to: input.recipientEmail,
-        subject: fact.summary.slice(0, 100),
-        body: fact.summary,
+        subject: attempt.emailSubject ?? fact.summary.slice(0, 100),
+        body: attempt.emailBody ?? fact.summary,
         senderIdentity: attempt.senderIdentity ?? '',
         templateVersionId,
       });
@@ -112,11 +141,7 @@ export class CreateEmailAttemptCommand {
           completedAt: new Date().toISOString(),
         });
       } else if (result.status === 'TEMPORARY_FAILURE') {
-        latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
-          status: 'FAILED_RETRY',
-          sanitizedError: result.sanitizedError,
-          nextRetryAt: this.calculateNextRetry(1),
-        });
+        latestAttempt = await this.failAttempt(attempt.attemptId, now, result.sanitizedError);
       } else if (result.status === 'BOUNCE') {
         latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
           status: 'PERMANENT_FAILURE',
@@ -126,27 +151,34 @@ export class CreateEmailAttemptCommand {
         });
       } else {
         // UNCERTAIN：等待回读
-        latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
-          status: 'FAILED_RETRY',
-          responseCategory: 'UNCERTAIN',
-          sanitizedError: '结果不确定，等待回读',
-          nextRetryAt: this.calculateNextRetry(1),
-        });
+        latestAttempt = await this.failAttempt(
+          attempt.attemptId,
+          now,
+          '结果不确定，等待回读',
+          'UNCERTAIN',
+        );
       }
     } catch (error) {
-      // 临时失败：进入重试（NTF-007）
-      latestAttempt = await this.attemptRepository.updateAttempt(attempt.attemptId, {
-        status: 'FAILED_RETRY',
-        sanitizedError: (error as Error).message,
-        nextRetryAt: this.calculateNextRetry(1),
-      });
+      // 临时失败：进入重试（NTF-007），记录首次失败时间
+      latestAttempt = await this.failAttempt(attempt.attemptId, now, (error as Error).message);
     }
 
     return latestAttempt;
   }
 
-  private calculateNextRetry(attemptNumber: number): string {
-    const minutes = Math.min(2 ** attemptNumber, 60 * 6); // 指数退避，最多 6 小时
-    return new Date(Date.now() + minutes * 60 * 1000).toISOString();
+  /** 进入失败重试：记录首次失败时间并计算退避（NTF-007） */
+  private async failAttempt(
+    attemptId: string,
+    now: string,
+    sanitizedError: string | null,
+    responseCategory: 'TEMPORARY_FAILURE' | 'UNCERTAIN' = 'TEMPORARY_FAILURE',
+  ): Promise<ChannelDeliveryAttemptModel> {
+    return this.attemptRepository.updateAttempt(attemptId, {
+      status: 'FAILED_RETRY',
+      firstFailedAt: now,
+      responseCategory,
+      sanitizedError,
+      nextRetryAt: computeNextRetryAt(1, now),
+    });
   }
 }
