@@ -54,7 +54,7 @@ export class ResolveRoutineActivationCommand {
     }
     if (invitation.status === 'SYNC_FAILED_PENDING_RETRY' && input.escalateToAnomaly) {
       // 重试中升级 → 高优先级同步异常（冻结普通重试）
-      return this.toAnomaly(invitation, input);
+      return this.toAnomaly(invitation);
     }
 
     // 组合写入并分别回读（社团 Group + 可选初始部门）
@@ -89,7 +89,7 @@ export class ResolveRoutineActivationCommand {
 
     // 无法确认且无法补偿到非成员 → 高优先级同步异常
     if (input.escalateToAnomaly) {
-      return this.toAnomaly(invitation, input);
+      return this.toAnomaly(invitation);
     }
 
     // 可重试：同步失败待重试（先回读后重试；无需本人重接；部分确认按组合补偿）
@@ -113,7 +113,6 @@ export class ResolveRoutineActivationCommand {
 
   private async toAnomaly(
     invitation: RoutineInvitation,
-    input: ResolveRoutineActivationInput,
   ): Promise<ResolveRoutineActivationResult> {
     const now = new Date().toISOString();
     const anomaly: RoutineInvitation = {

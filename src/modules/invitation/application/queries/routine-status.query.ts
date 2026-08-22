@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { RoutineInvitation } from '../../domain/models/routine-invitation';
 import { ROUTINE_INVITATION_REPOSITORY } from '../../infrastructure/routine-invitation-repository';
 import type { RoutineInvitationRepository } from '../../infrastructure/routine-invitation-repository';
 
