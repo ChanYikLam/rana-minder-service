@@ -161,7 +161,9 @@ export class OrgJointNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.endActivity(this.actor(request), activityId, _clubId));
+    return toHttpResponse(
+      await this.controller.endActivity(this.actor(request), activityId, _clubId),
+    );
   }
 
   @Post('activities/:activityId/force-end')
@@ -507,6 +509,8 @@ export class OrgJointNestController {
     @Param('activityId') activityId: string,
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
-    return toHttpResponse(await this.controller.getChannel(this.actor(request), activityId, _clubId));
+    return toHttpResponse(
+      await this.controller.getChannel(this.actor(request), activityId, _clubId),
+    );
   }
 }

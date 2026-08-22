@@ -53,6 +53,9 @@ export class DefaultEndJointActivityUseCase implements EndJointActivityUseCase {
     }
     await this.repository.saveActivity(activity.toSnapshot(), activitySnap.revisionNumber);
 
-    await this.tasks.scheduleArchiveTerminal(input.activityId, activity.toSnapshot().revisionNumber);
+    await this.tasks.scheduleArchiveTerminal(
+      input.activityId,
+      activity.toSnapshot().revisionNumber,
+    );
   }
 }
