@@ -603,6 +603,11 @@ export class StatisticsSpecification {
 
   /**
    * 计算当前值 vs 前一年学年值的趋势。前一年数据缺失则 flat/0。
+   *
+   * 业务意图说明（零基线语义）：前一年度桶存在但值为 0 时，同样视为
+   * 无趋势（flat/0），即「零基线不参与涨跌判定」。这样避免从 0 增长到
+   * 任意正数都被判为 up 而放大差异；如需如实反映从 0 的增长，可在上层
+   * 显式构造 yearBuckets 时处理（此处统一按零基线视为无趋势）。
    */
   computeTrend(
     currentAcademicYear: string | undefined,

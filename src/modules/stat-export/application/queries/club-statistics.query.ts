@@ -134,13 +134,21 @@ export class ClubStatisticsQuery {
 
     // 趋势（按学年 buckets）
     const memberByYear = this.groupMembersByYear(scopedMemberships);
-    const historyByYear = this.groupHistoryByYear(scopedHistory);
     const currentYear = filters?.academicYear ?? undefined;
     const memberTrend = this.spec.computeTrend(currentYear, currentTotal, memberByYear);
-    const historyTrend = this.spec.computeTrend(
+
+    // 历史趋势按口径分离（STAT-001：普通/联合绝不混合）：
+    // 普通招新与联合活动各用其自身的年度桶分别计算，避免复用混合口径的
+    // totalAccepted 趋势（否则展示的「普通趋势/联合趋势」实为混合口径总趋势）。
+    const normalHistoryTrend = this.spec.computeTrend(
       currentYear,
-      admissionHistory.totalAccepted,
-      historyByYear,
+      admissionHistory.normalTotal,
+      this.groupHistoryByYear(scopedHistory, 'normal'),
+    );
+    const jointHistoryTrend = this.spec.computeTrend(
+      currentYear,
+      admissionHistory.jointTotal,
+      this.groupHistoryByYear(scopedHistory, 'joint'),
     );
 
     // 审计
@@ -168,13 +176,13 @@ export class ClubStatisticsQuery {
         {
           label: '录取历史（普通招新）',
           value: admissionHistory.normalTotal,
-          ...historyTrend,
+          ...normalHistoryTrend,
           caliberNote: '普通招新接受事件计数，不兼容联合活动口径',
         },
         {
           label: '录取历史（联合活动）',
           value: admissionHistory.jointTotal,
-          ...historyTrend,
+          ...jointHistoryTrend,
           caliberNote: '联合活动接受事件计数，不兼容普通招新口径',
         },
         {
@@ -392,9 +400,13 @@ export class ClubStatisticsQuery {
     return map;
   }
 
-  private groupHistoryByYear(history: readonly { academicYear: string }[]): Map<string, number> {
+  private groupHistoryByYear(
+    history: readonly { academicYear: string; scope: 'normal' | 'joint' }[],
+    scope?: 'normal' | 'joint',
+  ): Map<string, number> {
     const map = new Map<string, number>();
     for (const h of history) {
+      if (scope !== undefined && h.scope !== scope) continue;
       map.set(h.academicYear, (map.get(h.academicYear) ?? 0) + 1);
     }
     return map;

@@ -89,6 +89,9 @@ export class StatisticsController {
       if (limit !== undefined && (Number.isNaN(limit) || limit < 1)) {
         throw new StatisticsAccessError('IFC-ERR-005', 'limit 必须为正整数');
       }
+      if (limit !== undefined && limit > 1000) {
+        throw new StatisticsAccessError('IFC-ERR-005', 'limit 超出允许上限（最大 1000）');
+      }
       return this.clubStats.drilldown({
         principal,
         clubId,
