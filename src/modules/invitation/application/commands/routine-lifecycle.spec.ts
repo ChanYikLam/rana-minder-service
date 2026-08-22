@@ -2,12 +2,19 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { InMemoryRoutineInvitationRepository } from '../../infrastructure/routine-invitation-repository';
 import type { CasdoorCompositeResult } from '../../infrastructure/casdoor-relation-port';
-import { CreateRoutineInvitationCommand } from './create-routine-invitation.command';
+import {
+  CreateRoutineInvitationCommand,
+  CreateRoutineError,
+} from './create-routine-invitation.command';
 import { AcceptRoutineInvitationCommand } from './accept-routine-invitation.command';
 import { RejectRoutineInvitationCommand } from './routine-reject-withdraw.command';
 import { WithdrawRoutineInvitationCommand } from './routine-reject-withdraw.command';
 import { ExpireRoutineInvitationCommand } from './expire-routine-invitation.command';
-import { ReissueRoutineInvitationCommand } from './reissue-routine-invitation.command';
+import {
+  ReissueRoutineInvitationCommand,
+  ReissueRoutineError,
+} from './reissue-routine-invitation.command';
+import type { RoutineInvitation } from '../../domain/models/routine-invitation';
 import { ResolveRoutineActivationCommand } from './resolve-routine-activation.command';
 import { RoutineInvitationStatusQuery } from '../queries/routine-status.query';
 import { RoutineInvitationStateMachine } from '../../domain/state-machines/routine-invitation-state-machine';
@@ -346,5 +353,77 @@ describe('4.5.2 常规入社邀请（MEM-004、SRS-SM-MEM-004）', () => {
     assert.equal(result.invitation.status, 'SYNC_FAILED_PENDING_RETRY');
     // 唯一目标未确认 → UNCONFIRMED，而非 PARTIAL
     assert.equal(result.invitation.syncStatus, 'UNCONFIRMED');
+  });
+
+  it('仓储幂等约束：并发重复保存 PENDING 时原子失败（消除 findPending+save 的 TOCTOU）', async () => {
+    const rig = makeRig();
+    const created = await rig.create.execute(createInput);
+    // 模拟并发：跳过 findPending 预检，直接 save 一条同社团同对象、不同 id 的 PENDING
+    // （等价于两个 worker 同时创建：一个已落库，另一个的 save 必须原子失败）
+    const duplicate: RoutineInvitation = {
+      routineInvitationId: 'race-dup',
+      inviteeId: createInput.inviteeId,
+      clubId: createInput.clubId,
+      issuerId: createInput.issuerId,
+      initialDepartmentId: createInput.initialDepartmentId,
+      status: 'PENDING',
+      version: 1,
+      createdAt: '2099-01-01T00:00:00.000Z',
+      expiresAt: createInput.expiresAt,
+      acceptedAt: null,
+      activatedAt: null,
+      relationTargets: [],
+      syncStatus: null,
+      attemptCount: 0,
+      history: [{ at: '2099-01-01T00:00:00.000Z', type: 'CREATED', by: createInput.issuerId }],
+    };
+    // 同社团同对象已存在 PENDING → 原子失败（即便 findPending 被绕过）
+    await assert.rejects(rig.repo.save(duplicate), /IFC-ERR-009/);
+    // 收口为已过期（非待处理）后不占用幂等槽位，可再发新待处理
+    await rig.expire.execute({
+      routineInvitationId: created.routineInvitationId,
+      expiryAllowed: true,
+    });
+    const reissued = await rig.reissue.execute({
+      oldInvitationId: created.routineInvitationId,
+      issuerId: 'hr1',
+      issuerRoles: ['HR_ADMIN'],
+      newExpiresAt: '2099-02-01T00:00:00.000Z',
+      revalidated: { accountValid: true, notMemberYet: true, departmentValid: true },
+    });
+    assert.equal(reissued.status, 'PENDING');
+  });
+
+  it('创建/重发并发竞争：同社团同对象已存在 PENDING 时抛 IFC-ERR-009 类型错误', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    // 同社团同对象已存在 PENDING（模拟并发创建方已抢先落库）→ create 抛类型错误
+    await assert.rejects(rig.create.execute(createInput), (err: unknown) => {
+      assert.ok(err instanceof CreateRoutineError);
+      assert.match(err.message, /IFC-ERR-009/);
+      return true;
+    });
+    // 原邀请先撤回为可重发状态
+    await rig.withdraw.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'hr1',
+      principalRoles: ['HR_ADMIN'],
+    });
+    // 同对象再并发创建一条 PENDING（占据幂等槽位）→ 重发 save 阶段原子失败转类型错误
+    await rig.create.execute(createInput);
+    await assert.rejects(
+      rig.reissue.execute({
+        oldInvitationId: inv.routineInvitationId,
+        issuerId: 'hr1',
+        issuerRoles: ['HR_ADMIN'],
+        newExpiresAt: '2099-02-01T00:00:00.000Z',
+        revalidated: { accountValid: true, notMemberYet: true, departmentValid: true },
+      }),
+      (err: unknown) => {
+        assert.ok(err instanceof ReissueRoutineError);
+        assert.match(err.message, /IFC-ERR-009/);
+        return true;
+      },
+    );
   });
 });

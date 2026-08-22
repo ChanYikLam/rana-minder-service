@@ -93,7 +93,16 @@ export class CreateRoutineInvitationCommand {
       attemptCount: 0,
       history: [{ at: now, type: 'CREATED', by: input.issuerId }],
     };
-    await this.repo.save(invitation);
+    // 保存时仓储原子强制的同社团同对象幂等约束（IFC-ERR-009）：即便并发创建/重发
+    // 同时通过上方 findPending 检查，save 仍会原子失败，消除 TOCTOU 竞态。
+    try {
+      await this.repo.save(invitation);
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('IFC-ERR-009')) {
+        throw new CreateRoutineError('IFC-ERR-009', '同社团同对象已存在待处理邀请');
+      }
+      throw e;
+    }
     return invitation;
   }
 }

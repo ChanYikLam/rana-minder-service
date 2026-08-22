@@ -103,7 +103,16 @@ export class ReissueRoutineInvitationCommand {
         },
       ],
     };
-    await this.repo.save(fresh);
+    // 保存时仓储原子强制的同社团同对象幂等约束（IFC-ERR-009）：即便并发重发/创建
+    // 同时通过上方 findPending 检查，save 仍会原子失败，消除 TOCTOU 竞态。
+    try {
+      await this.repo.save(fresh);
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('IFC-ERR-009')) {
+        throw new ReissueRoutineError('IFC-ERR-009', '同社团同对象已存在待处理邀请');
+      }
+      throw e;
+    }
     return fresh;
   }
 }
