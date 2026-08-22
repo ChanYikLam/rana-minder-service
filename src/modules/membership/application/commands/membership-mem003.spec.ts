@@ -549,6 +549,33 @@ describe('MEM-003 A7/A8 失败保持原关系与人工重试', () => {
     assert.equal(rel[0]?.status, 'NO_RELATION');
   });
 
+  it('窗口内软失败：同一尝试只结算一次（不重复外部写入与失败历史）', async () => {
+    // ok=true 但 confirmed=false：未超 15 分钟窗口 → 保持执行处理中（KEPT_PROCESSING）
+    const rig = makeRig([
+      [{ target: { kind: 'DEPARTMENT', refId: 'd2' }, ok: true, confirmed: false }],
+    ]);
+    const app = await rig.submit.execute({
+      clubId: 'c1',
+      applicantId: 'stu1',
+      type: 'JOIN',
+      targetDeptId: 'd2',
+    });
+    await rig.decide.execute({
+      applicationId: app.applicationId,
+      operatorId: 'deptLeadD2',
+      decision: 'APPROVE',
+    });
+    const processing = await rig.executeApp.execute(app.applicationId, 'leader1');
+    assert.equal(processing.status, 'EXECUTION_PROCESSING');
+    const rel = await rig.relRepo.listBySubjectAndRef('c1', 'stu1', 'd2');
+    assert.equal(rel[0]?.status, 'CHANGE_PROCESSING');
+    // 同一尝试只结算一次：attemptCount 为 1 且仅一条失败重试历史（双结算回归防护）
+    assert.equal(rel[0]?.change?.attemptCount, 1);
+    const retryHist =
+      rel[0]?.history.filter((h) => h.type === 'CHANGE_RETRY_KEPT_PROCESSING') ?? [];
+    assert.equal(retryHist.length, 1);
+  });
+
   it('人工重试沿用原批准与业务幂等键（新尝试号），不重新审批；成功后已生效', async () => {
     const failThenOk = makeRigWithRetryScenario();
     const { rig, app } = await failThenOk;

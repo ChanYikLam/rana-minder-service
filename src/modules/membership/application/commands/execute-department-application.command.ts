@@ -378,8 +378,9 @@ export class ExecuteDepartmentApplicationCommand {
     };
     await this.appRepo.save(next);
 
-    // 立即尝试一次写入＋回读结算（A6/A7 由 settle 完成）
-    await this.settleChange.execute(groupId);
+    // 立即尝试一次写入＋回读结算（A6/A7 由 settle 完成）。
+    // 注意：settle() 内部会调用 settleChange.execute(groupId)，这里不再重复触发，
+    // 避免同一尝试被结算两次（重复外部写入、重复失败历史事件与双倍 attemptCount）。
     return this.settle(next.applicationId);
   }
 
