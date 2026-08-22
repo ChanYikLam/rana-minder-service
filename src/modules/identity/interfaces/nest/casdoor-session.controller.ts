@@ -13,16 +13,13 @@
  * 会话解析退回到 RejectAllAuthSessionProvider（fail-closed）。
  */
 
-import { Controller, Delete, Get, HttpCode, Inject, Req, Res } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, Inject } from '@nestjs/common';
 import { type Request as ExpressRequest, type Response } from 'express';
 import { createHash } from 'node:crypto';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../../../config';
 import { CasdoorOidcClient } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import type { CasdoorOidcConfig } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
-import {
-  OidcAuthSessionProvider,
-  type SessionClaims,
-} from './oidc-session-provider';
+import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-provider';
 
 /** GET /api/auth/session 响应（API-AUTH-001） */
 export interface SessionResponse {
@@ -48,13 +45,11 @@ export class CasdoorSessionController {
   private oidcClient?: CasdoorOidcClient;
   private sessionSecret?: Uint8Array;
 
-  constructor(
-    @Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig,
-  ) {}
+  constructor(@Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig) {}
 
   /** GET /api/auth/casdoor/login-url */
   @Get('casdoor/login-url')
-  async getLoginUrl(req: ExpressRequest): Promise<{ url: string }> {
+  async getLoginUrl(_req: ExpressRequest): Promise<{ url: string }> {
     const client = this.ensureClient();
     const nonce = crypto.randomUUID();
     const state = { nonce };
@@ -64,10 +59,7 @@ export class CasdoorSessionController {
 
   /** GET /api/auth/session?code=xxx&state=yyy */
   @Get('session')
-  async establishSession(
-    req: ExpressRequest,
-    res: Response,
-  ): Promise<SessionResponse> {
+  async establishSession(req: ExpressRequest, res: Response): Promise<SessionResponse> {
     const client = this.ensureClient();
     const code = req.query['code'] as string | undefined;
     const stateRaw = req.query['state'] as string | undefined;
@@ -79,9 +71,7 @@ export class CasdoorSessionController {
     // 解码 state → nonce
     let nonce: string;
     try {
-      const state = JSON.parse(
-        Buffer.from(stateRaw, 'base64url').toString('utf8'),
-      );
+      const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8'));
       nonce = state.nonce;
     } catch {
       throw new SessionError('Invalid state', 400);
@@ -121,10 +111,7 @@ export class CasdoorSessionController {
     );
 
     // Set-Cookie (HttpOnly, Secure 在 dev 环境不强制)
-    res.setHeader(
-      'Set-Cookie',
-      `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`,
-    );
+    res.setHeader('Set-Cookie', `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
 
     return {
       user: {
@@ -168,9 +155,7 @@ export class CasdoorSessionController {
     };
     this.oidcClient = new CasdoorOidcClient(oidcConfig);
     this.sessionSecret = new TextEncoder().encode(
-      createHash('sha256')
-        .update(`ranaminder-session:${c.clientSecretRef}`)
-        .digest('hex'),
+      createHash('sha256').update(`ranaminder-session:${c.clientSecretRef}`).digest('hex'),
     );
     return this.oidcClient;
   }

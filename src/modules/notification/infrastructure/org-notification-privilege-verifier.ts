@@ -15,14 +15,10 @@
 import type { CurrentPermissionsPort } from '../../organization/application/ports';
 import { PermissionCatalog } from '../../organization/domain/models/permission-template';
 
-import type {
-  NotificationPrivilegeVerifier,
-} from './notification-ports';
+import type { NotificationPrivilegeVerifier } from './notification-ports';
 import type { KillSwitchScope } from '../domain/models/kill-switch.model';
 
-export class OrgBackedNotificationPrivilegeVerifier
-  implements NotificationPrivilegeVerifier
-{
+export class OrgBackedNotificationPrivilegeVerifier implements NotificationPrivilegeVerifier {
   constructor(private readonly permissions: CurrentPermissionsPort) {}
 
   async canOperateKillSwitch(

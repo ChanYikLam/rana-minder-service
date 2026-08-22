@@ -26,10 +26,7 @@ export class OrgBackedRecruitmentAuthorization implements RecruitmentAuthorizati
   constructor(private readonly permissions: CurrentPermissionsPort) {}
 
   async canManageRecruitment(input: RecruitmentAuthorizationInput): Promise<boolean> {
-    const effective = await this.permissions.effectiveForClub(
-      input.subjectId,
-      input.clubId,
-    );
+    const effective = await this.permissions.effectiveForClub(input.subjectId, input.clubId);
     return effective.includes(PermissionCatalog.CLUB_RECRUITMENT_MANAGE);
   }
 

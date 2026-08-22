@@ -41,10 +41,7 @@ export class OrgBackedFormDesignPermission implements FormDesignPermissionPort {
       // ORG-035：部门级权限解析无契约支撑，fail-closed（不放行、不猜测）。
       return false;
     }
-    const effective = await this.permissions.effectiveForClub(
-      actor.subjectId,
-      scope.ownerId,
-    );
+    const effective = await this.permissions.effectiveForClub(actor.subjectId, scope.ownerId);
     return effective.some((permission) => CLUB_DESIGN_PERMISSIONS.includes(permission));
   }
 
