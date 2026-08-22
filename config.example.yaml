@@ -1,0 +1,75 @@
+# ============================================================
+# RanaMinder Service 配置示例（ADR-010 单文件外置配置）
+#
+# 部署用法：
+#   cp config.example.yaml config.yaml
+#   # 编辑 config.yaml 填写真实内容后，再启动 docker compose
+#
+# 约定（ADR-010 / OPS-CFG-001/003/005）：
+#   - 本文件不含真实秘密，仅保留结构完整、秘密留空的字段；
+#   - 秘密一律以"CHANGE_ME"占位，部署者必须改写为真实值后再启动：
+#       直接写明文（单文件集中填写，首版允许）
+#       或改为外置引用形式，不写明文（推荐）：
+#         ${env:VAR_NAME}         从环境变量读取
+#         ${file:/path/to/secret} 从白名单路径读取（/etc/ranaminder/secrets/、/run/secrets/）
+#   - 真实 config.yaml 必须排除在源码仓库与镜像之外（见 .dockerignore）；
+#   - 正式环境（environment.name=prod）缺失必要配置或仍使用占位符时应用拒绝启动（fail-closed）。
+# ============================================================
+
+server:
+  host: 0.0.0.0
+  port: 3000
+  gracefulShutdownTimeoutMs: 10000
+
+environment:
+  # dev | test | prod；prod 触发正式环境强制约束（HTTPS、占位符拒绝、最小观测）
+  name: prod
+
+database:
+  # compose 内 PostgreSQL 服务名
+  host: postgres
+  port: 5432
+  name: ranaminder
+  user: ranaminder
+  schema: app
+  ssl: false
+  # 必填。部署者改写为真实密码（或外置引用，如 ${file:/run/secrets/db_password}）
+  passwordRef: CHANGE_ME
+
+casdoor:
+  # 学校既有 v3.108.0 实例地址
+  endpoint: https://casdoor.example.edu
+  clientId: CHANGE_ME
+  organization: CHANGE_ME
+  redirectUri: http://localhost:3000/api/auth/callback
+  # 必填。部署者改写为真实客户端秘密（或外置引用）
+  clientSecretRef: CHANGE_ME
+
+storage:
+  # compose 内 MinIO 服务名
+  endpoint: http://minio:9000
+  region: us-east-1
+  # 必填。对应 MinIO root 凭据；部署者改写为真实值（或外置引用）
+  accessKeyRef: CHANGE_ME
+  secretKeyRef: CHANGE_ME
+  buckets:
+    quarantine: ranaminder-quarantine
+    primary: ranaminder-primary
+    derived: ranaminder-derived
+
+mail:
+  host: localhost
+  port: 1025
+  fromAddress: no-reply@example.edu
+  # 可选：SMTP 需认证时填写；无需认证可留空
+  userRef: ""
+  passwordRef: ""
+
+observability:
+  logLevel: info
+  traceSamplingRate: 1.0
+
+job:
+  schedulerIntervalMs: 1000
+  defaultLeaseMs: 60000
+  maxAttempts: 5

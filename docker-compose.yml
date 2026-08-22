@@ -41,7 +41,9 @@ x-app-common: &app-common
   environment:
     NODE_ENV: production
     TZ: UTC
-    RANAMINDER_CONFIG: /etc/ranaminder/config.yaml
+    # 配置路径由加载器读取 RANAMINDER_CONFIG_FILE（src/config/config.loader.ts），
+    # 与默认路径 /etc/ranaminder/config.yaml 保持一致，显式受控（ADR-010）。
+    RANAMINDER_CONFIG_FILE: /etc/ranaminder/config.yaml
   # 应用由启动判定（配置校验/依赖就绪）自行阻断或降级（部署运维手册 §8）；
   # 这里仅提供依赖服务就绪顺序，不对应用作臆造端点的硬性健康检查（DOCK-043）。
   depends_on:
