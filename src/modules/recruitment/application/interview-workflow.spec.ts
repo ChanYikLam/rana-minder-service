@@ -245,4 +245,39 @@ describe('recruitment interview workflow (REC-005)', () => {
     });
     assert.strictEqual(held.status, 'HOLD');
   });
+
+  it('暂停恢复后可通过调度端点重新安排（PENDING_SELECTION → SCHEDULED）', async () => {
+    const pending = InterviewRecord.createPending({
+      id: 'iv-r',
+      applicationId,
+      activityId: (await repo.loadApplication(applicationId))!.activityId,
+      clubId: CLUB_ID,
+      roundId: 'round-6',
+      applicantId: APPLICANT,
+      now: NOW,
+    });
+    await repo.saveInterview(pending.toSnapshot(), -1);
+    const held = await workflow.hold({
+      interviewId: pending.id,
+      until: new Date('2026-06-01T00:00:00Z'),
+      actor: MANAGER,
+      now: NOW,
+    });
+    assert.strictEqual(held.status, 'HOLD');
+    const resumed = await workflow.resume({ interviewId: pending.id, actor: MANAGER, now: NOW });
+    assert.strictEqual(resumed.status, 'PENDING_SELECTION');
+
+    // 恢复后的待排记录应能通过调度端点复用同一记录编排到 SCHEDULED
+    const rescheduled = await workflow.schedule({
+      applicationId,
+      roundId: 'round-6',
+      interviewerId: INTERVIEWER,
+      scheduledAt: NOW,
+      location: '线上',
+      actor: MANAGER,
+      now: NOW,
+    });
+    assert.strictEqual(rescheduled.interviewId, pending.id);
+    assert.strictEqual(rescheduled.status, 'SCHEDULED');
+  });
 });

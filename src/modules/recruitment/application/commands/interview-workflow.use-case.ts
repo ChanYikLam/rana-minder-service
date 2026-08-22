@@ -76,12 +76,27 @@ export class InterviewWorkflowUseCase {
       (r) => r.applicationId === input.applicationId,
     );
     if (existing !== undefined) {
-      if (existing.status === 'VOIDED') {
-        // 作废后重排：复用同一记录（VOIDED → RESCHEDULE → SCHEDULED）
+      if (existing.status === 'VOIDED' || existing.status === 'PENDING_SELECTION') {
+        // 作废后重排或暂停恢复后的待排记录：复用同一记录编排到 SCHEDULED
         const record = InterviewRecord.fromSnapshot(existing);
-        if (!record.reschedule(new DefaultInterviewRecordStateMachine(), input.now)) {
-          throw recruitmentErrors.preconditionFailed('面试重排失败');
+        if (existing.status === 'VOIDED') {
+          if (!record.reschedule(new DefaultInterviewRecordStateMachine(), input.now)) {
+            throw recruitmentErrors.preconditionFailed('面试重排失败');
+          }
+        } else {
+          if (
+            !record.schedule(
+              new DefaultInterviewRecordStateMachine(),
+              input.interviewerId,
+              input.scheduledAt,
+              input.location,
+              input.now,
+            )
+          ) {
+            throw recruitmentErrors.preconditionFailed('面试调度失败');
+          }
         }
+        // 重排/调度均回到 SCHEDULED 后统一重新分配面试官/时间/地点
         record.reassign(input.interviewerId, input.scheduledAt, input.location, input.now);
         await this.repository.saveInterview(record.toSnapshot(), existing.revisionNumber);
         return { interviewId: record.id, status: record.status };
