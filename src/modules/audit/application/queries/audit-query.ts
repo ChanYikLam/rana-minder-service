@@ -13,9 +13,7 @@ import type { AuditQueryFilter, AuditRepository } from '../../infrastructure/aud
  */
 @Injectable()
 export class AuditQuery {
-  constructor(
-    @Inject(AUDIT_REPOSITORY) private readonly repo: AuditRepository,
-  ) {}
+  constructor(@Inject(AUDIT_REPOSITORY) private readonly repo: AuditRepository) {}
 
   async search(
     principal: { principalId: string; roles: readonly string[]; clubId?: string },
@@ -33,9 +31,7 @@ export class AuditQuery {
     if (principal.roles.includes('SUPER_ADMIN')) {
       return; // 超管可查全平台（每次特权访问产生审计由调用方/AuditWriter 记录）
     }
-    const isClubHandler = principal.roles.some(
-      (r) => r === 'CLUB_LEADER' || r === 'HR_ADMIN',
-    );
+    const isClubHandler = principal.roles.some((r) => r === 'CLUB_LEADER' || r === 'HR_ADMIN');
     if (isClubHandler) {
       if (principal.clubId === undefined) {
         throw new Error('IFC-ERR-003: 本社团负责人/人事须携带社团作用域才能查询审计');

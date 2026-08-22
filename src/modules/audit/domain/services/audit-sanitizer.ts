@@ -40,7 +40,11 @@ export class AuditSanitizer {
   sanitizeField(fieldName: string, value: unknown): SanitizedAuditValue {
     if (SENSITIVE_FIELD_WORDS.includes(normalizeField(fieldName))) {
       const len =
-        typeof value === 'string' ? value.length : value === null || value === undefined ? 0 : JSON.stringify(value)?.length ?? 0;
+        typeof value === 'string'
+          ? value.length
+          : value === null || value === undefined
+            ? 0
+            : (JSON.stringify(value)?.length ?? 0);
       return { display: `<REDACTED:${len}>`, redacted: true };
     }
     if (value === null || value === undefined) {

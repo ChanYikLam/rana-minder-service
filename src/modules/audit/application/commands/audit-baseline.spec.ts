@@ -70,7 +70,12 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
 
   it('审计只追加不可篡改：仓储无修改/删除方法；查询按条件过滤', async () => {
     const rig = makeRig();
-    await rig.writer.write({ ...baseEvent, eventType: AuditEventType.AUTH_LOGIN, actorId: 'u1', target: null });
+    await rig.writer.write({
+      ...baseEvent,
+      eventType: AuditEventType.AUTH_LOGIN,
+      actorId: 'u1',
+      target: null,
+    });
     await rig.writer.write({ ...baseEvent, actorId: 'u2' });
     await rig.writer.write({ ...baseEvent, actorId: 'u2', eventType: AuditEventType.CORRECTION });
     // 按用户过滤
@@ -105,10 +110,16 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     const all = await rig.query.search({ principalId: 'sa', roles: ['SUPER_ADMIN'] }, {});
     assert.equal(all.length, 1);
     // 本社团负责人/人事
-    const c1 = await rig.query.search({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' }, {});
+    const c1 = await rig.query.search(
+      { principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' },
+      {},
+    );
     assert.equal(c1.length, 1);
     // 本社团负责人/人事未指定 clubId 也应仅限本社团（防跨社团越权）
-    const c1NoFilter = await rig.query.search({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' }, {});
+    const c1NoFilter = await rig.query.search(
+      { principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' },
+      {},
+    );
     assert.equal(c1NoFilter.length, 1);
     // 无社团作用域的负责人/人事 → 拒绝
     await assert.rejects(

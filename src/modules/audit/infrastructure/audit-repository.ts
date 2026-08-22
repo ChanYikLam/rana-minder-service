@@ -45,7 +45,8 @@ export class InMemoryAuditRepository implements AuditRepository {
         if (filter.to !== undefined && e.occurredAt > filter.to) return false;
         if (filter.actorId !== undefined && e.actorId !== filter.actorId) return false;
         if (filter.clubId !== undefined && e.scope?.clubId !== filter.clubId) return false;
-        if (filter.objectType !== undefined && e.target?.objectType !== filter.objectType) return false;
+        if (filter.objectType !== undefined && e.target?.objectType !== filter.objectType)
+          return false;
         if (filter.objectId !== undefined && e.target?.objectId !== filter.objectId) return false;
         if (filter.eventType !== undefined && e.eventType !== filter.eventType) return false;
         return true;
