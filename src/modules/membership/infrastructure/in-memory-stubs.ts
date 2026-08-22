@@ -47,8 +47,12 @@ export class InMemoryMembershipAccessPort implements MembershipAccessPort {
 @Injectable()
 export class InMemoryMembershipNotificationPort implements MembershipNotificationPort {
   private readonly facts: MembershipNotificationFact[] = [];
+  private readonly seenDedupKeys = new Set<string>();
 
   async save(fact: MembershipNotificationFact): Promise<void> {
+    // 模拟生产去重语义：同 dedupKey 只保存一次，通知不重复泛滥
+    if (this.seenDedupKeys.has(fact.dedupKey)) return;
+    this.seenDedupKeys.add(fact.dedupKey);
     this.facts.push(fact);
   }
 

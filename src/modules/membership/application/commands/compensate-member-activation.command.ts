@@ -6,7 +6,7 @@ import { MembershipPeriodStateMachine } from '../../domain/state-machines/member
 import { MEMBERSHIP_CASDOOR_PORT } from '../../infrastructure/casdoor-group.port';
 import type { MembershipCasdoorPort } from '../../infrastructure/casdoor-group.port';
 import { InMemoryMembershipNotificationPort } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_NOTIFICATION_PORT } from '../ports';
+import { MEMBERSHIP_NOTIFICATION_PORT, saveNotificationFact } from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
 import type { MembershipRepository } from '../../infrastructure/membership-repository';
@@ -64,6 +64,41 @@ export class CompensateMemberActivationCommand {
     private readonly stateMachine: MembershipPeriodStateMachine = new MembershipPeriodStateMachine(),
   ) {}
 
+  /** 外部移除异常兜底：CAS 释放围栏回 PENDING 并留痕；释放失败则以最新态收敛返回 */
+  private async releaseOnException(
+    fenced: MembershipPeriod,
+    error: unknown,
+  ): Promise<CompensateMemberActivationResult> {
+    const act = fenced.activation as NonNullable<MembershipPeriod['activation']>;
+    const reason = error instanceof Error ? error.message : String(error);
+    const released: MembershipPeriod = {
+      ...fenced,
+      version: fenced.version + 1,
+      status: 'ACTIVATION_PROCESSING',
+      activation: {
+        ...act,
+        phase: ActivationExternalPhase.PENDING,
+        attemptCount: act.attemptCount + 1,
+        lastAttemptAt: new Date().toISOString(),
+        lastError: reason.length > 200 ? reason.slice(0, 200) + '…' : reason,
+      },
+      history: [
+        ...fenced.history,
+        {
+          at: new Date().toISOString(),
+          type: 'ACTIVATION_RETRY_KEPT_PROCESSING',
+          by: 'system',
+          note: '补偿外部移除异常，围栏已释放',
+        },
+      ],
+    };
+    const swapped = await this.repo.compareAndSwap(fenced, released);
+    if (swapped) return { period: released, compensated: false };
+    const latest = await this.repo.load(fenced.periodId);
+    if (latest === null) throw new CompensateActivationError('成员经历不存在');
+    return { period: latest, compensated: latest.status === 'ENTRY_COMPENSATED' };
+  }
+
   async execute(input: CompensateMemberActivationInput): Promise<CompensateMemberActivationResult> {
     const period = await this.repo.load(input.periodId);
     if (period === null) {
@@ -87,9 +122,35 @@ export class CompensateMemberActivationCommand {
       throw new CompensateActivationError('经历缺少生效意图');
     }
 
-    // 方向围栏：激活写入在途时拒绝补偿（异方向互斥；稍后重试）
+    // 方向围栏：激活写入在途时拒绝补偿（异方向互斥）；占用超 15 分钟允许超时接管，
+    // 防止外部写入任务滞留围栏导致补偿无限期 Busy（ORG-027 窗口语义）
     if (activation.phase === ActivationExternalPhase.WRITING) {
-      throw new CompensationBusyError('成员激活写入正在执行，补偿稍后重试');
+      const heldMs =
+        activation.fencedAt !== undefined ? Date.now() - Date.parse(activation.fencedAt) : 0;
+      if (heldMs < 15 * 60 * 1000) {
+        throw new CompensationBusyError('成员激活写入正在执行，补偿稍后重试');
+      }
+      const released: MembershipPeriod = {
+        ...period,
+        version: period.version + 1,
+        activation: { ...activation, phase: ActivationExternalPhase.PENDING },
+        history: [
+          ...period.history,
+          {
+            at: new Date().toISOString(),
+            type: 'ACTIVATION_RETRY_KEPT_PROCESSING',
+            by: 'system',
+            note: '激活围栏超时释放',
+          },
+        ],
+      };
+      const swappedRelease = await this.repo.compareAndSwap(period, released);
+      if (!swappedRelease) {
+        const latest = await this.repo.load(period.periodId);
+        if (latest === null) throw new CompensateActivationError('成员经历不存在');
+        return { period: latest, compensated: latest.status === 'ENTRY_COMPENSATED' };
+      }
+      return this.execute(input);
     }
 
     const now = new Date().toISOString();
@@ -98,7 +159,11 @@ export class CompensateMemberActivationCommand {
       const nextFence: MembershipPeriod = {
         ...period,
         version: period.version + 1,
-        activation: { ...activation, phase: ActivationExternalPhase.COMPENSATING },
+        activation: {
+          ...activation,
+          phase: ActivationExternalPhase.COMPENSATING,
+          fencedAt: now,
+        },
       };
       const swapped = await this.repo.compareAndSwap(period, nextFence);
       if (!swapped) {
@@ -111,12 +176,18 @@ export class CompensateMemberActivationCommand {
 
     // 逐项幂等移除并回读（同一经历段补偿键固定，重复执行安全）
     const idempotencyKey = 'member-activate-compensate:' + period.periodId;
-    const steps = await this.casdoor.removeAllAndReadBack(
-      fenced.clubId,
-      fenced.subjectId,
-      fenced.entryTargets,
-      idempotencyKey,
-    );
+    let steps: Awaited<ReturnType<MembershipCasdoorPort['removeAllAndReadBack']>>;
+    try {
+      steps = await this.casdoor.removeAllAndReadBack(
+        fenced.clubId,
+        fenced.subjectId,
+        fenced.entryTargets,
+        idempotencyKey,
+      );
+    } catch (error) {
+      // 外部移除异常：释放围栏、留尝试痕迹，保持处理中（不假成功；任务可安全重投）
+      return this.releaseOnException(fenced, error);
+    }
     const allConfirmed = steps.length > 0 && steps.every((s) => s.ok && s.confirmed);
 
     const act = fenced.activation as NonNullable<MembershipPeriod['activation']>;
@@ -173,7 +244,7 @@ export class CompensateMemberActivationCommand {
       if (latest === null) throw new CompensateActivationError('成员经历不存在');
       return { period: latest, compensated: latest.status === 'ENTRY_COMPENSATED' };
     }
-    await this.notifications.save({
+    await saveNotificationFact(this.notifications, {
       kind: 'MEMBER_ENTRY_COMPENSATED',
       toUserIds: [fenced.subjectId],
       clubId: fenced.clubId,

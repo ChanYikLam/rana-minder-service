@@ -1185,14 +1185,187 @@ describe('5.2.1 成员经历 MEM-001 · 计划结束不自动卸任（MEM-010/01
     assert.equal(sm.canTransition('ENTRY_COMPENSATED', 'ACTIVATION_PROCESSING'), false);
     assert.equal(sm.isTerminal('HISTORICAL_MEMBER'), true);
     assert.equal(sm.isActive('CURRENT_MEMBER'), true);
-    // 终态换入防护：以过期版本对终态记录的任何提交都失败
+    // 终态换入防护：版本匹配但试图把终态记录改回活跃状态 → TERMINAL 守卫拒绝
     const rig = makeRig();
     const current = await makeCurrentMember(rig);
     await rig.reconcileExternal.execute({ periodId: current.periodId, trustedConfirmed: true });
-    const stale = { ...current, version: current.version + 100, status: 'CURRENT_MEMBER' as const };
-    const swapped = await rig.repo.compareAndSwap(current, stale);
-    assert.equal(swapped, false);
+    const terminalNow = await rig.repo.load(current.periodId);
+    assert.ok(terminalNow !== null && terminalNow.status === 'HISTORICAL_MEMBER');
+    const resurrectAttempt = {
+      ...terminalNow,
+      version: terminalNow.version + 1,
+      status: 'CURRENT_MEMBER' as const,
+    };
+    const swapped = await rig.repo.compareAndSwap(terminalNow!, resurrectAttempt);
+    assert.equal(swapped, false, '终态不可复活（TERMINAL 守卫）');
     const reloaded = await rig.repo.load(current.periodId);
     assert.equal(reloaded?.status, 'HISTORICAL_MEMBER');
+  });
+});
+
+describe('5.2.1 成员经历 MEM-001 · 第二轮修复回归（N1~N4）', () => {
+  it('N4：外部写入抛异常时围栏释放、尝试留痕，保持处理中可安全重投', async () => {
+    const throwing = new StubCasdoorPort();
+    throwing.addAndReadBack = async (): Promise<GroupStepResult[]> => {
+      throw new Error('casdoor connection reset (token redacted)');
+    };
+    const rig = makeRig(throwing as unknown as StubCasdoorPort);
+    const p = await rig.enter.execute(enterInput);
+    const r = await rig.resolveActivation.execute({
+      periodId: p.periodId,
+      deadlineExceeded: false,
+    });
+    assert.equal(r.activated, false);
+    // 围栏已释放（不滞留 WRITING），补偿方向不被永久阻塞
+    assert.equal(r.period.activation?.phase, 'PENDING');
+    assert.equal(r.period.activation?.attemptCount, 1);
+    assert.match(r.period.activation?.lastError ?? '', /connection reset/);
+
+    // 异方向不再 Busy：补偿可立即接管执行
+    const c = await rig.compensate.execute({ periodId: p.periodId });
+    assert.equal(c.compensated, true);
+  });
+
+  it('N4：异方向占用超 15 分钟允许超时接管（未超时仍 Busy）', async () => {
+    const rig = makeRig();
+    const p = await rig.enter.execute(enterInput);
+    const staleFence = {
+      ...p,
+      version: p.version + 1,
+      activation: {
+        ...p.activation!,
+        phase: 'COMPENSATING' as const,
+        fencedAt: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+      },
+    };
+    await rig.repo.compareAndSwap(p, staleFence);
+    // 未超时的占用仍然拒绝（用新 rig 验证）
+    const rig2 = makeRig();
+    const p2 = await rig2.enter.execute(enterInput);
+    const freshFence = {
+      ...p2,
+      version: p2.version + 1,
+      activation: {
+        ...p2.activation!,
+        phase: 'COMPENSATING' as const,
+        fencedAt: new Date().toISOString(),
+      },
+    };
+    await rig2.repo.compareAndSwap(p2, freshFence);
+    await assert.rejects(
+      rig2.resolveActivation.execute({ periodId: p2.periodId, deadlineExceeded: false }),
+      (e: unknown) => e instanceof ActivationBusyError,
+    );
+    // 超时接管：激活解析成功推进到当前成员
+    const r = await rig.resolveActivation.execute({
+      periodId: p.periodId,
+      deadlineExceeded: false,
+    });
+    assert.equal(r.activated, true);
+    assert.equal(r.period.status, 'CURRENT_MEMBER');
+  });
+
+  it('N1：恢复态人工重试续跑全程版本单调递增，收口版本大于重入版本', async () => {
+    const failingThenIntact = new StubCasdoorPort(
+      [],
+      [
+        [
+          {
+            target: { kind: 'CLUB', refId: 'c1' },
+            ok: false,
+            confirmed: false,
+            reason: 'gateway-timeout',
+          },
+        ],
+      ],
+      [true],
+    );
+    const rig = makeRig(failingThenIntact);
+    seedStandard(rig);
+    const current = await makeCurrentMember(rig);
+    await rig.requestDeparture.execute({
+      periodId: current.periodId,
+      requesterId: 'stu1',
+      secondConfirmed: true,
+    });
+    const departing = await rig.approveDeparture.execute({
+      periodId: current.periodId,
+      approverId: 'hr1',
+      action: 'approve',
+      relationSnapshot: [],
+    });
+    const restored = await rig.executeDeparture.execute({
+      periodId: departing.periodId,
+      deadlineExceeded: true,
+    });
+    const restoredVersion = restored.period.version;
+    const retried = await rig.executeDeparture.execute({
+      periodId: departing.periodId,
+      deadlineExceeded: false,
+      manualRetry: true,
+      actorId: 'hr1',
+    });
+    assert.equal(retried.ended, true);
+    // 版本单调：收口版本必须严格大于恢复时版本（N1：此前存在停摆）
+    assert.ok(
+      retried.period.version > restoredVersion,
+      'version=' + retried.period.version + ' restored=' + restoredVersion,
+    );
+    // 重入落座（转换5边）与收口各推进一次版本：恰好 +2
+    assert.equal(retried.period.version - restoredVersion, 2);
+  });
+
+  it('N2：多轮提交-驳回后决定归档链完整保留（不止最后一条）', async () => {
+    const rig = makeRig();
+    seedStandard(rig);
+    let current = await makeCurrentMember(rig);
+    for (let round = 1; round <= 3; round++) {
+      await rig.requestDeparture.execute({
+        periodId: current.periodId,
+        requesterId: 'stu1',
+        secondConfirmed: true,
+      });
+      current = await rig.approveDeparture.execute({
+        periodId: current.periodId,
+        approverId: 'hr1',
+        action: 'reject',
+        rejectionReason: '第' + round + '次驳回原因',
+        relationSnapshot: [],
+      });
+    }
+    // 第 4 次提交后：前 3 轮驳回全部在档
+    await rig.requestDeparture.execute({
+      periodId: current.periodId,
+      requesterId: 'stu1',
+      secondConfirmed: true,
+    });
+    const reloaded = await rig.repo.load(current.periodId);
+    assert.equal(reloaded?.departure?.priorDecisions.length, 3);
+    assert.equal(reloaded?.departure?.priorDecisions[0]?.rejectionReason, '第1次驳回原因');
+    assert.equal(reloaded?.departure?.priorDecisions[2]?.rejectionReason, '第3次驳回原因');
+  });
+
+  it('N3：跨申请周期的通知去重键互不相同（驳回/批准按周期区分）', async () => {
+    const rig = makeRig();
+    seedStandard(rig);
+    let current = await makeCurrentMember(rig);
+    for (let round = 1; round <= 2; round++) {
+      await rig.requestDeparture.execute({
+        periodId: current.periodId,
+        requesterId: 'stu1',
+        secondConfirmed: true,
+      });
+      current = await rig.approveDeparture.execute({
+        periodId: current.periodId,
+        approverId: 'hr1',
+        action: 'reject',
+        rejectionReason: '第' + round + '轮',
+        relationSnapshot: [],
+      });
+    }
+    const facts = await rig.notify.list();
+    const rejectedFacts = facts.filter((f) => f.kind === 'MEMBER_DEPARTURE_REJECTED');
+    assert.equal(rejectedFacts.length, 2, '两轮驳回通知都应落事实（去重键含周期）');
+    assert.notEqual(rejectedFacts[0]?.dedupKey, rejectedFacts[1]?.dedupKey);
   });
 });

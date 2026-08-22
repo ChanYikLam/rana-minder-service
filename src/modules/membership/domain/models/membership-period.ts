@@ -65,6 +65,12 @@ export type ActivationExternalPhase =
 export interface MemberActivationState {
   readonly progress: ActivationProgress;
   readonly phase: ActivationExternalPhase;
+  /**
+   * 围栏占用起始时间（phase != PENDING 时存在）：异方向任务遇占用时，
+   * 超过 15 分钟（ORG-027 自动重试窗口）允许超时释放并接管，防止外部写入
+   * 任务永久滞留导致异方向无限期 Busy。
+   */
+  readonly fencedAt?: string;
   /** 已尝试次数（每次先回读再执行） */
   readonly attemptCount: number;
   /** 最近一次尝试时间 */

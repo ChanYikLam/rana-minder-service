@@ -11,10 +11,15 @@ import {
   DepartureRequestStatus,
 } from '../../domain/models/membership-period';
 import { LastOwnerContinuityPolicy } from '../../../organization/domain/services/last-owner-continuity.policy';
+import { MembershipPeriodStateMachine } from '../../domain/state-machines/membership-period.state-machine';
 import { MembershipPolicy } from '../../domain/services/membership-policy';
 import { InMemoryMembershipAccessPort } from '../../infrastructure/in-memory-stubs';
 import { InMemoryMembershipNotificationPort } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_ACCESS_PORT, MEMBERSHIP_NOTIFICATION_PORT } from '../ports';
+import {
+  MEMBERSHIP_ACCESS_PORT,
+  MEMBERSHIP_NOTIFICATION_PORT,
+  saveNotificationFact,
+} from '../ports';
 import type { MembershipAccessPort } from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
@@ -65,6 +70,7 @@ export class RemoveMemberCommand {
     private readonly policy: MembershipPolicy,
     @Inject(MEMBERSHIP_NOTIFICATION_PORT)
     private readonly notifications: MembershipNotificationPort = new InMemoryMembershipNotificationPort(),
+    private readonly stateMachine: MembershipPeriodStateMachine = new MembershipPeriodStateMachine(),
   ) {}
 
   async execute(input: RemoveMemberInput): Promise<MembershipPeriod> {
@@ -158,6 +164,7 @@ export class RemoveMemberCommand {
         (period.departure.requestStatus === DepartureRequestStatus.REJECTED ||
           period.departure.requestStatus === DepartureRequestStatus.WITHDRAWN)
           ? [
+              ...(period.departure.priorDecisions ?? []),
               {
                 kind: period.departure.kind,
                 requestStatus:
@@ -175,7 +182,7 @@ export class RemoveMemberCommand {
     const updated: MembershipPeriod = {
       ...period,
       version: period.version + 1,
-      status: 'DEPARTURE_PROCESSING', // 转换 5：当前成员 → 退出处理中
+      status: this.stateMachine.transition('CURRENT_MEMBER', 'DEPARTURE_PROCESSING'), // 转换 5
       departure,
       history: [
         ...period.history,
@@ -192,11 +199,11 @@ export class RemoveMemberCommand {
     if (!swapped) {
       throw new RemoveMemberError('IFC-ERR-007', '成员经历已被并发变更，移除受理失败，请重试');
     }
-    await this.notifications.save({
+    await saveNotificationFact(this.notifications, {
       kind: 'MEMBER_REMOVAL_DECIDED',
       toUserIds: [period.subjectId, input.operatorId],
       clubId: period.clubId,
-      dedupKey: 'MEMBER_REMOVAL_DECIDED:' + period.periodId,
+      dedupKey: 'MEMBER_REMOVAL_DECIDED:' + period.periodId + ':v' + period.version,
       title: '成员移除已受理',
       body: '正在级联移除该社团全部部门/职位关系与访问权限；完成后通知。',
     });

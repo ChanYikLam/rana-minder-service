@@ -7,12 +7,17 @@ import type {
 } from '../../domain/models/membership-period';
 import { DepartureExecution, DepartureRequestStatus } from '../../domain/models/membership-period';
 import { LastOwnerContinuityPolicy } from '../../../organization/domain/services/last-owner-continuity.policy';
+import { MembershipPeriodStateMachine } from '../../domain/state-machines/membership-period.state-machine';
 import { MembershipPolicy } from '../../domain/services/membership-policy';
 import {
   InMemoryMembershipAccessPort,
   InMemoryMembershipNotificationPort,
 } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_ACCESS_PORT, MEMBERSHIP_NOTIFICATION_PORT } from '../ports';
+import {
+  MEMBERSHIP_ACCESS_PORT,
+  MEMBERSHIP_NOTIFICATION_PORT,
+  saveNotificationFact,
+} from '../ports';
 import type { MembershipAccessPort } from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
@@ -62,6 +67,7 @@ export class ApproveDepartureCommand {
     private readonly policy: MembershipPolicy,
     @Inject(MEMBERSHIP_NOTIFICATION_PORT)
     private readonly notifications: MembershipNotificationPort = new InMemoryMembershipNotificationPort(),
+    private readonly stateMachine: MembershipPeriodStateMachine = new MembershipPeriodStateMachine(),
   ) {}
 
   async execute(input: ApproveDepartureInput): Promise<MembershipPeriod> {
@@ -136,11 +142,11 @@ export class ApproveDepartureCommand {
           '退出申请已被并发处理（撤回/审批竞争），只一个成功',
         );
       }
-      await this.notifications.save({
+      await saveNotificationFact(this.notifications, {
         kind: 'MEMBER_DEPARTURE_REJECTED',
         toUserIds: [period.subjectId],
         clubId: period.clubId,
-        dedupKey: 'MEMBER_DEPARTURE_REJECTED:' + period.periodId,
+        dedupKey: 'MEMBER_DEPARTURE_REJECTED:' + period.periodId + ':v' + period.version,
         title: '退出申请已驳回',
         body: '原因：' + (input.rejectionReason?.trim() ?? ''),
       });
@@ -166,7 +172,7 @@ export class ApproveDepartureCommand {
     const approved: MembershipPeriod = {
       ...period,
       version: period.version + 1,
-      status: 'DEPARTURE_PROCESSING', // 转换 5：当前成员 → 退出处理中
+      status: this.stateMachine.transition('CURRENT_MEMBER', 'DEPARTURE_PROCESSING'), // 转换 5
       departure,
       history: [
         ...period.history,
@@ -185,11 +191,11 @@ export class ApproveDepartureCommand {
         '退出申请已被并发处理（撤回/审批竞争），只一个成功',
       );
     }
-    await this.notifications.save({
+    await saveNotificationFact(this.notifications, {
       kind: 'MEMBER_DEPARTURE_APPROVED',
       toUserIds: [period.subjectId, input.approverId],
       clubId: period.clubId,
-      dedupKey: 'MEMBER_DEPARTURE_APPROVED:' + period.periodId,
+      dedupKey: 'MEMBER_DEPARTURE_APPROVED:' + period.periodId + ':v' + period.version,
       title: '退出申请已批准',
       body: '正在处理该社团全部部门/职位关系与访问权限的移除。',
     });

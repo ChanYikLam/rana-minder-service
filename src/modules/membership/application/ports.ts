@@ -37,6 +37,21 @@ export interface MembershipNotificationPort {
   list(): Promise<MembershipNotificationFact[]>;
 }
 
+/**
+ * 同事务保存通知事实的兜底封装（IFC-TX-002）：投递事实保存失败不得阻断主事务，
+ * 由生产适配器自行重试/留痕。所有用例统一经此调用。
+ */
+export async function saveNotificationFact(
+  port: MembershipNotificationPort,
+  fact: MembershipNotificationFact,
+): Promise<void> {
+  try {
+    await port.save(fact);
+  } catch {
+    // 失败不阻断主事务；生产适配器负责落告警
+  }
+}
+
 /** DI 令牌（Symbol；与仓库约定一致） */
 export const MEMBERSHIP_ACCESS_PORT = Symbol('MEMBERSHIP_ACCESS_PORT');
 export const MEMBERSHIP_NOTIFICATION_PORT = Symbol('MEMBERSHIP_NOTIFICATION_PORT');

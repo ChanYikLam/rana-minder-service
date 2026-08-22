@@ -50,8 +50,8 @@ export class IllegalMembershipTransitionError extends Error {
 }
 
 /**
- * 转换规则（SRS-SM-MEM-001 §8.1 全部 9 行明细＝8 条状态出边＋处理中自环保持行；
- * 与 README"9 条转换"口径一致——第 3 行为处理中→处理中（失败/重试标志）的自环）：
+ * 转换规则（SRS-SM-MEM-001 §8.1 全部转换；对齐 README"9 条转换"口径：
+ * 状态出边＋两个进行中状态的失败/重试自环保持行）：
  * 1. 非成员/历史成员 → 处理中：由 EnterMembership 新建经历草稿承载；
  * 2. 处理中 → 当前成员：Casdoor 社团＋组合部门全部回读确认；
  * 3. 处理中 → 处理中（失败/重试标志）：15 分钟内失败或响应不确定；
@@ -72,6 +72,7 @@ const TRANSITIONS: Readonly<Record<MembershipPeriodStatus, readonly MembershipPe
     MembershipPeriodStatus.HISTORICAL_MEMBER, // 仅外部直接移除对账收口
   ],
   [MembershipPeriodStatus.DEPARTURE_PROCESSING]: [
+    MembershipPeriodStatus.DEPARTURE_PROCESSING, // 自环：级联未全确认，保持退出处理中
     MembershipPeriodStatus.HISTORICAL_MEMBER,
     MembershipPeriodStatus.CURRENT_MEMBER, // 执行失败恢复（转换 7）
   ],

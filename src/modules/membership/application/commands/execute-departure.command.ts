@@ -12,7 +12,11 @@ import {
   InMemoryMembershipAccessPort,
   InMemoryMembershipNotificationPort,
 } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_ACCESS_PORT, MEMBERSHIP_NOTIFICATION_PORT } from '../ports';
+import {
+  MEMBERSHIP_ACCESS_PORT,
+  MEMBERSHIP_NOTIFICATION_PORT,
+  saveNotificationFact,
+} from '../ports';
 import type { MembershipAccessPort } from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 import { MEMBERSHIP_CASDOOR_PORT } from '../../infrastructure/casdoor-group.port';
@@ -120,7 +124,7 @@ export class ExecuteDepartureCommand {
     if (resumingFromRestore) {
       const reentered: MembershipPeriod = {
         ...basePeriod,
-        version: period.version + 1,
+        version: basePeriod.version + 1,
         status: this.stateMachine.transition('CURRENT_MEMBER', 'DEPARTURE_PROCESSING'),
         history: [
           ...basePeriod.history,
@@ -167,8 +171,8 @@ export class ExecuteDepartureCommand {
       if (remaining.length > 0) {
         const retryingResidual: MembershipPeriod = {
           ...basePeriod,
-          version: period.version + 1,
-          status: 'DEPARTURE_PROCESSING',
+          version: basePeriod.version + 1,
+          status: this.stateMachine.transition('DEPARTURE_PROCESSING', 'DEPARTURE_PROCESSING'),
           hasResidualAnomaly: true, // 残留标记异常；不自动改写外部，继续回读/重试
           departure: {
             ...departure,
@@ -199,8 +203,9 @@ export class ExecuteDepartureCommand {
       };
       const ended: MembershipPeriod = {
         ...basePeriod,
-        version: period.version + 1,
+        version: basePeriod.version + 1,
         status: this.stateMachine.transition(basePeriod.status, 'HISTORICAL_MEMBER'),
+        hasResidualAnomaly: false, // 全量自查通过：残留异常标记清除（N9）
         actualEndAt: now,
         departure: endedDeparture,
         history: [
@@ -223,7 +228,7 @@ export class ExecuteDepartureCommand {
           restoredToCurrent: false,
         };
       }
-      await this.notifications.save({
+      await saveNotificationFact(this.notifications, {
         kind: 'MEMBER_DEPARTURE_COMPLETED',
         toUserIds: [basePeriod.subjectId],
         clubId: basePeriod.clubId,
@@ -255,8 +260,9 @@ export class ExecuteDepartureCommand {
         };
         const restored: MembershipPeriod = {
           ...basePeriod,
-          version: period.version + 1,
+          version: basePeriod.version + 1,
           status: this.stateMachine.transition(basePeriod.status, 'CURRENT_MEMBER'),
+          hasResidualAnomaly: false, // 原关系确认完整：异常标记清除
           departure: restoredDeparture,
           history: [
             ...basePeriod.history,
@@ -273,7 +279,7 @@ export class ExecuteDepartureCommand {
             restoredToCurrent: latest.status === 'CURRENT_MEMBER',
           };
         }
-        await this.notifications.save({
+        await saveNotificationFact(this.notifications, {
           kind: 'MEMBER_DEPARTURE_EXECUTION_FAILED',
           toUserIds: [basePeriod.subjectId],
           clubId: basePeriod.clubId,
@@ -293,8 +299,8 @@ export class ExecuteDepartureCommand {
     // 保持退出处理中：保存尝试痕迹，继续回读/重试
     const retrying: MembershipPeriod = {
       ...basePeriod,
-      version: period.version + 1,
-      status: 'DEPARTURE_PROCESSING',
+      version: basePeriod.version + 1,
+      status: this.stateMachine.transition('DEPARTURE_PROCESSING', 'DEPARTURE_PROCESSING'),
       departure: {
         ...departure,
         attemptCount: departure.attemptCount + 1,

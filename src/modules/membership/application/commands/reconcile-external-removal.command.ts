@@ -4,10 +4,11 @@ import type {
   MembershipPeriod,
   MembershipRelationTarget,
 } from '../../domain/models/membership-period';
+import { MembershipPeriodStateMachine } from '../../domain/state-machines/membership-period.state-machine';
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
 import type { MembershipRepository } from '../../infrastructure/membership-repository';
 import { InMemoryMembershipNotificationPort } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_NOTIFICATION_PORT } from '../ports';
+import { MEMBERSHIP_NOTIFICATION_PORT, saveNotificationFact } from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 
 /** 外部直接移除对账输入（ORG-026/030、MEM-016；受信任外部管理操作触发） */
@@ -59,6 +60,7 @@ export class ReconcileExternalRemovalCommand {
     @Inject(MEMBERSHIP_REPOSITORY) private readonly repo: MembershipRepository,
     @Inject(MEMBERSHIP_NOTIFICATION_PORT)
     private readonly notifications: MembershipNotificationPort = new InMemoryMembershipNotificationPort(),
+    private readonly stateMachine: MembershipPeriodStateMachine = new MembershipPeriodStateMachine(),
   ) {}
 
   async execute(input: ReconcileExternalRemovalInput): Promise<ReconcileExternalRemovalResult> {
@@ -93,7 +95,7 @@ export class ReconcileExternalRemovalCommand {
     const ended: MembershipPeriod = {
       ...period,
       version: period.version + 1,
-      status: 'HISTORICAL_MEMBER', // 转换 8：当前成员 → 历史成员（存在残留时另标异常）
+      status: this.stateMachine.transition('CURRENT_MEMBER', 'HISTORICAL_MEMBER'), // 转换 8（存在残留时另标异常）
       actualEndAt: now,
       hasResidualAnomaly: residuals.length > 0,
       history: [
@@ -129,7 +131,7 @@ export class ReconcileExternalRemovalCommand {
       };
     }
     // 外部变更通知：成员、负责人、人事与超级管理员（ORG-026；收件人由调用方解析传入）
-    await this.notifications.save({
+    await saveNotificationFact(this.notifications, {
       kind: 'MEMBER_EXTERNAL_REMOVAL',
       toUserIds: [ended.subjectId],
       clubId: ended.clubId,

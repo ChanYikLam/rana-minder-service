@@ -12,7 +12,7 @@ import {
 } from '../../domain/models/membership-period';
 import { MembershipPolicy } from '../../domain/services/membership-policy';
 import { InMemoryMembershipNotificationPort } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_NOTIFICATION_PORT } from '../ports';
+import { MEMBERSHIP_NOTIFICATION_PORT, saveNotificationFact } from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
 import type { MembershipRepository } from '../../infrastructure/membership-repository';
@@ -115,7 +115,7 @@ export class RequestDepartureCommand {
       snapshot: [], // 快照在批准时按当时关系落笔（转换 5 原子保存）
       execution: DepartureExecution.PENDING,
       attemptCount: 0,
-      priorDecisions,
+      priorDecisions: [...(existing?.priorDecisions ?? []), ...priorDecisions],
     };
     const updated: MembershipPeriod = {
       ...period,
@@ -131,11 +131,11 @@ export class RequestDepartureCommand {
         '成员经历已被并发变更，提交退出申请失败，请重试',
       );
     }
-    await this.notifications.save({
+    await saveNotificationFact(this.notifications, {
       kind: 'MEMBER_DEPARTURE_REQUESTED',
       toUserIds: [input.requesterId],
       clubId: period.clubId,
-      dedupKey: 'MEMBER_DEPARTURE_REQUESTED:' + period.periodId + ':' + now,
+      dedupKey: 'MEMBER_DEPARTURE_REQUESTED:' + period.periodId + ':v' + period.version,
       title: '退出申请已提交',
       body: '申请已进入待审批；审批完成前成员身份与权限保持不变。',
     });

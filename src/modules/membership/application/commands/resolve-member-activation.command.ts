@@ -6,7 +6,7 @@ import { MembershipPeriodStateMachine } from '../../domain/state-machines/member
 import { MEMBERSHIP_CASDOOR_PORT } from '../../infrastructure/casdoor-group.port';
 import type { MembershipCasdoorPort } from '../../infrastructure/casdoor-group.port';
 import { InMemoryMembershipNotificationPort } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_NOTIFICATION_PORT } from '../ports';
+import { MEMBERSHIP_NOTIFICATION_PORT, saveNotificationFact } from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
 import type { MembershipRepository } from '../../infrastructure/membership-repository';
@@ -86,9 +86,35 @@ export class ResolveMemberActivationCommand {
       throw new ResolveActivationError('经历不在成员生效处理中，不能解析激活');
     }
 
-    // 方向围栏：补偿在途时拒绝激活写入（异方向互斥；稍后重试）
+    // 方向围栏：补偿在途时拒绝激活写入（异方向互斥）；占用超 15 分钟允许超时接管，
+    // 防止外部写入任务滞留围栏导致本方向无限期 Busy（ORG-027 窗口语义）
     if (activation.phase === ActivationExternalPhase.COMPENSATING) {
-      throw new ActivationBusyError('入社补偿正在执行，激活解析稍后重试');
+      const heldMs =
+        activation.fencedAt !== undefined ? Date.now() - Date.parse(activation.fencedAt) : 0;
+      if (heldMs < 15 * 60 * 1000) {
+        throw new ActivationBusyError('入社补偿正在执行，激活解析稍后重试');
+      }
+      const released: MembershipPeriod = {
+        ...period,
+        version: period.version + 1,
+        activation: { ...activation, phase: ActivationExternalPhase.PENDING },
+        history: [
+          ...period.history,
+          {
+            at: new Date().toISOString(),
+            type: 'ACTIVATION_RETRY_KEPT_PROCESSING',
+            by: 'system',
+            note: '补偿围栏超时释放',
+          },
+        ],
+      };
+      const swappedRelease = await this.repo.compareAndSwap(period, released);
+      if (!swappedRelease) {
+        const latest = await this.repo.load(period.periodId);
+        if (latest === null) throw new ResolveActivationError('成员经历不存在');
+        return { period: latest, activated: latest.status === 'CURRENT_MEMBER' };
+      }
+      return this.execute(input);
     }
 
     const now = new Date().toISOString();
@@ -98,7 +124,11 @@ export class ResolveMemberActivationCommand {
       const fenced: MembershipPeriod = {
         ...period,
         version: period.version + 1,
-        activation: { ...activation, phase: ActivationExternalPhase.WRITING },
+        activation: {
+          ...activation,
+          phase: ActivationExternalPhase.WRITING,
+          fencedAt: now,
+        },
       };
       const swapped = await this.repo.compareAndSwap(period, fenced);
       if (!swapped) {
@@ -120,12 +150,18 @@ export class ResolveMemberActivationCommand {
   ): Promise<ResolveMemberActivationResult> {
     const activation = fenced.activation as NonNullable<MembershipPeriod['activation']>;
     const idempotencyKey = 'member-activate:' + fenced.periodId;
-    const steps = await this.casdoor.addAndReadBack(
-      fenced.clubId,
-      fenced.subjectId,
-      fenced.entryTargets,
-      idempotencyKey,
-    );
+    let steps: Awaited<ReturnType<MembershipCasdoorPort['addAndReadBack']>>;
+    try {
+      steps = await this.casdoor.addAndReadBack(
+        fenced.clubId,
+        fenced.subjectId,
+        fenced.entryTargets,
+        idempotencyKey,
+      );
+    } catch (error) {
+      // 外部写入异常：释放围栏、留尝试痕迹，保持处理中（不假成功；任务可安全重投）
+      return this.releaseOnException(fenced, error);
+    }
     const allConfirmed = steps.length > 0 && steps.every((s) => s.ok && s.confirmed);
 
     if (allConfirmed) {
@@ -178,6 +214,42 @@ export class ResolveMemberActivationCommand {
     return this.close(fenced, updated, false);
   }
 
+  /** 外部写入异常兜底：CAS 释放围栏回 PENDING 并留痕；释放失败则以最新态收敛返回 */
+  private async releaseOnException(
+    fenced: MembershipPeriod,
+    error: unknown,
+  ): Promise<ResolveMemberActivationResult> {
+    const act = fenced.activation as NonNullable<MembershipPeriod['activation']>;
+    const reason = sanitizeReason(error instanceof Error ? error.message : String(error));
+    const released: MembershipPeriod = {
+      ...fenced,
+      version: fenced.version + 1,
+      status: 'ACTIVATION_PROCESSING',
+      activation: {
+        ...act,
+        phase: ActivationExternalPhase.PENDING,
+        progress: ActivationProgress.FAILED_PENDING_RETRY,
+        attemptCount: act.attemptCount + 1,
+        lastAttemptAt: new Date().toISOString(),
+        lastError: reason,
+      },
+      history: [
+        ...fenced.history,
+        {
+          at: new Date().toISOString(),
+          type: 'ACTIVATION_RETRY_KEPT_PROCESSING',
+          by: 'system',
+          note: '外部写入异常，围栏已释放',
+        },
+      ],
+    };
+    const swapped = await this.repo.compareAndSwap(fenced, released);
+    if (swapped) return { period: released, activated: false };
+    const latest = await this.repo.load(fenced.periodId);
+    if (latest === null) throw new ResolveActivationError('成员经历不存在');
+    return { period: latest, activated: latest.status === 'CURRENT_MEMBER' };
+  }
+
   /** 收口提交：单胜者 CAS；竞争失败重载最新并以最终状态推导 activated（不假成功） */
   private async close(
     current: MembershipPeriod,
@@ -193,7 +265,7 @@ export class ResolveMemberActivationCommand {
     }
     const activated = finalPeriod.status === 'CURRENT_MEMBER';
     if (activated && confirmedNow) {
-      await this.notifications.save({
+      await saveNotificationFact(this.notifications, {
         kind: 'MEMBER_ACTIVATED',
         toUserIds: [finalPeriod.subjectId],
         clubId: finalPeriod.clubId,

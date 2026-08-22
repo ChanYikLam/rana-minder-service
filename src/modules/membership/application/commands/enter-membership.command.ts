@@ -11,7 +11,7 @@ import { MembershipPeriodStateMachine } from '../../domain/state-machines/member
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
 import type { MembershipRepository } from '../../infrastructure/membership-repository';
 import { InMemoryMembershipNotificationPort } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_NOTIFICATION_PORT } from '../ports';
+import { MEMBERSHIP_NOTIFICATION_PORT, saveNotificationFact } from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 
 /** 进入成员经历输入（SRS-SM-MEM-001 转换 1；REC-026、JNT-016、MEM-007/018） */
@@ -123,7 +123,7 @@ export class EnterMembershipCommand {
     // 唯一约束在保存路径内原子校验：并发进入只一个成功（IFC-ERR-009）
     await this.repo.save(period);
     // 转换 1 收口通知事实：通知本人与相关管理员进入成员生效处理中（IFC-TX-002）
-    await this.notifications.save({
+    await saveNotificationFact(this.notifications, {
       kind: 'MEMBER_ENTRY_STARTED',
       toUserIds: [input.subjectId],
       clubId: input.clubId,
