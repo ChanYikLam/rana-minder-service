@@ -28,9 +28,7 @@ import { PostgresRoutineInvitationRepository } from './infrastructure/postgres-i
 import { CASDOOR_RELATION_PORT } from './infrastructure/casdoor-relation-port';
 import { OrgBackedCasdoorRelationPort } from './infrastructure/org-backed-casdoor-relation';
 import { OrganizationModule } from '../organization/module';
-import {
-  GROUP_MAPPING_REGISTRY,
-} from '../organization/application/ports';
+import { GROUP_MAPPING_REGISTRY } from '../organization/application/ports';
 import { CasdoorModule } from '../../platform/casdoor/module';
 import { IdentityModule } from '../identity/identity.module';
 import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
@@ -38,9 +36,7 @@ import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import { INVITATION_AUTH_SESSION_PROVIDER } from './interfaces/nest/invitation-auth-session';
 import { InvitationAuthGuard } from './interfaces/nest/invitation-auth.guard';
 import { InvitationNestController } from './interfaces/nest/invitation.nest.controller';
-import {
-  CASDOOR_WRITE_PORT,
-} from '../../platform/casdoor/contracts/ports';
+import { CASDOOR_WRITE_PORT } from '../../platform/casdoor/contracts/ports';
 
 /**
  * 领域模块：邀请与成员激活（4.5，SRS-SM-INV-001、SRS-SM-MEM-004）。

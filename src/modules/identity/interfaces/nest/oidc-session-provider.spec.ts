@@ -8,9 +8,7 @@ import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
 import type { Request } from 'express';
 
-import {
-  OidcAuthSessionProvider,
-} from './oidc-session-provider';
+import { OidcAuthSessionProvider } from './oidc-session-provider';
 
 const secret = new TextEncoder().encode('test-secret-32-bytes-minimum!');
 

@@ -21,9 +21,7 @@ import { OrganizationModule } from '../organization/module';
 import { IdentityModule } from '../identity/identity.module';
 import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
 import { adaptSessionProvider } from '../../shared/adapt-session-provider';
-import {
-  CURRENT_PERMISSIONS_PORT,
-} from '../organization/application/ports';
+import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
 import { DB_ADAPTER } from '../../adapters/tokens';
 
 import {
