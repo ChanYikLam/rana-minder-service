@@ -30,11 +30,18 @@ export class StatusPageForbiddenError extends Error {
 }
 
 export interface StatusPageAuthorizer {
+  /** 同步判断接口：无异步核验时直接抛/通过。 */
   assertSuperAdmin(actor: StatusPageActor | undefined): void;
+  /** 异步核验接口：接入真实超管判定（T5）后使用，返回 Promise。 */
+  assertSuperAdminAsync(actor: StatusPageActor | undefined): Promise<void>;
 }
 
 export class RejectAllStatusPageAuthorizer implements StatusPageAuthorizer {
   assertSuperAdmin(_actor: StatusPageActor | undefined): void {
+    throw new StatusPageForbiddenError();
+  }
+
+  async assertSuperAdminAsync(_actor: StatusPageActor | undefined): Promise<void> {
     throw new StatusPageForbiddenError();
   }
 }
@@ -42,5 +49,49 @@ export class RejectAllStatusPageAuthorizer implements StatusPageAuthorizer {
 export class AlwaysAllowStatusPageAuthorizer implements StatusPageAuthorizer {
   assertSuperAdmin(_actor: StatusPageActor | undefined): void {
     // 仅用于本地开发/集成测试；不得进入真实身份环境。
+  }
+
+  async assertSuperAdminAsync(_actor: StatusPageActor | undefined): Promise<void> {
+    // 仅用于本地开发/集成测试；不得进入真实身份环境。
+  }
+}
+
+/**
+ * 真实超管判定授权器（T5）。
+ *
+ * 委托 identity/authorization 的 SUPER_ADMIN_VERIFIER 核验当前请求主体是否为
+ * 有效超管（ADR-011 §6.3 / SEC-*）。核验器 fail-closed：无法核验时一律拒绝。
+ */
+export interface SuperAdminVerifierPortLike {
+  isSuperAdmin(subjectId: string): Promise<boolean>;
+}
+
+export class IdentityStatusPageAuthorizer implements StatusPageAuthorizer {
+  constructor(private readonly verifier: SuperAdminVerifierPortLike) {}
+
+  assertSuperAdmin(actor: StatusPageActor | undefined): void {
+    if (!actor?.userId) {
+      throw new StatusPageForbiddenError();
+    }
+    // 同步路径不做异步核验：避免误放行，保守拒绝并提示走异步接口。
+    throw new StatusPageForbiddenError();
+  }
+
+  async assertSuperAdminAsync(actor: StatusPageActor | undefined): Promise<void> {
+    if (!actor?.userId) {
+      throw new StatusPageForbiddenError();
+    }
+    try {
+      const ok = await this.verifier.isSuperAdmin(actor.userId);
+      if (!ok) {
+        throw new StatusPageForbiddenError();
+      }
+    } catch (err) {
+      // 核验器异常/不可用：按 fail-closed 拒绝，不向状态页暴露内部错误（最小披露）。
+      if (err instanceof StatusPageForbiddenError) {
+        throw err;
+      }
+      throw new StatusPageForbiddenError();
+    }
   }
 }

@@ -60,6 +60,18 @@
 - 定位说明：`CreateNotificationFactCommand` 是被各领域命令在本事务内调用的事务能力，不是独立公开命令；站内信/邮件/恢复补投由 job 模块编排调用本模块渠道命令，任务执行前仍复核事实状态与渠道资格（IFC-CMD-005）。
 - 审计与脱敏：业务审计引用通知事实，渠道尝试独立审计；失败信息、正文与发信密钥不得写入运行日志或普通审计（AUD-003、需求发现 08）。
 
+## 4.3.3 可选邮件渠道
+
+> 更新日期：2026-08-21
+
+- **邮件为附加渠道（NTF-004）**：`DispatchOptionalEmailCommand` 编排"先站内信、后可选邮件"——无论邮件是否发送，站内信呈现必须创建（权威记录，邮件不能替代站内信）；录取结果等 8 类学生权益事件允许邮件且默认开启；人工发布可传 `skipEmailThisTime` 取消本次邮件，自动通知使用活动配置。
+- **资格链（NTF-004/006/007）**：事件目录 → 本次取消 → 平台统一停用（`PlatformEmailSuspensionStore`，超管按类停用）→ 社团策略（`ClubEmailPolicyStore`，负责人/人事按活动或类型关闭，活动粒度覆盖类型粒度）→ 用户偏好（学生可关普通业务邮件；邮箱验证/变更/安全通知为受保护类别 `PROTECTED_EMAIL_CATEGORIES`，不在偏好模型、不可关闭）→ 邮箱已验证 → 发信账号有效。任一层关闭即只发站内信并记录跳过原因。
+- **社团发信密钥（NTF-006）**：`SaveEmailConfigCommand`/`TestEmailConfigCommand`/`RotateEmailKeyCommand`——每个社团独立配置（平台配置用保留键 `__platform__`），不能借用（发送前按作用域解析本社团/平台账号）；密钥 AES-256-GCM 加密落库（`AesGcmEmailSecretCipher`，主密钥取 `EMAIL_SECRET_CIPHER_KEY`），视图只回显 `secretConfigured`＋12 位指纹，永不回显明文；只能重填或轮换（轮换清除旧密文并置 `verified=false`）；关键信息（主机/账号/端口/密钥）任何变更都重置验证状态，必须测试邮件通过后才启用；全部配置变化写特权审计（不含密钥）。权限：社团侧 `club:email:config` 或超管（人事/部门负责人无权查看或修改），平台侧仅超管。
+- **邮件内容与失败（NTF-007）**：内容经模板管道渲染，只携带收件学生本人必要信息（白名单变量自动转义，不读取报名表/评语/他生数据）；无附件、无免登录令牌。临时失败指数退避重试（2^N 分钟封顶 6 小时）；明确退信立即永久失败；连续失败自首次失败起 24 小时停止重试。`MarkPermanentFailureCommand` 在永久失败后以站内信提示用户（去重键幂等）并写特权审计通知管理员；邮件失败不回滚业务与站内信。
+- **模板与安全（NTF-005）**：平台默认模板由超管维护（内置 8 类安全种子）；社团各级管理员基于默认模板改文字（保存前强制 `sanitizeEmailHtml` 白名单净化＋`validateTemplateSafety` 校验，禁止脚本/表单/iframe/自动跳转/外链 JS/CSS/危险协议与头注入，未通过拒绝保存 IFC-ERR-011）；`EmailTemplateResolver` 解析顺序：社团自定义（安全）→ 平台默认 → 内置最小兜底，社团模板失效自动回退平台安全默认模板；支持预览（草稿同样过安全校验）、测试邮件、版本保存与回滚（`rollbackToVersion` 生成新版本保持版本链完整）。
+- **发信署名与回复地址（NTF-008/009）**：`resolveSenderIdentity` 按作用域解析——平台/联合事件用平台展示名＋平台账号，社团独立事件用该社团展示名＋该社团账号；模板出现 From/Sender/Reply-To/Bcc/Cc 声明即判定越权（`findIdentityOverrideAttempts`），HTML 模板不能覆盖发件人身份；回复地址固定等于实际发信账号（`EmailSendInput.replyTo === fromAddress`，适配器不得接受其他值）；历史投递保留发送时身份快照（渠道尝试 `senderIdentity`）。
+- **HTTP 面（接口清单 §14.4/§15.9）**：org 域 email-config GET/POST/test/rotate-key（脱敏＋权限）、org preferences GET/POST（社团级按类型开关）、email-templates save/preview/test/rollback；admin 域 email-config GET/POST/test/rotate-key、templates 目录、email-outbox 最近 50 条只读（`findRecentEmailAttempts`）。会话新增服务端解析的 `permissions`/`isPlatformAdmin`（fail-closed：未提供视为空集）。
+
 ## 典型调用链
 
 权益领域命令（如录取结论发布）-> 同一本地事务原子保存业务结果＋通知事实＋收件人快照＋去重键（第 2 类边界，任一失败整体回滚）-> 站内信任务投递并创建唯一呈现记录 -> 邮件资格判定通过时创建渠道任务与模板快照 -> 发送后回读查询结果：临时失败转失败重试，明确退信或连续失败 24 小时转永久失败并站内信提示用户、通知管理员；恢复补投按原事件时间排队投递（IFC-NTF-001）。
