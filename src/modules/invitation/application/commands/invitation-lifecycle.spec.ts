@@ -33,6 +33,9 @@ class StubCasdoorPort implements CasdoorRelationPort {
     }
     return next;
   }
+  async writeAndReadBackRelations(): Promise<{ groupConfirmed: boolean; departmentConfirmed: boolean }> {
+    return { groupConfirmed: true, departmentConfirmed: true };
+  }
 }
 
 const makeRig = () => {
