@@ -76,6 +76,16 @@ export class DecideCorrectionCommand {
     this.policy.assertNotSelfDecision(input.decider.principalId, correction.authorId);
     // 决定必填原因（驳回必填；批准为变更原因）
     this.policy.assertReason(input.reason);
+    // 批准须提供原值/新值（只追加；AUD-001），避免空串入库
+    if (
+      input.approve &&
+      (input.oldValue === undefined ||
+        input.oldValue.trim().length === 0 ||
+        input.newValue === undefined ||
+        input.newValue.trim().length === 0)
+    ) {
+      throw new DecideCorrectionError('IFC-ERR-005', '批准须填写原值和新值');
+    }
     // 幂等/终态：相同决定 → 返回原结果；不同决定 → 终态不可覆盖（AUD-002）
     if (
       correction.status === CorrectionStatus.APPROVED ||
@@ -216,7 +226,8 @@ export class MarkOverdueCommand {
       history: [...correction.history, { at: now, type: 'MARKED_OVERDUE', by: 'system' }],
     };
     if (!(await this.repo.compareAndSwap(correction, overdue))) {
-      return correction; // 与决定竞争失败
+      // 与决定/撤回竞争失败：返回真实最新状态（避免把旧 PENDING 版本误当结果）
+      return this.repo.load(input.correctionId);
     }
     return overdue;
   }

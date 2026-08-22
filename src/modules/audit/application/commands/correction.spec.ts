@@ -279,6 +279,7 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
       /期望修正不能为空/,
     );
     await assert.rejects(rig.save.execute({ ...draftInput, authorId: '' }), /缺少记录原作者/);
+    await assert.rejects(rig.save.execute({ ...draftInput, applicantId: '' }), /缺少提交人/);
   });
 
   it('提交用版本 CAS：并发提交只一个成功，另一并发幂等返回待处理', async () => {
@@ -307,5 +308,48 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
       objectiveDescription: '姓名错误',
     });
     assert.equal(result.status, CorrectionStatus.PENDING);
+  });
+
+  it('批准须提供原值/新值：缺省时拒绝（IFC-ERR-005）', async () => {
+    const rig = makeRig();
+    const draft = await rig.save.execute(draftInput);
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
+    await assert.rejects(
+      rig.decide.execute({
+        correctionId: draft.correctionId,
+        decider: leader,
+        approve: true,
+        reason: '确属笔误',
+      }),
+      /批准须填写原值和新值/,
+    );
+  });
+
+  it('逾期任务与决定并发竞争失败时返回真实最新状态', async () => {
+    const rig = makeRig();
+    const draft = await rig.save.execute(draftInput);
+    await rig.submit.execute({
+      correctionId: draft.correctionId,
+      applicantId: 'stu1',
+      objectiveDescription: '姓名错误',
+    });
+    const pending = (await rig.repo.load(draft.correctionId))!;
+    // 并发先决定（推进到 APPROVED）
+    await rig.decide.execute({
+      correctionId: draft.correctionId,
+      decider: leader,
+      approve: true,
+      reason: '确属笔误',
+      oldValue: '张四',
+      newValue: '张三',
+    });
+    // 逾期任务用旧版本 CAS 失败 → 返回真实最新状态（APPROVED）而非旧 PENDING
+    const result = await rig.markOverdue.execute({ correctionId: draft.correctionId });
+    assert.equal(result!.status, CorrectionStatus.APPROVED);
+    assert.equal(pending.status, CorrectionStatus.PENDING); // 旧版本未变
   });
 });

@@ -72,6 +72,9 @@ export class SaveCorrectionDraftCommand {
     if (input.authorId.length === 0) {
       throw new CorrectionCommandError('IFC-ERR-005', '缺少记录原作者');
     }
+    if (input.applicantId.length === 0) {
+      throw new CorrectionCommandError('IFC-ERR-005', '缺少提交人');
+    }
     const now = new Date().toISOString();
     const correction: Correction = {
       correctionId: randomUUID(),

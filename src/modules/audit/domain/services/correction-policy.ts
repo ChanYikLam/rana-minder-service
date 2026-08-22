@@ -83,8 +83,12 @@ export class CorrectionPolicy {
       // 无负责人/人事处理角色（含仅部门负责人角色）不能处理正式纠错
       throw new CorrectionForbiddenError('仅社团负责人/人事可处理纠错');
     }
-    // 无单一作者共同事实：任一参与社团负责人/人事可处理
+    // 无单一作者共同事实（如联合排期）：任一参与社团负责人/人事可处理（AUD-010）
     if (COMMON_FACT_OBJECT_TYPES.includes(target.objectType)) {
+      // 仍需来自某参与社团（至少提供 clubId），避免无社团归属的负责人任意放行
+      if (decider.clubId === undefined || decider.clubId.length === 0) {
+        throw new CorrectionForbiddenError('跨社团改写他人记录');
+      }
       return;
     }
     // 本社团记录：负责人/人事可处理
