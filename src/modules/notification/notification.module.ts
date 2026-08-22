@@ -68,6 +68,9 @@ import {
   CURRENT_PERMISSIONS_PORT,
 } from '../organization/application/ports';
 import { OrganizationModule } from '../organization/module';
+import { IdentityModule } from '../identity/identity.module';
+import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
+import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import {
   CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
   CLUB_EMAIL_POLICY_STORE,
@@ -88,7 +91,7 @@ import {
 } from './tokens';
 
 @Module({
-  imports: [OrganizationModule],
+  imports: [OrganizationModule, IdentityModule],
   controllers: [NotificationController],
   providers: [
     // 应用命令
@@ -187,7 +190,8 @@ import {
     // 开发联调可在测试/独立配置中绑定可信边界的会话实现）
     {
       provide: NOTIFICATION_AUTH_SESSION_PROVIDER,
-      useClass: RejectAllNotificationAuthSessionProvider,
+      useFactory: (identitySession) => adaptSessionProvider(identitySession),
+      inject: [AUTH_SESSION_PROVIDER],
     },
   ],
   exports: [
