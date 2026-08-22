@@ -27,7 +27,8 @@
  *    config
  * 4. 适配：adapters（casdoor / db / mail / storage）受 DEP-Q-001/002 锁定后接入
  *
- * 当前已接入：OrganizationModule、TasksModule、FileModule、AdaptersModule、FormModule。
+ * 当前已接入：OrganizationModule、TasksModule、FileModule、AdaptersModule、FormModule、
+ * NotificationModule、InvitationModule、MembershipModule（5.2.1 成员经历）。
  * 任何在此处接人的 module 不得越过 ADR-002 的状态机唯一责任与 ADR-003 的本地原子
  * 提交边界。
  */
@@ -48,6 +49,7 @@ import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
 import { NotificationModule } from './modules/notification';
 import { InvitationModule } from './modules/invitation/module';
+import { MembershipModule } from './modules/membership/module';
 
 @Module({
   imports: [
@@ -65,6 +67,7 @@ import { InvitationModule } from './modules/invitation/module';
     FormModule,
     NotificationModule,
     InvitationModule,
+    MembershipModule,
   ],
   controllers: [],
   providers: [],
