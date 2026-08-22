@@ -872,7 +872,11 @@ export class NotificationController {
    */
   private senderScopeIdFromIdentity(senderIdentity: string | null): string | null {
     if (!senderIdentity || senderIdentity === 'platform') return null;
-    if (senderIdentity.includes('<') || senderIdentity.includes('>') || senderIdentity.includes('@')) {
+    if (
+      senderIdentity.includes('<') ||
+      senderIdentity.includes('>') ||
+      senderIdentity.includes('@')
+    ) {
       return null;
     }
     return senderIdentity;

@@ -176,10 +176,7 @@ describe('MarkPermanentFailureCommand（NTF-007 停止重试与提示义务）',
       '受影响收件人必须收到站内信提示',
     );
     const noticeB = await inbox.listForUser('student-b', { includeHidden: true }, null, 10);
-    assert.ok(
-      !noticeB.some((p) => p.eventType === 'system'),
-      '未受影响收件人不得收到提示',
-    );
+    assert.ok(!noticeB.some((p) => p.eventType === 'system'), '未受影响收件人不得收到提示');
   });
 
   it('重复执行幂等：不产生重复站内信提示', async () => {
