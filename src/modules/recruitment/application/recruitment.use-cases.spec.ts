@@ -305,4 +305,56 @@ describe('recruitment application layer (REC-001~004)', () => {
       { code: 'REC_PRECONDITION' },
     );
   });
+
+  it('报名截止（超过活动 endDate）后拒绝新报名', async () => {
+    auth.manageAllowed = true;
+    auth.submitAllowed = true;
+
+    const activityId = 'act-deadline';
+    await new DefaultCreateRecruitmentActivityUseCase(repo, auth).execute({
+      clubId: CLUB_ID,
+      title: '秋招',
+      description: null,
+      endDate: new Date('2026-01-15T00:00:00Z'),
+      actor: ACTOR,
+      now: NOW,
+      id: activityId,
+    });
+    const activity = RecruitmentActivity.fromSnapshot((await repo.loadActivity(activityId))!);
+    assert.ok(activity.open(new DefaultRecruitmentActivityStateMachine(), NOW));
+    await repo.saveActivity(activity.toSnapshot());
+    await new DefaultOpenApplicationChannelUseCase(repo, auth).execute({
+      activityId,
+      actor: ACTOR,
+      now: NOW,
+      id: 'ch-deadline',
+    });
+
+    form.seed({ id: 'sub-d', status: 'SUBMITTED', submittedBy: APPLICANT });
+    // NOW = 2026-01-01，活动 endDate = 2026-01-15，尚未截止，可提交
+    await new DefaultSubmitApplicationUseCase(repo, auth, form).execute({
+      activityId,
+      channelId: 'ch-deadline',
+      applicantId: APPLICANT,
+      departmentChoices: ['dept-a'],
+      formRef: { formId: FORM_ID, submissionId: 'sub-d', versionNumber: 1 },
+      actor: APPLICANT,
+      now: NOW,
+    });
+
+    // 截止后（now 晚于 endDate）拒绝新提交
+    await assert.rejects(
+      () =>
+        new DefaultSubmitApplicationUseCase(repo, auth, form).execute({
+          activityId,
+          channelId: 'ch-deadline',
+          applicantId: 'applicant-2',
+          departmentChoices: ['dept-a'],
+          formRef: { formId: FORM_ID, submissionId: 'sub-d', versionNumber: 1 },
+          actor: 'applicant-2',
+          now: new Date('2026-02-01T00:00:00Z'),
+        }),
+      { code: 'REC_PRECONDITION' },
+    );
+  });
 });
