@@ -194,7 +194,8 @@ export class CompensateMemberActivationCommand {
 
     const act = fenced.activation as NonNullable<MembershipPeriod['activation']>;
     if (!allConfirmed) {
-      // 补偿未确认：保持处理中（调用方进入高优先级异常），绝不假成功；释放围栏
+      // 补偿未确认：置失败/重试标志并保持处理中（调用方进入高优先级异常），
+      // 绝不假成功；释放围栏；失败原因脱敏后落库（与 resolve/异常路径口径一致）
       const firstFailure = steps.find((s) => !(s.ok && s.confirmed));
       const updated: MembershipPeriod = {
         ...fenced,
@@ -203,9 +204,10 @@ export class CompensateMemberActivationCommand {
         activation: {
           ...act,
           phase: ActivationExternalPhase.PENDING,
+          progress: ActivationProgress.FAILED_PENDING_RETRY,
           attemptCount: act.attemptCount + 1,
           lastAttemptAt: now,
-          lastError: firstFailure?.reason ?? 'compensation-readback-not-confirmed',
+          lastError: sanitizeReason(firstFailure?.reason ?? 'compensation-readback-not-confirmed'),
         },
         history: [
           ...fenced.history,

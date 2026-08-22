@@ -1369,3 +1369,33 @@ describe('5.2.1 成员经历 MEM-001 · 第二轮修复回归（N1~N4）', () =>
     assert.notEqual(rejectedFacts[0]?.dedupKey, rejectedFacts[1]?.dedupKey);
   });
 });
+
+describe('5.2.1 成员经历 MEM-001 · 补偿未确认分支口径（MR 评审回归）', () => {
+  it('补偿未确认：lastError 脱敏落库且 progress 置失败/重试标志（与 resolve/异常路径一致）', async () => {
+    const stuck = new StubCasdoorPort(
+      [],
+      [
+        [
+          { target: { kind: 'CLUB', refId: 'c1' }, ok: true, confirmed: true },
+          {
+            target: { kind: 'DEPARTMENT', refId: 'd1' },
+            ok: true,
+            confirmed: false,
+            reason: 'casdoor 500 token=abc123 secret=xyz readback-miss',
+          },
+        ],
+      ],
+    );
+    const rig = makeRig(stuck);
+    const p = await rig.enter.execute(enterInput);
+    const r = await rig.compensate.execute({ periodId: p.periodId });
+    assert.equal(r.compensated, false);
+    assert.equal(r.period.status, 'ACTIVATION_PROCESSING');
+    // ① 脱敏：token/secret 值不得出现在 lastError
+    const lastError = r.period.activation?.lastError ?? '';
+    assert.doesNotMatch(lastError, /abc123|xyz/);
+    assert.match(lastError, /\[redacted\]/);
+    // ② 失败/重试标志与 resolve/releaseOnException 口径一致
+    assert.equal(r.period.activation?.progress, 'FAILED_PENDING_RETRY');
+  });
+});
