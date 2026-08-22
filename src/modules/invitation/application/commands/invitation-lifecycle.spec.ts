@@ -13,6 +13,8 @@ import { ResolveActivationCommand } from './resolve-activation.command';
 import { InvitationStatusQuery } from '../queries/invitation-status.query';
 import { InvitationStateMachine } from '../../domain/state-machines/invitation-state-machine';
 import { InvitationPolicy } from '../../domain/services/invitation-policy';
+import { InvitationKind } from '../../domain/models/invitation';
+import type { Invitation } from '../../domain/models/invitation';
 import type {
   CasdoorRelationPort,
   CasdoorRelationResult,
@@ -225,6 +227,8 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
     assert.equal(fresh.status, 'PENDING');
     assert.notEqual(fresh.invitationId, inv.invitationId);
     assert.equal(fresh.history[0].note, `reissue-of:${inv.invitationId}`);
+    // 重发强引用（REC-024）：新邀请通过 reissuedFromId 强关联被重发的旧邀请
+    assert.equal(fresh.reissuedFromId, inv.invitationId);
     // 旧邀请保留（REJECTED 不修改）
     const old = await rig.repo.load(inv.invitationId);
     assert.equal(old!.status, 'REJECTED');
@@ -245,6 +249,61 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
       }),
       /不可重发/,
     );
+  });
+
+  it('仓储幂等约束：并发重复保存 PENDING 时原子失败（模拟 PostgreSQL 唯一索引，IFC-ERR-009）', async () => {
+    const repo = new InMemoryInvitationRepository();
+    // 先保存一条 PENDING
+    const existing: Invitation = {
+      invitationId: 'i-1',
+      kind: InvitationKind.RECRUIT_OFFER,
+      inviteeId: 'stu1',
+      clubId: 'c1',
+      issuerId: 'hr1',
+      decisionRef: 'dec-1',
+      reissuedFromId: null,
+      status: 'PENDING',
+      version: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      acceptedAt: null,
+      activation: null,
+      history: [],
+    };
+    await repo.save(existing);
+    // 另一条同社团同对象 PENDING：即使绕过 findPending 前置检查，save 也须原子失败
+    const duplicate: Invitation = { ...existing, invitationId: 'i-2', version: 1 };
+    await assert.rejects(repo.save(duplicate), /IFC-ERR-009/);
+  });
+
+  it('接受幂等：CAS 竞争失败但已被并发抢先接受时返回已接受结果（不误报 IFC-ERR-007）', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    // 模拟：先由另一请求成功接受（推进仓储到 ACCEPTED）
+    await rig.accept.execute({
+      invitationId: inv.invitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+    });
+    // 构造一个 compareAndSwap 恒失败但 load 返回最新 ACCEPTED 的仓储，模拟并发竞争
+    class ConcurrentAcceptRepo extends InMemoryInvitationRepository {
+      override async compareAndSwap(): Promise<boolean> {
+        return false; // 模拟本请求 CAS 竞争失败
+      }
+    }
+    const repo = new ConcurrentAcceptRepo();
+    const loaded = await rig.repo.load(inv.invitationId);
+    await repo.save(loaded!);
+    const sm = new InvitationStateMachine();
+    const policy = new InvitationPolicy();
+    const accept = new AcceptInvitationCommand(repo, policy, sm);
+    // 已接受非空（仓储中已存在一条）不会触发 save 的 PENDING 约束，重载返回 ACCEPTED
+    const out = await accept.execute({
+      invitationId: inv.invitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+    });
+    assert.equal(out.status, 'ACCEPTED'); // 幂等：返回已接受结果，不抛错
   });
 
   it('激活解析：回读确认 → 已生效；15 分钟仍失败 → 同步失败待重试（保持已接受、成员未生效）', async () => {

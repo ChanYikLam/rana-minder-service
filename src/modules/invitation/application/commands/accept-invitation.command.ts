@@ -79,7 +79,13 @@ export class AcceptInvitationCommand {
     };
     const swapped = await this.repo.compareAndSwap(invitation, accepted);
     if (!swapped) {
-      // 与撤回/过期/强制失效竞争：单胜者失败 → 不改变
+      // 单胜者失败（与其他接受请求或撤回/过期/强制失效竞争）。
+      // 重载判断最新状态：若已被并发请求抢先接受，则返回已接受结果（幂等），
+      // 而非误报“并发变更”错误；否则才判定为真正的状态冲突。
+      const latest = await this.repo.load(input.invitationId);
+      if (latest !== null && latest.status === 'ACCEPTED') {
+        return latest;
+      }
       throw new AcceptInvitationError('IFC-ERR-007', '邀请状态已被并发变更，接受失败');
     }
     return accepted;

@@ -73,6 +73,7 @@ export class CreateInvitationCommand {
       clubId: input.clubId,
       issuerId: input.issuerId,
       decisionRef: input.decisionRef,
+      reissuedFromId: null, // 首次创建：无重发来源
       status: this.stateMachine.transition('NEW', 'PENDING'),
       version: 1,
       createdAt: now,
@@ -81,7 +82,16 @@ export class CreateInvitationCommand {
       activation: null,
       history: [created],
     };
-    await this.repo.save(invitation);
+    try {
+      // 并发兜底：仓储在保存 PENDING 时强制执行“同社团同对象最多一份待处理”
+      // 唯一约束（模拟 PostgreSQL 部分唯一索引），防止并发创建击穿幂等（IFC-ERR-009）。
+      await this.repo.save(invitation);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('IFC-ERR-009')) {
+        throw new CreateInvitationError('IFC-ERR-009', '同社团同对象已存在待处理邀请');
+      }
+      throw err;
+    }
     return invitation;
   }
 }

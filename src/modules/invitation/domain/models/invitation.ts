@@ -50,6 +50,12 @@ export interface Invitation {
   readonly issuerId: string;
   /** 结论关联（已复核部门录取决定；REC-045） */
   readonly decisionRef: string | null;
+  /**
+   * 重发来源（REC-024）：若为重发产生的新邀请，记录被重发的旧邀请 id（强引用）。
+   * 与 history 中的 `reissue-of:` note 弱关联不同，此字段建立可查询的强引用，
+   * 便于追溯“同一录取对象的重发链”；普通首次创建为 null。
+   */
+  readonly reissuedFromId: string | null;
   /** 当前状态 */
   readonly status: InvitationStatus;
   /** 版本（单胜者竞争：接受/撤回/过期比较并交换） */

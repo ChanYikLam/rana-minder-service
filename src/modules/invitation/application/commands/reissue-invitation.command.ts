@@ -73,6 +73,7 @@ export class ReissueInvitationCommand {
       clubId: old.clubId,
       issuerId: input.issuerId,
       decisionRef: old.decisionRef,
+      reissuedFromId: old.invitationId, // 强引用被重发的旧邀请（REC-024 重发链）
       status: this.stateMachine.transition('NEW', 'PENDING'),
       version: 1,
       createdAt: now,
@@ -88,7 +89,16 @@ export class ReissueInvitationCommand {
         },
       ],
     };
-    await this.repo.save(fresh);
+    try {
+      // 并发兜底：仓储保存 PENDING 时强制执行唯一约束（模拟 PostgreSQL 部分唯一索引），
+      // 防止并发重发击穿“同社团同对象最多一份待处理”幂等（IFC-ERR-009）。
+      await this.repo.save(fresh);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('IFC-ERR-009')) {
+        throw new ReissueInvitationError('IFC-ERR-009', '同社团同对象已存在待处理邀请');
+      }
+      throw err;
+    }
     return fresh;
   }
 }
