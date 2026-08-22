@@ -268,10 +268,7 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
       rig.save.execute({ ...draftInput, expectedCorrection: '  ' }),
       /期望修正不能为空/,
     );
-    await assert.rejects(
-      rig.save.execute({ ...draftInput, authorId: '' }),
-      /缺少记录原作者/,
-    );
+    await assert.rejects(rig.save.execute({ ...draftInput, authorId: '' }), /缺少记录原作者/);
   });
 
   it('提交用版本 CAS：并发提交只一个成功，另一并发幂等返回待处理', async () => {
