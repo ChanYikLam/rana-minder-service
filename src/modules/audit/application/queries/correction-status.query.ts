@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { CorrectionStatus } from '../../domain/state-machines/correction-state-machine';
 import { CORRECTION_REPOSITORY } from '../../infrastructure/correction-repository';
 import type { CorrectionRepository } from '../../infrastructure/correction-repository';
+import { CorrectionCommandError } from '../commands/correction-submit.command';
 
 /** 纠错状态查询视图（真实状态；含历史） */
 export interface CorrectionStatusView {
@@ -27,7 +28,7 @@ export class CorrectionStatusQuery {
   async getStatus(correctionId: string): Promise<CorrectionStatusView> {
     const correction = await this.repo.load(correctionId);
     if (correction === null) {
-      throw new Error('IFC-ERR-006: 纠错申请不存在');
+      throw new CorrectionCommandError('IFC-ERR-006', '纠错申请不存在');
     }
     return {
       correctionId: correction.correctionId,

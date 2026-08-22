@@ -36,7 +36,7 @@ export class InMemoryCorrectionRepository implements CorrectionRepository {
     if (latest === undefined || latest.version !== current.version) {
       return false;
     }
-    this.corrections.set(next.correctionId, next);
+    this.corrections.set(current.correctionId, next);
     return true;
   }
 }
