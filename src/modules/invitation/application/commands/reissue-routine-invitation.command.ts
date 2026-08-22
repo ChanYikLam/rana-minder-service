@@ -22,7 +22,10 @@ export interface ReissueRoutineInput {
 
 /** 前置失败 */
 export class ReissueRoutineError extends Error {
-  constructor(code: 'IFC-ERR-003' | 'IFC-ERR-006' | 'IFC-ERR-007' | 'IFC-ERR-009', message: string) {
+  constructor(
+    code: 'IFC-ERR-003' | 'IFC-ERR-006' | 'IFC-ERR-007' | 'IFC-ERR-009',
+    message: string,
+  ) {
     super(`${code}: ${message}`);
     this.name = 'ReissueRoutineError';
   }
@@ -92,7 +95,12 @@ export class ReissueRoutineInvitationCommand {
       syncStatus: null,
       attemptCount: 0,
       history: [
-        { at: now, type: 'CREATED', by: input.issuerId, note: `reissue-of:${old.routineInvitationId}` },
+        {
+          at: now,
+          type: 'CREATED',
+          by: input.issuerId,
+          note: `reissue-of:${old.routineInvitationId}`,
+        },
       ],
     };
     await this.repo.save(fresh);

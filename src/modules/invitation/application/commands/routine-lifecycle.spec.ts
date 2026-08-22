@@ -20,7 +20,9 @@ const makeCasdoor = (impl: (department?: string | null) => Promise<CasdoorCompos
     impl(department),
 });
 
-const makeRig = (casdoor = makeCasdoor(async () => ({ groupConfirmed: true, departmentConfirmed: true }))) => {
+const makeRig = (
+  casdoor = makeCasdoor(async () => ({ groupConfirmed: true, departmentConfirmed: true })),
+) => {
   const repo = new InMemoryRoutineInvitationRepository();
   const sm = new RoutineInvitationStateMachine();
   const policy = new InvitationPolicy();
@@ -118,8 +120,16 @@ describe('4.5.2 常规入社邀请（MEM-004、SRS-SM-MEM-004）', () => {
   it('激活：社团及可选部门全部回读确认 → 已生效', async () => {
     const rig = makeRig();
     const inv = await rig.create.execute(createInput);
-    await rig.accept.execute({ routineInvitationId: inv.routineInvitationId, principalId: 'stu1', eligibilityOk: true, alreadyMember: false });
-    const result = await rig.resolve.execute({ routineInvitationId: inv.routineInvitationId, escalateToAnomaly: false });
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    const result = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: false,
+    });
     assert.equal(result.activated, true);
     assert.equal(result.invitation.status, 'ACTIVATED');
     assert.equal(result.invitation.syncStatus, 'ALL_CONFIRMED');
@@ -127,30 +137,60 @@ describe('4.5.2 常规入社邀请（MEM-004、SRS-SM-MEM-004）', () => {
 
   it('只确认部分关系不得成功 → 同步失败待重试（按组合补偿）', async () => {
     // 社团确认但部门未确认（部分确认）
-    const rig = makeRig(makeCasdoor(async () => ({ groupConfirmed: true, departmentConfirmed: false })));
+    const rig = makeRig(
+      makeCasdoor(async () => ({ groupConfirmed: true, departmentConfirmed: false })),
+    );
     const inv = await rig.create.execute(createInput);
-    await rig.accept.execute({ routineInvitationId: inv.routineInvitationId, principalId: 'stu1', eligibilityOk: true, alreadyMember: false });
-    const result = await rig.resolve.execute({ routineInvitationId: inv.routineInvitationId, escalateToAnomaly: false });
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    const result = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: false,
+    });
     assert.equal(result.activated, false); // 不得成功
     assert.equal(result.invitation.status, 'SYNC_FAILED_PENDING_RETRY');
     assert.equal(result.invitation.syncStatus, 'PARTIAL');
   });
 
   it('外部失败（全未确认）→ 同步失败待重试（先回读后重试，无需本人重接）', async () => {
-    const rig = makeRig(makeCasdoor(async () => ({ groupConfirmed: false, departmentConfirmed: false })));
+    const rig = makeRig(
+      makeCasdoor(async () => ({ groupConfirmed: false, departmentConfirmed: false })),
+    );
     const inv = await rig.create.execute(createInput);
-    await rig.accept.execute({ routineInvitationId: inv.routineInvitationId, principalId: 'stu1', eligibilityOk: true, alreadyMember: false });
-    const result = await rig.resolve.execute({ routineInvitationId: inv.routineInvitationId, escalateToAnomaly: false });
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    const result = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: false,
+    });
     assert.equal(result.activated, false);
     assert.equal(result.invitation.status, 'SYNC_FAILED_PENDING_RETRY');
     assert.equal(result.invitation.syncStatus, 'UNCONFIRMED');
   });
 
   it('无法确认且无法补偿到非成员 → 高优先级同步异常（冻结普通重试）', async () => {
-    const rig = makeRig(makeCasdoor(async () => ({ groupConfirmed: false, departmentConfirmed: false })));
+    const rig = makeRig(
+      makeCasdoor(async () => ({ groupConfirmed: false, departmentConfirmed: false })),
+    );
     const inv = await rig.create.execute(createInput);
-    await rig.accept.execute({ routineInvitationId: inv.routineInvitationId, principalId: 'stu1', eligibilityOk: true, alreadyMember: false });
-    const result = await rig.resolve.execute({ routineInvitationId: inv.routineInvitationId, escalateToAnomaly: true });
+    await rig.accept.execute({
+      routineInvitationId: inv.routineInvitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
+    const result = await rig.resolve.execute({
+      routineInvitationId: inv.routineInvitationId,
+      escalateToAnomaly: true,
+    });
     assert.equal(result.anomaly, true);
     assert.equal(result.invitation.status, 'HIGH_PRIORITY_SYNC_ANOMALY');
     assert.equal(result.invitation.syncStatus, 'ANOMALY');
@@ -161,19 +201,38 @@ describe('4.5.2 常规入社邀请（MEM-004、SRS-SM-MEM-004）', () => {
   it('拒绝/撤回/过期：仅待处理可操作；单胜者', async () => {
     const rig = makeRig();
     const inv1 = await rig.create.execute(createInput);
-    const rejected = await rig.reject.execute({ routineInvitationId: inv1.routineInvitationId, principalId: 'stu1' });
+    const rejected = await rig.reject.execute({
+      routineInvitationId: inv1.routineInvitationId,
+      principalId: 'stu1',
+    });
     assert.equal(rejected.status, 'REJECTED');
     const inv2 = await rig.create.execute({ ...createInput, inviteeId: 'stu2' });
-    const withdrawn = await rig.withdraw.execute({ routineInvitationId: inv2.routineInvitationId, principalId: 'hr1', principalRoles: ['HR_ADMIN'] });
+    const withdrawn = await rig.withdraw.execute({
+      routineInvitationId: inv2.routineInvitationId,
+      principalId: 'hr1',
+      principalRoles: ['HR_ADMIN'],
+    });
     assert.equal(withdrawn.status, 'WITHDRAWN');
     const inv3 = await rig.create.execute({ ...createInput, inviteeId: 'stu3' });
-    const expired = await rig.expire.execute({ routineInvitationId: inv3.routineInvitationId, expiryAllowed: true });
+    const expired = await rig.expire.execute({
+      routineInvitationId: inv3.routineInvitationId,
+      expiryAllowed: true,
+    });
     assert.equal(expired!.status, 'EXPIRED');
     // 已接受不可撤回
     const inv4 = await rig.create.execute({ ...createInput, inviteeId: 'stu4' });
-    await rig.accept.execute({ routineInvitationId: inv4.routineInvitationId, principalId: 'stu4', eligibilityOk: true, alreadyMember: false });
+    await rig.accept.execute({
+      routineInvitationId: inv4.routineInvitationId,
+      principalId: 'stu4',
+      eligibilityOk: true,
+      alreadyMember: false,
+    });
     await assert.rejects(
-      rig.withdraw.execute({ routineInvitationId: inv4.routineInvitationId, principalId: 'hr1', principalRoles: ['HR_ADMIN'] }),
+      rig.withdraw.execute({
+        routineInvitationId: inv4.routineInvitationId,
+        principalId: 'hr1',
+        principalRoles: ['HR_ADMIN'],
+      }),
       /仅待处理邀请可撤回/,
     );
   });
