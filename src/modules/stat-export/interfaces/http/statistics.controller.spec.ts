@@ -48,15 +48,50 @@ describe('StatisticsController', () => {
         throw new Error('should not reach');
       }, // will be stopped by drilldown endpoint
     });
-    // 用 drilldown 端点触发 leaderboard 拒绝（controller 层 assertLeaderboardClosed 前）
+    // 排行榜关闭校验收敛在 query（drilldown）层；fake drilldown 抛 StatisticsCaliberError
     try {
       await controller.clubDrillDown({ userId: 'u' }, 'club-1', 'leaderboard');
       assert.fail('应抛');
     } catch (e: any) {
-      // 实际上 assertLeaderboardClosed 在 controller 层就抛出 StatisticsCaliberError → mapped to 422 ERR-005
       assert.equal(e.status, 422);
       assert.equal(e.response.code, 'IFC-ERR-005');
     }
+  });
+
+  it('错误映射：时间范围 from/to 只传其一 → 422 IFC-ERR-005', async () => {
+    const controller = buildController({
+      resolvePrincipal: async () =>
+        ({ userId: 'u', isPlatformSuperAdmin: false, clubScopes: [] }) as StatisticsPrincipal,
+      clubSummaryImpl: async () => ({ clubId: 'club-1' }) as any,
+    });
+    try {
+      // 只传 from、未传 to
+      await controller.clubSummary({ userId: 'u' }, 'club-1', undefined, '2025-01-01', undefined);
+      assert.fail('应抛');
+    } catch (e: any) {
+      assert.equal(e.status, 422);
+      assert.equal(e.response.code, 'IFC-ERR-005');
+      assert.match(e.response.message, /from\/to/);
+    }
+  });
+
+  it('联合统计端点：不接收 clubId 参数（作用域由 jointId 决定）', async () => {
+    let calledWith: unknown;
+    const controller = buildController({
+      resolvePrincipal: async () =>
+        ({ userId: 'u', isPlatformSuperAdmin: false, clubScopes: [] }) as StatisticsPrincipal,
+      clubSummaryImpl: async () => ({}) as any,
+      jointStatsImpl: async (input: unknown) => {
+        calledWith = input;
+        return { jointActivityId: 'joint-1' };
+      },
+    });
+    const result = await controller.jointActivityStats({ userId: 'u' }, 'joint-1');
+    assert.deepEqual(calledWith, {
+      principal: { userId: 'u', isPlatformSuperAdmin: false, clubScopes: [] },
+      jointActivityId: 'joint-1',
+    });
+    assert.ok(result);
   });
 
   it('错误映射：IFC-ERR-015 → 404', async () => {
@@ -129,6 +164,7 @@ describe('StatisticsController', () => {
 interface FakeParts {
   resolvePrincipal: (userId: string) => Promise<StatisticsPrincipal>;
   clubSummaryImpl: (...args: any[]) => any;
+  jointStatsImpl?: (input: unknown) => Promise<unknown>;
 }
 
 function buildController(parts: FakeParts): StatisticsController {
@@ -143,14 +179,9 @@ function buildController(parts: FakeParts): StatisticsController {
   } as any;
 
   const funnel = { funnel: async () => ({}) } as any;
-  const jointStats = { statistics: async () => ({}) } as any;
-  const spec = {
-    assertLeaderboardClosed(m: string) {
-      if (m.toLowerCase().includes('leaderboard')) {
-        throw new StatisticsCaliberError('LEADERBOARD_FORBIDDEN', 'leaderboard forbidden');
-      }
-    },
+  const jointStats = {
+    statistics: parts.jointStatsImpl ?? (async () => ({})),
   } as any;
 
-  return new StatisticsController(authz, clubStats, funnel, jointStats, spec);
+  return new StatisticsController(authz, clubStats, funnel, jointStats);
 }

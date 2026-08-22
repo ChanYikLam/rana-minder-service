@@ -19,6 +19,7 @@ import {
   type StatisticsFilters,
 } from '../../domain/models/statistics-specification';
 import { STATISTICS_SOURCE, type StatisticsSourcePort } from '../ports/statistics-source.port';
+import { topKSorted } from '../sort-utils';
 import {
   STATISTICS_AUDIT_PORT,
   type StatisticsAuditPort,
@@ -231,9 +232,8 @@ export class ClubStatisticsQuery {
           })
         : scoped;
 
-      // 稳定排序：学号升序（非评分/排名序列）
-      const sorted = [...filtered].sort((a, b) => a.studentNo.localeCompare(b.studentNo));
-      rows = sorted.slice(0, limit).map((m) => ({
+      // 稳定取前 limit 行：学号升序（非评分/排名序列），top-k 部分排序避免全量排序
+      rows = topKSorted(filtered, (m) => m.studentNo, limit).map((m) => ({
         userId: m.userId,
         studentNo: m.studentNo,
         departmentId: m.departmentId,
@@ -276,8 +276,8 @@ export class ClubStatisticsQuery {
           })
         : scoped;
 
-      const sorted = [...filtered].sort((a, b) => a.acceptedAt.localeCompare(b.acceptedAt));
-      rows = sorted.slice(0, limit).map((h) => ({
+      // 稳定取前 limit 行：接受时间升序，top-k 部分排序
+      rows = topKSorted(filtered, (h) => h.acceptedAt, limit).map((h) => ({
         userId: h.userId,
         studentNo: h.studentNo,
         recruitmentActivityId: h.recruitmentActivityId,

@@ -9,6 +9,13 @@
  * - StatisticsController（社团侧＋平台侧统计端点，汇总/下钻分离）。
  *
  * 导出（5.4.2~5.4.4）将注入 STATISTICS_SPECIFICATION 复用同一口径基线。
+ *
+ * 门禁说明（评审提醒，非阻塞）：
+ * - MemoryStatisticsAuthorizationPort 采用 fail-closed 开发门禁（须 NODE_ENV=dev|test
+ *   且 ORG_DEV_ACTOR_HEADER=1），生产装配即抛错（GOV-007），与 organization 模块一致；
+ * - 身份模块接线落地前，生产环境统计端点整体不可达（属有意为之）——
+ *   上线前须以真实身份/授权实现替换 STATISTICS_AUTHORIZATION_PORT 与
+ *   STATISTICS_SOURCE（正式业务记录投影），并接通统计访问审计落库。
  */
 
 import { Module } from '@nestjs/common';

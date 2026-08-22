@@ -14,7 +14,6 @@ import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
 import { HttpException } from '@nestjs/common';
 
 import { StatisticsActor, type RequestActor } from './statistics-actor';
-import { StatisticsSpecification } from '../../domain/models/statistics-specification';
 import {
   ClubStatisticsQuery,
   type ClubStatisticsInput,
@@ -38,7 +37,6 @@ export class StatisticsController {
     private readonly clubStats: ClubStatisticsQuery,
     private readonly funnel: RecruitmentFunnelQuery,
     private readonly jointStats: JointActivityStatisticsQuery,
-    private readonly spec: StatisticsSpecification,
   ) {}
 
   // -----------------------------------------------------------------------
@@ -85,7 +83,6 @@ export class StatisticsController {
           'IFC-ERR-005',
           '缺少必填查询参数 metric（支持：current_members, admission_history）',
         );
-      this.spec.assertLeaderboardClosed(metric);
 
       const principal = await this.authz.resolvePrincipal(actor.userId);
       const limit = limitRaw ? parseInt(limitRaw, 10) : undefined;
@@ -133,9 +130,11 @@ export class StatisticsController {
   @Get('org/:clubId/stats/joint/:jointId')
   async jointActivityStats(
     @StatisticsActor() actor: RequestActor,
-    @Param('clubId') clubId: string, // URL 作用域提示；查询用 jointId 加载，再验证 scope
     @Param('jointId') jointId: string,
   ) {
+    // 注意：URL 中 :clubId 段仅为命名空间占位，不参与鉴权——联合统计的
+    // 作用域由 jointId 实际归属的参与方社团决定（STAT-002），clubId 不校验、
+    // 也不作为入参，避免误导调用方以为可用任意 clubId 绕开作用域。
     return this.catchErrors(async () => {
       const principal = await this.authz.resolvePrincipal(actor.userId);
       return this.jointStats.statistics({
@@ -205,6 +204,10 @@ export class StatisticsController {
     } = {};
     if (q.academicYear) filters.academicYear = q.academicYear;
     if (q.departmentId) filters.departmentId = q.departmentId;
+    // from/to 必须成对出现；只传其一视为输入无效（IFC-ERR-005），不做静默忽略
+    if ((q.from === undefined) !== (q.to === undefined)) {
+      throw new StatisticsAccessError('IFC-ERR-005', '时间范围筛选参数 from/to 必须成对提供');
+    }
     if (q.from && q.to) filters.timeRange = { from: q.from, to: q.to };
     return Object.keys(filters).length > 0 ? filters : undefined;
   }
