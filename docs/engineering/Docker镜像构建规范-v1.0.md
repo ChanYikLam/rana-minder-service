@@ -131,6 +131,8 @@ docker compose -f docker-compose.dev.yml up -d
 
 `DOCK-081`：验证项：双入口分别启动成功；只读配置生效（容器内 `/etc/ranaminder/config.yaml` 只读）；`docker history` 无配置/秘密层；非 root 用户生效（`docker exec id`）；`docker run --read-only` 无写路径异常。
 
+`DOCK-082`：上述验证已固化为可重复脚本 `scripts/verify-image.sh`（退出码非 0 即存在失败项），用法：先 `cp config.example.yaml config.dev.yaml`，再 `bash scripts/verify-image.sh [IMAGE_TAG]`（默认 `ranaminder-service:dev`）。本机无 Docker 时脚本以退出码 2 明确提示需在具备 Docker/CI 环境执行。
+
 ## 10. 检查结论
 
 | 检查项 | 结果 |
@@ -138,8 +140,9 @@ docker compose -f docker-compose.dev.yml up -d
 | 镜像构建规范 | 已落地（本文件） |
 | Dockerfile（多阶段、双入口、非 root） | 已落地（仓库根） |
 | .dockerignore（秘密与杂物排除） | 已落地（仓库根） |
+| 示例配置 config.example.yaml（虚构、无秘密，只读挂载验证用） | 已落地（仓库根；被 .dockerignore 排除不入镜像） |
 | 开发环境编排 docker-compose.dev.yml | 已落地（仓库根，四依赖服务） |
 | postgres 初始化脚本 | 已落地（scripts/dev/postgres-init.sql，挂载 init 自动执行） |
 | CI 阶段 8 门禁 | 已同步（Dockerfile＋package.json 双条件，三处配置） |
 | DEP-Q-003 | **已冻结**：运行阶段 node:24-slim ＋ 构建阶段 node:24（§2 DOCK-011），Dockerfile 已同步 |
-| 生产部署编排 | 不属本文件范围（部署运维手册体系另行收口） |
+| 生产部署编排 | 已落地仓库根 `docker-compose.yml`（官方单机：app＋worker＋PostgreSQL＋MinIO＋Casdoor；只读挂载、--read-only、进程探针）；详参该文件头注释与部署运维手册 §13 |
