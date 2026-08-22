@@ -12,6 +12,15 @@ build/
 .env.*.local
 !.env.example
 
+# ---------- 真实配置文件（ADR-010：仅 config.example.yaml 可入版本控制） ----------
+config.yaml
+config.dev.yaml
+config.test.yaml
+config.prod.yaml
+config.local.yaml
+*.local.yaml
+!config.example.yaml
+
 # ---------- 编辑器与 IDE ----------
 .vscode/
 .idea/

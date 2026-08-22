@@ -138,6 +138,7 @@ docker compose -f docker-compose.dev.yml up -d
 | 镜像构建规范 | 已落地（本文件） |
 | Dockerfile（多阶段、双入口、非 root） | 已落地（仓库根） |
 | .dockerignore（秘密与杂物排除） | 已落地（仓库根） |
+| 示例配置 config.example.yaml（虚构、无秘密，只读挂载验证用） | 已落地（仓库根；被 .dockerignore 排除不入镜像） |
 | 开发环境编排 docker-compose.dev.yml | 已落地（仓库根，四依赖服务） |
 | postgres 初始化脚本 | 已落地（scripts/dev/postgres-init.sql，挂载 init 自动执行） |
 | CI 阶段 8 门禁 | 已同步（Dockerfile＋package.json 双条件，三处配置） |

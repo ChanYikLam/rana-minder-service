@@ -1,0 +1,103 @@
+# ============================================================
+# RanaMinder 示例配置（config.example.yaml）
+# 权威依据：ADR-010（单文件外置配置与 Docker 只读挂载）、配置规格-v1.0.md
+#
+# 用途：部署者复制本文件为 config.yaml（或 config.dev.yaml），填写真实内容。
+# 真实内容**绝不进入源码仓库、镜像、日志、截图**（ADR-010 / SRS-NFR-032）。
+# 本文件全部为虚构示例：秘密一律用 CHANGE_ME 占位，正式环境检测到占位符即启动失败。
+#
+# 复制并填写：
+#   cp config.example.yaml config.yaml        # 生产/测试（部署项目目录）
+#   cp config.example.yaml config.dev.yaml    # 开发（后端以 CONFIG_FILE 指向）
+# ============================================================
+
+# ---- server：HTTP 与任务入口 ----
+server:
+  httpPort: 3000          # HTTP 应用监听端口（默认 3000）
+  workerEnabled: true     # 当前进程是否承担后台任务（独立入口时由入口决定）
+  trustProxy: false       # 反向代理场景按部署手册 §13 受控开启
+
+# ---- environment：环境标识（dev|test|prod）----
+environment:
+  name: dev               # prod 触发正式环境强制约束（HTTPS、占位符拒绝、最小观测）
+
+# ---- database：PostgreSQL 18（ADR-014 统一业务 Schema）----
+database:
+  host: 127.0.0.1         # 单机部署：postgres 服务名；拆分部署：独立节点
+  port: 5432
+  name: ranaminder
+  user: ranaminder
+  passwordRef: CHANGE_ME  # 外置密钥引用，不写明文
+  migrationUser: ""       # 迁移专用最小高权限角色（与业务连接分离），可留空
+  pool:
+    max: 20               # 连接池上限（默认值待实现确认）
+    idleTimeoutMs: 30000
+  ssl:
+    enabled: false        # 正式环境按 OPS-CFG-006 强制 TLS
+
+# ---- casdoor：学校既有 v3.108.0 精确兼容基线 ----
+casdoor:
+  endpoint: http://127.0.0.1:8000   # 学校实例地址（开发为本地 Casdoor 靶场）
+  organization: CHANGE_ME           # 学校级 Organization
+  clientId: CHANGE_ME               # OIDC 客户端标识（非秘密）
+  clientSecretRef: CHANGE_ME        # 客户端秘密引用
+  adminUser: ""                     # 服务账号（最小权限），可留空
+  adminPasswordRef: ""              # 服务账号凭据引用
+  callbackUrl: http://localhost:5173/auth/callback  # 登录回调（开发为前端 dev server）
+  webhookEnabled: false             # 默认关闭（DATA-Q-013）
+
+# ---- storage：S3 兼容对象存储（DATA-Q-012 三个私有 Bucket）----
+storage:
+  endpoint: http://127.0.0.1:9000   # MinIO / 兼容端点
+  region: us-east-1                 # 兼容占位
+  accessKeyRef: CHANGE_ME           # 访问键引用
+  secretKeyRef: CHANGE_ME           # 秘密键引用
+  bucketQuarantine: CHANGE_ME       # 待检查隔离 Bucket（私有）
+  bucketOriginals: CHANGE_ME        # 权威原件 Bucket（私有）
+  bucketDerived: CHANGE_ME          # 临时派生 Bucket（私有）
+  secure: false                     # 正式环境强制 TLS
+
+# ---- mail：SMTP 渠道（开发指向 Mailpit）----
+mail:
+  smtpHost: 127.0.0.1               # 开发为 Mailpit
+  smtpPort: 1025                    # 开发 Mailpit SMTP
+  smtpUser: ""
+  smtpPasswordRef: ""
+  fromName: RanaMinder
+  fromAddress: no-reply@example.invalid  # 虚构发件身份
+  encryption: none                  # ssl | tls | none
+
+# ---- notifications：通知渠道开关、模板、kill-switch ----
+notifications:
+  emailChannelEnabled: true         # 权益通知事实不依赖渠道
+  killSwitchInitial:
+    enabled: false
+  templateVersion: ""
+
+# ---- security：加密、密钥环引用、TLS 策略（DATA-Q-014）----
+security:
+  tlsPolicy: dev                    # enforce | warn | dev
+  keyRingRef: CHANGE_ME             # 外置版本化密钥环引用（AES-256-GCM 根密钥）
+  keyVersion: "1"                   # 当前活跃密钥版本
+  reauthTtlSeconds: 600             # 增强认证 proof TTL
+  allowedCorsOrigins:
+    - http://localhost:5173         # 开发为前端 dev server
+
+# ---- logging：日志级别、保留、字段允许清单 ----
+logging:
+  level: info                       # debug | info | warn | error
+  retentionDays: 30                 # ADR-011 默认 30 天
+  allowedFields: []                 # 日志字段允许清单（OPS-CFG-005）
+
+# ---- school：学校平台时区、学年起点（IFC-QRY-009）----
+school:
+  timezone: Asia/Shanghai           # 平台时区（截止/自然日语义）
+  academicYearStart: 9              # 学年起点月份
+
+# ---- obs：内置状态页（ADR-011 最小观测）----
+obs:
+  statusPageEnabled: true
+
+# ---- backup：备份目录（生产必填，承接手册 §16）----
+backup:
+  dir: ""                           # 生产必填；开发可留空
