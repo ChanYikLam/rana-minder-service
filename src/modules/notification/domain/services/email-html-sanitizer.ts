@@ -135,7 +135,8 @@ const DANGEROUS_URL_PROTOCOLS = /^(javascript|vbscript|file|data|blob|about):/i;
 /** 校验普通链接：只允许 HTTPS 或本系统相对路径（需求发现 08 §模板 7） */
 function isSafeLinkUrl(url: string): boolean {
   const trimmed = url.trim();
-  if (trimmed.startsWith('/')) return true; // 站内相对路径（打开时重新鉴权）
+  // 站内相对路径（打开时重新鉴权）；拒绝 // 协议相对 URL（可指向任意外部 http/https 站点）
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return true;
   if (/^https:/i.test(trimmed)) return true;
   return false;
 }

@@ -40,4 +40,46 @@ describe('AesGcmEmailSecretCipher（NTF-006 密钥保护）', () => {
     assert.ok(!fp.includes('my-secret'));
     assert.notEqual(cipher.fingerprint('other'), fp);
   });
+
+  it('非开发环境缺失 EMAIL_SECRET_CIPHER_KEY 时拒绝启动（fail-closed）', () => {
+    const originalEnv = process.env.NODE_ENV;
+    const originalKey = process.env.EMAIL_SECRET_CIPHER_KEY;
+    try {
+      delete process.env.EMAIL_SECRET_CIPHER_KEY;
+      process.env.NODE_ENV = 'production';
+      assert.throws(
+        () => new AesGcmEmailSecretCipher(),
+        /EMAIL_SECRET_CIPHER_KEY/,
+        '生产环境缺失主密钥必须拒绝初始化',
+      );
+      process.env.NODE_ENV = 'staging';
+      assert.throws(
+        () => new AesGcmEmailSecretCipher(),
+        /EMAIL_SECRET_CIPHER_KEY/,
+        'staging 等非开发环境同样拒绝',
+      );
+    } finally {
+      if (originalEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = originalEnv;
+      if (originalKey === undefined) delete process.env.EMAIL_SECRET_CIPHER_KEY;
+      else process.env.EMAIL_SECRET_CIPHER_KEY = originalKey;
+    }
+  });
+
+  it('开发环境缺失主密钥时使用开发密钥（本地联调可用）', () => {
+    const originalEnv = process.env.NODE_ENV;
+    const originalKey = process.env.EMAIL_SECRET_CIPHER_KEY;
+    try {
+      delete process.env.EMAIL_SECRET_CIPHER_KEY;
+      process.env.NODE_ENV = 'development';
+      const devCipher = new AesGcmEmailSecretCipher();
+      const plaintext = 'dev-only-secret';
+      assert.equal(devCipher.decrypt(devCipher.encrypt(plaintext)), plaintext);
+    } finally {
+      if (originalEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = originalEnv;
+      if (originalKey === undefined) delete process.env.EMAIL_SECRET_CIPHER_KEY;
+      else process.env.EMAIL_SECRET_CIPHER_KEY = originalKey;
+    }
+  });
 });
