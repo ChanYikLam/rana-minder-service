@@ -29,6 +29,10 @@ interface JointTaskScheduleInput {
   readonly activityRevision: number;
   readonly idempotencyKey: string;
   readonly notBefore: Date;
+  /** 附加业务标识（如 invitationId），透传至任务 payload 供消费方精确定位 */
+  readonly refId?: string;
+  /** payload 引用字段名（默认 'refId'） */
+  readonly refKey?: string;
 }
 
 @Injectable()
@@ -48,7 +52,10 @@ export class JointTaskEnqueuer {
         version: input.activityRevision,
         scope: PLATFORM_SCOPE,
       },
-      payload: { activityId: input.activityId },
+      payload:
+        input.refId !== undefined && input.refKey !== undefined
+          ? { activityId: input.activityId, [input.refKey]: input.refId }
+          : { activityId: input.activityId },
       notBefore: input.notBefore.toISOString(),
       createdAt: now.toISOString(),
     };
@@ -81,6 +88,8 @@ export class JointTaskEnqueuer {
       activityRevision,
       idempotencyKey: `joint-invitation-timeout:${activityId}:${invitationId}`,
       notBefore,
+      refId: invitationId,
+      refKey: 'invitationId',
     });
   }
 

@@ -169,7 +169,12 @@ export class JointInterview {
         history: [{ values, editorId: interviewerId, at: now }],
       });
     }
-    this.snapshot = { ...this.snapshot, evaluations: nextEvaluations, updatedAt: now };
+    this.snapshot = {
+      ...this.snapshot,
+      evaluations: nextEvaluations,
+      revisionNumber: this.snapshot.revisionNumber + 1,
+      updatedAt: now,
+    };
   }
 
   private transition(

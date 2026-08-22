@@ -45,7 +45,13 @@ export const JOINT_TASK_TYPES = [
 
 export type JointTaskType = (typeof JOINT_TASK_TYPES)[number];
 
-export type JointTaskHandler = (payload: { activityId: string }) => Promise<void>;
+export type JointTaskHandler = (payload: JointTaskPayload) => Promise<void>;
+
+/** 任务载荷；邀请超时任务携带 invitationId，其余仅 activityId */
+export interface JointTaskPayload {
+  readonly activityId: string;
+  readonly invitationId?: string;
+}
 
 export interface JointTaskDeps {
   readonly repository: JointRepository;
@@ -138,12 +144,17 @@ export function createJointTaskHandlers(deps: JointTaskDeps): Record<string, Joi
       await archiveJointActivity(repository, activityId, now);
     },
 
-    'joint-invitation-timeout': async ({ activityId }) => {
+    'joint-invitation-timeout': async ({ activityId, invitationId }) => {
       const now = new Date();
+      // 每个邀请独立调度（payload 携带 invitationId），只超时指定邀请，
+      // 不得按活动批量超时全部待处理邀请（避免误伤未到期邀请）。
       const conclusions = await repository.loadConclusionsByActivity(activityId);
       const machine = new JointConclusionStateMachine();
       for (const snap of conclusions) {
         if (snap.status !== JointConclusionStatus.INVITE_PENDING) {
+          continue;
+        }
+        if (invitationId !== undefined && snap.invitationId !== invitationId) {
           continue;
         }
         const conclusion = JointConclusion.fromSnapshot(snap);
@@ -176,7 +187,7 @@ export function registerJointTasks(
     registry.register({
       taskType,
       handle: async (task: TaskRecord): Promise<void> => {
-        const payload = task.payload as { activityId: string };
+        const payload = task.payload as JointTaskPayload;
         await handler(payload);
       },
     });
