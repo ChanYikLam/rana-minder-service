@@ -132,7 +132,10 @@
           script: |
             set -e
             if ! command -v trivy >/dev/null 2>&1; then
-              curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.3
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              rm -f /tmp/trivy.tar.gz
             fi
             # 扫描已构建镜像；HIGH/CRITICAL 漏洞使扫描失败（镜像层、OS 包、应用依赖）
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
@@ -144,7 +147,10 @@
           script: |
             set -e
             if ! command -v syft >/dev/null 2>&1; then
-              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | bash -s -- -b /usr/local/bin
+              curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
+              echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+              rm -f /tmp/syft.tar.gz
             fi
             # 生成镜像 SBOM 并输出（发布门证据归档用，不推送产物）
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
@@ -249,7 +255,10 @@
           script: |
             set -e
             if ! command -v trivy >/dev/null 2>&1; then
-              curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.3
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              rm -f /tmp/trivy.tar.gz
             fi
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
               --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
@@ -260,7 +269,10 @@
           script: |
             set -e
             if ! command -v syft >/dev/null 2>&1; then
-              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | bash -s -- -b /usr/local/bin
+              curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
+              echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+              rm -f /tmp/syft.tar.gz
             fi
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
             echo "镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
@@ -360,7 +372,10 @@
           script: |
             set -e
             if ! command -v trivy >/dev/null 2>&1; then
-              curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.3
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              rm -f /tmp/trivy.tar.gz
             fi
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
               --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
@@ -371,7 +386,10 @@
           script: |
             set -e
             if ! command -v syft >/dev/null 2>&1; then
-              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | bash -s -- -b /usr/local/bin
+              curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
+              echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+              rm -f /tmp/syft.tar.gz
             fi
             syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
             echo "发布镜像 SBOM 已生成（spdx-json），许可证复核见阶段 10 与发布门证据摘要。"
