@@ -68,8 +68,13 @@ export class ResolveActivationCommand {
     let nextStatus: ActivationStatus;
     if (result.ok && result.confirmed) {
       nextStatus = ActivationStatus.ACTIVATED; // 回读确认完成 → 成员权限生效
-    } else if (input.deadlineExceeded) {
-      nextStatus = ActivationStatus.SYNC_FAILED_PENDING_RETRY; // 15 分钟仍失败：保持已接受、成员未生效
+    } else if (
+      input.deadlineExceeded ||
+      activation.status === ActivationStatus.SYNC_FAILED_PENDING_RETRY
+    ) {
+      // 15 分钟仍失败 → 保持已接受、成员未生效；
+      // 已进入同步失败待重试后不可回退到 PROCESSING（状态单调），直到回读确认成功
+      nextStatus = ActivationStatus.SYNC_FAILED_PENDING_RETRY;
     } else {
       nextStatus = ActivationStatus.PROCESSING; // 未到期：保持处理中
     }
@@ -81,7 +86,10 @@ export class ResolveActivationCommand {
         status: nextStatus,
         attemptCount: nextAttempt,
         lastAttemptAt: now,
-        lastError: result.ok ? undefined : (result.reason ?? 'casdoor-write-readback-failed'),
+        lastError:
+          result.ok && result.confirmed
+            ? undefined
+            : (result.reason ?? 'casdoor-write-readback-not-confirmed'),
       },
     };
     await this.repo.save(updated);

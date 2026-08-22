@@ -13,6 +13,25 @@ import { ResolveActivationCommand } from './resolve-activation.command';
 import { InvitationStatusQuery } from '../queries/invitation-status.query';
 import { InvitationStateMachine } from '../../domain/state-machines/invitation-state-machine';
 import { InvitationPolicy } from '../../domain/services/invitation-policy';
+import type {
+  CasdoorRelationPort,
+  CasdoorRelationResult,
+} from '../../infrastructure/casdoor-relation-port';
+
+/** 测试用可编排 Casdoor 端口（模拟写回读确认失败/成功） */
+class StubCasdoorPort implements CasdoorRelationPort {
+  private readonly outcomes: CasdoorRelationResult[];
+  constructor(...outcomes: CasdoorRelationResult[]) {
+    this.outcomes = outcomes;
+  }
+  async writeAndReadBackGroup(): Promise<CasdoorRelationResult> {
+    const next = this.outcomes.shift();
+    if (next === undefined) {
+      return { ok: true, confirmed: true };
+    }
+    return next;
+  }
+}
 
 const makeRig = () => {
   const repo = new InMemoryInvitationRepository();
@@ -243,5 +262,41 @@ describe('4.5.1 普通录取邀请（INV-001、REC-024/026）', () => {
     });
     assert.equal(ok.activated, true);
     assert.equal(ok.invitation.activation?.status, 'ACTIVATED');
+  });
+
+  it('激活解析：同步失败待重试不可回退到处理中（状态单调）；成功后激活', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    await rig.accept.execute({
+      invitationId: inv.invitationId,
+      principalId: 'stu1',
+      eligibilityOk: true,
+    });
+    const casdoor = new StubCasdoorPort(
+      { ok: false, confirmed: false, reason: 'write-timeout' }, // 第 1 次失败
+      { ok: false, confirmed: false, reason: 'write-timeout' }, // 第 2 次仍失败（未到期）
+      { ok: true, confirmed: true }, // 第 3 次成功
+    );
+    const resolve = new ResolveActivationCommand(rig.repo, casdoor);
+
+    // 15 分钟到期且失败 → 同步失败待重试
+    const first = await resolve.execute({ invitationId: inv.invitationId, deadlineExceeded: true });
+    assert.equal(first.invitation.activation?.status, 'SYNC_FAILED_PENDING_RETRY');
+    assert.equal(first.activated, false);
+
+    // 再次失败、且未到期：已进入同步失败待重试后不可回退到 PROCESSING
+    const second = await resolve.execute({
+      invitationId: inv.invitationId,
+      deadlineExceeded: false,
+    });
+    assert.equal(second.invitation.activation?.status, 'SYNC_FAILED_PENDING_RETRY');
+
+    // 回读确认成功 → 激活
+    const third = await resolve.execute({
+      invitationId: inv.invitationId,
+      deadlineExceeded: false,
+    });
+    assert.equal(third.activated, true);
+    assert.equal(third.invitation.activation?.status, 'ACTIVATED');
   });
 });
