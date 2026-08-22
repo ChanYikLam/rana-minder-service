@@ -312,5 +312,9 @@ export interface NotificationPrivilegeVerifier {
    * 校验操作者是否有权执行站内信紧急关闭/恢复。
    * @returns 通过返回 true；拒绝返回 false
    */
-  canOperateKillSwitch(scope: KillSwitchScope, clubId: string | null, subjectId: string): Promise<boolean>;
+  canOperateKillSwitch(
+    scope: KillSwitchScope,
+    clubId: string | null,
+    subjectId: string,
+  ): Promise<boolean>;
 }
