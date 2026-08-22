@@ -152,6 +152,9 @@ export class JointActivity {
   }
 
   forceEnd(machine: JointActivityStateMachine, reason: string, now: Date): boolean {
+    // 终态只读：已结束/已取消/已强制结束的活动不可再次强制结束，
+    // 避免重复触发归档清理任务或意外改写终态语义（ENDED→FORCE_ENDED）。
+    this.assertNotTerminal();
     const ok = this.transition(machine, JointActivityEvent.FORCE_END, now);
     if (ok) {
       this.snapshot = { ...this.snapshot, forcedEndedReason: reason };

@@ -18,17 +18,31 @@ export interface ApiErrorResult {
 const JOINT_ERROR_HTTP_STATUS: Record<string, number> = {
   JNT_FORBIDDEN: 403,
   JNT_NOT_FOUND: 404,
+  JNT_VALIDATION: 400,
+  // 以下领域业务前提不满足类错误统一映射为 409（Precondition Failed）
   JNT_CONFLICT: 409,
   JNT_PRECONDITION: 409,
-  JNT_VALIDATION: 400,
+  JNT_ACT_TERMINAL: 409,
+  JNT_ACT_LOCKED: 409,
+  JNT_ACT_FIRST_INVITE_LOCK: 409,
+  JNT_APP_CONSENT_MISMATCH: 409,
+  JNT_APP_NOT_DRAFT: 409,
+  JNT_APP_NOT_SUBMITTED: 409,
+  JNT_CON_LOCKED: 409,
+  JNT_CON_NO_DECISION: 409,
+  JNT_INT_LOCKED: 409,
+  JNT_PART_NOT_PROPOSED: 409,
+  JNT_PART_ROUND_MISMATCH: 409,
 };
 
 export function toApiError(error: unknown): ApiErrorResult {
   const supportId = generateTraceId();
   if (error instanceof JointDomainError) {
+    // 领域业务校验错误默认映射为 409（前提不满足）；未显式登记的错误码
+    // 也归为 409，避免漏配导致返回 500。
     return {
       ok: false,
-      status: JOINT_ERROR_HTTP_STATUS[error.code] ?? 500,
+      status: JOINT_ERROR_HTTP_STATUS[error.code] ?? 409,
       body: { code: error.code, message: error.message, supportId },
     };
   }
