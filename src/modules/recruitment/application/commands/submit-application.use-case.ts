@@ -55,6 +55,9 @@ export class DefaultSubmitApplicationUseCase implements SubmitApplicationUseCase
     if (activity === null) {
       throw recruitmentErrors.notFound('招新活动');
     }
+    if (activity.paused) {
+      throw recruitmentErrors.preconditionFailed('招新活动已暂停，暂不接受新报名');
+    }
     if (
       !(await this.authorization.canSubmitApplication({
         clubId: activity.clubId,

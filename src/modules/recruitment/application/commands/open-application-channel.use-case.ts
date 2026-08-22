@@ -42,6 +42,9 @@ export class DefaultOpenApplicationChannelUseCase implements OpenApplicationChan
     if (activity.status !== 'OPEN') {
       throw recruitmentErrors.preconditionFailed('仅进行中的招新活动可开放报名通道');
     }
+    if (activity.paused) {
+      throw recruitmentErrors.preconditionFailed('招新活动已暂停，不可开放报名通道');
+    }
     if (
       !(await this.authorization.canManageRecruitment({
         clubId: activity.clubId,

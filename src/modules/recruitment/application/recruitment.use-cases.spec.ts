@@ -252,4 +252,57 @@ describe('recruitment application layer (REC-001~004)', () => {
       { code: 'REC_VALIDATION' },
     );
   });
+
+  it('活动暂停后不接受新报名、不可开放新通道', async () => {
+    auth.manageAllowed = true;
+    auth.submitAllowed = true;
+
+    const activityId = 'act-paused';
+    await new DefaultCreateRecruitmentActivityUseCase(repo, auth).execute({
+      clubId: CLUB_ID,
+      title: '秋招',
+      description: null,
+      actor: ACTOR,
+      now: NOW,
+      id: activityId,
+    });
+    const activity = RecruitmentActivity.fromSnapshot((await repo.loadActivity(activityId))!);
+    assert.ok(activity.open(new DefaultRecruitmentActivityStateMachine(), NOW));
+    await repo.saveActivity(activity.toSnapshot());
+    const channelId = 'ch-paused';
+    await new DefaultOpenApplicationChannelUseCase(repo, auth).execute({
+      activityId,
+      actor: ACTOR,
+      now: NOW,
+      id: channelId,
+    });
+
+    // 暂停活动
+    activity.pause(NOW);
+    await repo.saveActivity(activity.toSnapshot());
+
+    form.seed({ id: 'sub-p', status: 'SUBMITTED', submittedBy: APPLICANT });
+    await assert.rejects(
+      () =>
+        new DefaultSubmitApplicationUseCase(repo, auth, form).execute({
+          activityId,
+          channelId,
+          applicantId: APPLICANT,
+          departmentChoices: ['dept-a'],
+          formRef: { formId: FORM_ID, submissionId: 'sub-p', versionNumber: 1 },
+          actor: APPLICANT,
+          now: NOW,
+        }),
+      { code: 'REC_PRECONDITION' },
+    );
+    await assert.rejects(
+      () =>
+        new DefaultOpenApplicationChannelUseCase(repo, auth).execute({
+          activityId,
+          actor: ACTOR,
+          now: NOW,
+        }),
+      { code: 'REC_PRECONDITION' },
+    );
+  });
 });
