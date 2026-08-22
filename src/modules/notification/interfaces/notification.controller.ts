@@ -314,7 +314,7 @@ export class NotificationController {
   // 紧急关闭站内信（NTF-001、SRS-FAIL-009、IFC-NTF-001、XCC-FAIL-009）
   // -------------------------------------------------------------------------
 
-  /** POST /api/org/:clubId/notifications/kill-switch（社团级；操作者取自会话） */
+  /** POST /api/org/:clubId/notifications/kill-switch（社团级紧急关闭，超管；操作者取自会话） */
   @Post('/api/org/:clubId/notifications/kill-switch')
   @HttpCode(HttpStatus.OK)
   async clubKillSwitch(
@@ -322,6 +322,7 @@ export class NotificationController {
     @Param('clubId') clubId: string,
     @Body() input: NotificationKillSwitchInput,
   ): Promise<NotificationKillSwitchState> {
+    this.assertPlatformAdmin(request);
     const session = notificationSessionFromRequest(request);
     return this.toggleKillSwitch('CLUB', clubId, input, session.userId, session.displayName);
   }
@@ -332,13 +333,14 @@ export class NotificationController {
     return this.toState(await this.killSwitches.findByScope('CLUB', clubId));
   }
 
-  /** POST /api/admin/notifications/kill-switch（平台级，超管；清单 15.9） */
+  /** POST /api/admin/notifications/kill-switch（平台级紧急关闭，超管；清单 15.9） */
   @Post('/api/admin/notifications/kill-switch')
   @HttpCode(HttpStatus.OK)
   async platformKillSwitch(
     @Req() request: Request,
     @Body() input: NotificationKillSwitchInput,
   ): Promise<NotificationKillSwitchState> {
+    this.assertPlatformAdmin(request);
     const session = notificationSessionFromRequest(request);
     return this.toggleKillSwitch('PLATFORM', null, input, session.userId, session.displayName);
   }
