@@ -68,6 +68,30 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.ok(v.includes('normalField=普通字段'), '普通字段保留');
   });
 
+  it('敏感不落盘：嵌套对象/数组内的敏感字段与循环引用不泄漏、不抛错（CAS-SEC-001~004）', async () => {
+    const rig = makeRig();
+    // 嵌套对象中的敏感键仍须脱敏（防整段 JSON 落盘带出密码/令牌）
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: {
+        config: { apiKey: 'SECRET-KEY-123', password: 'pwd999' },
+        items: [{ token: 't1', name: 'n1' }],
+      },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('SECRET-KEY-123'), '嵌套 apiKey 不得落盘');
+    assert.ok(!v.includes('pwd999'), '嵌套 password 不得落盘');
+    assert.ok(!v.includes('t1'), '数组内 token 不得落盘');
+    assert.ok(v.includes('config.apiKey=<REDACTED'), '嵌套敏感键仅记脱敏差异');
+    assert.ok(v.includes('items[0].name=n1'), '非敏感叶子保留');
+    // 循环引用对象不应抛错导致审计写入失败（避免业务整体失败被恶意输入触发）
+    const circular: Record<string, unknown> = { a: {} };
+    (circular.a as Record<string, unknown>).self = circular;
+    const ev2 = await rig.writer.write({ ...baseEvent, newValues: { config: circular } });
+    assert.ok(ev2.auditId.length > 0, '循环引用对象不应导致写入失败');
+    assert.ok(!(ev2.newValue ?? '').includes('self='), '循环引用不把循环体正文落盘');
+  });
+
   it('失败原因脱敏：错误信息中的令牌/密码不落盘，超长文本截断', async () => {
     const rig = makeRig();
     const event = await rig.writer.write({
@@ -80,6 +104,19 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.ok(!event.failureReason?.includes('abc123'), '令牌不得落盘');
     assert.ok(!event.failureReason?.includes('xyz'), '密钥不得落盘');
     assert.ok(!event.failureReason?.includes('SECRETTOK'), 'URL 查询串凭证不得落盘');
+    // 凭证出现在字符串起始处/无前置分隔符时也须脱敏（防起始位置泄漏）
+    const atStart = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: 'token: abc123 调用下游失败',
+    });
+    assert.ok(!atStart.failureReason?.includes('abc123'), '起始处令牌不得落盘');
+    const noSep = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: 'client_secret=xyz failed',
+    });
+    assert.ok(!noSep.failureReason?.includes('xyz'), '无分隔符密钥不得落盘');
     // 超长文本截断
     const long = await rig.writer.write({
       ...baseEvent,

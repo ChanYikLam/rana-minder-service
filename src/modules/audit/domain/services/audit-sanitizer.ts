@@ -23,6 +23,10 @@ const SENSITIVE_FIELD_WORDS: readonly string[] = [
 /** 归一化字段名（去分隔符转小写；smtpSecret → smtpsecret） */
 const normalizeField = (name: string): string => name.replace(/[^a-z0-9]/gi, '').toLowerCase();
 
+/** 是否属于敏感字段名 */
+const isSensitiveField = (name: string): boolean =>
+  SENSITIVE_FIELD_WORDS.includes(normalizeField(name));
+
 /** 脱敏结果 */
 export interface SanitizedAuditValue {
   /** 脱敏后的展示值（不含敏感正文） */
@@ -37,13 +41,8 @@ export interface SanitizedAuditValue {
 export class AuditSanitizer {
   /** 字段级脱敏：敏感字段只记差异，不落正文（CAS-SEC-001~004） */
   sanitizeField(fieldName: string, value: unknown): SanitizedAuditValue {
-    if (SENSITIVE_FIELD_WORDS.includes(normalizeField(fieldName))) {
-      const len =
-        typeof value === 'string'
-          ? value.length
-          : value === null || value === undefined
-            ? 0
-            : (JSON.stringify(value)?.length ?? 0);
+    if (isSensitiveField(fieldName)) {
+      const len = this.sensitiveValueLength(value);
       return { display: `<REDACTED:${len}>`, redacted: true };
     }
     if (value === null || value === undefined) {
@@ -56,10 +55,31 @@ export class AuditSanitizer {
       }
       return { display: value, redacted: false };
     }
-    try {
-      return { display: JSON.stringify(value), redacted: false };
-    } catch {
+    const json = this.safeJsonStringify(value);
+    if (json === null) {
       return { display: '<unserializable>', redacted: false };
+    }
+    return { display: json, redacted: false };
+  }
+
+  /** 敏感值长度估算（不落正文；对不可序列化/循环引用不抛错） */
+  private sensitiveValueLength(value: unknown): number {
+    if (typeof value === 'string') {
+      return value.length;
+    }
+    if (value === null || value === undefined) {
+      return 0;
+    }
+    const json = this.safeJsonStringify(value);
+    return json === null ? 0 : json.length;
+  }
+
+  /** 安全 JSON 序列化（循环引用/序列化异常返回 null，不抛错） */
+  private safeJsonStringify(value: unknown): string | null {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
     }
   }
 
@@ -69,15 +89,57 @@ export class AuditSanitizer {
       return null;
     }
     const diffs: string[] = [];
-    for (const [key, value] of Object.entries(input)) {
-      const s = this.sanitizeField(key, value);
-      // 过滤掉 undefined/null：不记录无意义的空值差异；字符串（含空串）与
-      // 其它非空值（数字/布尔/对象）以及已脱敏的敏感字段才记录
-      if (s.redacted || (value !== undefined && value !== null)) {
-        diffs.push(`${key}=${s.display}`);
+    const seen = new WeakSet<object>();
+    this.collectDiffs(input, '', diffs, seen);
+    return diffs.length > 0 ? diffs.join(';') : null;
+  }
+
+  /** 是否为可递归展开的普通对象（排除 Date/Map 等特殊对象，避免误展开） */
+  private isPlainRecord(child: unknown): child is Record<string, unknown> {
+    return (
+      typeof child === 'object' &&
+      child !== null &&
+      !Array.isArray(child) &&
+      Object.getPrototypeOf(child) === Object.prototype
+    );
+  }
+
+  /** 递归收集脱敏差异（敏感字段名任意层级均脱敏；非敏感叶子为空值不记录） */
+  private collectDiffs(
+    value: Record<string, unknown> | unknown[],
+    prefix: string,
+    diffs: string[],
+    seen: WeakSet<object>,
+  ): void {
+    // 防循环引用导致的无限递归：已访问对象不再下钻（不会把循环体正文落盘）
+    if (seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+    const entries: ReadonlyArray<readonly [string, unknown]> = Array.isArray(value)
+      ? value.map((v, i) => [`${prefix}[${i}]`, v] as const)
+      : Object.entries(value).map(([k, v]) => [`${prefix ? `${prefix}.` : ''}${k}`, v] as const);
+
+    for (const [path, child] of entries) {
+      const leafName = path.slice(path.lastIndexOf('.') + 1);
+      if (isSensitiveField(leafName)) {
+        const s = this.sanitizeField(leafName, child);
+        diffs.push(`${path}=${s.display}`);
+        continue;
+      }
+      if (Array.isArray(child)) {
+        this.collectDiffs(child, path, diffs, seen);
+        continue;
+      }
+      if (this.isPlainRecord(child)) {
+        this.collectDiffs(child, path, diffs, seen);
+        continue;
+      }
+      if (child !== undefined && child !== null) {
+        const s = this.sanitizeField(leafName, child);
+        diffs.push(`${path}=${s.display}`);
       }
     }
-    return diffs.length > 0 ? diffs.join(';') : null;
   }
 
   /**
@@ -89,9 +151,11 @@ export class AuditSanitizer {
       return undefined;
     }
     let text = message;
-    // 抹掉 key=value / key:value 形式的敏感键值（覆盖 token/secret/password/key/code 等）
+    // 抹掉 key=value / key:value 形式的敏感键值（覆盖 token/secret/password/key/code 等）。
+    // 键前须有分隔符（&、;、空白、引号、冒号或字符串起始），避免误伤普通文本，
+    // 同时保证凭证出现在字符串起始处时也能被抹掉，防止敏感信息落盘。
     text = text.replace(
-      /([&;\s,"'])([a-z0-9_-]{0,40}(?:token|secret|password|passwd|apikey|key|code|credential))\s*[=:]\s*[^&;\s,"']+/gi,
+      /(^|[&;\s,"':])([a-z0-9_-]{0,40}(?:token|secret|password|passwd|apikey|key|code|credential))\s*[=:]\s*[^&;\s,"':]+/gi,
       (_m, sep: string, name: string) => `${sep}${name}=<REDACTED>`,
     );
     // 抹掉 URL 查询串里的凭证参数
