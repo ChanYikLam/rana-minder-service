@@ -4,11 +4,16 @@ import { SubmitCorrectionCommand } from './application/commands/correction-submi
 import { DecideCorrectionCommand } from './application/commands/correction-decide.command';
 import { WithdrawCorrectionCommand } from './application/commands/correction-decide.command';
 import { MarkOverdueCommand } from './application/commands/correction-decide.command';
+import { AuditWriter } from './application/commands/audit-writer';
 import { CorrectionStatusQuery } from './application/queries/correction-status.query';
+import { AuditQuery } from './application/queries/audit-query';
 import { CorrectionStateMachine } from './domain/state-machines/correction-state-machine';
 import { CorrectionPolicy } from './domain/services/correction-policy';
+import { AuditSanitizer } from './domain/services/audit-sanitizer';
 import { CORRECTION_REPOSITORY } from './infrastructure/correction-repository';
 import { InMemoryCorrectionRepository } from './infrastructure/correction-repository';
+import { AUDIT_REPOSITORY } from './infrastructure/audit-repository';
+import { InMemoryAuditRepository } from './infrastructure/audit-repository';
 
 /**
  * 领域模块：纠错、审计与数据生命周期（5.3，SRS-SM-AUD-001）。
@@ -21,19 +26,24 @@ import { InMemoryCorrectionRepository } from './infrastructure/correction-reposi
  * - 客观错误才可纠错（单纯主观评价争议拒绝）；
  * - 作者回避：原作者不得单独批准自己的错误；
  * - 逾期只标记并提醒，不自动批准/驳回/修改业务记录；
- * - 审计不可改、删除只留最小审计、不建设匿名化。
+ * - 审计不可改：关键审计与业务同事务（写入失败业务失败），敏感不落盘，
+ *   应用内无修改/删除审计入口；删除只留最小审计；不建设匿名化。
  */
 @Module({
   providers: [
     CorrectionStateMachine,
     CorrectionPolicy,
+    AuditSanitizer,
     { provide: CORRECTION_REPOSITORY, useClass: InMemoryCorrectionRepository },
+    { provide: AUDIT_REPOSITORY, useClass: InMemoryAuditRepository },
     SaveCorrectionDraftCommand,
     SubmitCorrectionCommand,
     DecideCorrectionCommand,
     WithdrawCorrectionCommand,
     MarkOverdueCommand,
     CorrectionStatusQuery,
+    AuditWriter,
+    AuditQuery,
   ],
   exports: [
     SaveCorrectionDraftCommand,
@@ -42,7 +52,10 @@ import { InMemoryCorrectionRepository } from './infrastructure/correction-reposi
     WithdrawCorrectionCommand,
     MarkOverdueCommand,
     CorrectionStatusQuery,
+    AuditWriter,
+    AuditQuery,
     CORRECTION_REPOSITORY,
+    AUDIT_REPOSITORY,
   ],
 })
 export class AuditModule {}
