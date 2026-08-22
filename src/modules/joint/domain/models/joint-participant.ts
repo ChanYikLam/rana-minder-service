@@ -120,6 +120,11 @@ export class JointParticipant {
     return this.transition(machine, JointParticipantEvent.WITHDRAW, now);
   }
 
+  /** 撤回后重新提出拟参与：WITHDRAWN → PROPOSED（同一活动+社团唯一聚合，不新建冲突行） */
+  repropose(machine: JointParticipantStateMachine, now: Date): boolean {
+    return this.transition(machine, JointParticipantEvent.REPROPOSE, now);
+  }
+
   suspend(machine: JointParticipantStateMachine, now: Date): boolean {
     const ok = this.transition(machine, JointParticipantEvent.SUSPEND, now);
     if (ok) {

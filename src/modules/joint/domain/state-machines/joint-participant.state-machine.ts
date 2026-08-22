@@ -23,6 +23,7 @@ export enum JointParticipantEvent {
   RECONFIRM = 'RECONFIRM',
   PARTICIPATE = 'PARTICIPATE',
   WITHDRAW = 'WITHDRAW',
+  REPROPOSE = 'REPROPOSE',
   SUSPEND = 'SUSPEND',
   RESUME = 'RESUME',
 }
@@ -62,6 +63,11 @@ export class JointParticipantStateMachine {
       case JointParticipantEvent.WITHDRAW:
         if (currentState === JointParticipantStatus.PROPOSED) {
           return { allowed: true, nextState: JointParticipantStatus.WITHDRAWN };
+        }
+        return { allowed: false };
+      case JointParticipantEvent.REPROPOSE:
+        if (currentState === JointParticipantStatus.WITHDRAWN) {
+          return { allowed: true, nextState: JointParticipantStatus.PROPOSED };
         }
         return { allowed: false };
       case JointParticipantEvent.SUSPEND:
