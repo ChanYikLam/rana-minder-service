@@ -43,6 +43,9 @@ import { ExternalFileCheckAdapter } from './file-check/external-file-check.adapt
 import { ApplicationFileCheck } from '../modules/file/infrastructure/file-check-port';
 import { HttpNotifyAdapter, type NotifyAdapter } from './notify/external-notify.adapter';
 import { ExternalBackupAdapter } from './backup/external-backup.adapter';
+import { NotWiredBackupReportPort } from '../platform/observability/backup-report/backup-report';
+import { randomUUID } from 'node:crypto';
+import { externalFailure } from '../common/contracts/external-result';
 import {
   InMemoryDepLatestRecorder,
   type DepLatestRecorder,
@@ -179,8 +182,6 @@ const depLatestRecorder: DepLatestRecorder = new InMemoryDepLatestRecorder();
           // fail-closed：未启用时返回不可用桩（对象为 UNAVAILABLE 语义）。
           return {
             async send() {
-              const { randomUUID } = await import('node:crypto');
-              const { externalFailure } = await import('../common/contracts/external-result');
               return externalFailure(
                 'UNAVAILABLE',
                 {
@@ -204,7 +205,8 @@ const depLatestRecorder: DepLatestRecorder = new InMemoryDepLatestRecorder();
       provide: ADAPTERS_BACKUP,
       useFactory: (config: RanaMinderConfig, recorder: DepLatestRecorder) => {
         if (!realEnabled('ADAPTERS_BACKUP_REAL')) {
-          return null;
+          // fail-closed：未启用时返回空集桩（不抛异常、不伪造备份记录）。
+          return new NotWiredBackupReportPort();
         }
         return trackBackup(
           new ExternalBackupAdapter({ endpoint: config.storage.endpoint }),
