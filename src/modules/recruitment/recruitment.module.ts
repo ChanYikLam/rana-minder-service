@@ -6,14 +6,20 @@
  * RecruitmentController → Nest HTTP 适配控制器与守卫。
  *
  * 会话：Casdoor OIDC 会话链路接入前绑定 RejectAllRecruitmentAuthSessionProvider
- * （fail-closed，受保护端点 401）；授权：3.x 组织/身份授权落地前绑定
- * NotWiredRecruitmentAuthorization（全部管理/提交操作拒绝）。
+ * （fail-closed，受保护端点 401）；授权：已接线组织授权（OrgBackedRecruitment-
+ * Authorization，ORG-038 经 CURRENT_PERMISSIONS_PORT 逐请求重算；
+ * canManage=club:recruitment:manage，canSubmit=非现任成员）。
+ * 表单集成仍为 StubRecruitmentForm（4.4b 与 FormModule 真集成时收口）。
  */
 
 import { Module } from '@nestjs/common';
 
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
+import { OrganizationModule } from '../organization/module';
+import {
+  CURRENT_PERMISSIONS_PORT,
+} from '../organization/application/ports';
 import { DB_ADAPTER } from '../../adapters/tokens';
 
 import {
@@ -37,7 +43,7 @@ import {
 
 import { RecruitmentUnitOfWork } from './infrastructure/unit-of-work';
 import { PostgresRecruitmentRepository } from './infrastructure/postgres-recruitment.repository';
-import { NotWiredRecruitmentAuthorization } from './application/ports/recruitment-authorization.port';
+import { OrgBackedRecruitmentAuthorization } from './infrastructure/org-recruitment-authorization';
 import { StubRecruitmentForm } from './application/ports/recruitment-form.port';
 
 import { DefaultCreateRecruitmentActivityUseCase } from './application/commands/create-recruitment-activity.use-case';
@@ -61,7 +67,7 @@ import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.
 import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-recruitment.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule],
+  imports: [AdaptersModule, ObservabilityModule, OrganizationModule],
   controllers: [OrgRecruitmentNestController, ApplicantRecruitmentNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
@@ -82,8 +88,12 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
       useFactory: (db, uow) => new PostgresRecruitmentRepository(db, uow),
       inject: [DB_ADAPTER, RecruitmentUnitOfWork],
     },
-    // ----- 端口（3.x 接入前失败关闭桩）-----
-    { provide: RECRUITMENT_AUTHORIZATION, useClass: NotWiredRecruitmentAuthorization },
+    // ----- 端口（授权已接线组织授权；表单集成仍为桩，4.4b 收口）-----
+    {
+      provide: RECRUITMENT_AUTHORIZATION,
+      useFactory: (permissions) => new OrgBackedRecruitmentAuthorization(permissions),
+      inject: [CURRENT_PERMISSIONS_PORT],
+    },
     { provide: RECRUITMENT_FORM_PORT, useClass: StubRecruitmentForm },
     // ----- 应用命令 -----
     {

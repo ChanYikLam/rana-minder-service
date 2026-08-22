@@ -8,7 +8,8 @@
  *
  * 会话：Casdoor OIDC 会话链路接入前绑定 RejectAllFormAuthSessionProvider
  * （fail-closed，全部受保护端点 401 IFC-ERR-001）；权限：organization（3.2）
- * 落地前绑定 NotWiredFormDesignPermission（任何设计/平台管理操作拒绝）。
+ * 设计/填写权限已接线组织授权（OrgBacked*，ORG-038）；部门级权限解析
+ * （ORG-035）无契约支撑前，department 作用域设计仍 fail-closed（见适配器注释）。
  * 资料目录接入共享的 profile-field 常量（src/shared/models，静态实现，随 3.x 配置化目录替换）。
  */
 
@@ -16,6 +17,10 @@ import { Module } from '@nestjs/common';
 
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
+import { OrganizationModule } from '../organization/module';
+import {
+  CURRENT_PERMISSIONS_PORT,
+} from '../organization/application/ports';
 import { DB_ADAPTER } from '../../adapters/tokens';
 
 import {
@@ -56,8 +61,8 @@ import { PostgresFormDefinitionRepository } from './infrastructure/postgres-form
 import { PostgresFormAudit } from './infrastructure/postgres-form-audit';
 import { PostgresFormIdempotencyStore } from './infrastructure/postgres-form-idempotency-store';
 import { PostgresFormSubmissionRepository } from './infrastructure/postgres-form-submission.repository';
-import { NotWiredFormDesignPermission } from './infrastructure/not-wired-form-design-permission';
-import { NotWiredFormFillPermission } from './infrastructure/not-wired-form-fill-permission';
+import { OrgBackedFormDesignPermission } from './infrastructure/org-form-design-permission';
+import { OrgBackedFormFillPermission } from './infrastructure/org-form-fill-permission';
 import { StaticProfileFieldDirectory } from './infrastructure/static-profile-field-directory';
 
 import { DefaultFormVersionStateMachine } from './domain/state-machines/form-version.state-machine';
@@ -92,7 +97,7 @@ import { AdminFormsNestController } from './interfaces/nest/admin-forms.nest.con
 import { FormSubmissionNestController } from './interfaces/nest/form-submission.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule],
+  imports: [AdaptersModule, ObservabilityModule, OrganizationModule],
   controllers: [OrgFormsNestController, AdminFormsNestController, FormSubmissionNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
@@ -120,8 +125,12 @@ import { FormSubmissionNestController } from './interfaces/nest/form-submission.
       useFactory: (db, uow) => new PostgresFormIdempotencyStore(db, uow),
       inject: [DB_ADAPTER, FormUnitOfWork],
     },
-    // ----- 领域适配器（权限失败关闭 / 静态资料目录）-----
-    { provide: FORM_DESIGN_PERMISSION, useClass: NotWiredFormDesignPermission },
+    // ----- 领域适配器（组织授权接线 / 静态资料目录；部门作用域仍 fail-closed，见适配器注释）-----
+    {
+      provide: FORM_DESIGN_PERMISSION,
+      useFactory: (permissions) => new OrgBackedFormDesignPermission(permissions),
+      inject: [CURRENT_PERMISSIONS_PORT],
+    },
     { provide: FORM_PROFILE_FIELD_DIRECTORY, useClass: StaticProfileFieldDirectory },
     // ----- 状态机与策略（纯规则单例）-----
     { provide: FORM_VERSION_MACHINE, useClass: DefaultFormVersionStateMachine },
@@ -276,7 +285,11 @@ import { FormSubmissionNestController } from './interfaces/nest/form-submission.
       useFactory: (db, uow) => new PostgresFormSubmissionRepository(db, uow),
       inject: [DB_ADAPTER, FormUnitOfWork],
     },
-    { provide: FORM_FILL_PERMISSION, useClass: NotWiredFormFillPermission },
+    {
+      provide: FORM_FILL_PERMISSION,
+      useFactory: (permissions) => new OrgBackedFormFillPermission(permissions),
+      inject: [CURRENT_PERMISSIONS_PORT],
+    },
     {
       provide: SUBMIT_FORM_USE_CASE,
       useFactory: (repo, definitions, permission, audit, idempotency) =>
