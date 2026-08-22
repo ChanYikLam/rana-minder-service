@@ -280,6 +280,27 @@ describe('5.3.1 事实纠错（AUD-001/002/010）', () => {
     );
     await assert.rejects(rig.save.execute({ ...draftInput, authorId: '' }), /缺少记录原作者/);
     await assert.rejects(rig.save.execute({ ...draftInput, applicantId: '' }), /缺少提交人/);
+    await assert.rejects(
+      rig.save.execute({
+        ...draftInput,
+        targetRecord: { ...draftInput.targetRecord, objectId: '' },
+      }),
+      /缺少目标记录标识/,
+    );
+    await assert.rejects(
+      rig.save.execute({
+        ...draftInput,
+        targetRecord: { ...draftInput.targetRecord, fieldKey: '' },
+      }),
+      /缺少目标字段/,
+    );
+    await assert.rejects(
+      rig.save.execute({
+        ...draftInput,
+        targetRecord: { ...draftInput.targetRecord, ownerClubId: '' },
+      }),
+      /缺少目标记录所属社团/,
+    );
   });
 
   it('提交用版本 CAS：并发提交只一个成功，另一并发幂等返回待处理', async () => {

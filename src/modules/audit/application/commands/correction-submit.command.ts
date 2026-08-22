@@ -75,6 +75,19 @@ export class SaveCorrectionDraftCommand {
     if (input.applicantId.length === 0) {
       throw new CorrectionCommandError('IFC-ERR-005', '缺少提交人');
     }
+    // 目标业务记录关键字段非空，避免无效草稿进入待处理/跨社团判定
+    if (input.targetRecord.objectType.length === 0) {
+      throw new CorrectionCommandError('IFC-ERR-005', '缺少目标记录类型');
+    }
+    if (input.targetRecord.objectId.length === 0) {
+      throw new CorrectionCommandError('IFC-ERR-005', '缺少目标记录标识');
+    }
+    if (input.targetRecord.fieldKey.length === 0) {
+      throw new CorrectionCommandError('IFC-ERR-005', '缺少目标字段');
+    }
+    if (input.targetRecord.ownerClubId.length === 0) {
+      throw new CorrectionCommandError('IFC-ERR-005', '缺少目标记录所属社团');
+    }
     const now = new Date().toISOString();
     const correction: Correction = {
       correctionId: randomUUID(),
