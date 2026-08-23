@@ -33,6 +33,8 @@ export interface ArchiveAccessContext {
   readonly clubId?: string;
   /** 当前部门（部门负责人） */
   readonly departmentId?: string;
+  /** 当前部门所属社团（部门负责人归属校验：本部门路径仅限本社团归档） */
+  readonly departmentClubId?: string;
   /** 是否申请人（本人） */
   readonly isApplicant?: boolean;
 }
@@ -94,10 +96,17 @@ export class ArchiveAccessPolicy {
     if (!this.isClubHandler(context.roles) && !isDepartmentLeader) {
       throw new ArchiveAccessDeniedError('当前无归档访问角色');
     }
-    // 现任部门负责人：仅本部门路径（需提供 departmentId 且限定范围）
+    // 现任部门负责人：仅本部门路径（需提供 departmentId 且限定范围；部门归属社团须匹配）
     if (isDepartmentLeader && !this.isClubHandler(context.roles)) {
       if (context.departmentId === undefined || requesterClubId === null) {
         throw new ArchiveAccessDeniedError('部门负责人只能访问本部门路径');
+      }
+      // 部门归属校验：本部门路径仅限本部门所属社团的归档（防止跨社团越权）
+      if (
+        context.departmentClubId !== undefined &&
+        requesterClubId !== context.departmentClubId
+      ) {
+        throw new ArchiveAccessDeniedError('部门负责人只能访问本部门所属社团的归档');
       }
       return { allowed: true, privileged: false };
     }
@@ -129,6 +138,14 @@ export class ArchiveAccessPolicy {
         return;
       }
       throw new ArchiveAccessDeniedError('内部评价/纠错/审计仅有权角色可看');
+    }
+    // CLUB_HISTORY（本社团全部历史）：仅现任社团负责人/人事/超管；
+    // 部门负责人只能看本部门路径（DEPARTMENT_PATH），不得借此看全部历史
+    if (contentKind === ArchiveContentKind.CLUB_HISTORY) {
+      if (this.isClubHandler(context.roles) || context.roles.includes('SUPER_ADMIN')) {
+        return;
+      }
+      throw new ArchiveAccessDeniedError('本社团全部历史仅负责人/人事可看');
     }
     // SELF = 本人记录（报名/附件/公开结果/邀请）：本人访问自己的记录一律允许，
     // 记录归属由调用方限定（objectId=principalId）；无额外角色限制

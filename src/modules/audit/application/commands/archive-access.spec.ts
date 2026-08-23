@@ -188,4 +188,39 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     });
     assert.equal(ok.decision.allowed, true);
   });
+
+  it('评审修复：部门负责人不得借 CLUB_HISTORY 看本社团全部历史（仅负责人/人事）', async () => {
+    const rig = await makeRig();
+    await assert.rejects(
+      rig.query.access({
+        activityId: 'act-1',
+        context: ctx({
+          principalId: 'd1',
+          roles: ['DEPARTMENT_LEADER'],
+          departmentId: 'dep-1',
+          departmentClubId: 'c1',
+        }),
+        requesterClubId: 'c1',
+        contentKind: 'CLUB_HISTORY' as never,
+      }),
+      /仅负责人\/人事可看/,
+    );
+  });
+
+  it('评审修复：部门负责人跨社团访问（部门归属社团不匹配）→ 拒绝', async () => {
+    const rig = await makeRig();
+    await assert.rejects(
+      rig.query.access({
+        activityId: 'act-1',
+        context: ctx({
+          principalId: 'd1',
+          roles: ['DEPARTMENT_LEADER'],
+          departmentId: 'dep-1',
+          departmentClubId: 'c2', // 部门属于 c2，却请求 c1 归档
+        }),
+        requesterClubId: 'c1',
+      }),
+      /只能访问本部门所属社团/,
+    );
+  });
 });
