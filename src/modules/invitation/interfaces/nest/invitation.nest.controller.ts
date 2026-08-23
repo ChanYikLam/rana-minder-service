@@ -34,6 +34,7 @@ import {
   InvitationStatusQuery,
   InvitationStatusQueryError,
 } from '../../application/queries/invitation-status.query';
+import { RoutineInvitationStatusQueryError } from '../../application/queries/routine-status.query';
 import {
   AcceptRoutineInvitationCommand,
   AcceptRoutineError,
@@ -64,6 +65,7 @@ export class InvitationNestController {
     @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
     try {
+      // 授权在查询内按邀请所属社团解析（GOV-007 权限化），caller 只需提供主体 ID。
       const view = await this.status.getStatus(invitationId, {
         principalId: this.principal(request),
         roles: [],
@@ -112,10 +114,16 @@ export class InvitationNestController {
   @Get('membership/:invitationId')
   async membershipStatus(
     @Param('invitationId') invitationId: string,
-    @Req() _request: Record<string, unknown>,
+    @Req() request: Record<string, unknown>,
   ): Promise<ApiSuccess<unknown>> {
     try {
-      const view = await this.routineStatus.getStatus(invitationId);
+      // 访问控制：仅本人或发文社团负责人/人事可查看（IFC-ERR-003），
+      // 授权在查询内按邀请所属社团解析，caller 只需提供主体 ID。
+      const view = await this.routineStatus.getStatus(invitationId, {
+        principalId: this.principal(request),
+        roles: [],
+        clubId: '',
+      });
       return { code: 0, data: view };
     } catch (error) {
       throw this.mapError(error);
@@ -170,6 +178,7 @@ export class InvitationNestController {
       error instanceof AcceptRoutineError ||
       error instanceof RoutineRejectError ||
       error instanceof InvitationStatusQueryError ||
+      error instanceof RoutineInvitationStatusQueryError ||
       error instanceof InvitationUniqueViolationError
         ? (error.message.split(':')[0] as string)
         : null;

@@ -53,6 +53,24 @@ export interface OidcDiscovery {
   readonly end_session_endpoint?: string;
 }
 
+/** 出站 OIDC 请求超时（毫秒）；避免 Casdoor 挂起无限阻塞 /api/auth/session。 */
+export const OIDC_FETCH_TIMEOUT_MS = 5000;
+
+/** 带超时的 fetch：AbortController 计时中断挂起连接（CAS-AUTH-001 出站不阻塞）。 */
+async function fetchWithTimeout(
+  url: string | URL,
+  init: RequestInit = {},
+  timeoutMs = OIDC_FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export class CasdoorOidcClient {
   private discovery?: OidcDiscovery;
 
@@ -78,7 +96,7 @@ export class CasdoorOidcClient {
    */
   async exchangeCode(code: string): Promise<TokenSet> {
     const disco = await this.ensureDiscovery();
-    const res = await fetch(disco.token_endpoint, {
+    const res = await fetchWithTimeout(disco.token_endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -126,7 +144,7 @@ export class CasdoorOidcClient {
    */
   async fetchUserInfo(accessToken: string): Promise<OidcUserInfo> {
     const disco = await this.ensureDiscovery();
-    const res = await fetch(disco.userinfo_endpoint, {
+    const res = await fetchWithTimeout(disco.userinfo_endpoint, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
@@ -157,7 +175,7 @@ export class CasdoorOidcClient {
     accessToken: string,
   ): Promise<'ACTIVE' | 'DISABLED' | 'DELETED' | 'UNKNOWN'> {
     const url = `${this.config.endpoint}/api/get-user`;
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
@@ -182,7 +200,7 @@ export class CasdoorOidcClient {
   private async ensureDiscovery(): Promise<OidcDiscovery> {
     if (this.discovery) return this.discovery;
     const url = `${this.config.endpoint}/.well-known/openid-configuration`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     if (!res.ok) {
       throw new Error(`Casdoor OIDC discovery failed: ${res.status}`);
     }

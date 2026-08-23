@@ -1,7 +1,12 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { InvitationPolicy } from '../../domain/services/invitation-policy';
 import { INVITATION_REPOSITORY } from '../../infrastructure/invitation-repository';
 import type { InvitationRepository } from '../../infrastructure/invitation-repository';
+import {
+  CURRENT_PERMISSIONS_PORT,
+  type CurrentPermissionsPort,
+} from '../../../organization/application/ports';
+import { PermissionCatalog } from '../../../organization/domain/models/permission-template';
 
 /** 邀请状态查询视图（IFC-SM-019 真实状态） */
 export interface InvitationStatusView {
@@ -49,6 +54,9 @@ export class InvitationStatusQuery {
   constructor(
     @Inject(INVITATION_REPOSITORY) private readonly repo: InvitationRepository,
     private readonly policy: InvitationPolicy = new InvitationPolicy(),
+    @Optional()
+    @Inject(CURRENT_PERMISSIONS_PORT)
+    private readonly permissions?: CurrentPermissionsPort,
   ) {}
 
   async getStatus(
@@ -63,8 +71,20 @@ export class InvitationStatusQuery {
       // 本人 或 发出社团负责人/人事 可查看；其余无权（IFC-ERR-003）
       const isInvitee = viewer.principalId === invitation.inviteeId;
       if (!isInvitee) {
-        // 仅邀请所属社团的负责人/人事可查看，防止跨社团信息泄露
-        this.policy.assertCanIssueForClub(viewer.roles, viewer.clubId, invitation.clubId);
+        // 权限化授权（GOV-007）：以邀请所属社团的 club:invite:manage 权限判定，
+        // 使 HTTP 层无需预知 caller 角色/社团即可正确放行“发文社团可查看”。
+        if (this.permissions !== undefined) {
+          const effective = await this.permissions.effectiveForClub(
+            viewer.principalId,
+            invitation.clubId,
+          );
+          if (!effective.includes(PermissionCatalog.CLUB_INVITE_MANAGE)) {
+            throw new InvitationStatusQueryError('IFC-ERR-003', '当前无权查看');
+          }
+        } else {
+          // 回退（无权限端口装配，如领域单测）：按 caller 提供的角色/社团校验
+          this.policy.assertCanIssueForClub(viewer.roles, viewer.clubId, invitation.clubId);
+        }
       }
     }
     return {

@@ -16,6 +16,8 @@ import { forwardRef, Module } from '@nestjs/common';
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { APP_LOGGER } from '../../platform/observability/logging/tokens';
+import { DEP_LATEST_PORT } from '../../platform/observability/status-page/tokens';
+import type { DepLatestPort } from '../../platform/observability/status-page/dep-latest';
 import { DB_ADAPTER, CASDOOR_ADAPTER, MAIL_CHANNEL_ADAPTER } from '../../adapters/tokens';
 
 import {
@@ -117,16 +119,22 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     // ----- 会话（条件装配：Casdoor endpoint 配置时启用 OIDC；否则 fail-closed）-----
     {
       provide: AUTH_SESSION_PROVIDER,
-      useFactory: (config: RanaMinderConfig) => {
+      useFactory: async (config: RanaMinderConfig, depLatest: DepLatestPort) => {
         if (config.casdoor.endpoint && config.casdoor.clientId && config.casdoor.clientSecretRef) {
+          // CAS-FAIL-001：casdoorAvailable 取上一轮连通探测结果（而非硬编码 true），
+          // 使 15 分钟降级窗口在 Casdoor 不可用时真正生效。无法确认（unknown）按
+          // fail-closed 视为不可用，避免宣称降级能力而实际失效。
+          const casdoorState = await depLatest.latest('casdoor');
+          const casdoorAvailable =
+            casdoorState.state === 'fresh' && casdoorState.lastResult === 'success';
           return new OidcAuthSessionProvider({
             sessionSecret: resolveSessionSecret(config.casdoor),
-            casdoorAvailable: true,
+            casdoorAvailable,
           });
         }
         return new RejectAllAuthSessionProvider();
       },
-      inject: [RANA_MINDER_CONFIG],
+      inject: [RANA_MINDER_CONFIG, DEP_LATEST_PORT],
     },
     AuthGuard,
     // ----- 工作单元（ambient 事务 + RLS 单目标上下文）-----
