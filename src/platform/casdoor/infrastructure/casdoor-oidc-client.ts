@@ -59,6 +59,8 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 export class CasdoorOidcClient {
   private discovery?: OidcDiscovery;
   private readonly timeoutMs: number;
+  /** 缓存的远程 JWKS（jose 内置缓存 + 自动刷新）；复用同一实例避免每次登录重新拉取。 */
+  private jwks?: ReturnType<typeof createRemoteJWKSet>;
 
   constructor(private readonly config: CasdoorOidcConfig) {
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -115,7 +117,7 @@ export class CasdoorOidcClient {
    */
   async verifyIdToken(idToken: string, nonce: string): Promise<JWTPayload> {
     const disco = await this.ensureDiscovery();
-    const JWKS = createRemoteJWKSet(new URL(disco.jwks_uri));
+    const JWKS = this.getJwks(disco);
     const { payload } = await jwtVerify(idToken, JWKS, {
       issuer: disco.issuer,
       audience: this.config.clientId,
@@ -183,6 +185,12 @@ export class CasdoorOidcClient {
   }
 
   // ----- 内部 -----
+
+  private getJwks(disco: OidcDiscovery): ReturnType<typeof createRemoteJWKSet> {
+    // JWKS 缓存实例以复用 jose 的缓存 + 自动刷新能力，避免每次登录重复拉取密钥集。
+    this.jwks ??= createRemoteJWKSet(new URL(disco.jwks_uri));
+    return this.jwks;
+  }
 
   private async ensureDiscovery(): Promise<OidcDiscovery> {
     if (this.discovery) return this.discovery;
