@@ -6,6 +6,8 @@ import {
   DeletionStepStatus,
 } from '../../domain/models/deletion';
 import type { DeletionChecklist, DeletionScope, DeletionStep } from '../../domain/models/deletion';
+import { AuditEventType, AuditOutcome } from '../../domain/models/audit-event';
+import { AuditWriter } from './audit-writer';
 import { DeletionPolicy, DeletionPolicyError } from '../../domain/services/deletion-policy';
 import { DELETION_CHECKLIST_REPOSITORY } from '../../infrastructure/deletion-checklist-repository';
 import type { DeletionChecklistRepository } from '../../infrastructure/deletion-checklist-repository';
@@ -24,6 +26,11 @@ export interface FormalDeleteInput {
   readonly affectedObjects: readonly string[];
   /** 活动业务关系（成员关系/有效邀请/进行中活动；须先结束，AUD-008） */
   readonly activeRelations: readonly { kind: string; ref: string }[];
+  /** 审计上下文（发起删除的超管敏感操作留痕；AUD-006/008） */
+  readonly audit: {
+    readonly requestId: string;
+    readonly source: { channel: 'WEB' | 'ADMIN' | 'SYSTEM_TASK' | 'BATCH' };
+  };
 }
 
 /**
@@ -34,6 +41,8 @@ export interface FormalDeleteInput {
  * - **不建设匿名化**：拒绝变相匿名化用途（完整删除不属于匿名化）；
  * - 生成**独立删除执行清单**（在线库/附件存储/缓存/搜索索引/未过期导出），
  *   保存后由执行器逐项核验；恢复后重放清单防复现；
+ * - 发起正式删除（超管敏感操作）**本身落审计留痕**（SUPER_ADMIN_OP，AUD-006/008），
+ *   与执行清单时的删除审计共同构成完整留痕链；
  * - 不自动删 Casdoor 账号/Group/Claims，不能召回已发邮件（AUD-006/008）。
  */
 @Injectable()
@@ -41,6 +50,7 @@ export class FormalDeleteCommand {
   constructor(
     @Inject(DELETION_CHECKLIST_REPOSITORY) private readonly repo: DeletionChecklistRepository,
     private readonly policy: DeletionPolicy,
+    private readonly auditWriter: AuditWriter,
   ) {}
 
   async execute(input: FormalDeleteInput): Promise<DeletionChecklist> {
@@ -88,6 +98,23 @@ export class FormalDeleteCommand {
       auditCommitted: false,
     };
     await this.repo.save(checklist);
+    // 发起正式删除（超管敏感操作）落审计留痕（仅内部标识/类型，不含正文，AUD-006/008）
+    await this.auditWriter.write({
+      eventType: AuditEventType.SUPER_ADMIN_OP,
+      actorId: input.initiator.principalId,
+      actorRoles: ['SUPER_ADMIN'],
+      scope: null,
+      source: input.audit.source,
+      target: { objectType: 'DELETION_CHECKLIST', objectId: checklist.checklistId },
+      oldValues: null,
+      newValues: {
+        scopeKind: input.scope.kind,
+        deletionType: input.scope.kind,
+        purpose: input.purpose,
+      },
+      outcome: AuditOutcome.SUCCESS,
+      requestId: input.audit.requestId,
+    });
     return checklist;
   }
 

@@ -16,11 +16,20 @@ export interface DeletionStepExecutorPort {
   deleteAndVerify(kind: string, targetRef: string): Promise<{ ok: boolean }>;
 }
 
-/** 占位实现（开发期直接确认；生产接存储执行器） */
+/**
+ * 占位实现（开发期占位；生产接存储执行器）。
+ *
+ * **fail-closed**：未接入真实删除执行器时，直接调用删除并回读核验会抛错，
+ * 而非恒返回 `{ok:true}`，避免“假删除/假清理”被静默确认（评审 critical）。
+ * 接线分支须在接入真实各存储执行器后再启用命令，否则执行即失败（安全兜底）。
+ */
 @Injectable()
 export class DefaultDeletionStepExecutor implements DeletionStepExecutorPort {
   async deleteAndVerify(_kind: string, _targetRef: string): Promise<{ ok: boolean }> {
-    return { ok: true };
+    throw new DeletionPolicyError(
+      'IFC-ERR-016',
+      '删除步骤执行器未接线（占位实现 fail-closed）：请先接入真实各存储删除执行器',
+    );
   }
 }
 

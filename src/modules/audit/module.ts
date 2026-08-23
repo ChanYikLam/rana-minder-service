@@ -94,8 +94,9 @@ import { PostgresDeletionChecklistRepository } from './infrastructure/postgres-d
     },
     {
       provide: DELETION_STEP_EXECUTOR,
-      // 开发期占位（恒确认）；上线前须接入真实各存储删除执行器（在线库/附件/缓存/
-      // 索引/未过期导出），接入后 deleteAndVerify 执行删除并回读核验（AUD-009/IFC-TX-007）
+      // 开发期占位（fail-closed：未接线即抛错，绝不静默假删除）；上线前须接入真实
+      // 各存储删除执行器（在线库/附件/缓存/索引/未过期导出），接入后 deleteAndVerify
+      // 执行删除并回读核验（AUD-009/IFC-TX-007）
       useClass: DefaultDeletionStepExecutor,
     },
     FormalDeleteCommand,
@@ -103,7 +104,7 @@ import { PostgresDeletionChecklistRepository } from './infrastructure/postgres-d
     RetentionCleanupCommand,
     {
       provide: RETENTION_CLEANUP_EXECUTOR,
-      // 开发期占位（恒确认）；生产接真实临时清理执行器（I2 评审意见）
+      // 开发期占位（fail-closed：未接线即抛错，绝不静默假清理）；生产接真实临时清理执行器（I2 评审意见）
       useClass: DefaultRetentionCleanupExecutor,
     },
     DeletionChecklistQuery,

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditEventType, AuditOutcome } from '../../domain/models/audit-event';
-import type { TemporaryItemKind } from '../../domain/models/deletion';
+import type { TemporaryItem, TemporaryItemKind } from '../../domain/models/deletion';
 import { AuditWriter } from './audit-writer';
 
 /** 临时清理执行器注入令牌（RetentionCleanupExecutorPort 为接口，注入须用显式 token） */
@@ -12,24 +12,23 @@ export interface RetentionCleanupExecutorPort {
   deleteAndVerify(itemId: string, kind: TemporaryItemKind): Promise<{ ok: boolean }>;
 }
 
-/** 占位实现（开发期直接确认；生产接真实清理执行器） */
+/**
+ * 占位实现（开发期占位；生产接真实清理执行器）。
+ *
+ * **fail-closed**：未接入真实清理执行器时，直接清理并回读核验会抛错，而非恒返回
+ * `{ok:true}`，避免“假清理 + 误导性 SUCCESS 审计”被静默确认（评审 critical）。
+ * 接线分支须在接入真实清理适配后再启用命令，否则清理即失败（安全兜底）。
+ */
 @Injectable()
 export class DefaultRetentionCleanupExecutor implements RetentionCleanupExecutorPort {
   async deleteAndVerify(_itemId: string, _kind: TemporaryItemKind): Promise<{ ok: boolean }> {
-    return { ok: true };
+    throw new Error('清理执行器未接线（占位实现 fail-closed）：请先接入真实临时清理执行器');
   }
 }
 
 /** 临时清理输入（AUD-007/009） */
 export interface RetentionCleanupInput {
-  readonly items: readonly {
-    readonly itemId: string;
-    readonly kind: TemporaryItemKind;
-    /** 期限已到（超管配置；调用方判定） */
-    readonly retentionExpired: boolean;
-    /** 清理前重查引用：无有效引用才可清理 */
-    readonly hasValidReference: boolean;
-  }[];
+  readonly items: readonly TemporaryItem[];
   /** 审计上下文（可选；供清理审计留痕溯源，缺省用系统任务占位） */
   readonly audit?: {
     readonly actorId: string;

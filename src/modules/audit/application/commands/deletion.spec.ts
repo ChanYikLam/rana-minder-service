@@ -2,8 +2,14 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { InMemoryDeletionChecklistRepository } from '../../infrastructure/deletion-checklist-repository';
 import { FormalDeleteCommand } from './formal-delete.command';
-import { ExecuteDeletionChecklistCommand } from './execute-deletion-checklist.command';
-import { RetentionCleanupCommand } from './retention-cleanup.command';
+import {
+  ExecuteDeletionChecklistCommand,
+  DefaultDeletionStepExecutor,
+} from './execute-deletion-checklist.command';
+import {
+  RetentionCleanupCommand,
+  DefaultRetentionCleanupExecutor,
+} from './retention-cleanup.command';
 import { DeletionChecklistQuery } from '../queries/deletion-checklist.query';
 import { DeletionPolicy } from '../../domain/services/deletion-policy';
 import {
@@ -23,7 +29,9 @@ const makeAuditWriterStub = () => {
 const makeRig = (executor: { ok: boolean } = { ok: true }) => {
   const repo = new InMemoryDeletionChecklistRepository();
   const policy = new DeletionPolicy();
-  const formalDelete = new FormalDeleteCommand(repo, policy);
+  // 发起删除的审计留痕独立 stub（与执行清单审计分开计数，互不干扰）
+  const initiateAudit = makeAuditWriterStub();
+  const formalDelete = new FormalDeleteCommand(repo, policy, initiateAudit.writer);
   const audit = makeAuditWriterStub();
   const execute = new ExecuteDeletionChecklistCommand(
     repo,
@@ -46,6 +54,7 @@ const makeRig = (executor: { ok: boolean } = { ok: true }) => {
     query,
     writes: audit.writes,
     cleanupWrites: cleanupAudit.writes,
+    initiateWrites: initiateAudit.writes,
   };
 };
 
@@ -63,6 +72,7 @@ const deleteInput = {
   confirmed: true,
   affectedObjects: ['报名:r1', '评价:e1'],
   activeRelations: [],
+  audit: { requestId: 'req-del', source: { channel: 'ADMIN' as const } },
 };
 
 describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
@@ -164,6 +174,31 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
       rig.query.previewAffected(checklist.checklistId, ['HR_ADMIN']),
       /仅超级管理员/,
     );
+    // 发起正式删除（超管敏感操作）本身落审计留痕（AUD-006/008；评审 warning 修复）
+    assert.equal(rig.initiateWrites.length, 1);
+    const initWrite = rig.initiateWrites[0] as {
+      eventType: string;
+      actorId: string;
+      target: { objectId: string };
+    };
+    assert.equal(initWrite.eventType, 'SUPER_ADMIN_OP');
+    assert.equal(initWrite.actorId, 'sa1');
+    assert.equal(initWrite.target.objectId, checklist.checklistId);
+  });
+
+  it('评审修复：占位删除/清理执行器 fail-closed（未接线即抛错，绝不静默假删除）', async () => {
+    // 默认占位删除执行器：调用删除并回读核验即抛错（不再恒返回 {ok:true}）
+    const stepExecutor = new DefaultDeletionStepExecutor();
+    await assert.rejects(
+      stepExecutor.deleteAndVerify('ONLINE_DB', 'db:u1'),
+      /删除步骤执行器未接线/,
+    );
+    // 默认占位清理执行器：调用清理即抛错（不再恒返回 {ok:true}）
+    const cleanupExecutor = new DefaultRetentionCleanupExecutor();
+    await assert.rejects(
+      cleanupExecutor.deleteAndVerify('draft-1', TemporaryItemKind.UNSUBMITTED_DRAFT),
+      /清理执行器未接线/,
+    );
   });
 
   it('执行清单：全部回读核验 → 完成 + 最小删除审计（不含正文；AUD-006/008）', async () => {
@@ -217,7 +252,7 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
   it('评审修复：审计写入失败 → 普通重试补写审计（auditCommitted 标志，无需 replay 重执行）', async () => {
     const repo = new InMemoryDeletionChecklistRepository();
     const policy = new DeletionPolicy();
-    const formalDelete = new FormalDeleteCommand(repo, policy);
+    const formalDelete = new FormalDeleteCommand(repo, policy, makeAuditWriterStub().writer);
     const failingAudit = {
       write: async () => {
         throw new Error('audit db down');
@@ -267,7 +302,7 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
       },
     } as never;
     const policy = new DeletionPolicy();
-    const formalDelete = new FormalDeleteCommand(repo, policy);
+    const formalDelete = new FormalDeleteCommand(repo, policy, makeAuditWriterStub().writer);
     const audit = makeAuditWriterStub();
     const execute = new ExecuteDeletionChecklistCommand(
       repo,
