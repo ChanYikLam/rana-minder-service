@@ -78,6 +78,7 @@ describe('TaskRepositoryJobScheduler（ADR-004 持久任务桥接）', () => {
     await scheduler.enqueue({ ...TASK, scheduleType: 'at', at: NOW.toISOString() });
     const due = await scheduler.listDue(new Date(NOW.getTime() + 60_000));
     assert.equal(due.length, 1);
+    assert.equal(due[0].taskId, TASK.taskId); // 组织域以 intentId 寻址，与 acquireLease/complete/fail 一致
     assert.equal(due[0].refId, 'relcmd-1');
     assert.equal(due[0].kind, 'relation_execute');
     assert.equal(due[0].scheduleType, 'at');

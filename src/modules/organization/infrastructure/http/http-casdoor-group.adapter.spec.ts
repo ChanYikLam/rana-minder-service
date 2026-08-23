@@ -93,6 +93,30 @@ describe('HttpCasdoorGroupAdapter', () => {
     assert.equal(r.outcome, 'unknown');
   });
 
+  it('writeMembership remove：2xx 但读回失败 → unknown（严禁读失败误报成功）', async () => {
+    const { adapter } = makeFetch((url) => {
+      if (isGroupUrl(url)) return { status: 200, body: GROUP_BODY };
+      if (isMembersUrl(url)) return { status: 502, body: {} }; // 回读失败（瞬时故障）
+      return { status: 200, body: { ok: true } };
+    });
+    const r = await adapter.writeMembership({
+      ref: { owner: 'club-acm', name: '宣传部' },
+      subjectId: 'u_c',
+      action: 'remove',
+      requestId: 'req-2b',
+    });
+    // 回读读不到真实成员实况，绝不能因空数组合 remove 恒真而误判 success
+    assert.equal(r.outcome, 'unknown');
+  });
+
+  it('getGroupByRef：5xx 瞬时故障 → 上抛而非当作 deleted', async () => {
+    const { adapter } = makeFetch(() => ({ status: 502, body: {} }));
+    await assert.rejects(
+      () => adapter.getGroupByRef({ owner: 'x', name: 'y' }),
+      /casdoor get-group failed/,
+    );
+  });
+
   it('writeMembership：Group 不存在 → failure；5xx → unknown 可重试', async () => {
     const missing = makeFetch(() => ({ status: 404, body: {} }));
     const r1 = await missing.adapter.writeMembership({

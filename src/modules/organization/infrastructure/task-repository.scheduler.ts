@@ -113,7 +113,10 @@ export class TaskRepositoryJobScheduler implements JobSchedulerPort {
       scheduleAt?: string | null;
     } | null;
     return {
-      taskId: record.taskId,
+      // 组织域以 intentId 寻址：acquireLease/complete/fail 均走 findByIntentId。
+      // 若返回派生的 record.taskId（task:<TYPE>:<intentId>）会与寻址口径不一致，
+      // 导致 listDue 产出的任务无法被正确收口（本修复点）。
+      taskId: record.intentId,
       kind: payload?.kind ?? 'reconcile',
       refId: payload?.refId ?? record.source.objectId,
       scheduleType: payload?.scheduleAt == null ? 'immediate' : 'at',

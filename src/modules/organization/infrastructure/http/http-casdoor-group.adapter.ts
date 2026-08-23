@@ -162,7 +162,12 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
       `/get-group?owner=${encodeURIComponent(ref.owner)}&name=${encodeURIComponent(ref.name)}`,
       { method: 'GET' },
     );
-    if (!ok || status === 404) return null;
+    // 只有 404 才是「Group 确实不存在」；500/403/超时等瞬时故障必须上抛，
+    // 严禁被对账固化为 deleted 异常（ORG-026）。
+    if (status === 404) return null;
+    if (!ok) {
+      throw new Error(`casdoor get-group failed (status=${status || 'network'})`);
+    }
     if (typeof data !== 'object' || data === null) return null;
     return this.mapGroup(data as RawGroup);
   }
@@ -192,7 +197,17 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
     action: 'add' | 'remove';
     requestId: string;
   }): Promise<CasdoorWriteResult> {
-    const group = await this.getGroupByRef(input.ref);
+    let group: CasdoorGroupInfo | null;
+    try {
+      group = await this.getGroupByRef(input.ref);
+    } catch {
+      // 读取 Group 瞬时故障（非 404）→ 可重试 unknown，而非误判为 not found
+      return {
+        requestId: input.requestId,
+        outcome: 'unknown',
+        error: 'casdoor get-group failed (transient)',
+      };
+    }
     if (group === null) {
       return {
         requestId: input.requestId,
@@ -213,15 +228,26 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
         error: `casdoor write rejected (status=${status || 'network'})`,
       };
     }
-    // 写后定向读回（CAS-WR-006/007）：不以 2xx 宣称成功
+    // 写后定向读回（CAS-WR-006/007）：不以 2xx 宣称成功。
+    // 读回必须走严格路径：只有真正读到权威成员实况才允许确认。
+    // 若沿用 fail-closed 的 getGroupMembers/readback，读失败会被置空 []，
+    // 使 remove 的 !members.includes(subjectId) 恒真而误报成功（本修复点）。
     let confirmed = false;
     try {
-      const readback = await this.readback([input.ref]);
-      const members = readback.membersByGroup[`${input.ref.owner}/${input.ref.name}`] ?? [];
-      confirmed =
-        input.action === 'add'
-          ? members.includes(input.subjectId)
-          : !members.includes(input.subjectId);
+      const { ok: ro, status: rs, data: rd } = await this.request(
+        `/get-group-users?id=${encodeURIComponent(group.stableId)}`,
+        { method: 'GET' },
+      );
+      if (ro && rs >= 200 && rs < 300 && Array.isArray(rd)) {
+        const members = (rd as Array<{ id?: string }>)
+          .map((u) => u.id)
+          .filter((id): id is string => typeof id === 'string');
+        confirmed =
+          input.action === 'add'
+            ? members.includes(input.subjectId)
+            : !members.includes(input.subjectId);
+      }
+      // 非 2xx 或响应非数组 → 读失败，不确认
     } catch {
       confirmed = false;
     }
