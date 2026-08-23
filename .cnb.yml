@@ -80,6 +80,10 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
+        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
+        - name: 4b-DI引导测试
+          if: "[ -f package.json ]"
+          script: npm run test:di
         # 阶段 5：集成测试 L2（真实 PG18：pg_trgm/btree_gist 扩展；dind 已声明）
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
@@ -215,6 +219,10 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
+        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
+        - name: 4b-DI引导测试
+          if: "[ -f package.json ]"
+          script: npm run test:di
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
           script: |
@@ -335,6 +343,10 @@
         - name: 4-单元测试L1
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run test:unit
+        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
+        - name: 4b-DI引导测试
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run test:di
         - name: 5-集成测试L2
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |

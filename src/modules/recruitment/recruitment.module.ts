@@ -17,6 +17,9 @@ import { Module } from '@nestjs/common';
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { OrganizationModule } from '../organization/module';
+import { IdentityModule } from '../identity/identity.module';
+import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
+import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
 import { DB_ADAPTER } from '../../adapters/tokens';
 
@@ -59,19 +62,19 @@ import { DefaultListApplicationsQuery } from './application/queries/list-applica
 import { DefaultListInterviewsQuery } from './application/queries/list-interviews.query';
 
 import { RecruitmentController } from './interfaces/controllers/recruitment.controller';
-import { RejectAllRecruitmentAuthSessionProvider } from './interfaces/nest/recruitment-auth-session';
 import { RecruitmentAuthGuard } from './interfaces/nest/recruitment-auth.guard';
 import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.nest.controller';
 import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-recruitment.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule, OrganizationModule],
+  imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule],
   controllers: [OrgRecruitmentNestController, ApplicantRecruitmentNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
     {
       provide: RECRUITMENT_AUTH_SESSION_PROVIDER,
-      useClass: RejectAllRecruitmentAuthSessionProvider,
+      useFactory: (identitySession) => adaptSessionProvider(identitySession),
+      inject: [AUTH_SESSION_PROVIDER],
     },
     RecruitmentAuthGuard,
     // ----- 工作单元（事务边界）-----
