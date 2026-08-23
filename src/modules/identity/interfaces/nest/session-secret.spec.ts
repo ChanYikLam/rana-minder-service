@@ -38,6 +38,10 @@ describe('deriveSessionSecret（会话签名密钥派生）', () => {
     assert.notEqual(bytesToHex(fromRef), bytesToHex(fromReal));
 
     // 引号串作为输入时结果不含引用串明文（无泄漏面）。
-    assert.ok(!bytesToHex(fromReal).includes(createHash('sha256').update('${env:CASDOOR_CLIENT_SECRET}').digest('hex')));
+    assert.ok(
+      !bytesToHex(fromReal).includes(
+        createHash('sha256').update('${env:CASDOOR_CLIENT_SECRET}').digest('hex'),
+      ),
+    );
   });
 });
