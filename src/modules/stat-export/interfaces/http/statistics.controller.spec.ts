@@ -75,6 +75,33 @@ describe('StatisticsController', () => {
     }
   });
 
+  it('错误映射：时间范围 from 晚于 to → 422 IFC-ERR-005', async () => {
+    const controller = buildController({
+      resolvePrincipal: async () =>
+        ({
+          userId: 'u',
+          isPlatformSuperAdmin: false,
+          clubScopes: [{ clubId: 'club-1', level: 'club', departmentIds: [] }],
+        }) as StatisticsPrincipal,
+      clubSummaryImpl: async () => ({ clubId: 'club-1' }) as any,
+    });
+    try {
+      // from 晚于 to
+      await controller.clubSummary(
+        { userId: 'u' },
+        'club-1',
+        undefined,
+        '2025-10-01',
+        '2025-01-01',
+      );
+      assert.fail('应抛');
+    } catch (e: any) {
+      assert.equal(e.status, 422);
+      assert.equal(e.response.code, 'IFC-ERR-005');
+      assert.match(e.response.message, /不得晚于 to/);
+    }
+  });
+
   it('联合统计端点：不接收 clubId 参数（作用域由 jointId 决定）', async () => {
     let calledWith: unknown;
     const controller = buildController({

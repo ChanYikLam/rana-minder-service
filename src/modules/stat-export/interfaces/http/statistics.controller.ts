@@ -211,7 +211,13 @@ export class StatisticsController {
     if ((q.from === undefined) !== (q.to === undefined)) {
       throw new StatisticsAccessError('IFC-ERR-005', '时间范围筛选参数 from/to 必须成对提供');
     }
-    if (q.from && q.to) filters.timeRange = { from: q.from, to: q.to };
+    if (q.from && q.to) {
+      // ISO 时间字符串按码点比较即时间序；from 晚于 to 属无效范围，不应静默返回空结果
+      if (q.from > q.to) {
+        throw new StatisticsAccessError('IFC-ERR-005', '时间范围筛选参数 from 不得晚于 to');
+      }
+      filters.timeRange = { from: q.from, to: q.to };
+    }
     return Object.keys(filters).length > 0 ? filters : undefined;
   }
 }
