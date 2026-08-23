@@ -18,7 +18,7 @@ export interface ArchiveActivityInput {
  *
  * - 招新/联合活动完成后自动归档，**不要求额外归档操作**；
  * - 归档只读（readOnly 恒 true）；参与关系与社团启用状态锁定为快照；
- * - 幂等：重复归档返回原记录（不创建第二归档）。
+ * - **原子幂等**：并发归档只一个创建成功，其余返回已存在记录（createIfAbsent）。
  */
 @Injectable()
 export class ArchiveActivityCommand {
@@ -27,10 +27,6 @@ export class ArchiveActivityCommand {
   ) {}
 
   async execute(input: ArchiveActivityInput): Promise<ArchiveRecord> {
-    const existing = await this.repo.load(input.activityId);
-    if (existing !== null) {
-      return existing; // 幂等
-    }
     const archive: ArchiveRecord = {
       activityId: input.activityId,
       kind: input.kind,
@@ -40,7 +36,8 @@ export class ArchiveActivityCommand {
       readOnly: true,
       version: 1,
     };
-    await this.repo.save(archive);
-    return archive;
+    // 原子创建：已存在返回原记录（幂等且不覆盖快照）
+    const existing = await this.repo.createIfAbsent(archive);
+    return existing ?? archive;
   }
 }

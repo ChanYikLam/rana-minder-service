@@ -37,7 +37,15 @@ export interface ArchiveAccessContext {
   readonly departmentClubId?: string;
   /** 是否申请人（本人） */
   readonly isApplicant?: boolean;
+  /** 请求访问的记录归属人（SELF 校验：只能访问本人记录，防调用方传错） */
+  readonly requestedOwnerId?: string;
 }
+
+/** 请求范围（消除 null 双语义：申请人=本人 / 超管=全平台） */
+export type ArchiveRequestScope =
+  | { readonly type: 'SELF' }
+  | { readonly type: 'CLUB'; readonly clubId: string }
+  | { readonly type: 'ALL' };
 
 /** 归档访问结果 */
 export interface ArchiveAccessDecision {
@@ -62,7 +70,7 @@ export class ArchiveAccessPolicy {
    *
    * @param context 当前角色上下文
    * @param archive 归档记录（参与关系/启用状态锁定快照）
-   * @param requesterClubId 请求者请求的社团范围（null=全平台）
+   * @param scope 请求范围（SELF=本人 / CLUB=某社团 / ALL=全平台仅超管）
    */
   check(
     context: ArchiveAccessContext,
@@ -70,9 +78,9 @@ export class ArchiveAccessPolicy {
       participants: readonly { clubId: string; enabledAtLock: boolean }[];
       kind: string;
     },
-    requesterClubId: string | null,
+    scope: ArchiveRequestScope,
   ): ArchiveAccessDecision {
-    // 超管：全部归档；特权访问必须审计
+    // 超管：全部归档（任何范围）；特权访问必须审计
     if (context.roles.includes('SUPER_ADMIN')) {
       return { allowed: true, privileged: true };
     }
@@ -87,7 +95,7 @@ export class ArchiveAccessPolicy {
     }
     // 申请人：仅自己范围（不看内部评价/纠错/审计）——由调用方限定内容类别
     if (context.isApplicant && !this.isClubHandler(context.roles) && !isDepartmentLeader) {
-      if (requesterClubId !== null) {
+      if (scope.type !== 'SELF') {
         throw new ArchiveAccessDeniedError('申请人只能访问本人报名/附件/公开结果');
       }
       return { allowed: true, privileged: false };
@@ -96,15 +104,15 @@ export class ArchiveAccessPolicy {
     if (!this.isClubHandler(context.roles) && !isDepartmentLeader) {
       throw new ArchiveAccessDeniedError('当前无归档访问角色');
     }
-    // 现任部门负责人：仅本部门路径（需提供 departmentId 且限定范围；部门归属社团须匹配）
+    // 现任部门负责人：仅本部门路径（需提供 departmentId 且限定本社团；部门归属须匹配）
     if (isDepartmentLeader && !this.isClubHandler(context.roles)) {
-      if (context.departmentId === undefined || requesterClubId === null) {
+      if (context.departmentId === undefined || scope.type !== 'CLUB') {
         throw new ArchiveAccessDeniedError('部门负责人只能访问本部门路径');
       }
       // 部门归属校验：本部门路径仅限本部门所属社团的归档（防止跨社团越权）
       if (
         context.departmentClubId !== undefined &&
-        requesterClubId !== context.departmentClubId
+        scope.clubId !== context.departmentClubId
       ) {
         throw new ArchiveAccessDeniedError('部门负责人只能访问本部门所属社团的归档');
       }
@@ -112,7 +120,10 @@ export class ArchiveAccessPolicy {
     }
     // 现任社团负责人/人事：本社团全部历史；需在参与社团内且社团锁定快照启用
     if (this.isClubHandler(context.roles)) {
-      if (requesterClubId === null || context.clubId === undefined) {
+      if (scope.type !== 'CLUB' || context.clubId === undefined) {
+        throw new ArchiveAccessDeniedError('负责人/人事只能访问本社团历史');
+      }
+      if (scope.clubId !== context.clubId) {
         throw new ArchiveAccessDeniedError('负责人/人事只能访问本社团历史');
       }
       const participant = archive.participants.find((p) => p.clubId === context.clubId);
@@ -147,8 +158,17 @@ export class ArchiveAccessPolicy {
       }
       throw new ArchiveAccessDeniedError('本社团全部历史仅负责人/人事可看');
     }
-    // SELF = 本人记录（报名/附件/公开结果/邀请）：本人访问自己的记录一律允许，
-    // 记录归属由调用方限定（objectId=principalId）；无额外角色限制
+    // SELF = 本人记录（报名/附件/公开结果/邀请）：策略层校验记录归属人=本人，
+    // 防止调用方传 SELF 却访问他人记录（requestedOwnerId 由调用方从对象数据填充）
+    if (contentKind === ArchiveContentKind.SELF) {
+      if (
+        context.requestedOwnerId !== undefined &&
+        context.requestedOwnerId !== context.principalId
+      ) {
+        throw new ArchiveAccessDeniedError('只能访问本人的归档记录');
+      }
+      return;
+    }
     if (contentKind === ArchiveContentKind.DEPARTMENT_PATH) {
       if (!context.roles.includes('DEPARTMENT_LEADER') && !this.isClubHandler(context.roles)) {
         throw new ArchiveAccessDeniedError('仅部门负责人/负责人可看部门路径');

@@ -30,13 +30,15 @@ const ctx = (overrides: Record<string, unknown>) => ({
   ...overrides,
 });
 
+const scopeClub = (clubId: string) => ({ type: 'CLUB' as const, clubId });
+
 describe('5.3.3 归档后的访问（AUD-004）', () => {
-  it('自动只读归档：活动完成后归档，幂等，只读，参与关系锁定快照', async () => {
+  it('自动只读归档：活动完成后归档，原子幂等，只读，参与关系锁定快照', async () => {
     const rig = await makeRig();
     assert.equal(rig.archive.readOnly, true);
     assert.equal(rig.archive.sourceState, 'COMPLETED');
     assert.equal(rig.archive.participants.length, 2);
-    // 幂等：重复归档返回原记录
+    // 原子幂等：重复归档返回原记录（不覆盖快照）
     const again = await new ArchiveActivityCommand(rig.repo).execute({
       activityId: 'act-1',
       kind: ArchiveKind.JOINT,
@@ -45,38 +47,61 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     });
     assert.equal(again.version, 1);
     assert.equal(again.participants.length, 2); // 原快照不变
+    // 仓储原子：已存在 → 返回原记录（不覆盖快照）
+    const existing = await rig.repo.createIfAbsent(rig.archive);
+    assert.notEqual(existing, null);
+    assert.equal(existing!.participants.length, 2);
   });
 
-  it('超管：可查看全部归档，privileged=true（每次特权访问审计）', async () => {
+  it('超管：可查看全部归档（ALL），privileged=true（每次特权访问审计）', async () => {
     const rig = await makeRig();
     const result = await rig.query.access({
       activityId: 'act-1',
       context: ctx({ principalId: 'sa', roles: ['SUPER_ADMIN'] }),
-      requesterClubId: null,
+      scope: { type: 'ALL' },
     });
     assert.equal(result.decision.allowed, true);
     assert.equal(result.decision.privileged, true);
   });
 
-  it('申请人：只看自己范围；内部评价/纠错/审计拒绝', async () => {
+  it('申请人：仅 SELF 范围；内部评价/纠错/审计拒绝；SELF 只能访问本人记录', async () => {
     const rig = await makeRig();
-    // 本人范围（requesterClubId=null 且 isApplicant）→ 允许
+    // 本人范围（SELF）→ 允许
     const self = await rig.query.access({
       activityId: 'act-1',
-      context: ctx({ principalId: 'stu1', roles: ['APPLICANT'], isApplicant: true }),
-      requesterClubId: null,
+      context: ctx({ principalId: 'stu1', roles: ['APPLICANT'], isApplicant: true, requestedOwnerId: 'stu1' }),
+      scope: { type: 'SELF' },
       contentKind: 'SELF' as never,
     });
     assert.equal(self.decision.allowed, true);
-    // 申请人访问内部内容 → 拒绝
+    // 申请人请求社团范围 → 拒绝
     await assert.rejects(
       rig.query.access({
         activityId: 'act-1',
         context: ctx({ principalId: 'stu1', roles: ['APPLICANT'], isApplicant: true }),
-        requesterClubId: null,
+        scope: scopeClub('c1'),
+      }),
+      /申请人只能访问本人/,
+    );
+    // 申请人访问内部内容 → 拒绝
+    await assert.rejects(
+      rig.query.access({
+        activityId: 'act-1',
+        context: ctx({ principalId: 'stu1', roles: ['APPLICANT'], isApplicant: true, requestedOwnerId: 'stu1' }),
+        scope: { type: 'SELF' },
         contentKind: 'INTERNAL' as never,
       }),
       /内部评价/,
+    );
+    // SELF 但记录归属人非本人 → 拒绝（策略层校验）
+    await assert.rejects(
+      rig.query.access({
+        activityId: 'act-1',
+        context: ctx({ principalId: 'stu1', roles: ['APPLICANT'], isApplicant: true, requestedOwnerId: 'other' }),
+        scope: { type: 'SELF' },
+        contentKind: 'SELF' as never,
+      }),
+      /只能访问本人的归档记录/,
     );
   });
 
@@ -86,28 +111,47 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
       rig.query.access({
         activityId: 'act-1',
         context: ctx({ principalId: 'iv1', roles: ['INTERVIEWER'] }),
-        requesterClubId: null,
+        scope: { type: 'ALL' },
       }),
       /面试官结束后/,
     );
   });
 
-  it('现任部门负责人：仅本部门路径；未限定范围/缺部门 → 拒绝', async () => {
+  it('现任部门负责人：仅本部门路径（本部门所属社团）；未限定/跨社团/CLUB_HISTORY 拒绝', async () => {
     const rig = await makeRig();
     const ok = await rig.query.access({
       activityId: 'act-1',
-      context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1' }),
-      requesterClubId: 'c1',
+      context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1', departmentClubId: 'c1' }),
+      scope: scopeClub('c1'),
     });
     assert.equal(ok.decision.allowed, true);
-    // 未限定社团范围 → 拒绝
+    // 未限定社团（ALL）→ 拒绝
     await assert.rejects(
       rig.query.access({
         activityId: 'act-1',
-        context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1' }),
-        requesterClubId: null,
+        context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1', departmentClubId: 'c1' }),
+        scope: { type: 'ALL' },
       }),
       /只能访问本部门路径/,
+    );
+    // 部门归属社团不匹配（部门属 c2 却请求 c1）→ 拒绝
+    await assert.rejects(
+      rig.query.access({
+        activityId: 'act-1',
+        context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1', departmentClubId: 'c2' }),
+        scope: scopeClub('c1'),
+      }),
+      /只能访问本部门所属社团/,
+    );
+    // 部门负责人不得借 CLUB_HISTORY 看全部历史
+    await assert.rejects(
+      rig.query.access({
+        activityId: 'act-1',
+        context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1', departmentClubId: 'c1' }),
+        scope: scopeClub('c1'),
+        contentKind: 'CLUB_HISTORY' as never,
+      }),
+      /仅负责人\/人事可看/,
     );
   });
 
@@ -117,24 +161,24 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     const ok = await rig.query.access({
       activityId: 'act-1',
       context: ctx({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' }),
-      requesterClubId: 'c1',
+      scope: scopeClub('c1'),
     });
     assert.equal(ok.decision.allowed, true);
-    // c3 不在参与范围 → 拒绝
+    // 请求他社团范围（c3 不在参与范围）→ 拒绝
     await assert.rejects(
       rig.query.access({
         activityId: 'act-1',
-        context: ctx({ principalId: 'hr3', roles: ['HR_ADMIN'], clubId: 'c3' }),
-        requesterClubId: 'c3',
+        context: ctx({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' }),
+        scope: scopeClub('c3'),
       }),
-      /不在该归档参与范围/,
+      /只能访问本社团历史/,
     );
     // c2 被紧急停用（enabledAtLock=false）→ 停用期间不能查看
     await assert.rejects(
       rig.query.access({
         activityId: 'act-1',
         context: ctx({ principalId: 'hr2', roles: ['HR_ADMIN'], clubId: 'c2' }),
-        requesterClubId: 'c2',
+        scope: scopeClub('c2'),
       }),
       /停用期间不能查看/,
     );
@@ -146,81 +190,29 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
       rig.query.access({
         activityId: 'act-1',
         context: ctx({ principalId: 'ex-leader', roles: ['MEMBER'] }), // 已离任，仅普通成员角色
-        requesterClubId: 'c1',
+        scope: scopeClub('c1'),
       }),
       /当前无归档访问角色/,
     );
   });
 
-  it('联合归档：按首次公布锁定参与关系与启用状态；INTERNAL 仅有权角色可看', async () => {
+  it('联合归档：INTERNAL 仅有权角色可看；负责人访问本人记录（SELF）允许', async () => {
     const rig = await makeRig();
     // c1 负责人看 INTERNAL → 允许
     const internal = await rig.query.access({
       activityId: 'act-1',
       context: ctx({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' }),
-      requesterClubId: 'c1',
+      scope: scopeClub('c1'),
       contentKind: 'INTERNAL' as never,
     });
     assert.equal(internal.decision.allowed, true);
-  });
-
-  it('审查修复：部门负责人兼面试官 → 按部门负责人放行（面试官拒绝不误伤）', async () => {
-    const rig = await makeRig();
-    const ok = await rig.query.access({
+    // 负责人访问本人记录（SELF，requestedOwnerId=本人）→ 允许
+    const self = await rig.query.access({
       activityId: 'act-1',
-      context: ctx({
-        principalId: 'd1',
-        roles: ['DEPARTMENT_LEADER', 'INTERVIEWER'],
-        departmentId: 'dep-1',
-      }),
-      requesterClubId: 'c1',
-    });
-    assert.equal(ok.decision.allowed, true);
-  });
-
-  it('审查修复：负责人访问本人记录（SELF）→ 允许（本人记录不限角色）', async () => {
-    const rig = await makeRig();
-    const ok = await rig.query.access({
-      activityId: 'act-1',
-      context: ctx({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' }),
-      requesterClubId: 'c1',
+      context: ctx({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1', requestedOwnerId: 'hr1' }),
+      scope: scopeClub('c1'),
       contentKind: 'SELF' as never,
     });
-    assert.equal(ok.decision.allowed, true);
-  });
-
-  it('评审修复：部门负责人不得借 CLUB_HISTORY 看本社团全部历史（仅负责人/人事）', async () => {
-    const rig = await makeRig();
-    await assert.rejects(
-      rig.query.access({
-        activityId: 'act-1',
-        context: ctx({
-          principalId: 'd1',
-          roles: ['DEPARTMENT_LEADER'],
-          departmentId: 'dep-1',
-          departmentClubId: 'c1',
-        }),
-        requesterClubId: 'c1',
-        contentKind: 'CLUB_HISTORY' as never,
-      }),
-      /仅负责人\/人事可看/,
-    );
-  });
-
-  it('评审修复：部门负责人跨社团访问（部门归属社团不匹配）→ 拒绝', async () => {
-    const rig = await makeRig();
-    await assert.rejects(
-      rig.query.access({
-        activityId: 'act-1',
-        context: ctx({
-          principalId: 'd1',
-          roles: ['DEPARTMENT_LEADER'],
-          departmentId: 'dep-1',
-          departmentClubId: 'c2', // 部门属于 c2，却请求 c1 归档
-        }),
-        requesterClubId: 'c1',
-      }),
-      /只能访问本部门所属社团/,
-    );
+    assert.equal(self.decision.allowed, true);
   });
 });
