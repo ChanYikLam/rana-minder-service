@@ -52,15 +52,9 @@ describe('ApplicationChannel (REC-002)', () => {
     assert.equal(channel.open(MACHINE, NOW), false);
     assert.equal(channel.status, 'CLOSED');
     // 新截止不晚于重开时刻 → 拒绝
-    assert.equal(
-      channel.open(MACHINE, NOW, { newDeadlineStrictlyAfterNow: false }),
-      false,
-    );
+    assert.equal(channel.open(MACHINE, NOW, { newDeadlineStrictlyAfterNow: false }), false);
     // 新截止合法 → 允许
-    assert.equal(
-      channel.open(MACHINE, NOW, { newDeadlineStrictlyAfterNow: true }),
-      true,
-    );
+    assert.equal(channel.open(MACHINE, NOW, { newDeadlineStrictlyAfterNow: true }), true);
     assert.equal(channel.status, 'OPEN');
   });
 });
