@@ -1,0 +1,287 @@
+/**
+ * 导出删除与失效命令（5.4.2，P4，SRS-SM-EXP-001 转换 9/10 / AUD-009 / JNT-023）。
+ *
+ * - byApplicant（转换 9）：申请人提前删除，仅本人/授权者（超级管理员亦可）；
+ * - applyFormalDelete（转换 10）：正式删除清单命中导出内容 → 未过期导出失效（AUD-009，
+ *   不得因导出快照绕过正式删除）；
+ * - invalidateUnexpiredBySuspension（JNT-023）：参与社团被紧急停用后，已有未过期
+ *   链接立即失权，使后续不能下载。
+ */
+
+import { Inject } from '@nestjs/common';
+
+import {
+  EXPORT_AUDIT_PORT,
+  EXPORT_SAFETY_SWITCH_PORT,
+  type ExportAuditEntry,
+  type ExportAuditPort,
+  type ExportPrincipal,
+  type ExportSafetySwitchPort,
+} from '../ports/export-authorization.port';
+import { EXPORT_TASK_REPOSITORY, type ExportTaskRepository } from '../ports/export-repository.port';
+import { ExportTaskStatus } from '../../domain/state-machines/export-task.state-machine';
+import type { ExportTaskAggregate } from '../../domain/models/export-task';
+import { exportErrors, ExportError } from '../errors';
+import { deniedAuditEntry } from '../export-denied-audit';
+
+// ---------------------------------------------------------------------------
+// 提前删除（申请人本人/授权者）
+// ---------------------------------------------------------------------------
+
+export interface ExportDeleteInput {
+  readonly principal: ExportPrincipal;
+  readonly exportId: string;
+  readonly expectedRevision: number;
+  readonly now?: Date;
+}
+
+export class ExportDeleteCommand {
+  constructor(
+    @Inject(EXPORT_SAFETY_SWITCH_PORT) private readonly safety: ExportSafetySwitchPort,
+    @Inject(EXPORT_AUDIT_PORT) private readonly audit: ExportAuditPort,
+    @Inject(EXPORT_TASK_REPOSITORY) private readonly repo: ExportTaskRepository,
+  ) {}
+
+  /** 申请人提前删除（仅本人 / 授权者；超管可代删） */
+  async byApplicant(input: ExportDeleteInput): Promise<void> {
+    const now = input.now ?? new Date();
+    try {
+      await this.doByApplicant(input, now);
+    } catch (err) {
+      if (err instanceof ExportError) {
+        // 拒绝路径审计：越权删除（IFC-ERR-003）、状态冲突（IFC-ERR-007）、
+        // 版本冲突（IFC-ERR-008）、安全开关关闭（IFC-ERR-011）等拒绝须留痕可追踪。
+        // 任务快照可能不可见，尽力复用其作用域上下文丰富审计。
+        let clubId: string | null = null;
+        let jointActivityId: string | null = null;
+        try {
+          const t = await this.repo.load(input.exportId);
+          if (t !== null) {
+            clubId = t.snapshot.data.scope.clubId ?? null;
+            jointActivityId =
+              t.snapshot.data.scope.kind === 'joint'
+                ? (t.snapshot.data.scope.jointActivityId ?? null)
+                : null;
+          }
+        } catch {
+          // 审计上下文增强失败不影响原拒绝抛出
+        }
+        await this.audit.record(
+          deniedAuditEntry(
+            now.toISOString(),
+            'export_delete',
+            {
+              principal: input.principal,
+              clubId,
+              jointActivityId,
+              datasetType: null,
+              exportId: input.exportId,
+              purpose: null,
+            },
+            err,
+          ),
+        );
+      }
+      throw err;
+    }
+  }
+
+  private async doByApplicant(input: ExportDeleteInput, now: Date): Promise<void> {
+    const safetyState = await this.safety.checkAllowed();
+    if (!safetyState.allowed) {
+      throw exportErrors.safety('导出安全开关已关闭，拒绝提前删除（GOV-004）');
+    }
+
+    const task = await this.repo.load(input.exportId);
+    if (task === null) {
+      throw exportErrors.notVisible('导出任务不存在（IFC-ERR-015）');
+    }
+
+    this.assertDeleteAuthorized(input.principal, task);
+
+    if (task.status === ExportTaskStatus.PRE_DELETED) {
+      throw exportErrors.stateConflict('该导出已提前删除（IFC-ERR-007）');
+    }
+    // 仅允许来自"待生成/失败/可下载"的执行提前删除；生成中/失权/过期/新建不可
+    if (
+      task.status !== ExportTaskStatus.PENDING_GENERATION &&
+      task.status !== ExportTaskStatus.FAILED &&
+      task.status !== ExportTaskStatus.DOWNLOADABLE
+    ) {
+      throw exportErrors.stateConflict(`当前状态 ${task.status} 不可提前删除（IFC-ERR-007）`);
+    }
+
+    if (input.expectedRevision !== task.revisionNumber) {
+      throw exportErrors.versionConflict(
+        `导出任务版本不一致（期望 ${input.expectedRevision}，实际 ${task.revisionNumber}）（IFC-ERR-008）`,
+      );
+    }
+
+    task.preDelete(now);
+    await this.repo.save(task, { expectedRevision: input.expectedRevision });
+
+    await this.audit.record({
+      at: now.toISOString(),
+      action: 'export_delete',
+      principalId: input.principal.userId,
+      privileged: input.principal.kind === 'platform_super_admin',
+      clubId: task.snapshot.data.scope.clubId,
+      jointActivityId: task.snapshot.data.scope.jointActivityId,
+      datasetType: null,
+      exportId: task.id,
+      purpose: null,
+      outcome: 'allowed',
+    });
+  }
+
+  /**
+   * 正式删除清单联动（AUD-009）：查找未过期、非删除、命中删除选择集的任务，
+   * 统一转 PRE_DELETED（转换 10）。返回失效任务数。
+   *
+   * AUD-009 不可绕删：状态机允许 EXPIRED/REVOKED --formal_delete_hit--> PRE_DELETED，
+   * 故通过 includeTerminal=true 把已过期/已失权但仍保留导出文件的任务也纳入联动清理，
+   * 否则已过期文件永远不会被正式删除清理。
+   */
+  async applyFormalDelete(input: {
+    selection: { clubId?: string; jointActivityId?: string };
+    principalId?: string;
+    now?: Date;
+  }): Promise<number> {
+    const now = input.now ?? new Date();
+    const when = now.toISOString();
+    const candidates = await this.repo.listUnexpiredByMatch(
+      {
+        clubId: input.selection.clubId,
+        jointActivityId: input.selection.jointActivityId,
+      },
+      { includeTerminal: true },
+    );
+    let count = 0;
+    for (const candidate of candidates) {
+      // 并发容错：失效逻辑下沉到 invalidateCandidate，命中版本冲突（IFC-ERR-008）
+      // 时重读最新聚合后重试一次；二次仍冲突则跳过该条，留待下一轮联动清理。
+      const invalidated = await this.invalidateCandidate(
+        candidate,
+        (t) => t.status !== ExportTaskStatus.PRE_DELETED,
+        (t) => t.formalDeleteHit(now),
+      );
+      if (invalidated === null) continue;
+      count += 1;
+      await this.recordSystemAudit(
+        when,
+        'export_formal_delete_invalidate',
+        input.principalId ?? 'system',
+        invalidated,
+      );
+    }
+    return count;
+  }
+
+  /**
+   * 参与社团紧急停用（JNT-023）：已有未过期（待生成/生成中/可下载）链接立即失权，
+   * 使其不可再下载。返回失效任务数。
+   */
+  async invalidateUnexpiredBySuspension(input: {
+    clubId: string;
+    principalId?: string;
+    now?: Date;
+  }): Promise<number> {
+    const now = input.now ?? new Date();
+    const when = now.toISOString();
+    const candidates = await this.repo.listUnexpiredByMatch({ clubId: input.clubId });
+    let count = 0;
+    for (const candidate of candidates) {
+      const invalidated = await this.invalidateCandidate(
+        candidate,
+        (t) =>
+          t.status === ExportTaskStatus.PENDING_GENERATION ||
+          t.status === ExportTaskStatus.GENERATING ||
+          t.status === ExportTaskStatus.DOWNLOADABLE,
+        (t) => t.revoke(`参与社团 ${input.clubId} 紧急停用（JNT-023）`, now),
+      );
+      if (invalidated === null) continue;
+      count += 1;
+      await this.recordSystemAudit(
+        when,
+        'export_suspension_invalidate',
+        input.principalId ?? 'system',
+        invalidated,
+      );
+    }
+    return count;
+  }
+
+  // -------------------------------------------------------------------------
+  // 内部
+  // -------------------------------------------------------------------------
+
+  /** 判断是否为乐观并发版本冲突（IFC-ERR-008），用于批量失效时捕获并跳过单条竞争 */
+  private isVersionConflict(err: unknown): boolean {
+    return (
+      err instanceof Error &&
+      ((err as Error & { code?: string }).code === 'IFC-ERR-008' ||
+        err.message.includes('IFC-ERR-008'))
+    );
+  }
+
+  /**
+   * 单条候选的失效：乐观保存失败（IFC-ERR-008）时重读最新聚合后重试一次；
+   * 二次仍冲突或候选已被并发写者处理完毕/不再符合失效条件则跳过该条，不中断整批。
+   *
+   * @param initial 已从 list 加载的候选脱敏拷贝
+   * @param eligible 重读后的资格复核：返回 false 表示候选已被并发处理或不再符合失效条件
+   * @param mutate 在资格通过后执行的失效变更（formalDeleteHit / revoke）
+   * @returns 实际成功失效的聚合（含最新 revisionNumber）；null 表示该条被跳过
+   */
+  private async invalidateCandidate(
+    initial: ExportTaskAggregate,
+    eligible: (task: ExportTaskAggregate) => boolean,
+    mutate: (task: ExportTaskAggregate) => void,
+  ): Promise<ExportTaskAggregate | null> {
+    let task: ExportTaskAggregate | null = initial;
+    for (let round = 0; round < 2 && task !== null; round += 1) {
+      if (!eligible(task)) return null;
+      // 记录变更前版本作为乐观并发基线（避免依赖 `revisionNumber - 1` 魔法算术，
+      // 与状态机版本递增解耦——transition 后 aggregate.revisionNumber 才会 +1）。
+      const expectedRevision = task.revisionNumber;
+      mutate(task);
+      try {
+        await this.repo.save(task, { expectedRevision });
+        return task;
+      } catch (err) {
+        if (!this.isVersionConflict(err)) throw err; // 真实仓储异常不静默吞掉
+        task = round === 0 ? await this.repo.load(initial.id) : null;
+      }
+    }
+    return null;
+  }
+
+  private assertDeleteAuthorized(principal: ExportPrincipal, task: ExportTaskAggregate): void {
+    const isOwner = task.ownerUserId === principal.userId;
+    const isAuthorizer = task.authorizerUserId === principal.userId;
+    const isSuperAdmin = principal.kind === 'platform_super_admin';
+    if (!isOwner && !isAuthorizer && !isSuperAdmin) {
+      throw exportErrors.forbidden('仅申请人本人或授权者可提前删除该导出（EXP-003）');
+    }
+  }
+
+  private recordSystemAudit(
+    at: string,
+    action: ExportAuditEntry['action'],
+    principalId: string,
+    task: ExportTaskAggregate,
+  ): Promise<void> {
+    return this.audit.record({
+      at,
+      action,
+      principalId,
+      privileged: false,
+      clubId: task.snapshot.data.scope.clubId,
+      jointActivityId: task.snapshot.data.scope.jointActivityId,
+      datasetType: null,
+      exportId: task.id,
+      purpose: null,
+      outcome: 'allowed',
+    });
+  }
+}
