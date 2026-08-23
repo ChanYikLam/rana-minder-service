@@ -221,6 +221,30 @@ describe('P2 导出申请（幂等/快照/越权/停用/联合失效）', () => 
     );
   });
 
+  it('个人副本：越权（代申请他人）+ includeFiles → 越权优先（IFC-ERR-003）', async () => {
+    // 错误码优先级与批量/联合分支统一：越权（IFC-ERR-003）先于能力不支持（IFC-ERR-005）。
+    // 若先判 includeFiles，越权者可借 includeFiles 探测附件功能状态（信息泄露）。
+    const h = makeHarness({});
+    await assert.rejects(
+      h.apply.execute({
+        principal: memberPrincipal, // member_applicant 代申请他人副本 → 越权
+        request: { kind: 'personal', targetUserId: 'someone-else', includeFiles: true },
+      }),
+      (e: ExportError) => e.code === 'IFC-ERR-003',
+    );
+  });
+
+  it('个人副本：本人合法 + includeFiles → 能力不支持（IFC-ERR-005）', async () => {
+    const h = makeHarness({});
+    await assert.rejects(
+      h.apply.execute({
+        principal: memberPrincipal, // 本人副本合法，但附件能力未接入
+        request: { kind: 'personal', includeFiles: true },
+      }),
+      (e: ExportError) => e.code === 'IFC-ERR-005',
+    );
+  });
+
   it('申请幂等：同 key 语义一致 → 回放同一任务', async () => {
     const h = makeHarness({
       clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
