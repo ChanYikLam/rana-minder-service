@@ -69,15 +69,12 @@ export class ArchiveAccessPolicy {
    * 实时鉴权归档访问（按当前有效角色，不按历史职位）。
    *
    * @param context 当前角色上下文
-   * @param archive 归档记录（参与关系/启用状态锁定快照）
+   * @param participants 归档参与关系（锁定快照）
    * @param scope 请求范围（SELF=本人 / CLUB=某社团 / ALL=全平台仅超管）
    */
   check(
     context: ArchiveAccessContext,
-    archive: {
-      participants: readonly { clubId: string; enabledAtLock: boolean }[];
-      kind: string;
-    },
+    participants: readonly { clubId: string; enabledAtLock: boolean }[],
     scope: ArchiveRequestScope,
   ): ArchiveAccessDecision {
     // 超管：全部归档（任何范围）；特权访问必须审计
@@ -110,10 +107,7 @@ export class ArchiveAccessPolicy {
         throw new ArchiveAccessDeniedError('部门负责人只能访问本部门路径');
       }
       // 部门归属校验：本部门路径仅限本部门所属社团的归档（防止跨社团越权）
-      if (
-        context.departmentClubId !== undefined &&
-        scope.clubId !== context.departmentClubId
-      ) {
+      if (context.departmentClubId !== undefined && scope.clubId !== context.departmentClubId) {
         throw new ArchiveAccessDeniedError('部门负责人只能访问本部门所属社团的归档');
       }
       return { allowed: true, privileged: false };
@@ -126,7 +120,7 @@ export class ArchiveAccessPolicy {
       if (scope.clubId !== context.clubId) {
         throw new ArchiveAccessDeniedError('负责人/人事只能访问本社团历史');
       }
-      const participant = archive.participants.find((p) => p.clubId === context.clubId);
+      const participant = participants.find((p) => p.clubId === context.clubId);
       if (participant === undefined) {
         throw new ArchiveAccessDeniedError('本社团不在该归档参与范围');
       }
@@ -140,10 +134,7 @@ export class ArchiveAccessPolicy {
   }
 
   /** 内容类别边界（申请人不看内部评价/纠错/审计；AUD-004） */
-  assertContentAllowed(
-    context: ArchiveAccessContext,
-    contentKind: ArchiveContentKind,
-  ): void {
+  assertContentAllowed(context: ArchiveAccessContext, contentKind: ArchiveContentKind): void {
     if (contentKind === ArchiveContentKind.INTERNAL) {
       if (this.isClubHandler(context.roles) || context.roles.includes('SUPER_ADMIN')) {
         return;

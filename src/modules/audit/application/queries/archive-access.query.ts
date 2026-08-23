@@ -1,7 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ArchiveRecord } from '../../domain/models/archive';
 import { ArchiveAccessPolicy } from '../../domain/services/archive-access-policy';
-import type { ArchiveAccessContext, ArchiveAccessDecision, ArchiveContentKind, ArchiveRequestScope } from '../../domain/services/archive-access-policy';
+import type {
+  ArchiveAccessContext,
+  ArchiveAccessDecision,
+  ArchiveContentKind,
+  ArchiveRequestScope,
+} from '../../domain/services/archive-access-policy';
 import { ARCHIVE_REPOSITORY } from '../../infrastructure/archive-repository';
 import type { ArchiveRepository } from '../../infrastructure/archive-repository';
 
@@ -43,7 +48,7 @@ export class ArchiveAccessQuery {
     if (archive === null) {
       throw new Error('IFC-ERR-006: 归档不存在');
     }
-    const decision = this.policy.check(input.context, archive, input.scope);
+    const decision = this.policy.check(input.context, archive.participants, input.scope);
     if (input.contentKind !== undefined) {
       this.policy.assertContentAllowed(input.context, input.contentKind);
     }

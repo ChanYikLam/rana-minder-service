@@ -22,11 +22,18 @@ export interface ArchiveActivityInput {
  */
 @Injectable()
 export class ArchiveActivityCommand {
-  constructor(
-    @Inject(ARCHIVE_REPOSITORY) private readonly repo: ArchiveRepository,
-  ) {}
+  constructor(@Inject(ARCHIVE_REPOSITORY) private readonly repo: ArchiveRepository) {}
 
   async execute(input: ArchiveActivityInput): Promise<ArchiveRecord> {
+    if (input.activityId.trim().length === 0) {
+      throw new Error('IFC-ERR-005: 活动 ID 不能为空');
+    }
+    if (input.participants.length === 0) {
+      throw new Error('IFC-ERR-005: 归档需至少一个参与社团');
+    }
+    if (input.participants.some((p) => p.clubId.trim().length === 0)) {
+      throw new Error('IFC-ERR-005: 参与社团 ID 不能为空');
+    }
     const archive: ArchiveRecord = {
       activityId: input.activityId,
       kind: input.kind,

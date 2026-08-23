@@ -5,12 +5,13 @@ import { ArchiveActivityCommand } from './archive-activity.command';
 import { ArchiveAccessQuery } from '../queries/archive-access.query';
 import { ArchiveAccessPolicy } from '../../domain/services/archive-access-policy';
 import { ArchiveKind } from '../../domain/models/archive';
-import type { ArchiveRecord } from '../../domain/models/archive';
 
-const makeRig = async (participants: { clubId: string; enabledAtLock: boolean }[] = [
-  { clubId: 'c1', enabledAtLock: true },
-  { clubId: 'c2', enabledAtLock: false }, // c2 被紧急停用
-]) => {
+const makeRig = async (
+  participants: { clubId: string; enabledAtLock: boolean }[] = [
+    { clubId: 'c1', enabledAtLock: true },
+    { clubId: 'c2', enabledAtLock: false }, // c2 被紧急停用
+  ],
+) => {
   const repo = new InMemoryArchiveRepository();
   const policy = new ArchiveAccessPolicy();
   const command = new ArchiveActivityCommand(repo);
@@ -53,6 +54,28 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     assert.equal(existing!.participants.length, 2);
   });
 
+  it('评审修复：归档输入校验——空活动 ID/空参与列表拒绝（IFC-ERR-005）', async () => {
+    const rig = await makeRig();
+    await assert.rejects(
+      new ArchiveActivityCommand(rig.repo).execute({
+        activityId: '  ',
+        kind: ArchiveKind.JOINT,
+        participants: [{ clubId: 'c1', enabledAtLock: true }],
+        sourceState: 'COMPLETED',
+      }),
+      /活动 ID 不能为空/,
+    );
+    await assert.rejects(
+      new ArchiveActivityCommand(rig.repo).execute({
+        activityId: 'act-2',
+        kind: ArchiveKind.JOINT,
+        participants: [],
+        sourceState: 'COMPLETED',
+      }),
+      /至少一个参与社团/,
+    );
+  });
+
   it('超管：可查看全部归档（ALL），privileged=true（每次特权访问审计）', async () => {
     const rig = await makeRig();
     const result = await rig.query.access({
@@ -69,7 +92,12 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     // 本人范围（SELF）→ 允许
     const self = await rig.query.access({
       activityId: 'act-1',
-      context: ctx({ principalId: 'stu1', roles: ['APPLICANT'], isApplicant: true, requestedOwnerId: 'stu1' }),
+      context: ctx({
+        principalId: 'stu1',
+        roles: ['APPLICANT'],
+        isApplicant: true,
+        requestedOwnerId: 'stu1',
+      }),
       scope: { type: 'SELF' },
       contentKind: 'SELF' as never,
     });
@@ -87,7 +115,12 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     await assert.rejects(
       rig.query.access({
         activityId: 'act-1',
-        context: ctx({ principalId: 'stu1', roles: ['APPLICANT'], isApplicant: true, requestedOwnerId: 'stu1' }),
+        context: ctx({
+          principalId: 'stu1',
+          roles: ['APPLICANT'],
+          isApplicant: true,
+          requestedOwnerId: 'stu1',
+        }),
         scope: { type: 'SELF' },
         contentKind: 'INTERNAL' as never,
       }),
@@ -97,7 +130,12 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     await assert.rejects(
       rig.query.access({
         activityId: 'act-1',
-        context: ctx({ principalId: 'stu1', roles: ['APPLICANT'], isApplicant: true, requestedOwnerId: 'other' }),
+        context: ctx({
+          principalId: 'stu1',
+          roles: ['APPLICANT'],
+          isApplicant: true,
+          requestedOwnerId: 'other',
+        }),
         scope: { type: 'SELF' },
         contentKind: 'SELF' as never,
       }),
@@ -121,7 +159,12 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     const rig = await makeRig();
     const ok = await rig.query.access({
       activityId: 'act-1',
-      context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1', departmentClubId: 'c1' }),
+      context: ctx({
+        principalId: 'd1',
+        roles: ['DEPARTMENT_LEADER'],
+        departmentId: 'dep-1',
+        departmentClubId: 'c1',
+      }),
       scope: scopeClub('c1'),
     });
     assert.equal(ok.decision.allowed, true);
@@ -129,7 +172,12 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     await assert.rejects(
       rig.query.access({
         activityId: 'act-1',
-        context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1', departmentClubId: 'c1' }),
+        context: ctx({
+          principalId: 'd1',
+          roles: ['DEPARTMENT_LEADER'],
+          departmentId: 'dep-1',
+          departmentClubId: 'c1',
+        }),
         scope: { type: 'ALL' },
       }),
       /只能访问本部门路径/,
@@ -138,7 +186,12 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     await assert.rejects(
       rig.query.access({
         activityId: 'act-1',
-        context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1', departmentClubId: 'c2' }),
+        context: ctx({
+          principalId: 'd1',
+          roles: ['DEPARTMENT_LEADER'],
+          departmentId: 'dep-1',
+          departmentClubId: 'c2',
+        }),
         scope: scopeClub('c1'),
       }),
       /只能访问本部门所属社团/,
@@ -147,7 +200,12 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     await assert.rejects(
       rig.query.access({
         activityId: 'act-1',
-        context: ctx({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'], departmentId: 'dep-1', departmentClubId: 'c1' }),
+        context: ctx({
+          principalId: 'd1',
+          roles: ['DEPARTMENT_LEADER'],
+          departmentId: 'dep-1',
+          departmentClubId: 'c1',
+        }),
         scope: scopeClub('c1'),
         contentKind: 'CLUB_HISTORY' as never,
       }),
@@ -209,7 +267,12 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     // 负责人访问本人记录（SELF，requestedOwnerId=本人）→ 允许
     const self = await rig.query.access({
       activityId: 'act-1',
-      context: ctx({ principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1', requestedOwnerId: 'hr1' }),
+      context: ctx({
+        principalId: 'hr1',
+        roles: ['HR_ADMIN'],
+        clubId: 'c1',
+        requestedOwnerId: 'hr1',
+      }),
       scope: scopeClub('c1'),
       contentKind: 'SELF' as never,
     });
