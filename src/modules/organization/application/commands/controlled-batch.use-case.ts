@@ -51,9 +51,8 @@ export interface BatchCompensationItem {
  * 逆序补偿的合法入口状态（ORG-034）：仅部分成功 / 失败项重试中允许回滚，
  * 其余状态（all_succeeded / all_failed / selecting 等）不具备可补偿语义。
  */
-export const COMPENSABLE_BATCH_STATUSES: ReadonlySet<ControlledBatchStatus> = new Set<
-  ControlledBatchStatus
->(['partial_success', 'failed_items_retrying']);
+export const COMPENSABLE_BATCH_STATUSES: ReadonlySet<ControlledBatchStatus> =
+  new Set<ControlledBatchStatus>(['partial_success', 'failed_items_retrying']);
 
 /** 确认批次前的负责人守卫上下文 */
 export interface BatchOwnerGuardContext {
