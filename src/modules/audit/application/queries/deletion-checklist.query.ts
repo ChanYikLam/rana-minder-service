@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DeletionChecklist } from '../../domain/models/deletion';
-import { DeletionPolicy } from '../../domain/services/deletion-policy';
-import { DeletionPolicyError } from '../../domain/services/deletion-policy';
+import { DeletionPolicy, DeletionPolicyError } from '../../domain/services/deletion-policy';
 import { DELETION_CHECKLIST_REPOSITORY } from '../../infrastructure/deletion-checklist-repository';
 import type { DeletionChecklistRepository } from '../../infrastructure/deletion-checklist-repository';
 

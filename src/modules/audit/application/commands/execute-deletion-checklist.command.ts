@@ -174,12 +174,31 @@ export class ExecuteDeletionChecklistCommand {
           failureReason: 'max-step-retry-reached',
           requestId: input.audit.requestId,
         });
+        // 已持久化人工介入状态：抛错由接线层告警收敛（评审者语义），
+        // 且 needsManualReview 已落库（后续自动重试被拒绝，warning 语义）
+        throw new DeletionPolicyError(
+          'IFC-ERR-016',
+          '删除步骤失败重试已达上限，需人工介入处理后再继续',
+        );
       }
-      // 已持久化人工介入状态：抛错由接线层告警收敛（评审者语义），
-      // 且 needsManualReview 已落库（后续自动重试被拒绝，warning 语义）
+      // CAS 失败（清单已被并发执行者修改）：重读最新状态，避免误报"需人工介入"（warning 评审意见）——
+      // 他方可能已推进（完成）或已置人工介入；按最新持久态返回/抛错
+      const latest = await this.repo.load(input.checklistId);
+      if (latest === null) {
+        throw new DeletionPolicyError('IFC-ERR-015', '删除清单不存在');
+      }
+      if (latest.completed) {
+        return { checklist: latest, completed: true, minimalAudit: null };
+      }
+      if (latest.needsManualReview) {
+        throw new DeletionPolicyError(
+          'IFC-ERR-016',
+          '删除步骤失败重试已达上限，需人工介入处理后再继续',
+        );
+      }
       throw new DeletionPolicyError(
         'IFC-ERR-016',
-        '删除步骤失败重试已达上限，需人工介入处理后再继续',
+        '删除清单已被并发执行修改，本次执行作废，请重试',
       );
     }
 

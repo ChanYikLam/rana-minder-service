@@ -611,3 +611,30 @@ describe('5.3.4 第五轮评审修复（重试上限/孤儿清单/幂等声明�
     await assert.rejects(rig.execute.execute(execInput(latest.checklistId)), /需人工介入/);
   });
 });
+
+describe('5.3.4 exceeded 分支并发修复（评审 warning）', () => {
+  it('达上限时 CAS 失败（他方已推进完成）→ 重读最新态返回，不误报人工介入', async () => {
+    const rig = makeRig({ ok: false });
+    const checklist = await rig.formalDelete.execute(deleteInput);
+    // 前 4 次重试（retryCount 1-4）
+    let latest = checklist;
+    for (let i = 0; i < 4; i++) {
+      const r = await rig.execute.execute(execInput(latest.checklistId));
+      latest = r.checklist;
+    }
+    // 模拟并发他方已把清单推进为完成（版本递增）
+    const base = await rig.repo.load(latest.checklistId);
+    const completedByOther = {
+      ...base!,
+      completed: true,
+      version: base!.version + 1,
+      auditCommitted: true,
+    };
+    await rig.repo.compareAndSwap(base!, completedByOther);
+    // 第 5 次执行（达上限）：CAS 失败（版本冲突）→ 重读最新态（completed）→ 返回而非误报
+    const result = await rig.execute.execute(execInput(latest.checklistId));
+    assert.equal(result.completed, true);
+    assert.equal(result.checklist.completed, true);
+    assert.equal(result.checklist.auditCommitted, true);
+  });
+});
