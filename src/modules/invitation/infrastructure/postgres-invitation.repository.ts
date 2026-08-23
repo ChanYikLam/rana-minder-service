@@ -29,6 +29,7 @@ import { Injectable } from '@nestjs/common';
  * 供控制器 instanceof 识别并映射为约定 HTTP 状态。
  */
 export class InvitationUniqueViolationError extends Error {
+  readonly code = 'IFC-ERR-009';
   constructor(message = '同社团同对象已存在待处理邀请（IFC-ERR-009 幂等冲突）') {
     super(`IFC-ERR-009: ${message}`);
     this.name = 'InvitationUniqueViolationError';

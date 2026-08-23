@@ -17,6 +17,7 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  Inject,
   Param,
   Post,
   Req,
@@ -25,6 +26,8 @@ import {
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 import { InvitationAuthGuard, invitationSessionFromRequest } from './invitation-auth.guard';
 import { InvitationUniqueViolationError } from '../../infrastructure/postgres-invitation.repository';
+import { CASDOOR_USER_PORT } from '../../../identity/tokens';
+import type { CasdoorUserPort } from '../../../identity/application/ports/casdoor-user.port';
 
 import { AcceptInvitationCommand } from '../../application/commands/accept-invitation.command';
 import { RejectInvitationCommand } from '../../application/commands/reject-invitation.command';
@@ -55,6 +58,7 @@ export class InvitationNestController {
     private readonly acceptRoutine: AcceptRoutineInvitationCommand,
     private readonly rejectRoutine: RejectRoutineInvitationCommand,
     private readonly routineStatus: RoutineInvitationStatusQuery,
+    @Inject(CASDOOR_USER_PORT) private readonly casdoorUser: CasdoorUserPort,
   ) {}
 
   // ----- 普通录取邀请 -----
@@ -87,8 +91,9 @@ export class InvitationNestController {
     const principalId = this.principal(request);
     try {
       if (action === 'accept') {
-        // eligibilityOk：账号有效性在会话建立时已实时核验（CAS-REC-002）；
-        // 逐请求新鲜度分级核验随 freshness registry 任务落地（当前会话 JWT ≤24h）。
+        // eligibilityOk：接受是 CAS-REC-002 高价值业务动作，逐请求实时复核账号有效性
+        // （评审 SEC：会话 JWT 有效 ≤24h，登录后被禁用/删除仍可接受邀请）。
+        await this.assertAccountActive(principalId);
         const invitation = await this.accept.execute({
           invitationId,
           principalId,
@@ -140,6 +145,8 @@ export class InvitationNestController {
     const principalId = this.principal(request);
     try {
       if (action === 'accept') {
+        // 接受同样逐请求实时复核账号有效性（CAS-REC-002，防会话有效期内被禁用/删除）。
+        await this.assertAccountActive(principalId);
         const invitation = await this.acceptRoutine.execute({
           routineInvitationId: invitationId,
           principalId,
@@ -171,7 +178,36 @@ export class InvitationNestController {
     return session?.subjectId ?? '';
   }
 
+  /**
+   * 接受邀请前的账号有效性实时复核（CAS-REC-002 逐请求新鲜度）。
+   * 经 CASDOOR_USER_PORT 可信读取当前账号状态；DISABLED/DELETED 直接拒绝（403），
+   * 无法确认（失败/不确定）按 fail-closed 拒绝，不宣称账号当前有效。
+   */
+  private async assertAccountActive(subjectId: string): Promise<void> {
+    if (!subjectId) {
+      throw new HttpException(
+        { code: 'IFC-ERR-001', message: '未认证或认证失效' },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    const result = await this.casdoorUser.readAccountStatus(subjectId);
+    const active =
+      result.status === 'SUCCESS' && result.data !== null && result.data.state === 'ACTIVE';
+    if (!active) {
+      throw new HttpException(
+        { code: 'IFC-ERR-011', message: '账号已被禁用或删除，无法接受邀请' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
   private mapError(error: unknown): HttpException {
+    // 已是 HttpException（如账号有效性实时复核抛出的 401/403）原样透传，不再映射。
+    if (error instanceof HttpException) {
+      return error;
+    }
+    // 错误类显式暴露 code 字段（评审 CQ：不再依赖 message.split(':') 解析错误码，
+    // 避免解析失败静默降级为 500）。
     const code =
       error instanceof AcceptInvitationError ||
       error instanceof RejectInvitationError ||
@@ -180,7 +216,7 @@ export class InvitationNestController {
       error instanceof InvitationStatusQueryError ||
       error instanceof RoutineInvitationStatusQueryError ||
       error instanceof InvitationUniqueViolationError
-        ? (error.message.split(':')[0] as string)
+        ? error.code
         : null;
     if (code === 'IFC-ERR-006') {
       return new HttpException({ code, message: '邀请不存在' }, HttpStatus.NOT_FOUND);

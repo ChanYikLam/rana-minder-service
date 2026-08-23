@@ -24,9 +24,11 @@ export interface InvitationStatusView {
 
 /** 邀请状态查询失败（IFC-ERR-006 / IFC-ERR-003 当前无权） */
 export class InvitationStatusQueryError extends Error {
+  readonly code: 'IFC-ERR-006' | 'IFC-ERR-003';
   constructor(code: 'IFC-ERR-006' | 'IFC-ERR-003', message: string) {
     super(`${code}: ${message}`);
     this.name = 'InvitationStatusQueryError';
+    this.code = code;
   }
 }
 

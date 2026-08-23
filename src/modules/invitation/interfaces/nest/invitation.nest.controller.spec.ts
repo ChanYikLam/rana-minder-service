@@ -24,6 +24,16 @@ function makeController(respond: (input: unknown) => Promise<unknown>): Invitati
   const routineStatus = {
     getStatus: async () => ({ status: 'PENDING' }),
   };
+  // casdoorUser 桩：默认账号 ACTIVE，接受路径的实时复核放行。
+  const casdoorUser = {
+    readAccountStatus: async () => ({
+      status: 'SUCCESS',
+      data: { state: 'ACTIVE', observedAt: new Date(), externalVersion: null },
+      error: null,
+      attemptId: 'a',
+      timestamp: new Date(),
+    }),
+  };
   return new InvitationNestController(
     { execute: respond } as never,
     noop as never,
@@ -31,6 +41,7 @@ function makeController(respond: (input: unknown) => Promise<unknown>): Invitati
     noop as never,
     noop as never,
     routineStatus as never,
+    casdoorUser as never,
   );
 }
 
@@ -57,8 +68,35 @@ describe('InvitationNestController 错误映射（IFC-ERR-009 回归）', () => 
     assert.equal((caught.getResponse() as { code?: string }).code, 'IFC-ERR-009');
   });
 
-  it('InvitationUniqueViolationError 的 message 以 IFC-ERR-009 为前缀（供 code 提取）', () => {
+  it('InvitationUniqueViolationError 暴露显式 code=IFC-ERR-009（供 mapError 识别，评审 CQ）', () => {
     const err = new InvitationUniqueViolationError();
-    assert.equal(err.message.split(':')[0], 'IFC-ERR-009');
+    assert.equal(err.code, 'IFC-ERR-009');
+  });
+
+  it('accept 时账号 DISABLED/DELETED → 403（IFC-ERR-011，CAS-REC-002 实时复核）', async () => {
+    const controller = makeController(async () => ({ status: 'ACCEPTED' }));
+    // 覆盖为禁用状态，触发实时复核拒绝
+    (
+      controller as unknown as { casdoorUser: { readAccountStatus: () => Promise<unknown> } }
+    ).casdoorUser = {
+      readAccountStatus: async () => ({
+        status: 'SUCCESS',
+        data: { state: 'DISABLED', observedAt: new Date(), externalVersion: null },
+        error: null,
+        attemptId: 'a',
+        timestamp: new Date(),
+      }),
+    };
+    let caught: HttpException | undefined;
+    try {
+      await controller.recruitmentRespond('inv-1', buildSessionRequest() as never, {
+        action: 'accept',
+      });
+    } catch (e) {
+      caught = e as HttpException;
+    }
+    assert.ok(caught, '应抛出 HttpException');
+    assert.equal(caught.getStatus(), HttpStatus.FORBIDDEN);
+    assert.equal((caught.getResponse() as { code?: string }).code, 'IFC-ERR-011');
   });
 });

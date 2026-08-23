@@ -217,7 +217,8 @@ export class CasdoorOidcClient {
     return this.discovery;
   }
 
-  private encodeState(state: OidcState): string {
+  /** 编码 OIDC state（base64url JSON）。公开供控制器把 state 写入 HttpOnly Cookie 以做登录 CSRF 比对。 */
+  encodeState(state: OidcState): string {
     return Buffer.from(JSON.stringify(state)).toString('base64url');
   }
 }

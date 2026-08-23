@@ -22,6 +22,7 @@ import {
   HttpStatus,
   Inject,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 import { type Request as ExpressRequest, type Response } from 'express';
 import {
   isSecretRef,
@@ -62,11 +63,18 @@ export class CasdoorSessionController {
 
   /** GET /api/auth/casdoor/login-url */
   @Get('casdoor/login-url')
-  async getLoginUrl(_req: ExpressRequest): Promise<{ url: string }> {
+  async getLoginUrl(_req: ExpressRequest, res: Response): Promise<{ url: string }> {
     const client = this.ensureClient();
     const nonce = crypto.randomUUID();
     const state = { nonce };
     const url = await client.buildAuthorizationUrl(state);
+    // 登录 CSRF 防护（CAS-AUTH-003）：把完整 state 写入短生命周期 HttpOnly Cookie，
+    // 回调时逐字符比对，杜绝攻击者把受害者的 code 绑定到自己的 state/nonce。
+    const stateRaw = client.encodeState(state);
+    res.setHeader(
+      'Set-Cookie',
+      `oidc_state=${stateRaw}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${LOGIN_STATE_TTL_SECONDS}`,
+    );
     return { url };
   }
 
@@ -80,6 +88,22 @@ export class CasdoorSessionController {
     if (!code || !stateRaw) {
       throw new SessionError('Missing code or state', HttpStatus.BAD_REQUEST);
     }
+
+    // 登录 CSRF 防护：回调 state 必须与 login-url 阶段下发的 HttpOnly Cookie 逐字节一致，
+    // 否则拒绝（防 login CSRF / 回放）。比对失败按无效 state 处理，且清除残留 Cookie。
+    const expectedState = readCookie(req, LOGIN_STATE_COOKIE);
+    if (!expectedState || !timingSafeEqualStr(expectedState, stateRaw)) {
+      res.setHeader(
+        'Set-Cookie',
+        `${LOGIN_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+      );
+      throw new SessionError('Invalid state', HttpStatus.BAD_REQUEST);
+    }
+    // 一次性使用：校验通过即清除，防同一 state 复用/回放。
+    res.setHeader(
+      'Set-Cookie',
+      `${LOGIN_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+    );
 
     // 解码 state → nonce
     let nonce: string;
@@ -123,8 +147,12 @@ export class CasdoorSessionController {
       this.sessionSecret!,
     );
 
-    // Set-Cookie (HttpOnly, Secure 在 dev 环境不强制)
-    res.setHeader('Set-Cookie', `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
+    // Set-Cookie：HttpOnly + SameSite=Lax；生产/staging（非 dev/test）追加 Secure，
+    // 避免非 HTTPS 链路窃听会话令牌（评审 SEC：Cookie 缺 Secure 标志）。
+    res.setHeader(
+      'Set-Cookie',
+      `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax${isSecureEnv() ? '; Secure' : ''}`,
+    );
 
     return {
       user: {
@@ -198,4 +226,36 @@ export class SessionError extends HttpException {
     );
     this.name = 'SessionError';
   }
+}
+
+// 登录 CSRF 防护常量（CAS-AUTH-003）：state 写入 HttpOnly Cookie，短生命周期防回放。
+const LOGIN_STATE_COOKIE = 'oidc_state';
+const LOGIN_STATE_TTL_SECONDS = 600;
+
+/** 从请求 Cookie 头解析指定 cookie 值（避免依赖外部解析库）。 */
+function readCookie(req: ExpressRequest, name: string): string | null {
+  const header = req.headers['cookie'];
+  if (!header) return null;
+  for (const part of String(header).split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    const key = part.slice(0, eq).trim();
+    const value = part.slice(eq + 1).trim();
+    if (key === name) return decodeURIComponent(value);
+  }
+  return null;
+}
+
+/** 常量时间字符串比对（防时序侧信道，用于 state/nonce 回验）。 */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
+/** 会话 Cookie 是否需追加 Secure：仅 dev/test 不强制，其余环境（生产/staging/未设置）一律加。 */
+function isSecureEnv(): boolean {
+  const nodeEnv = process.env.NODE_ENV;
+  return nodeEnv !== 'development' && nodeEnv !== 'test';
 }
