@@ -95,27 +95,26 @@ export class FormalDeleteCommand {
       steps,
       completed: false,
       replayCount: 0,
+      retryCount: 0,
+      needsManualReview: false,
       version: 1,
       auditCommitted: false,
     };
-    await this.repo.save(checklist);
-    // 发起正式删除（超管敏感操作）落审计留痕（仅内部标识/类型，不含正文，AUD-006/008）
+    // **先写审计成功，再落清单**（warning 评审意见）：审计失败则清单不落库，
+    // 杜绝"无审计留痕的孤儿清单"（发起删除事件脱敏，仅记录范围与用途）
     await this.auditWriter.write({
       eventType: AuditEventType.SUPER_ADMIN_OP,
       actorId: input.initiator.principalId,
       actorRoles: ['SUPER_ADMIN'],
       scope: null,
       source: input.audit.source,
-      target: { objectType: 'DELETION_CHECKLIST', objectId: checklist.checklistId },
+      target: { objectType: 'DELETION_REQUEST', objectId: checklist.checklistId },
       oldValues: null,
-      newValues: {
-        scopeKind: input.scope.kind,
-        deletionType: input.scope.kind,
-        purpose: input.purpose,
-      },
+      newValues: { deletionKind: input.scope.kind, purpose: input.purpose },
       outcome: AuditOutcome.SUCCESS,
       requestId: input.audit.requestId,
     });
+    await this.repo.save(checklist);
     return checklist;
   }
 

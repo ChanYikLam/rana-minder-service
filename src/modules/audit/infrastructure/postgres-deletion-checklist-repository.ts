@@ -26,6 +26,8 @@ interface DeletionChecklistRow {
   readonly steps: unknown;
   readonly completed: boolean;
   readonly replay_count: number;
+  readonly retry_count: number;
+  readonly needs_manual_review: boolean;
   readonly version: number;
   readonly audit_committed: boolean;
 }
@@ -44,6 +46,8 @@ function toRow(c: DeletionChecklist): DeletionChecklistRow {
     steps: JSON.stringify(c.steps),
     completed: c.completed,
     replay_count: c.replayCount,
+    retry_count: c.retryCount,
+    needs_manual_review: c.needsManualReview,
     version: c.version,
     audit_committed: c.auditCommitted,
   };
@@ -63,6 +67,8 @@ function fromRow(r: DeletionChecklistRow): DeletionChecklist {
     steps: JSON.parse(r.steps as string) as DeletionChecklist['steps'],
     completed: r.completed,
     replayCount: r.replay_count,
+    retryCount: r.retry_count,
+    needsManualReview: r.needs_manual_review,
     version: r.version,
     auditCommitted: r.audit_committed,
   };
@@ -97,8 +103,8 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
         tx,
         `INSERT INTO deletion_checklist (
            checklist_id, scope, reason, purpose, initiated_by, initiated_at, confirmed,
-           affected_objects, business_relations_ended, steps, completed, replay_count, version, audit_committed
-         ) VALUES ($1, $2::jsonb, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14)`,
+           affected_objects, business_relations_ended, steps, completed, replay_count, retry_count, needs_manual_review, version, audit_committed
+         ) VALUES ($1, $2::jsonb, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14, $15, $16)`,
         [
           row.checklist_id,
           row.scope,
@@ -112,6 +118,8 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
           row.steps,
           row.completed,
           row.replay_count,
+          row.retry_count,
+          row.needs_manual_review,
           row.version,
           row.audit_committed,
         ],
@@ -124,7 +132,7 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
       const rows = await this.db.query<DeletionChecklistRow>(
         tx,
         `SELECT checklist_id, scope, reason, purpose, initiated_by, initiated_at, confirmed,
-                affected_objects, business_relations_ended, steps, completed, replay_count, version, audit_committed
+                affected_objects, business_relations_ended, steps, completed, replay_count, retry_count, needs_manual_review, version, audit_committed
          FROM deletion_checklist WHERE checklist_id = $1`,
         [checklistId],
       );
@@ -149,9 +157,9 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
         `UPDATE deletion_checklist SET
            scope = $2::jsonb, reason = $3, purpose = $4, initiated_by = $5, initiated_at = $6,
            confirmed = $7, affected_objects = $8::jsonb, business_relations_ended = $9,
-           steps = $10::jsonb, completed = $11, replay_count = $12, version = $13,
-           audit_committed = $15
-         WHERE checklist_id = $1 AND version = $14`,
+           steps = $10::jsonb, completed = $11, replay_count = $12, retry_count = $13,
+           needs_manual_review = $16, version = $14, audit_committed = $15
+         WHERE checklist_id = $1 AND version = $17`,
         [
           row.checklist_id,
           row.scope,
@@ -165,9 +173,11 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
           row.steps,
           row.completed,
           row.replay_count,
+          row.retry_count,
           row.version,
-          current.version,
           row.audit_committed,
+          row.needs_manual_review,
+          current.version,
         ],
       );
       return true;
@@ -175,7 +185,8 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
   }
 
   async listIncomplete(): Promise<readonly DeletionChecklist[]> {
-    return this.listWhere('completed = false');
+    // 排除需人工介入清单（达重试上限），重试任务不再拉取空转（warning 评审意见）
+    return this.listWhere('completed = false AND needs_manual_review = false');
   }
 
   async listAll(): Promise<readonly DeletionChecklist[]> {

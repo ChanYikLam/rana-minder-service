@@ -37,29 +37,19 @@ const makeFakeDb = (rows: Record<string, unknown>[]) => {
         return [];
       }
       if (/^UPDATE/.test(sql.trim())) {
+        // 列顺序与仓储 UPDATE 逐位对齐：$13 retry_count / $14 version / $15 audit_committed / $16 needs_manual_review / $17 current.version
         const id = params[0];
-        const version = params[13];
-        const idx = store.findIndex((r) => r.checklist_id === id && r.version === version);
+        const currentVersion = params[16];
+        const idx = store.findIndex((r) => r.checklist_id === id && r.version === currentVersion);
         if (idx === -1) return [];
         store[idx] = {
           ...store[idx],
-          ...Object.fromEntries(
-            [
-              'scope',
-              'reason',
-              'purpose',
-              'initiated_by',
-              'initiated_at',
-              'confirmed',
-              'affected_objects',
-              'business_relations_ended',
-              'steps',
-              'completed',
-              'replay_count',
-              'version',
-            ].map((k, i) => [k, params[i + 1]]),
-          ),
+          completed: params[10],
+          replay_count: params[11],
+          retry_count: params[12],
+          version: params[13],
           audit_committed: params[14],
+          needs_manual_review: params[15],
         };
         return [];
       }

@@ -30,6 +30,7 @@ const makeRig = (executor: { ok: boolean } = { ok: true }) => {
   const repo = new InMemoryDeletionChecklistRepository();
   const policy = new DeletionPolicy();
   // 发起删除的审计留痕独立 stub（与执行清单审计分开计数，互不干扰）
+  // 发起删除的审计留痕独立 stub（与执行清单审计分开计数，互不干扰）
   const initiateAudit = makeAuditWriterStub();
   const formalDelete = new FormalDeleteCommand(repo, policy, initiateAudit.writer);
   const audit = makeAuditWriterStub();
@@ -213,7 +214,8 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(audit.deletionType, DeletionScopeKind.USER_ALL_DATA);
     assert.equal(audit.performedBy, 'sa1');
     assert.equal(audit.note, 'minimal-audit-only');
-    // 最小审计已落库（W2：经 AuditWriter 持久化，杜绝审计丢失）
+    // 审计已落库：发起删除（initiateWrites 1 条）+ 完成最小审计（rig.writes 1 条）
+    assert.equal(rig.initiateWrites.length, 1);
     assert.equal(rig.writes.length, 1);
     const written = rig.writes[0] as { target: { objectId: string } };
     assert.equal(written.target.objectId, checklist.checklistId);
@@ -252,7 +254,12 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
   it('评审修复：审计写入失败 → 普通重试补写审计（auditCommitted 标志，无需 replay 重执行）', async () => {
     const repo = new InMemoryDeletionChecklistRepository();
     const policy = new DeletionPolicy();
-    const formalDelete = new FormalDeleteCommand(repo, policy, makeAuditWriterStub().writer);
+    // 发起删除用正常审计（清单可落库）；执行时审计失败
+    const okAudit = {
+      writes: [] as unknown[],
+      write: async (e: unknown) => void okAudit.writes.push(e),
+    };
+    const formalDelete = new FormalDeleteCommand(repo, policy, okAudit as never);
     const failingAudit = {
       write: async () => {
         throw new Error('audit db down');
@@ -330,7 +337,8 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(result.completed, false);
     assert.equal(result.checklist.completed, false);
     assert.equal(result.minimalAudit, null); // 未完成不得生成最小审计/宣称完成
-    // 部分失败保留尝试审计（AUD-009）：FAILURE 审计已落库（脱敏失败详情）
+    // 审计已落库：发起删除（initiateWrites 1 条）+ 部分失败尝试审计（rig.writes 1 条，FAILURE 脱敏详情）
+    assert.equal(rig.initiateWrites.length, 1);
     assert.equal(rig.writes.length, 1);
     const written = rig.writes[0] as { outcome: string; failureReason: string };
     assert.equal(written.outcome, 'FAILURE');
@@ -552,5 +560,49 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     // 第一项审计失败 → 并入 skipped；第二项审计成功 → 清理
     assert.deepEqual(result.cleaned, ['scan-2']);
     assert.deepEqual(result.skipped, ['draft-1']);
+  });
+});
+
+describe('5.3.4 第五轮评审修复（重试上限/孤儿清单/幂等声明）', () => {
+  it('发起删除先审计后落库：审计失败 → 清单不落库（防孤儿清单）', async () => {
+    const repo = new InMemoryDeletionChecklistRepository();
+    const policy = new DeletionPolicy();
+    const failingAudit = {
+      write: async () => {
+        throw new Error('audit db down');
+      },
+    };
+    const formalDelete = new FormalDeleteCommand(repo, policy, failingAudit as never);
+    // 审计失败 → 命令抛错且清单未落库（无孤儿清单）
+    await assert.rejects(formalDelete.execute(deleteInput), /audit db down/);
+    const all = await repo.listAll();
+    assert.equal(all.length, 0);
+  });
+
+  it('重试达上限：retryCount 持久化 + needsManualReview 落库 + 清单不再自动重试', async () => {
+    const rig = makeRig({ ok: false });
+    const checklist = await rig.formalDelete.execute(deleteInput);
+    // 前 4 次重试正常（retryCount 1-4）；第 5 次达上限 → CAS 持久化 + 抛错
+    let latest = checklist;
+    for (let i = 0; i < 4; i++) {
+      const r = await rig.execute.execute(execInput(latest.checklistId));
+      latest = r.checklist;
+      assert.equal(latest.retryCount, i + 1);
+      assert.equal(latest.needsManualReview, false);
+    }
+    // 第 5 次：达上限 → 持久化 needsManualReview 后抛错（人工介入）
+    await assert.rejects(
+      rig.execute.execute(execInput(latest.checklistId)),
+      /重试已达上限，需人工介入/,
+    );
+    const persisted = await rig.repo.load(latest.checklistId);
+    assert.equal(persisted!.retryCount, 5);
+    assert.equal(persisted!.needsManualReview, true); // 人工介入标记已落库
+    assert.equal(persisted!.completed, false);
+    // 需人工介入清单不再被重试任务拉取（listIncomplete 排除）
+    const incomplete = await rig.query.listIncomplete(['SUPER_ADMIN']);
+    assert.equal(incomplete.length, 0);
+    // 后续自动重试被拒绝（IFC-ERR-016 需人工介入）
+    await assert.rejects(rig.execute.execute(execInput(latest.checklistId)), /需人工介入/);
   });
 });

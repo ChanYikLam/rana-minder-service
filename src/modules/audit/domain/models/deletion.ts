@@ -90,6 +90,10 @@ export interface DeletionChecklist {
   readonly completed: boolean;
   /** 恢复后重放次数（防复现） */
   readonly replayCount: number;
+  /** 自动重试计数（达到上限标记 needsManualReview，防无限重试空转） */
+  readonly retryCount: number;
+  /** 需人工介入（达到重试上限；不再自动重试） */
+  readonly needsManualReview: boolean;
   /** 乐观锁版本（并发执行防护：同一清单只一个执行提交成功） */
   readonly version: number;
   /** 删除执行结果是否已落审计（审计写入成功；false=审计缺失，普通重试可补写） */

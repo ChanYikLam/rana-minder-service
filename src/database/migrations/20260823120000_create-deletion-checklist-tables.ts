@@ -39,6 +39,8 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       steps                   jsonb       NOT NULL DEFAULT '[]'::jsonb,
       completed               boolean     NOT NULL DEFAULT false,
       replay_count            bigint      NOT NULL DEFAULT 0,
+      retry_count             bigint      NOT NULL DEFAULT 0,
+      needs_manual_review     boolean     NOT NULL DEFAULT false,
       version                 bigint      NOT NULL DEFAULT 1,
       audit_committed         boolean     NOT NULL DEFAULT false,
       CONSTRAINT ck_deletion_checklist_purpose CHECK (purpose IN

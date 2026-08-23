@@ -16,7 +16,11 @@ export const DELETION_STEP_EXECUTOR = Symbol('DELETION_STEP_EXECUTOR');
 
 /** 删除步骤执行器端口（跨存储：在线库/附件/缓存/索引/导出；生产接各存储适配） */
 export interface DeletionStepExecutorPort {
-  /** 删除并回读核验（不伪装原子事务；AUD-009/IFC-TX-007） */
+  /**
+   * 删除并回读核验（不伪装原子事务；AUD-009/IFC-TX-007）。
+   * **必须幂等**：同一 targetRef 重复调用删除结果一致（并发下多个执行可能都实际
+   * 删除存储，仅一个 CAS 提交胜出；重复删除无害——info 评审意见显式声明）
+   */
   deleteAndVerify(kind: string, targetRef: string): Promise<{ ok: boolean }>;
 }
 
@@ -82,6 +86,10 @@ export class ExecuteDeletionChecklistCommand {
       throw new DeletionPolicyError('IFC-ERR-015', '删除清单不存在');
     }
     const replay = input.replay === true;
+    // 需人工介入（达重试上限）：拒绝自动重试，防无限空转
+    if (checklist.needsManualReview && !replay) {
+      throw new DeletionPolicyError('IFC-ERR-016', '删除清单已达重试上限，需人工介入');
+    }
     // 幂等：已完成且**审计已落**且非重放 → 返回原结果；
     // 已完成但审计缺失（auditCommitted=false，审计写入曾失败）→ 继续执行补审计
     if (checklist.completed && checklist.auditCommitted && !replay) {
@@ -132,8 +140,43 @@ export class ExecuteDeletionChecklistCommand {
     const completed =
       failed === 0 && verified === checklist.steps.length && checklist.steps.length > 0;
 
-    // 已超出重试上限且仍未完成 → 拒绝继续空转，抛错由接线层告警收敛
-    if (exhaustedRetries && !completed) {
+    // 重试上限判定（未完成且非重放）：**必须在首次 CAS 之前**——达上限时直接以
+    // 人工介入状态 CAS 提交，避免普通 updated 先落库导致二次 CAS 版本冲突、
+    // needsManualReview 无法持久化（warning 评审意见）；步骤级 exhaustedRetries
+    // （评审者 81ec386）与清单级 retryCount 任一达上限均触发人工介入
+    const retryCount = replay ? checklist.retryCount : checklist.retryCount + 1;
+    const exceeded =
+      !completed && !replay && (retryCount >= MAX_STEP_RETRY_COUNT || exhaustedRetries);
+    if (exceeded) {
+      const updatedWithRetry: DeletionChecklist = {
+        ...checklist,
+        steps,
+        completed: false,
+        replayCount: checklist.replayCount, // exceeded 分支 replay 恒非 true（TS 控制流）
+        retryCount,
+        needsManualReview: true,
+        version: checklist.version + 1,
+        auditCommitted: false,
+      };
+      const blocked = await this.repo.compareAndSwap(checklist, updatedWithRetry);
+      if (blocked) {
+        // 人工介入审计落库（状态不滞留"上限-1"，重试任务不再拉取该清单空转）
+        await this.auditWriter.write({
+          eventType: AuditEventType.SUPER_ADMIN_OP,
+          actorId: checklist.initiatedBy,
+          actorRoles: ['SUPER_ADMIN'],
+          scope: null,
+          source: input.audit.source,
+          target: { objectType: 'DELETION_CHECKLIST', objectId: checklist.checklistId },
+          oldValues: null,
+          newValues: { deletionType: checklist.scope.kind, needsManualReview: true },
+          outcome: AuditOutcome.FAILURE,
+          failureReason: 'max-step-retry-reached',
+          requestId: input.audit.requestId,
+        });
+      }
+      // 已持久化人工介入状态：抛错由接线层告警收敛（评审者语义），
+      // 且 needsManualReview 已落库（后续自动重试被拒绝，warning 语义）
       throw new DeletionPolicyError(
         'IFC-ERR-016',
         '删除步骤失败重试已达上限，需人工介入处理后再继续',
@@ -145,6 +188,8 @@ export class ExecuteDeletionChecklistCommand {
       steps,
       completed,
       replayCount: replay ? checklist.replayCount + 1 : checklist.replayCount,
+      retryCount,
+      needsManualReview: checklist.needsManualReview,
       version: checklist.version + 1,
       // 审计待提交（成功后二次 CAS 置 true；失败则保持 false，普通重试可补写）。
       // 重放已完成+审计已落清单：保留 auditCommitted=true，避免破坏幂等标志（去重）

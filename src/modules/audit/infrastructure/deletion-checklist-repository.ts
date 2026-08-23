@@ -44,7 +44,8 @@ export class InMemoryDeletionChecklistRepository implements DeletionChecklistRep
   }
 
   async listIncomplete(): Promise<readonly DeletionChecklist[]> {
-    return [...this.checklists.values()].filter((c) => !c.completed);
+    // 排除需人工介入清单（达重试上限）：重试任务不再拉取空转（warning 评审意见）
+    return [...this.checklists.values()].filter((c) => !c.completed && !c.needsManualReview);
   }
 
   async listAll(): Promise<readonly DeletionChecklist[]> {
