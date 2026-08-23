@@ -53,6 +53,7 @@ import { JointModule } from './modules/joint/joint.module';
 import { InvitationModule } from './modules/invitation/module';
 import { MembershipModule } from './modules/membership/module';
 import { AuditModule } from './modules/audit/module';
+import { StatExportModule } from './modules/stat-export/module';
 import { RecruitmentModule } from './modules/recruitment/recruitment.module';
 import { DB_STATUS_PORT, TASK_SUMMARY_PORT } from './platform/observability/status-page/tokens';
 import {
@@ -83,6 +84,7 @@ import type { TaskRepository } from './platform/tasks/contracts';
     InvitationModule,
     MembershipModule,
     AuditModule,
+    StatExportModule,
     RecruitmentModule,
   ],
   controllers: [],
