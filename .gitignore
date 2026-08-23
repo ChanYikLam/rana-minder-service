@@ -49,3 +49,4 @@ coverage/
 # ---------- 文档与脚本生成的本地材料 ----------
 docs/_local/
 scripts/_local/
+.opencode/
