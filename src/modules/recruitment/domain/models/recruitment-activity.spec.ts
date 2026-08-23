@@ -38,6 +38,12 @@ describe('RecruitmentActivity (REC-001)', () => {
     assert.equal(activity.status, 'CANCELLED');
   });
 
+  it('DRAFT → CANCELLED（SRS-SM-REC-001：草稿或进行中均可取消）', () => {
+    const activity = draft();
+    assert.equal(activity.cancel(MACHINE, NOW), true);
+    assert.equal(activity.status, 'CANCELLED');
+  });
+
   it('DRAFT 不允许 COMPLETE', () => {
     const activity = draft();
     assert.equal(activity.complete(MACHINE, NOW), false);
