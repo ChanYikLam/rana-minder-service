@@ -21,7 +21,7 @@ const makeRig = (executor: { ok: boolean } = { ok: true }) => {
     deleteAndVerify: async () => executor,
   } as never);
   const cleanup = new RetentionCleanupCommand();
-  const query = new DeletionChecklistQuery(repo);
+  const query = new DeletionChecklistQuery(repo, policy);
   return { repo, formalDelete, execute, cleanup, query };
 };
 
@@ -71,6 +71,39 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     );
   });
 
+  it('评审修复：scope 完整性校验——缺定位字段/空影响清单拒绝（IFC-ERR-005）', async () => {
+    const rig = makeRig();
+    // 单条记录缺 objectType/objectId
+    await assert.rejects(
+      rig.formalDelete.execute({
+        ...deleteInput,
+        scope: { kind: DeletionScopeKind.SINGLE_RECORD, objectType: 'RECORD' },
+      }),
+      /需提供 objectType 与 objectId/,
+    );
+    // 活动范围缺 activityId
+    await assert.rejects(
+      rig.formalDelete.execute({
+        ...deleteInput,
+        scope: { kind: DeletionScopeKind.ACTIVITY },
+      }),
+      /需提供 activityId/,
+    );
+    // 用户全部数据缺 principalId
+    await assert.rejects(
+      rig.formalDelete.execute({
+        ...deleteInput,
+        scope: { kind: DeletionScopeKind.USER_ALL_DATA },
+      }),
+      /需提供 principalId/,
+    );
+    // 空影响清单
+    await assert.rejects(
+      rig.formalDelete.execute({ ...deleteInput, affectedObjects: [] }),
+      /受影响对象清单不能为空/,
+    );
+  });
+
   it('正式删除排队：生成 5 类步骤清单 + 受影响对象预览', async () => {
     const rig = makeRig();
     const checklist = await rig.formalDelete.execute(deleteInput);
@@ -88,9 +121,14 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
       ],
     );
     assert.ok(checklist.steps.every((s) => s.status === DeletionStepStatus.PENDING));
-    // 受影响对象预览（二次确认展示）
-    const preview = await rig.query.previewAffected(checklist.checklistId);
+    // 受影响对象预览（二次确认展示；仅超管）
+    const preview = await rig.query.previewAffected(checklist.checklistId, ['SUPER_ADMIN']);
     assert.deepEqual(preview, ['报名:r1', '评价:e1']);
+    // 非超管查清单 → 拒绝（安全缺口修复）
+    await assert.rejects(
+      rig.query.previewAffected(checklist.checklistId, ['HR_ADMIN']),
+      /仅超级管理员/,
+    );
   });
 
   it('执行清单：全部回读核验 → 完成 + 最小删除审计（不含正文；AUD-006/008）', async () => {
@@ -141,7 +179,7 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     });
     assert.equal(failedReplay.completed, false);
     // 全量清单（恢复重放需含已完成清单；AUD-009）
-    const all = await rig.query.listAll();
+    const all = await rig.query.listAll(['SUPER_ADMIN']);
     assert.equal(all.length, 1); // 含已完成清单
   });
 

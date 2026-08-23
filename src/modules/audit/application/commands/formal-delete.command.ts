@@ -49,6 +49,10 @@ export class FormalDeleteCommand {
     this.policy.assertNotAnonymization(input.purpose);
     this.policy.assertConfirmed(input.confirmed);
     this.policy.assertBusinessRelationsEnded(input.activeRelations);
+    this.assertScopeComplete(input.scope);
+    if (input.affectedObjects.length === 0) {
+      throw new Error('IFC-ERR-005: 受影响对象清单不能为空');
+    }
 
     const steps: readonly DeletionStep[] = (
       [
@@ -90,6 +94,32 @@ export class FormalDeleteCommand {
         return `activity:${scope.activityId}`;
       case DeletionScopeKind.USER_ALL_DATA:
         return `user:${scope.principalId}`;
+    }
+  }
+
+  /** scope 完整性校验（各删除范围必填定位字段；IFC-ERR-005） */
+  private assertScopeComplete(scope: DeletionScope): void {
+    switch (scope.kind) {
+      case DeletionScopeKind.SINGLE_RECORD:
+        if (
+          scope.objectType === undefined ||
+          scope.objectType.trim().length === 0 ||
+          scope.objectId === undefined ||
+          scope.objectId.trim().length === 0
+        ) {
+          throw new Error('IFC-ERR-005: 单条记录删除需提供 objectType 与 objectId');
+        }
+        return;
+      case DeletionScopeKind.ACTIVITY:
+        if (scope.activityId === undefined || scope.activityId.trim().length === 0) {
+          throw new Error('IFC-ERR-005: 活动范围删除需提供 activityId');
+        }
+        return;
+      case DeletionScopeKind.USER_ALL_DATA:
+        if (scope.principalId === undefined || scope.principalId.trim().length === 0) {
+          throw new Error('IFC-ERR-005: 用户全部数据删除需提供 principalId');
+        }
+        return;
     }
   }
 }
