@@ -84,7 +84,18 @@ export class ControlledBatchUseCase {
     });
     // 把状态机声明的副作用标签交给平台端口消费（save_preview_audit、freeze_batch_inputs、
     // spawn_item_tasks 等），保证驱动阶段与副作用落地一致。
-    await this.platformPort.execute(input.batchId, input.event, result.requiredSideEffects);
+    // 平台端口返回失败（ok=false）时，不得返回推进后的新状态，否则上报与实际持久化
+    // 状态不一致；此处直接抛 commitFailed 交由上层按提交失败收口。
+    const executed = await this.platformPort.execute(
+      input.batchId,
+      input.event,
+      result.requiredSideEffects,
+    );
+    if (executed && executed.ok === false) {
+      throw orgError.commitFailed(
+        `批次 ${input.batchId} 阶段 ${input.event} 平台执行失败：${executed.error ?? '未知原因'}`,
+      );
+    }
     return result.status;
   }
 
@@ -183,7 +194,11 @@ export class ControlledBatchUseCase {
 export const controlledBatchProvider = {
   provide: CONTROLLED_BATCH_PORT,
   useFactory: (/** 平台 batch 执行器接入点（本次为桩） */) => ({
-    async execute(_batchId: string, _phase: string): Promise<{ ok: boolean }> {
+    async execute(
+      _batchId: string,
+      _phase: string,
+      _requiredSideEffects?: readonly string[],
+    ): Promise<{ ok: boolean; error?: string }> {
       return { ok: true };
     },
   }),

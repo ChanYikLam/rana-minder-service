@@ -92,6 +92,26 @@ describe('ControlledBatchUseCase.drive', () => {
     });
     assert.equal(next, 'partial_success');
   });
+
+  it('平台端口执行失败（ok=false）时抛 commitFailed，不返回推进后状态', async () => {
+    const port = makePort();
+    // 覆盖为失败返回值
+    (port as { execute: (...a: unknown[]) => Promise<unknown> }).execute = async () => ({
+      ok: false,
+      error: 'batch executor down',
+    });
+    const useCase = new ControlledBatchUseCase(port);
+    await assert.rejects(
+      () =>
+        useCase.drive({
+          batchId: 'b1',
+          event: 'generate_preview',
+          status: 'selecting',
+          facts: { scopeFixed: true },
+        }),
+      (e: Error) => e.message.includes('平台执行失败') && e.message.includes('batch executor down'),
+    );
+  });
 });
 
 // -------------------------------------------------------------------------
