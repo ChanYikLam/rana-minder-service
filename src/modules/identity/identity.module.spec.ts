@@ -99,7 +99,8 @@ describe('IdentityModule 装配（DI 图 + 失败关闭）', () => {
 
   it('会话认证链路接入前：受保护端点统一 401（RejectAll 失败关闭）', async () => {
     const module = await createModule();
-    const provider = module.get<AuthSessionProvider>(AUTH_SESSION_PROVIDER);
+    // AUTH_SESSION_PROVIDER 为异步工厂（依赖 Casdoor 连通探测），需先 await 解析
+    const provider = await module.get<AuthSessionProvider>(AUTH_SESSION_PROVIDER);
     assert.equal(await provider.resolveSession({} as never), null);
     const guard = module.get(AuthGuard);
     await assert.rejects(

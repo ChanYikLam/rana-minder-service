@@ -28,54 +28,58 @@ import { NotificationController } from '../src/modules/notification/interfaces';
 import { NotificationDeliveryHandler } from '../src/platform/tasks/executors/handlers/notification-delivery.handler';
 
 /**
- * 最小占位配置：AdaptersModule 的真实外部适配器工厂会注入 RANA_MINDER_CONFIG
- * （仅 ADAPTERS_*_REAL=1 时消费，测试保持默认 fail-closed 桩）。为满足 Nest DI
- * 解析，这里注入一份完整的最小配置即可（生产由 @Global ConfigurationModule 提供）。
+ * 测试用完整配置。编译 NotificationModule/TasksModule 会经 @Global AdaptersModule
+ * 触发 RANA_MINDER_CONFIG 注入，且 identity 模块的会话装配会读取 casdoor.endpoint，
+ * 因此必须提供完整配置（不能只给 job 片段，否则 casdoor 为 undefined 会在工厂内抛错）。
  */
-const stubConfig: RanaMinderConfig = {
-  server: { port: 3000, host: '0.0.0.0', gracefulShutdownTimeoutMs: 10000 },
+const TEST_CONFIG: RanaMinderConfig = {
+  server: { port: 3000, host: '0.0.0.0', gracefulShutdownTimeoutMs: 10_000 },
   database: {
     host: 'localhost',
     port: 5432,
-    name: 'ranaminder',
-    user: 'ranaminder',
+    name: 'ranaminder_test',
+    user: 'test',
     schema: 'app',
     ssl: false,
-    passwordRef: '',
+    passwordRef: 'test-password',
   },
   casdoor: {
     endpoint: '',
-    clientId: '',
-    organization: '',
-    redirectUri: '',
-    clientSecretRef: '',
+    clientId: 'test-client',
+    organization: 'test-org',
+    redirectUri: 'http://localhost:3000/api/auth/callback',
+    clientSecretRef: 'test-secret',
   },
   storage: {
-    endpoint: '',
+    endpoint: 'http://localhost:9000',
     region: 'us-east-1',
-    accessKeyRef: '',
-    secretKeyRef: '',
+    accessKeyRef: 'test-access',
+    secretKeyRef: 'test-secret-key',
     buckets: {
-      quarantine: 'ranaminder-quarantine',
-      primary: 'ranaminder-primary',
-      derived: 'ranaminder-derived',
+      quarantine: 'quarantine',
+      primary: 'primary',
+      derived: 'derived',
     },
   },
-  mail: { host: '', port: 25, fromAddress: '' },
+  mail: {
+    host: 'localhost',
+    port: 25,
+    fromAddress: 'noreply@example.edu',
+  },
   fileCheck: { endpoint: '' },
   notify: { endpoint: '' },
   backup: { endpoint: '' },
-  observability: { logLevel: 'info', traceSamplingRate: 1 },
-  job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
+  observability: { logLevel: 'warn', traceSamplingRate: 1 },
+  job: { defaultLeaseMs: 60_000, schedulerIntervalMs: 1_000, maxAttempts: 5 },
 };
 
 describe('NotificationModule DI bootstrap', () => {
   it('NotificationModule 全部提供者可被解析（无接口注入回归）', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [NotificationModule, ConfigurationModule.forRoot()],
+      imports: [ConfigurationModule.forRoot(), NotificationModule],
     })
       .overrideProvider(RANA_MINDER_CONFIG)
-      .useValue(stubConfig)
+      .useValue(TEST_CONFIG)
       .compile();
 
     const commands = [
@@ -97,7 +101,7 @@ describe('NotificationModule DI bootstrap', () => {
       imports: [ConfigurationModule.forRoot(), TasksModule],
     })
       .overrideProvider(RANA_MINDER_CONFIG)
-      .useValue(stubConfig)
+      .useValue(TEST_CONFIG)
       .compile();
 
     const handler = moduleRef.get(NotificationDeliveryHandler);

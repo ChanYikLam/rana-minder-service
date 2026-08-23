@@ -323,9 +323,9 @@ export class InMemoryCasdoorPort implements CasdoorGroupPort {
   }
 
   async getGroupMembers(ref: GroupStableRef): Promise<readonly string[]> {
+    // 与 readback 端口容错语义一致：Group 缺失视为空成员集，返回 [] 而非抛裸 Error
     const g = await this.getGroupByRef(ref);
-    if (g === null) throw new Error(`Group 不存在: ${ref.owner}/${ref.name}`);
-    return [...g.memberIds];
+    return g === null ? [] : [...g.memberIds];
   }
 
   async writeMembership(input: {
@@ -373,6 +373,15 @@ export class InMemoryCasdoorPort implements CasdoorGroupPort {
     if (kind === 'deleted') g.deleted = true;
     else if (kind === 'no_access') g.readable = false;
     this.failingRefs.add(`${ref.owner}/${ref.name}`);
+  }
+
+  /** 测试辅助：构造后追加一个 Group（不影响已存在 Group）；按 ref 去重 */
+  addGroup(g: MemoryCasdoorSeed['groups'][number]): void {
+    const exists = this.groups.some(
+      (x) => x.ref.owner === g.ref.owner && x.ref.name === g.ref.name,
+    );
+    if (exists) return;
+    this.groups.push(this.normalize(g, this.groups.length));
   }
 }
 
