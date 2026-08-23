@@ -15,6 +15,7 @@
  */
 
 import { Controller, Delete, Get, HttpCode, HttpException, Inject } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { type Request as ExpressRequest, type Response } from 'express';
 import {
   RANA_MINDER_CONFIG,
@@ -30,6 +31,7 @@ import type {
 import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-provider';
 import { deriveSessionSecret } from './session-secret';
 import { CasdoorAvailability } from './casdoor-availability';
+import { InMemoryOidcNonceStore } from './oidc-nonce-store';
 import { CASDOOR_AVAILABILITY } from '../../tokens';
 
 /** Casdoor 账号状态（与 CasdoorOidcClient.fetchAccountState 返回值一致）。 */
@@ -58,6 +60,7 @@ export interface SessionResponse {
 export class CasdoorSessionController {
   private oidcClient?: CasdoorOidcClient;
   private sessionSecret?: Uint8Array;
+  private readonly nonceStore = new InMemoryOidcNonceStore();
 
   constructor(
     @Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig,
@@ -68,7 +71,9 @@ export class CasdoorSessionController {
   @Get('casdoor/login-url')
   async getLoginUrl(_req: ExpressRequest): Promise<{ url: string }> {
     const client = this.ensureClient();
-    const nonce = crypto.randomUUID();
+    const nonce = randomUUID();
+    // 服务端记录本次授权请求的 nonce，回调时校验并一次性消费（登录 CSRF/会话固定防护）。
+    this.nonceStore.issue(nonce);
     const state = { nonce };
     try {
       const url = await client.buildAuthorizationUrl(state);
@@ -84,6 +89,9 @@ export class CasdoorSessionController {
   @Get('session')
   async establishSession(req: ExpressRequest, res: Response): Promise<SessionResponse> {
     const client = this.ensureClient();
+    // 记录本次登录尝试开始前的 Casdoor 连通状态：若此前探测已判定不可用，则本次
+    // 成功建立的会话仍标记为 degraded，受 CAS-FAIL-001 的 15 分钟降级窗口约束。
+    const wasAvailable = this.availability.available;
     const code = req.query['code'] as string | undefined;
     const stateRaw = req.query['state'] as string | undefined;
 
@@ -91,13 +99,17 @@ export class CasdoorSessionController {
       throw new SessionError('Missing code or state', 400);
     }
 
-    // 解码 state → nonce
+    // 解码 state → nonce，并校验该 nonce 确由本服务签发（一次性消费）。
+    // 未签发/已消费/过期一律拒绝，防登录 CSRF 与会话固定。
     let nonce: string;
     try {
       const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8'));
       nonce = state.nonce;
     } catch {
       throw new SessionError('Invalid state', 400);
+    }
+    if (typeof nonce !== 'string' || !this.nonceStore.consume(nonce)) {
+      throw new SessionError('Invalid or expired state (nonce not issued by this service)', 400);
     }
 
     // 交换授权码 → TokenSet（Casdoor 连通失败时标记降级窗口，CAS-FAIL-001）
@@ -134,32 +146,46 @@ export class CasdoorSessionController {
     // Casdoor 链路整体可用（探测恢复）
     this.availability.markAvailable();
 
-    // 签发本地会话 JWT
+    // 签发本地会话 JWT。degraded 联动本次登录尝试开始前的 Casdoor 连通状态
+    // （CAS-FAIL-001）：此前不可用时，本会话标记为 degraded，受 15 分钟降级窗口约束。
+    const degraded = !wasAvailable;
     const now = Math.floor(Date.now() / 1000);
     const sessionClaims: SessionClaims = {
       sub,
       name: typeof claims['name'] === 'string' ? claims['name'] : undefined,
       email: typeof claims['email'] === 'string' ? claims['email'] : undefined,
       iat: now,
-      degraded: false,
+      degraded,
     };
     const sessionToken = await OidcAuthSessionProvider.signSession(
       sessionClaims,
       this.sessionSecret!,
     );
 
-    // Set-Cookie (HttpOnly, Secure 在 dev 环境不强制)
-    res.setHeader('Set-Cookie', `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
+    // Set-Cookie：HttpOnly + SameSite=Lax 强制；Secure 在 HTTPS 下启用（防明文截获）。
+    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    const secureAttr = secure ? '; Secure' : '';
+    res.setHeader(
+      'Set-Cookie',
+      `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax${secureAttr}`,
+    );
+
+    // profileGate 联动真实账号/声明（CAS-REC-002）：emailVerified 来自 id_token 声明，
+    // profileComplete 依据核心资料字段是否齐备（name 与 email 均存在）。
+    const email = typeof claims['email'] === 'string' ? claims['email'] : undefined;
+    const name = (claims['name'] as string) ?? sub;
+    const emailVerified = claims['email_verified'] === true;
+    const profileComplete = Boolean(name && email);
 
     return {
       user: {
         sub,
-        name: (claims['name'] as string) ?? sub,
-        email: claims['email'] as string | undefined,
+        name,
+        email,
       },
-      profileGate: { profileComplete: true, emailVerified: false },
-      degraded: false,
-      degradedSince: null,
+      profileGate: { profileComplete, emailVerified },
+      degraded,
+      degradedSince: degraded ? new Date(now * 1000).toISOString() : null,
       permissions: [],
       workspace: null,
     };
@@ -168,8 +194,14 @@ export class CasdoorSessionController {
   /** DELETE /api/auth/logout */
   @Delete('logout')
   @HttpCode(200)
-  async logout(_req: ExpressRequest, res: Response): Promise<{ ok: boolean }> {
-    res.setHeader('Set-Cookie', 'session_token=; Path=/; Max-Age=0');
+  async logout(req: ExpressRequest, res: Response): Promise<{ ok: boolean }> {
+    // 清 cookie 时使用与写入一致的 Path/HttpOnly/SameSite/Secure 属性，确保真正清除。
+    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    const secureAttr = secure ? '; Secure' : '';
+    res.setHeader(
+      'Set-Cookie',
+      `session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureAttr}`,
+    );
     return { ok: true };
   }
 
