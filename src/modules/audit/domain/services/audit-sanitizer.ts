@@ -157,10 +157,12 @@ export class AuditSanitizer {
     }
     let text = message;
     // 抹掉 key=value / key:value 形式的敏感键值（覆盖 token/secret/password/key/code 等）。
-    // 键前须有分隔符（&、;、空白、引号、冒号或字符串起始），避免误伤普通文本，
-    // 同时保证凭证出现在字符串起始处时也能被抹掉，防止敏感信息落盘。
+    // 采用「整词/受限前缀」匹配，避免过度脱敏：通用词（key/code/token）仅作为独立词，
+    // 或由特定敏感前缀（access_/client_/api_ 等）组成复合键时才脱敏；
+    // 不再用任意 [a-z0-9_-] 前缀吸收普通单词，避免误伤 postcode、status_code、
+    // monkey、bank_code 等正常字段。
     text = text.replace(
-      /(^|[&;\s,"':])([a-z0-9_-]{0,40}(?:token|secret|password|passwd|apikey|key|code|credential))\s*[=:]\s*[^&;\s,"':]+/gi,
+      /(^|[&;\s,"':])((?:(?:access|refresh|auth|client|smtp|email|api|secret|session|activation|reset|jwt|bearer|verify|verification|private|public|user|login)_?)?(?:token|secret|password|passwd|apikey|credential|key|code))\b\s*[=:]\s*[^&;\s,"':]+/gi,
       (_m, sep: string, name: string) => `${sep}${name}=<REDACTED>`,
     );
     // 抹掉 Authorization 认证头里的凭证正文（Bearer/Basic/Digest token）

@@ -151,6 +151,58 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.ok(long.failureReason?.includes('truncated'), '应带截断标记');
   });
 
+  it('失败原因脱敏不误伤普通字段：postcode/status_code/monkey 等不被过度脱敏', async () => {
+    const rig = makeRig();
+    // 通用词（code/key/token）作为任意单词子串时不得被误判为敏感字段（防过度脱敏），
+    // 否则审计失败原因里大量正常排查信息会被无谓抹掉，降低可排查性。
+    const normal = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '查询失败：postcode=1234&status_code=500&bank_code=XX&error_code=404&country_code=CN&monkey=1&barcode=123',
+    });
+    const fr = normal.failureReason ?? '';
+    assert.ok(fr.includes('postcode=1234'), 'postcode 不应被脱敏');
+    assert.ok(fr.includes('status_code=500'), 'status_code 不应被脱敏');
+    assert.ok(fr.includes('bank_code=XX'), 'bank_code 不应被脱敏');
+    assert.ok(fr.includes('error_code=404'), 'error_code 不应被脱敏');
+    assert.ok(fr.includes('country_code=CN'), 'country_code 不应被脱敏');
+    assert.ok(fr.includes('monkey=1'), 'monkey 不应被脱敏');
+    assert.ok(fr.includes('barcode=123'), 'barcode 不应被脱敏');
+    // 真敏感键（含复合键）仍须脱敏，不得因收紧匹配而漏报（用不与其他单词碰撞的唯一值做校验）
+    const sensitive = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '认证失败 access_token=VALATOKEN client_secret=VALCSECRET password=VALPASSWORD api_key=VALAPIKEY verify_code=VALVCODE smtp_secret=VALSMTP email_secret=VALEMAIL refresh_token=VALRT session_token=VALST token=VALTOKEN',
+    });
+    const sf = sensitive.failureReason ?? '';
+    for (const secret of [
+      'VALATOKEN',
+      'VALCSECRET',
+      'VALPASSWORD',
+      'VALAPIKEY',
+      'VALVCODE',
+      'VALSMTP',
+      'VALEMAIL',
+      'VALRT',
+      'VALST',
+      'VALTOKEN',
+    ]) {
+      assert.ok(!sf.includes(secret), `敏感值 ${secret} 不得落盘`);
+    }
+    assert.ok(sf.includes('access_token=<REDACTED>'), 'access_token 应脱敏');
+    assert.ok(sf.includes('client_secret=<REDACTED>'), 'client_secret 应脱敏');
+    assert.ok(sf.includes('password=<REDACTED>'), 'password 应脱敏');
+    assert.ok(sf.includes('api_key=<REDACTED>'), 'api_key 应脱敏');
+    assert.ok(sf.includes('verify_code=<REDACTED>'), 'verify_code 应脱敏');
+    assert.ok(sf.includes('smtp_secret=<REDACTED>'), 'smtp_secret 应脱敏');
+    assert.ok(sf.includes('email_secret=<REDACTED>'), 'email_secret 应脱敏');
+    assert.ok(sf.includes('refresh_token=<REDACTED>'), 'refresh_token 应脱敏');
+    assert.ok(sf.includes('session_token=<REDACTED>'), 'session_token 应脱敏');
+    assert.ok(sf.includes('token=<REDACTED>'), '独立 token 应脱敏');
+  });
+
   it('仓储查询 limit<=0 返回空，缺省/正数返回最近 N 条', async () => {
     const rig = makeRig();
     await rig.writer.write({ ...baseEvent, actorId: 'u1' });
