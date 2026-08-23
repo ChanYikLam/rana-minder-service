@@ -27,11 +27,56 @@ import { NotificationQueryService } from '../src/modules/notification/applicatio
 import { NotificationController } from '../src/modules/notification/interfaces';
 import { NotificationDeliveryHandler } from '../src/platform/tasks/executors/handlers/notification-delivery.handler';
 
+/**
+ * 最小占位配置：AdaptersModule 的真实外部适配器工厂会注入 RANA_MINDER_CONFIG
+ * （仅 ADAPTERS_*_REAL=1 时消费，测试保持默认 fail-closed 桩）。为满足 Nest DI
+ * 解析，这里注入一份完整的最小配置即可（生产由 @Global ConfigurationModule 提供）。
+ */
+const stubConfig: RanaMinderConfig = {
+  server: { port: 3000, host: '0.0.0.0', gracefulShutdownTimeoutMs: 10000 },
+  database: {
+    host: 'localhost',
+    port: 5432,
+    name: 'ranaminder',
+    user: 'ranaminder',
+    schema: 'app',
+    ssl: false,
+    passwordRef: '',
+  },
+  casdoor: {
+    endpoint: '',
+    clientId: '',
+    organization: '',
+    redirectUri: '',
+    clientSecretRef: '',
+  },
+  storage: {
+    endpoint: '',
+    region: 'us-east-1',
+    accessKeyRef: '',
+    secretKeyRef: '',
+    buckets: {
+      quarantine: 'ranaminder-quarantine',
+      primary: 'ranaminder-primary',
+      derived: 'ranaminder-derived',
+    },
+  },
+  mail: { host: '', port: 25, fromAddress: '' },
+  fileCheck: { endpoint: '' },
+  notify: { endpoint: '' },
+  backup: { endpoint: '' },
+  observability: { logLevel: 'info', traceSamplingRate: 1 },
+  job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
+};
+
 describe('NotificationModule DI bootstrap', () => {
   it('NotificationModule 全部提供者可被解析（无接口注入回归）', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [NotificationModule],
-    }).compile();
+      imports: [NotificationModule, ConfigurationModule.forRoot()],
+    })
+      .overrideProvider(RANA_MINDER_CONFIG)
+      .useValue(stubConfig)
+      .compile();
 
     const commands = [
       moduleRef.get(DeliverInboxCommand),
@@ -52,9 +97,7 @@ describe('NotificationModule DI bootstrap', () => {
       imports: [ConfigurationModule.forRoot(), TasksModule],
     })
       .overrideProvider(RANA_MINDER_CONFIG)
-      .useValue({
-        job: { defaultLeaseMs: 60_000, schedulerIntervalMs: 1_000, maxAttempts: 5 },
-      } as RanaMinderConfig)
+      .useValue(stubConfig)
       .compile();
 
     const handler = moduleRef.get(NotificationDeliveryHandler);
