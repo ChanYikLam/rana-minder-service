@@ -7,7 +7,8 @@
 #   // no-spec-required <原因>
 # 目的：让 CI-001「新增代码须有对应用例」从口号变为可执行断言。
 # 用法：bash scripts/ci/check-spec-coverage.sh [base-ref]
-#       base-ref 缺省依次尝试 $CNB_COMPARE_TO / origin/dev / HEAD~1
+#       base-ref 缺省依次尝试 $CNB_COMPARE_TO / origin/dev / HEAD~1（后两者为降级；
+#       多 commit PR 建议显式传 merge-base，避免 HEAD~1 只检最后一个 commit）
 # 退出码：0 = 全部通过；1 = 存在缺失用例且未豁免
 # ============================================================
 set -u
@@ -20,12 +21,18 @@ if [ -z "$base" ]; then
   if git rev-parse --verify --quiet origin/dev >/dev/null 2>&1; then
     base=origin/dev
   else
+    # 无显式 base 且无 origin/dev：回退 HEAD~1 只覆盖最后一个 commit。
+    # 多 commit 改动会漏检中间 commit，属降级路径——显式警告并提示传 merge-base。
     base=HEAD~1
+    echo "WARN  check-spec-coverage: 未提供 base-ref 且无 origin/dev，回退 $base。" >&2
+    echo "WARN  三点 diff 仅覆盖最后一个 commit；多 commit PR 请显式传入 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
   fi
 fi
 
-changed="$(git diff --name-only --diff-filter=d "$base"...HEAD -- 'src/**/*.ts' 2>/dev/null \
-  || git diff --name-only --diff-filter=d "$base" -- 'src/**/*.ts')"
+# pathspec 显式覆盖 src/ 顶层（src/*.ts）与嵌套目录（src/**/*.ts）：
+# git 的 '**' 在 pathspec 中要求至少一层目录，仅写 src/**/*.ts 会漏检 src/main.ts 等顶层文件。
+changed="$(git diff --name-only --diff-filter=d "$base"...HEAD -- 'src/*.ts' 'src/**/*.ts' 2>/dev/null \
+  || git diff --name-only --diff-filter=d "$base" -- 'src/*.ts' 'src/**/*.ts')"
 # 只看生产代码；测试文件自身不要求配对
 changed="$(printf '%s\n' "$changed" | grep -v '\.spec\.ts$' || true)"
 
