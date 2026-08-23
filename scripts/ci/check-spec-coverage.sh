@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
 # ============================================================
-# RanaMinder 改动文件↔用例对应检查（CI 阶段 4b 附属门禁）
+# RanaMinder 改动文件↔用例对应检查（CI 阶段 4b 覆盖率门禁附属检查）
 #
 # 职责（P1-A 可选项落地）：本次变更新增/修改的 src/**/*.ts 生产代码文件，
 # 必须存在同名 *.spec.ts（同目录）或在文件内标注豁免标记：
 #   // no-spec-required <原因>
 # 目的：让 CI-001「新增代码须有对应用例」从口号变为可执行断言。
 # 用法：bash scripts/ci/check-spec-coverage.sh [base-ref]
-#       base-ref 缺省依次尝试 $CNB_COMPARE_TO / origin/dev / HEAD~1（后两者为降级；
-#       多 commit PR 建议显式传 merge-base，避免 HEAD~1 只检最后一个 commit）
-# 退出码：0 = 全部通过；1 = 存在缺失用例且未豁免
+#       base-ref 缺省依次尝试 origin/dev；无显式 base 且无 origin/dev 时
+#       fail-closed（exit 1），不静默降级，避免门禁失效。
+#       多 commit PR 请显式传 merge-base（CI 已传内置变量），避免漏检中间 commit。
+# 退出码：0 = 全部通过；1 = 存在缺失用例 / base 不可解析（fail-closed）
 # ============================================================
 set -u
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 
-base="${1:-${CNB_COMPARE_TO:-}}"
+base="${1:-}"
 if [ -z "$base" ]; then
   if git rev-parse --verify --quiet origin/dev >/dev/null 2>&1; then
     base=origin/dev
   else
-    # 无显式 base 且无 origin/dev：回退 HEAD~1 只覆盖最后一个 commit。
-    # 多 commit 改动会漏检中间 commit，属降级路径——显式警告并提示传 merge-base。
-    base=HEAD~1
-    echo "WARN  check-spec-coverage: 未提供 base-ref 且无 origin/dev，回退 $base。" >&2
-    echo "WARN  三点 diff 仅覆盖最后一个 commit；多 commit PR 请显式传入 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
+    # 无显式 base 且无 origin/dev：fail-closed，绝不静默降级导致门禁失效。
+    echo "ERROR check-spec-coverage: 未提供 base-ref 且无 origin/dev，无法确定变更基线。" >&2
+    echo "ERROR 门禁 fail-closed（exit 1）。请显式传 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
+    exit 1
   fi
 fi
 

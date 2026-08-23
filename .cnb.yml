@@ -88,7 +88,7 @@
           script: |
             set -e
             npm run test:cov:gate
-            bash scripts/ci/check-spec-coverage.sh "$CNB_COMPARE_TO"
+            bash scripts/ci/check-spec-coverage.sh "$CNB_PULL_REQUEST_TARGET_SHA"
         # 阶段 5：集成测试 L2（真实 PG18：pg_trgm/btree_gist 扩展；dind 已声明）
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
@@ -232,7 +232,7 @@
           script: |
             set -e
             npm run test:cov:gate
-            bash scripts/ci/check-spec-coverage.sh "$CNB_COMPARE_TO"
+            bash scripts/ci/check-spec-coverage.sh "$CNB_BEFORE_SHA"
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
           script: |
@@ -359,7 +359,7 @@
           script: |
             set -e
             npm run test:cov:gate
-            bash scripts/ci/check-spec-coverage.sh "$CNB_COMPARE_TO"
+            bash scripts/ci/check-spec-coverage.sh "$CNB_COMMIT~1"
         - name: 5-集成测试L2
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |
