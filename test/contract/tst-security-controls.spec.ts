@@ -58,9 +58,12 @@ describe('TST-SEC 安全控制证据', () => {
   it('控制面总量守恒：38 个控制目标，登记数 + 显式留白 = 总额', () => {
     assert.equal(TOTAL_CONTROLS, 38);
     const gap = TOTAL_CONTROLS - CONCRETE_CONTROLS.length;
-    assert.ok(gap >= 0, '登记数不得超过控制总额');
+    // 守恒等式名副其实：登记数 + 留白必须恰好等于总额，
+    // 任何一方改到与 TOTAL_CONTROLS 不一致都会在此显式失败，杜绝“账目对不上”而静默通过。
+    assert.equal(CONCRETE_CONTROLS.length + gap, TOTAL_CONTROLS, '登记数 + 显式留白应等于控制总额');
     // 留白不得为负：允许逐步补满 38 项（届时 gap=0 亦为合法完成态，
     // 不应因“做对事”而让构建失败）；若仍处于缺口期，缺口数量必须显式可见。
+    assert.ok(gap >= 0, '登记数不得超过控制总额');
   });
 
   it(`棘轮下限：已具可执行证据的控制 ≥ ${BASELINE_CONCRETE_CONTROLS}`, () => {
