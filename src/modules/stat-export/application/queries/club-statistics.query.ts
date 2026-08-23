@@ -26,7 +26,7 @@ import {
   type StatisticsPrincipal,
   type StatisticsAccessAction,
 } from '../ports/statistics-authorization.port';
-import { requireClubScope } from '../statistics-scope';
+import { assertClubNotSuspended, requireClubScope } from '../statistics-scope';
 import { statisticsErrors } from '../statistics-errors';
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ export class ClubStatisticsQuery {
     const scope = requireClubScope(principal, clubId);
 
     // 停用检查
-    await this.assertNotSuspended(clubId, principal);
+    await assertClubNotSuspended(this.source, clubId, principal, '社团统计');
 
     // 只读回源
     const [memberships, history] = await Promise.all([
@@ -217,7 +217,7 @@ export class ClubStatisticsQuery {
     this.spec.assertLeaderboardClosed(metric);
 
     // 停用检查
-    await this.assertNotSuspended(clubId, principal);
+    await assertClubNotSuspended(this.source, clubId, principal, '社团统计');
 
     const limit = Math.min(Math.max(input.limit ?? 200, 1), 1000);
 
@@ -381,14 +381,6 @@ export class ClubStatisticsQuery {
   // -----------------------------------------------------------------------
   // 内部辅助
   // -----------------------------------------------------------------------
-
-  private async assertNotSuspended(clubId: string, principal: StatisticsPrincipal): Promise<void> {
-    if (principal.isPlatformSuperAdmin) return; // 超管不受停用限制
-    const profile = await this.source.loadClubProfile(clubId);
-    if (profile !== null && profile.forcedSuspension) {
-      throw statisticsErrors.precondition(`社团 ${clubId} 处于紧急停用状态，统计撤权（STAT-002）`);
-    }
-  }
 
   /**
    * 按学年分桶统计成员数，且与 `uniqueStudentCount` 保持同一去重口径（STAT-001）：

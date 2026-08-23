@@ -9,7 +9,12 @@
  * - 其余任何环境一律拒绝信任请求头，必须由身份模块提供已认证主体。
  */
 
-import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
+import {
+  createParamDecorator,
+  HttpException,
+  HttpStatus,
+  type ExecutionContext,
+} from '@nestjs/common';
 
 export interface RequestActor {
   readonly userId: string;
@@ -46,8 +51,11 @@ function isDevActorHeaderEnabled(env: NodeJS.ProcessEnv): boolean {
 }
 
 function devActorError(): never {
-  throw Object.assign(new Error('认证未接入，拒绝信任 x-actor-id（fail-closed，IFC-ERR-001）'), {
-    status: 401,
-    code: 'IFC-ERR-001',
-  });
+  // 抛 HttpException（401）而非普通 Error：此异常在装饰器阶段抛出，绕过控制器
+  // 的 catchErrors 映射，若用普通 Error 会被 Nest 默认识别为未识别异常 → 500。
+  // 401 与组织模块 fail-closed 语义一致（认证未接入时请求被拒）。
+  throw new HttpException(
+    '认证未接入，拒绝信任 x-actor-id（fail-closed，IFC-ERR-001）',
+    HttpStatus.UNAUTHORIZED,
+  );
 }

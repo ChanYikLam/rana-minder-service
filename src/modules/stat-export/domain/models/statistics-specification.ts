@@ -37,6 +37,9 @@ export interface StatisticsFilters {
   readonly timeRange?: StatisticsTimeRange | null;
 }
 
+/** 部门分布中「无部门归属」成员使用的内部占位键（统计后过滤，不对外暴露） */
+const NO_DEPARTMENT_KEY = '__NO_DEPT__';
+
 // ---------------------------------------------------------------------------
 // 事实类型（正式业务记录投影；只读不修改）
 // ---------------------------------------------------------------------------
@@ -291,11 +294,12 @@ function matchesFunnel(fact: NormalFunnelFact, filters: StatisticsFilters | unde
 }
 
 function matchesJointConclusion(
-  fact: JointConclusionFact,
-  filters: StatisticsFilters | undefined,
+  _fact: JointConclusionFact,
+  _filters: StatisticsFilters | undefined,
 ): boolean {
-  if (!filters) return true;
-  if (filters.departmentId && fact.departmentId !== filters.departmentId) return false;
+  // 联合结论不按 filters 过滤：部门作用域收敛由查询用例在 scopedFacts 中按
+  // 「本社团按部门、其他参与方社团全可见」逐条完成（STAT-002），此处若再按
+  // departmentId 一刀切过滤会把其他社团的结论一并隐藏，造成口径漂移（STAT-001）。
   return true;
 }
 
@@ -332,9 +336,13 @@ export class StatisticsSpecification {
     }
   }
 
-  /** 声明聚合入口的单一口径（编码到 view 元数据） */
+  /**
+   * 声明聚合入口的单一口径（编码到 view 元数据，STAT-001）。
+   * 仅接受 `normal`/`joint` 两个合法单口径，拒绝未知口径——本质是防御性
+   * 断言，供各查询入口声明「本次只处理一种口径」的意图；真正的混合防护由
+   * `assertScopeSeparated` 在聚合路径上强制（同一入口不会混入异口径事实）。
+   */
   assertSingleScope(scope: StatScopeKind): void {
-    // runtime no-op but documents intent for callers
     if (scope !== 'normal' && scope !== 'joint') {
       throw new StatisticsCaliberError('MIXED_SCOPE_CALIBER', `未知统计口径：${scope}`);
     }
@@ -370,13 +378,13 @@ export class StatisticsSpecification {
     const map = new Map<string, { id: string; name: string | null; count: number }>();
     for (const f of facts) {
       if (!matchesMembership(f, filters)) continue;
-      const deptId = f.departmentId ?? '__NO_DEPT__';
+      const deptId = f.departmentId ?? NO_DEPARTMENT_KEY;
       const row = map.get(deptId) ?? { id: deptId, name: f.departmentName ?? null, count: 0 };
       row.count += 1;
       map.set(deptId, row);
     }
     return [...map.entries()]
-      .filter(([key]) => key !== '__NO_DEPT__')
+      .filter(([key]) => key !== NO_DEPARTMENT_KEY)
       .map(([_, v]) => ({ departmentId: v.id, departmentName: v.name, memberCount: v.count }));
   }
 

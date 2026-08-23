@@ -13,6 +13,7 @@
 
 import type { StatisticsPrincipal } from './ports/statistics-authorization.port';
 import { statisticsErrors } from './statistics-errors';
+import type { StatisticsSourcePort } from './ports/statistics-source.port';
 
 // ---------------------------------------------------------------------------
 // 社团作用域收敛
@@ -121,4 +122,27 @@ export function requireJointScope(
     throw statisticsErrors.forbidden(`用户 ${principal.userId} 无权查看该联合活动统计（STAT-002）`);
   }
   return scope;
+}
+
+// ---------------------------------------------------------------------------
+// 停用撤权（STAT-002）
+// ---------------------------------------------------------------------------
+
+/**
+ * 社团紧急停用撤权（STAT-002）。超管不受停用限制；停用社团的统计一律撤权。
+ * 三个查询用例（社团/漏斗/联合）共用同一实现，避免口径漂移。
+ */
+export async function assertClubNotSuspended(
+  source: StatisticsSourcePort,
+  clubId: string,
+  principal: StatisticsPrincipal,
+  context: string,
+): Promise<void> {
+  if (principal.isPlatformSuperAdmin) return;
+  const profile = await source.loadClubProfile(clubId);
+  if (profile !== null && profile.forcedSuspension) {
+    throw statisticsErrors.precondition(
+      `社团 ${clubId} 处于紧急停用状态，${context}撤权（STAT-002）`,
+    );
+  }
 }

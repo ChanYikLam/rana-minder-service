@@ -22,7 +22,7 @@ import {
   type StatisticsAuditPort,
   type StatisticsPrincipal,
 } from '../ports/statistics-authorization.port';
-import { requireJointScope } from '../statistics-scope';
+import { assertClubNotSuspended, requireJointScope } from '../statistics-scope';
 import { statisticsErrors } from '../statistics-errors';
 
 // ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ export class JointActivityStatisticsQuery {
 
     // 停用检查：参与方社团紧急停用 → 撤权
     if (scope.kind !== 'platform') {
-      await this.assertNotSuspended(scope.clubId!, principal);
+      await assertClubNotSuspended(this.source, scope.clubId!, principal, '联合统计');
     }
 
     // 断言单一联合口径
@@ -129,15 +129,5 @@ export class JointActivityStatisticsQuery {
         leaderboardProvided: false,
       },
     };
-  }
-
-  private async assertNotSuspended(clubId: string, principal: StatisticsPrincipal): Promise<void> {
-    if (principal.isPlatformSuperAdmin) return;
-    const profile = await this.source.loadClubProfile(clubId);
-    if (profile !== null && profile.forcedSuspension) {
-      throw statisticsErrors.precondition(
-        `社团 ${clubId} 处于紧急停用状态，联合统计撤权（STAT-002）`,
-      );
-    }
   }
 }

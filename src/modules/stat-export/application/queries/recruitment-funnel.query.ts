@@ -19,7 +19,7 @@ import {
   type StatisticsAuditPort,
   type StatisticsPrincipal,
 } from '../ports/statistics-authorization.port';
-import { requireClubScope } from '../statistics-scope';
+import { assertClubNotSuspended, requireClubScope } from '../statistics-scope';
 import { statisticsErrors } from '../statistics-errors';
 
 // ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ export class RecruitmentFunnelQuery {
     const scope = requireClubScope(principal, clubId);
 
     // 停用检查
-    await this.assertNotSuspended(clubId, principal);
+    await assertClubNotSuspended(this.source, clubId, principal, '招新漏斗');
 
     // 活动必须属于该社团且为普通招新
     const activityRef = await this.source.loadNormalActivity(activityId);
@@ -132,13 +132,5 @@ export class RecruitmentFunnelQuery {
         leaderboardProvided: false,
       },
     };
-  }
-
-  private async assertNotSuspended(clubId: string, principal: StatisticsPrincipal): Promise<void> {
-    if (principal.isPlatformSuperAdmin) return;
-    const profile = await this.source.loadClubProfile(clubId);
-    if (profile !== null && profile.forcedSuspension) {
-      throw statisticsErrors.precondition(`社团 ${clubId} 处于紧急停用状态，统计撤权（STAT-002）`);
-    }
   }
 }
