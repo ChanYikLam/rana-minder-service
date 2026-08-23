@@ -234,10 +234,13 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
     // 使 remove 的 !members.includes(subjectId) 恒真而误报成功（本修复点）。
     let confirmed = false;
     try {
-      const { ok: ro, status: rs, data: rd } = await this.request(
-        `/get-group-users?id=${encodeURIComponent(group.stableId)}`,
-        { method: 'GET' },
-      );
+      const {
+        ok: ro,
+        status: rs,
+        data: rd,
+      } = await this.request(`/get-group-users?id=${encodeURIComponent(group.stableId)}`, {
+        method: 'GET',
+      });
       if (ro && rs >= 200 && rs < 300 && Array.isArray(rd)) {
         const members = (rd as Array<{ id?: string }>)
           .map((u) => u.id)
