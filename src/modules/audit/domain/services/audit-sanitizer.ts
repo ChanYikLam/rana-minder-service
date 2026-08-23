@@ -94,13 +94,31 @@ export class AuditSanitizer {
     return diffs.length > 0 ? diffs.join(';') : null;
   }
 
-  /** 是否为可递归展开的普通对象（排除 Date/Map 等特殊对象，避免误展开） */
+  /** 特殊对象容器（Date/Map/Set 等）：不递归展开，直接序列化为叶子 */
+  private isSpecialContainer(child: unknown): boolean {
+    if (typeof child !== 'object' || child === null || Array.isArray(child)) {
+      return false;
+    }
+    const tag = Object.prototype.toString.call(child);
+    // Date/RegExp/Buffer 等标量容器：内部无业务敏感键，直接序列化即可
+    return (
+      child instanceof Date ||
+      child instanceof RegExp ||
+      child instanceof Map ||
+      child instanceof Set ||
+      child instanceof ArrayBuffer ||
+      typeof Buffer !== 'undefined' && Buffer.isBuffer(child) ||
+      /^\[object (Date|RegExp|Map|Set|ArrayBuffer|Uint8Array)\]$/.test(tag)
+    );
+  }
+
+  /** 是否为可递归展开的对象（排除 Date/Map 等特殊容器，避免误展开；含 class 实例） */
   private isPlainRecord(child: unknown): child is Record<string, unknown> {
     return (
       typeof child === 'object' &&
       child !== null &&
       !Array.isArray(child) &&
-      Object.getPrototypeOf(child) === Object.prototype
+      !this.isSpecialContainer(child)
     );
   }
 

@@ -115,6 +115,33 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.ok(v.includes('b.name=shared-name'), '共享引用的非敏感叶子在每条路径都应保留');
   });
 
+  it('敏感不落盘：class 实例/DTO（非普通对象）内的敏感字段同样脱敏（CAS-SEC-001~004）', async () => {
+    const rig = makeRig();
+    // NestJS 中 DTO/领域对象常为 class 实例（原型非 Object.prototype），
+    // 若不递归展开而直接 JSON 序列化，会把其内的密码/令牌以明文带进审计。
+    class CredentialDto {
+      readonly password = 'DTO_PWD_SECRET';
+      readonly accessToken = 'DTO_TOK_SECRET';
+      readonly name = 'alice';
+    }
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { credential: new CredentialDto() },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('DTO_PWD_SECRET'), 'class 实例内密码不得落盘');
+    assert.ok(!v.includes('DTO_TOK_SECRET'), 'class 实例内令牌不得落盘');
+    assert.ok(v.includes('credential.password=<REDACTED'), 'class 实例内敏感字段应脱敏');
+    assert.ok(v.includes('credential.accessToken=<REDACTED'), 'class 实例内令牌应脱敏');
+    assert.ok(v.includes('credential.name=alice'), 'class 实例内非敏感字段保留');
+    // Date 等特殊容器仍应正常序列化，不得被误判为可递归对象
+    const withDate = await rig.writer.write({
+      ...baseEvent,
+      newValues: { createdAt: new Date('2024-01-01T00:00:00.000Z') },
+    });
+    assert.ok(withDate.newValue?.includes('createdAt="2024-01-01'), 'Date 应正常序列化');
+  });
+
   it('失败原因脱敏：错误信息中的令牌/密码不落盘，超长文本截断', async () => {
     const rig = makeRig();
     const event = await rig.writer.write({
