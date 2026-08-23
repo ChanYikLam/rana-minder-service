@@ -357,8 +357,7 @@ describe('P2 导出申请（幂等/快照/越权/停用/联合失效）', () => 
         idempotencyKey: 'k-ghost',
         request: { kind: 'club' as const, clubId: 'C1' },
       }),
-      (e: ExportError) =>
-        e.code === 'IFC-ERR-007' && e.message.includes('幂等命中但任务不存在'),
+      (e: ExportError) => e.code === 'IFC-ERR-007' && e.message.includes('幂等命中但任务不存在'),
     );
   });
 

@@ -12,7 +12,11 @@
  * （该判定依赖事实回源，由 command 层配合上下文完成，见 export-apply.command.ts）。
  */
 
-import type { ExportPrincipal, ExportClubScope, ExportReauthPort } from './ports/export-authorization.port';
+import type {
+  ExportPrincipal,
+  ExportClubScope,
+  ExportReauthPort,
+} from './ports/export-authorization.port';
 import type { ExportFactSourcePort } from './ports/export-fact-source.port';
 import { ExportError, exportErrors } from './errors';
 
