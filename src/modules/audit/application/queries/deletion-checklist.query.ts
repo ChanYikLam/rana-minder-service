@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DeletionChecklist } from '../../domain/models/deletion';
 import { DeletionPolicy } from '../../domain/services/deletion-policy';
+import { DeletionPolicyError } from '../../domain/services/deletion-policy';
 import { DELETION_CHECKLIST_REPOSITORY } from '../../infrastructure/deletion-checklist-repository';
 import type { DeletionChecklistRepository } from '../../infrastructure/deletion-checklist-repository';
 
@@ -17,7 +18,7 @@ export class DeletionChecklistQuery {
     this.policy.assertSuperAdmin(roles);
     const checklist = await this.repo.load(checklistId);
     if (checklist === null) {
-      throw new Error('IFC-ERR-015: 删除清单不存在');
+      throw new DeletionPolicyError('IFC-ERR-015', '删除清单不存在');
     }
     return checklist.affectedObjects;
   }

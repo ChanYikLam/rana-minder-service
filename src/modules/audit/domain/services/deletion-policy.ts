@@ -10,9 +10,12 @@
  */
 export const SUPER_ADMIN_ROLE = 'SUPER_ADMIN';
 
-/** 前置失败 */
+/** 前置失败（IFC-ERR-003 无权 / IFC-ERR-005 输入无效 / IFC-ERR-006 前置失败 / IFC-ERR-015 结果不可见 / IFC-ERR-016 内部提交失败） */
 export class DeletionPolicyError extends Error {
-  constructor(code: 'IFC-ERR-003' | 'IFC-ERR-005' | 'IFC-ERR-006', message: string) {
+  constructor(
+    code: 'IFC-ERR-003' | 'IFC-ERR-005' | 'IFC-ERR-006' | 'IFC-ERR-015' | 'IFC-ERR-016',
+    message: string,
+  ) {
     super(`${code}: ${message}`);
     this.name = 'DeletionPolicyError';
   }

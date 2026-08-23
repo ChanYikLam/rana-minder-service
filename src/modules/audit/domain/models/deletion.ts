@@ -73,6 +73,8 @@ export interface DeletionChecklist {
   readonly completed: boolean;
   /** 恢复后重放次数（防复现） */
   readonly replayCount: number;
+  /** 乐观锁版本（并发执行防护：同一清单只一个执行提交成功） */
+  readonly version: number;
 }
 
 /**

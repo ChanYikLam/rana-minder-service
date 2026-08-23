@@ -54,18 +54,20 @@ export class FormalDeleteCommand {
       throw new DeletionPolicyError('IFC-ERR-005', '受影响对象清单不能为空');
     }
 
+    // 各存储类型生成专属定位引用（生产各存储定位符规则不同；I1）
+    const baseRef = this.scopeRef(input.scope);
     const steps: readonly DeletionStep[] = (
       [
-        DeletionStepKind.ONLINE_DB,
-        DeletionStepKind.ATTACHMENT_STORE,
-        DeletionStepKind.CACHE,
-        DeletionStepKind.SEARCH_INDEX,
-        DeletionStepKind.UNEXPIRED_EXPORT,
+        [DeletionStepKind.ONLINE_DB, `db:${baseRef}`],
+        [DeletionStepKind.ATTACHMENT_STORE, `storage:${baseRef}`],
+        [DeletionStepKind.CACHE, `cache:${baseRef}`],
+        [DeletionStepKind.SEARCH_INDEX, `index:${baseRef}`],
+        [DeletionStepKind.UNEXPIRED_EXPORT, `export:${baseRef}`],
       ] as const
-    ).map((kind) => ({
+    ).map(([kind, targetRef]) => ({
       stepId: randomUUID(),
       kind,
-      targetRef: this.scopeRef(input.scope),
+      targetRef,
       status: DeletionStepStatus.PENDING,
     }));
 
@@ -81,6 +83,7 @@ export class FormalDeleteCommand {
       steps,
       completed: false,
       replayCount: 0,
+      version: 1,
     };
     await this.repo.save(checklist);
     return checklist;

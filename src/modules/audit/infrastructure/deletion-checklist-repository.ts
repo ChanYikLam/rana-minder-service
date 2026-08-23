@@ -13,13 +13,15 @@ export const DELETION_CHECKLIST_REPOSITORY = Symbol('DELETION_CHECKLIST_REPOSITO
 export interface DeletionChecklistRepository {
   save(checklist: DeletionChecklist): Promise<void>;
   load(checklistId: string): Promise<DeletionChecklist | null>;
+  /** 乐观锁提交（并发执行防护：期望版本匹配才写入；W1） */
+  compareAndSwap(current: DeletionChecklist, next: DeletionChecklist): Promise<boolean>;
   /** 恢复后重放：返回全部未完成清单（防复现） */
   listIncomplete(): Promise<readonly DeletionChecklist[]>;
   /** 全量清单（恢复备份后重放需含已完成清单；AUD-009） */
   listAll(): Promise<readonly DeletionChecklist[]>;
 }
 
-/** 进程内实现（开发期占位） */
+/** 进程内实现（开发期占位；compareAndSwap 以版本比较实现单胜者） */
 @Injectable()
 export class InMemoryDeletionChecklistRepository implements DeletionChecklistRepository {
   private readonly checklists = new Map<string, DeletionChecklist>();
@@ -30,6 +32,15 @@ export class InMemoryDeletionChecklistRepository implements DeletionChecklistRep
 
   async load(checklistId: string): Promise<DeletionChecklist | null> {
     return this.checklists.get(checklistId) ?? null;
+  }
+
+  async compareAndSwap(current: DeletionChecklist, next: DeletionChecklist): Promise<boolean> {
+    const latest = this.checklists.get(current.checklistId);
+    if (latest === undefined || latest.version !== current.version) {
+      return false;
+    }
+    this.checklists.set(next.checklistId, next);
+    return true;
   }
 
   async listIncomplete(): Promise<readonly DeletionChecklist[]> {
