@@ -10,6 +10,8 @@
  * evidence 文件路径（套件内断言存在），否则清单测试失败。
  */
 
+import { resolveThreatIdsFromDoc } from './authority-docs';
+
 export const TOTAL_THREATS = 26;
 export const TOTAL_CONTROLS = 38;
 
@@ -92,10 +94,16 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   },
 ];
 
-/** 威胁桩位：26 个 THR 编号占额，状态一律"未执行"，逐项落地前不得删除 */
+/**
+ * 威胁桩位：按权威威胁模型文档的 SEC-THR 编号逐项生成，状态一律"未执行"。
+ *
+ * 编号来源不再硬编码，而是解析 docs/specification/安全设计与实现级威胁模型-v1.0.md
+ * 的威胁目录表（SEC-THR-001 ~ 026）；文档增删威胁时，桩位随之变化，
+ * 相关断言会显式失败，而不是静默通过（防虚报 / 防漂移）。
+ */
 export function threatStubs(): readonly { id: string; status: '未执行' }[] {
-  return Array.from({ length: TOTAL_THREATS }, (_, i) => ({
-    id: `TST-SEC-THR-${String(i + 1).padStart(2, '0')}`,
+  return resolveThreatIdsFromDoc().map((thr) => ({
+    id: `TST-SEC-THR-${thr.replace('SEC-THR-', '').replace(/^0+/, '').padStart(2, '0')}`,
     status: '未执行' as const,
   }));
 }

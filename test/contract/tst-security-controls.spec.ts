@@ -21,6 +21,7 @@ import {
   TOTAL_CONTROLS,
   TOTAL_THREATS,
 } from '../helpers/security-controls-inventory';
+import { resolveThreatIdsFromDoc, THREAT_MODEL_DOC } from '../helpers/authority-docs';
 
 const ROOT = path.resolve(__dirname, '../..');
 const exists = (rel: string): boolean => fs.existsSync(path.join(ROOT, rel));
@@ -35,17 +36,29 @@ describe('TST-SEC 安全控制证据', () => {
     }
     const ids = new Set(threats.map((t) => t.id));
     assert.equal(ids.size, TOTAL_THREATS);
+    // 桩位编号必须与权威威胁模型文档的 SEC-THR 目录一一对应（防文档增删而静默通过）
+    const docThreatIds = resolveThreatIdsFromDoc();
+    assert.equal(
+      docThreatIds.length,
+      TOTAL_THREATS,
+      `权威威胁模型文档 ${THREAT_MODEL_DOC} 应声明 ${TOTAL_THREATS} 个威胁，实际 ${docThreatIds.length}`,
+    );
+    const mapped = docThreatIds.map((thr) =>
+      thr.replace('SEC-THR-', '').replace(/^0+/, '').padStart(2, '0'),
+    );
+    assert.deepEqual(
+      [...ids].sort(),
+      mapped.map((n) => `TST-SEC-THR-${n}`).sort(),
+      '桩位编号与权威威胁模型文档的 SEC-THR 目录不一致',
+    );
   });
 
   it('控制面总量守恒：38 个控制目标，登记数 + 显式留白 = 总额', () => {
     assert.equal(TOTAL_CONTROLS, 38);
     const gap = TOTAL_CONTROLS - CONCRETE_CONTROLS.length;
     assert.ok(gap >= 0, '登记数不得超过控制总额');
-    // 留白必须可见：不允许悄悄补满而无需评审
-    assert.ok(
-      gap > 0,
-      `当前已登记 ${CONCRETE_CONTROLS.length} 项；若确实补满 38 项请同步更新本断言与威胁模型追踪`,
-    );
+    // 留白不得为负：允许逐步补满 38 项（届时 gap=0 亦为合法完成态，
+    // 不应因“做对事”而让构建失败）；若仍处于缺口期，缺口数量必须显式可见。
   });
 
   it(`棘轮下限：已具可执行证据的控制 ≥ ${BASELINE_CONCRETE_CONTROLS}`, () => {

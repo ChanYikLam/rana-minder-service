@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { EXPECTED_SM_PENDING, SM_FACETS, SRS_SM_INVENTORY } from '../helpers/srs-sm-inventory';
+import { resolveFixedFacetsFromDoc } from '../helpers/authority-docs';
 
 const ROOT = path.resolve(__dirname, '../..');
 const exists = (rel: string): boolean => fs.existsSync(path.join(ROOT, rel));
@@ -49,8 +50,16 @@ describe('TST-SM 状态机测试矩阵（29×306）', () => {
     }
   });
 
-  it('固定六分面入口定义齐全（NOM/AUT/STA/VER/CON/REV）', () => {
+  it('固定六分面入口定义齐全（NOM/AUT/STA/VER/CON/REV）且与权威规格一致', () => {
     assert.deepEqual([...SM_FACETS], ['NOM', 'AUT', 'STA', 'VER', 'CON', 'REV']);
+    // 自证式校验加固：核对权威测试规格文档“逐转换固定分面”表，
+    // 防止仅改清单内常量而规格文档漂移（防虚报 / 防漂移）。
+    const docFacets = resolveFixedFacetsFromDoc();
+    assert.deepEqual(
+      [...SM_FACETS],
+      [...docFacets],
+      'SM_FACETS 与权威测试规格文档的固定分面不一致',
+    );
   });
 
   it('每台状态机实现文件真实存在（防文档漂移）', () => {
