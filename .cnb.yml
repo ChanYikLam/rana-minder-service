@@ -80,6 +80,13 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
+        # 阶段 4b：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
+        - name: 4b-覆盖率门禁
+          if: "[ -f package.json ]"
+          script: |
+            set -e
+            npm run test:cov:gate
+            bash scripts/ci/check-spec-coverage.sh
         # 阶段 5：集成测试 L2（真实 PG18：pg_trgm/btree_gist 扩展；dind 已声明）
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
@@ -215,6 +222,13 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
+        # 阶段 4b：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
+        - name: 4b-覆盖率门禁
+          if: "[ -f package.json ]"
+          script: |
+            set -e
+            npm run test:cov:gate
+            bash scripts/ci/check-spec-coverage.sh
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
           script: |
@@ -335,6 +349,12 @@
         - name: 4-单元测试L1
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run test:unit
+        - name: 4b-覆盖率门禁
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: |
+            set -e
+            npm run test:cov:gate
+            bash scripts/ci/check-spec-coverage.sh
         - name: 5-集成测试L2
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |
