@@ -44,7 +44,11 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       version                 bigint      NOT NULL DEFAULT 1,
       audit_committed         boolean     NOT NULL DEFAULT false,
       CONSTRAINT ck_deletion_checklist_purpose CHECK (purpose IN
-        ('USER_REQUEST', 'LEGAL_REQUIREMENT', 'DATA_QUALITY', 'RETENTION_VIOLATION'))
+        ('USER_REQUEST', 'LEGAL_REQUIREMENT', 'DATA_QUALITY', 'RETENTION_VIOLATION')),
+      -- DB 层兜底（建议级评审意见）：受影响对象清单非空——应用层已校验调用路径，
+      -- 此约束防直连 DB/其他写入路径绕过（formal-delete 受影响对象清单必填）
+      CONSTRAINT ck_deletion_checklist_affected_objects
+        CHECK (jsonb_array_length(affected_objects) > 0)
     )
   `);
 
