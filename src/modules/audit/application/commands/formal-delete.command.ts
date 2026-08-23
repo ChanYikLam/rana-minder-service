@@ -79,6 +79,7 @@ export class FormalDeleteCommand {
       kind,
       targetRef,
       status: DeletionStepStatus.PENDING,
+      retryCount: 0,
     }));
 
     const checklist: DeletionChecklist = {

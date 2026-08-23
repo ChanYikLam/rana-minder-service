@@ -401,4 +401,74 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(written.target.objectId, 'draft-1');
     assert.equal(written.outcome, 'SUCCESS');
   });
+
+  it('评审修复：清理审计角色语义——系统任务缺省 actorRoles=SYSTEM_TASK，显式超管才标 SUPER_ADMIN', async () => {
+    const rig = makeRig();
+    // 缺省 audit 上下文（系统自动清理）→ 不得误标为超管角色
+    await rig.cleanup.execute({
+      items: [
+        {
+          itemId: 'auto-1',
+          kind: TemporaryItemKind.NO_REFERENCE_UPLOAD,
+          retentionExpired: true,
+          hasValidReference: false,
+        },
+      ],
+    });
+    const auto = rig.cleanupWrites[0] as { actorId: string; actorRoles: readonly string[] };
+    assert.equal(auto.actorId, 'system');
+    assert.deepEqual(auto.actorRoles, ['SYSTEM_TASK']);
+    // 显式超管 audit 上下文 → 标 SUPER_ADMIN
+    await rig.cleanup.execute({
+      items: [
+        {
+          itemId: 'manual-1',
+          kind: TemporaryItemKind.TEMPORARY_EXPORT,
+          retentionExpired: true,
+          hasValidReference: false,
+        },
+      ],
+      audit: { actorId: 'sa1', source: { channel: 'ADMIN' }, requestId: 'req-manual' },
+    });
+    const manual = rig.cleanupWrites[1] as { actorId: string; actorRoles: readonly string[] };
+    assert.equal(manual.actorId, 'sa1');
+    assert.deepEqual(manual.actorRoles, ['SUPER_ADMIN']);
+  });
+
+  it('评审修复：失败重试上限——FAILED 步骤超出 MAX_STEP_RETRY_COUNT 抛错（防无限重试）', async () => {
+    const repo = new InMemoryDeletionChecklistRepository();
+    const policy = new DeletionPolicy();
+    const checklist = await new FormalDeleteCommand(
+      repo,
+      policy,
+      makeAuditWriterStub().writer,
+    ).execute(deleteInput);
+    // 构造已重试到上限的 FAILED 步骤（模拟多次失败累积）
+    const exhausted = await repo.load(checklist.checklistId);
+    const staleSteps = exhausted!.steps.map((s) => ({
+      ...s,
+      status: DeletionStepStatus.FAILED,
+      retryCount: 5, // == MAX_STEP_RETRY_COUNT
+    }));
+    const stale = { ...exhausted!, steps: staleSteps, completed: false, version: 1 };
+    await repo.save(stale);
+    const execute = new ExecuteDeletionChecklistCommand(
+      repo,
+      { deleteAndVerify: async () => ({ ok: false }) } as never,
+      makeAuditWriterStub().writer,
+    );
+    // 已超上限且仍失败 → 抛“需人工介入”，不再空转
+    await assert.rejects(execute.execute(execInput(checklist.checklistId)), /需人工介入/);
+  });
+
+  it('评审修复：恢复重放上限——replayCount 达 MAX_REPLAY_COUNT 拒绝继续重放（防无限累积）', async () => {
+    const rig = makeRig({ ok: true });
+    const checklist = await rig.formalDelete.execute(deleteInput);
+    const exhausted = await rig.repo.load(checklist.checklistId);
+    await rig.repo.save({ ...exhausted!, replayCount: 10 }); // == MAX_REPLAY_COUNT
+    await assert.rejects(
+      rig.execute.execute(execInput(checklist.checklistId, { replay: true })),
+      /已达上限/,
+    );
+  });
 });

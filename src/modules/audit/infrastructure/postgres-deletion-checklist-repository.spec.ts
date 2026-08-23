@@ -85,6 +85,7 @@ const makeRow = (overrides: Record<string, unknown> = {}): Record<string, unknow
       kind: 'ONLINE_DB',
       targetRef: 'db:user:u1',
       status: DeletionStepStatus.PENDING,
+      retryCount: 0,
     },
   ]),
   completed: false,

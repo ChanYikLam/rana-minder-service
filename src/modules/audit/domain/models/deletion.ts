@@ -47,7 +47,22 @@ export interface DeletionStep {
   readonly kind: DeletionStepKind;
   readonly targetRef: string;
   readonly status: DeletionStepStatus;
+  /** 该步骤失败重试次数（幂等执行：每次失败 +1，成功归零；
+   *  超出上限标记需人工介入，防无限重试空转） */
+  readonly retryCount: number;
 }
+
+/**
+ * 删除步骤最大失败重试次数（AUD-009 评审：防 FAILED 步骤无限重试）。
+ * 达到上限后步骤保持未完成并标记需人工介入，由接线层告警收敛。
+ */
+export const MAX_STEP_RETRY_COUNT = 5;
+
+/**
+ * 恢复重放最大次数（AUD-009 评审：防备份恢复后无限重放累积）。
+ * 超出后拒绝再次重放，由运维介入评估恢复必要性。
+ */
+export const MAX_REPLAY_COUNT = 10;
 
 /**
  * 删除执行清单（IFC-TX-007、AUD-009）。

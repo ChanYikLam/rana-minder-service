@@ -73,10 +73,14 @@ export class RetentionCleanupCommand {
       if (result.ok) {
         cleaned.push(item.itemId);
         // 实际删除 + 回读核验成功 → 落审计留痕（AUD-007/009；仅内部标识/类型，不含正文）
+        // 语义：保留期清理属平台级保留策略操作（AUD-007），非超管敏感操作。
+        // 由显式 audit 上下文驱动的清理（如超管手动触发）标注 SUPER_ADMIN；
+        // 缺省的系统任务/自动清理标注 SYSTEM_TASK，避免把 system 操作误记为超管角色。
+        const isSystemRun = input.audit === undefined;
         await this.auditWriter.write({
           eventType: AuditEventType.SUPER_ADMIN_OP,
           actorId: input.audit?.actorId ?? 'system',
-          actorRoles: ['SUPER_ADMIN'],
+          actorRoles: isSystemRun ? ['SYSTEM_TASK'] : ['SUPER_ADMIN'],
           scope: null,
           source: input.audit?.source ?? { channel: 'SYSTEM_TASK' },
           target: { objectType: `RETENTION_${item.kind}`, objectId: item.itemId },

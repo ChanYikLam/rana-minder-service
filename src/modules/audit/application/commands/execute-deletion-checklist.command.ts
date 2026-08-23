@@ -1,6 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditEventType, AuditOutcome } from '../../domain/models/audit-event';
-import { DeletionStepStatus } from '../../domain/models/deletion';
+import {
+  DeletionStepStatus,
+  MAX_STEP_RETRY_COUNT,
+  MAX_REPLAY_COUNT,
+} from '../../domain/models/deletion';
 import type { DeletionChecklist, MinimalDeletionAudit } from '../../domain/models/deletion';
 import { AuditWriter } from './audit-writer';
 import { DeletionPolicyError } from '../../domain/services/deletion-policy';
@@ -86,6 +90,14 @@ export class ExecuteDeletionChecklistCommand {
     // 重放已完成+审计已落清单时：步骤须重执行（防复现），但审计不应重复落（去重）
     const replayOfDoneAudited = replay && checklist.completed && checklist.auditCommitted;
 
+    // 恢复重放次数上限（AUD-009 评审）：防备份恢复后无限重放累积，超出由运维介入
+    if (replay && checklist.replayCount >= MAX_REPLAY_COUNT) {
+      throw new DeletionPolicyError(
+        'IFC-ERR-016',
+        '删除清单恢复重放次数已达上限，需运维介入评估后再重放',
+      );
+    }
+
     let failed = 0;
     let verified = 0;
     // 备份恢复后重放（replay=true）：**即使清单已完成也重新执行全部步骤**，
@@ -99,15 +111,34 @@ export class ExecuteDeletionChecklistCommand {
         const result = await this.executor.deleteAndVerify(step.kind, step.targetRef);
         if (!result.ok) {
           failed++;
-          return { ...step, status: DeletionStepStatus.FAILED };
+          // 失败重试计数递增：防 FAILED 步骤无限重试空转（AUD-009 评审），
+          // 超出 MAX_STEP_RETRY_COUNT 后保持未完成并由接线层告警收敛
+          return {
+            ...step,
+            status: DeletionStepStatus.FAILED,
+            retryCount: (step.retryCount ?? 0) + 1,
+          };
         }
         verified++;
-        return { ...step, status: DeletionStepStatus.VERIFIED_DELETED };
+        return { ...step, status: DeletionStepStatus.VERIFIED_DELETED, retryCount: 0 };
       }),
+    );
+
+    // 存在超出重试上限的步骤 → 需人工介入（防无限重试，接线层据此告警）
+    const exhaustedRetries = checklist.steps.some(
+      (s) => (s.retryCount ?? 0) >= MAX_STEP_RETRY_COUNT,
     );
 
     const completed =
       failed === 0 && verified === checklist.steps.length && checklist.steps.length > 0;
+
+    // 已超出重试上限且仍未完成 → 拒绝继续空转，抛错由接线层告警收敛
+    if (exhaustedRetries && !completed) {
+      throw new DeletionPolicyError(
+        'IFC-ERR-016',
+        '删除步骤失败重试已达上限，需人工介入处理后再继续',
+      );
+    }
 
     const updated: DeletionChecklist = {
       ...checklist,
