@@ -220,6 +220,69 @@ describe('StatisticsSpecification — 多部门去重', () => {
 });
 
 // ===========================================================================
+// 2.5 趋势分桶过滤（收敛到领域层，避免查询用例内联复制）
+// ===========================================================================
+
+describe('StatisticsSpecification — 趋势分桶过滤', () => {
+  it('filterMembershipForTrend: 应用 departmentId 口径、保留全部学年桶', () => {
+    const ms: MembershipFact[] = [
+      membership('u1', 'S001', 'dept-a', '技术部', '2024-2025'),
+      membership('u1', 'S001', 'dept-a', '技术部', '2025-2026'),
+      membership('u2', 'S002', 'dept-b', '产品部', '2024-2025'),
+      membership('u3', 'S003', 'dept-a', '技术部', '2023-2024'),
+    ];
+    const scoped = spec.filterMembershipForTrend(ms, { departmentId: 'dept-a' });
+    // dept-b 被过滤；academicYear 不被过滤（保留全部学年桶供趋势对比）
+    assert.equal(scoped.length, 3);
+    assert.ok(scoped.every((m) => m.departmentId === 'dept-a'));
+    assert.deepEqual(
+      new Set(scoped.map((m) => m.academicYear)),
+      new Set(['2023-2024', '2024-2025', '2025-2026']),
+    );
+  });
+
+  it('filterMembershipForTrend: 无 filters → 原样返回', () => {
+    const ms: MembershipFact[] = [
+      membership('u1', 'S001', 'dept-a', '技术部', '2024-2025'),
+      membership('u2', 'S002', 'dept-b', '产品部', '2025-2026'),
+    ];
+    assert.equal(spec.filterMembershipForTrend(ms, undefined).length, 2);
+  });
+
+  it('filterAdmissionForTrend: 按 scope + departmentId/timeRange 过滤、保留全部学年桶', () => {
+    const facts: AdmissionAcceptanceFact[] = [
+      admission('u1', 'S001', 'act-1', 'normal', 'dept-a', '技术部', '2024-2025'),
+      admission('u1', 'S001', 'act-1', 'joint', 'dept-a', '技术部', '2024-2025'),
+      admission('u2', 'S002', 'act-1', 'normal', 'dept-b', '产品部', '2025-2026'),
+      admission('u3', 'S003', 'act-1', 'normal', 'dept-a', '技术部', '2023-2024'),
+    ];
+    const scoped = spec.filterAdmissionForTrend(facts, 'normal', {
+      departmentId: 'dept-a',
+      timeRange: { from: '2023-01-01', to: '2026-12-31' },
+    });
+    // 仅保留 normal + dept-a；joint 与 dept-b 被过滤；全部学年桶保留
+    assert.equal(scoped.length, 2);
+    assert.ok(scoped.every((h) => h.scope === 'normal' && h.departmentId === 'dept-a'));
+    assert.deepEqual(
+      new Set(scoped.map((h) => h.academicYear)),
+      new Set(['2023-2024', '2024-2025']),
+    );
+  });
+
+  it('filterAdmissionForTrend: timeRange 过滤生效', () => {
+    const a = admission('u1', 'S001', 'act-1', 'normal', 'dept-a', '技术部', '2024-2025');
+    // 将 acceptedAt 设为 range 之外
+    const outside = { ...a, acceptedAt: '2020-01-01' };
+    const inside = { ...a, acceptedAt: '2025-09-01' };
+    const scoped = spec.filterAdmissionForTrend([outside, inside], 'normal', {
+      timeRange: { from: '2021-01-01', to: '2026-12-31' },
+    });
+    assert.equal(scoped.length, 1);
+    assert.equal(scoped[0].acceptedAt, '2025-09-01');
+  });
+});
+
+// ===========================================================================
 // 3. 排行榜关闭
 // ===========================================================================
 

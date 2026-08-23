@@ -30,6 +30,7 @@ import { InMemoryStatisticsSource } from './infrastructure/in-memory-statistics-
 import {
   InMemoryStatisticsAuditPort,
   MemoryStatisticsAuthorizationPort,
+  buildMemoryStatisticsAuthorizationSeedFromEnv,
 } from './infrastructure/memory-statistics-access';
 import { ClubStatisticsQuery } from './application/queries/club-statistics.query';
 import { RecruitmentFunnelQuery } from './application/queries/recruitment-funnel.query';
@@ -50,7 +51,12 @@ export const STATISTICS_SPECIFICATION = Symbol('STATISTICS_SPECIFICATION');
     { provide: STATISTICS_SOURCE, useClass: InMemoryStatisticsSource },
     {
       provide: STATISTICS_AUTHORIZATION_PORT,
-      useFactory: () => new MemoryStatisticsAuthorizationPort({}),
+      // 授权桩种子：默认空种子（fail-closed，生产拒绝装配）。dev/test 联调演示
+      // 可设 ORG_DEV_STATS_DEMO=1 + ORG_DEV_STATS_DEMO_CLUBS/… 提供明确演示主体，
+      // 见 buildMemoryStatisticsAuthorizationSeedFromEnv 注释。不设时所有用户解析为
+      // 空作用域，统计端点返回 403——属有意为空的过渡态，避免误放权。
+      useFactory: () =>
+        new MemoryStatisticsAuthorizationPort(buildMemoryStatisticsAuthorizationSeedFromEnv()),
     },
     { provide: STATISTICS_AUDIT_PORT, useClass: InMemoryStatisticsAuditPort },
 

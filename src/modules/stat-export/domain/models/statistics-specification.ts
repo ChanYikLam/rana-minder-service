@@ -615,6 +615,44 @@ export class StatisticsSpecification {
   // -------------------------------------------------------------------------
 
   /**
+   * 成员趋势分桶过滤：应用与 `uniqueStudentCount` 一致的 `departmentId` 口径，
+   * 但保留全部学年桶（不应用 `academicYear`），以便与前一年度对比趋势。
+   * 过滤谓词收敛到领域层单一实现，查询用例不再内联复制，避免口径漂移（STAT-001）。
+   */
+  filterMembershipForTrend(
+    facts: ReadonlyArray<MembershipFact>,
+    filters: StatisticsFilters | undefined,
+  ): MembershipFact[] {
+    return facts.filter((f) => {
+      if (!filters) return true;
+      if (filters.departmentId && f.departmentId !== filters.departmentId) return false;
+      return true;
+    });
+  }
+
+  /**
+   * 录取历史趋势分桶过滤：按 `scope` + `departmentId`/`timeRange` 口径过滤，
+   * 保留全部学年桶（不应用 `academicYear`），用于与前一年度对比趋势。
+   * 与 `splitAdmissionHistoryAndCurrent` 中的历史口径一致（STAT-001）。
+   */
+  filterAdmissionForTrend(
+    facts: ReadonlyArray<AdmissionAcceptanceFact>,
+    scope: StatScopeKind,
+    filters: StatisticsFilters | undefined,
+  ): AdmissionAcceptanceFact[] {
+    return facts.filter((f) => {
+      if (f.scope !== scope) return false;
+      if (!filters) return true;
+      if (filters.departmentId && f.departmentId !== filters.departmentId) return false;
+      if (filters.timeRange) {
+        if (f.acceptedAt < filters.timeRange.from) return false;
+        if (f.acceptedAt > filters.timeRange.to) return false;
+      }
+      return true;
+    });
+  }
+
+  /**
    * 计算当前值 vs 前一年学年值的趋势。前一年数据缺失则 flat/0。
    *
    * 业务意图说明（零基线语义）：前一年度桶存在但值为 0 时，同样视为

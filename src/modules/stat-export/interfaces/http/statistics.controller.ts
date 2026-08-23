@@ -10,7 +10,7 @@
  * → IFC-ERR-* → HTTP 状态，带 supportId。
  */
 
-import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import { Controller, Get, Inject, Logger, Param, Query } from '@nestjs/common';
 import { HttpException } from '@nestjs/common';
 
 import { StatisticsActor, type RequestActor } from './statistics-actor';
@@ -31,6 +31,8 @@ import { generateTraceId } from '../../../../platform/observability/domain/servi
 
 @Controller('api')
 export class StatisticsController {
+  private readonly logger = new Logger(StatisticsController.name);
+
   constructor(
     @Inject(STATISTICS_AUTHORIZATION_PORT)
     private readonly authz: StatisticsAuthorizationPort,
@@ -181,8 +183,15 @@ export class StatisticsController {
           IFC_ERROR_HTTP_STATUS['IFC-ERR-005'],
         );
       }
-      // 兜底：500
+      // 兜底：500（IFC-ERR-016）。对外仅暴露脱敏后的通用消息 + supportId；
+      // 原始错误详情以脱敏形式关联 supportId 落日志，便于线上用 supportId 定位，
+      // 同时避免将内部异常细节透出到响应体（安全：不泄露堆栈/内部路径）。
       const supportId = generateTraceId();
+      this.logger.error(
+        `stat-export 未预期异常：supportId=${supportId} detail=${String(
+          err instanceof Error ? err.message : err,
+        )}`,
+      );
       throw new HttpException(
         { code: 'IFC-ERR-016' as const, message: '服务异常，请稍后重试', supportId },
         500,

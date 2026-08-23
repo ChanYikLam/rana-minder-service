@@ -17,6 +17,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   StatisticsSpecification,
   type StatisticsFilters,
+  type MembershipFact,
+  type AdmissionAcceptanceFact,
 } from '../../domain/models/statistics-specification';
 import { STATISTICS_SOURCE, type StatisticsSourcePort } from '../ports/statistics-source.port';
 import { topKSorted } from '../sort-utils';
@@ -388,19 +390,14 @@ export class ClubStatisticsQuery {
    * 避免 `memberTrend` 以非去重计数与前学年（去重）对比，导致趋势基准不一致。
    */
   private groupMembersByYear(
-    memberships: readonly {
-      academicYear: string;
-      studentNo: string;
-      departmentId?: string | null;
-    }[],
+    memberships: readonly MembershipFact[],
     filters?: StatisticsFilters,
   ): Map<string, number> {
+    // 过滤谓词收敛到领域层（filterMembershipForTrend），保持与
+    // uniqueStudentCount 一致的 departmentId 口径（STAT-001），避免内联复制漂移。
+    const scoped = this.spec.filterMembershipForTrend(memberships, filters);
     const buckets = new Map<string, Set<string>>();
-    for (const m of memberships) {
-      // 与 currentTotal（uniqueStudentCount）保持同一过滤口径（STAT-001）：
-      // 应用 departmentId 筛选，避免趋势基准与当前值口径不一致；
-      // 不应用 academicYear 筛选，以保留前一年度桶用于趋势对比。
-      if (filters?.departmentId && m.departmentId !== filters.departmentId) continue;
+    for (const m of scoped) {
       let set = buckets.get(m.academicYear);
       if (set === undefined) {
         set = new Set();
@@ -414,26 +411,15 @@ export class ClubStatisticsQuery {
   }
 
   private groupHistoryByYear(
-    history: readonly {
-      academicYear: string;
-      scope: 'normal' | 'joint';
-      departmentId?: string | null;
-      acceptedAt?: string;
-    }[],
+    history: readonly AdmissionAcceptanceFact[],
     scope: 'normal' | 'joint',
     filters?: StatisticsFilters,
   ): Map<string, number> {
+    // 过滤谓词收敛到领域层（filterAdmissionForTrend），与
+    // splitAdmissionHistoryAndCurrent 的历史口径一致（STAT-001）。
+    const scoped = this.spec.filterAdmissionForTrend(history, scope, filters);
     const map = new Map<string, number>();
-    for (const h of history) {
-      if (h.scope !== scope) continue;
-      // 与 admissionHistory.normalTotal / jointTotal（matchesAdmission）保持同一
-      // 过滤口径（STAT-001）：应用 departmentId / timeRange 筛选，不应用
-      // academicYear，以保留前一年度桶用于趋势对比。
-      if (filters?.departmentId && h.departmentId !== filters.departmentId) continue;
-      if (filters?.timeRange) {
-        if (h.acceptedAt === undefined || h.acceptedAt < filters.timeRange.from) continue;
-        if (h.acceptedAt > filters.timeRange.to) continue;
-      }
+    for (const h of scoped) {
       map.set(h.academicYear, (map.get(h.academicYear) ?? 0) + 1);
     }
     return map;

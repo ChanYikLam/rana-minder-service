@@ -35,6 +35,47 @@ export interface MemoryStatisticsAuthorizationSeed {
   >;
 }
 
+/**
+ * 从环境变量构建可选演示种子（仅 dev/test 下生效，受 ORG_DEV_ACTOR_HEADER 门禁保护）。
+ *
+ * 用途：默认空种子下，dev/test 中所有用户解析为空作用域，统计端点全部返回 403，
+ * 无法本地联调演示。设置 `ORG_DEV_STATS_DEMO=1` 可启用一个明确的演示主体，
+ * 使统计端点可达；不设置则保持空种子（fail-closed，生产仍拒绝装配）。
+ *
+ * 可选环境变量：
+ * - ORG_DEV_STATS_DEMO_ACTOR（默认 "stats-demo"）：演示主体 userId；
+ * - ORG_DEV_STATS_DEMO_SUPER_ADMIN（可选，逗号分隔）：授予平台超管的主体 userId；
+ * - ORG_DEV_STATS_DEMO_CLUBS（可选，逗号分隔）：授予全社团（club 级）作用域的 clubId 列表。
+ */
+export function buildMemoryStatisticsAuthorizationSeedFromEnv(): MemoryStatisticsAuthorizationSeed {
+  const env = process.env;
+  if (env['ORG_DEV_STATS_DEMO'] !== '1') return {};
+
+  const actor = env['ORG_DEV_STATS_DEMO_ACTOR'] || 'stats-demo';
+  const clubs = (env['ORG_DEV_STATS_DEMO_CLUBS'] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const superAdmins = (env['ORG_DEV_STATS_DEMO_SUPER_ADMIN'] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  return {
+    superAdminUserIds: superAdmins.length > 0 ? superAdmins : undefined,
+    clubScopes:
+      clubs.length > 0
+        ? {
+            [actor]: clubs.map((clubId) => ({
+              clubId,
+              level: 'club' as const,
+              departmentIds: [],
+            })),
+          }
+        : undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 授权桩实现
 // ---------------------------------------------------------------------------

@@ -4,14 +4,53 @@
  * 门禁测试：生产环境拒绝装配、缺 ORG_DEV_ACTOR_HEADER 拒绝。
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
   MemoryStatisticsAuthorizationPort,
   InMemoryStatisticsAuditPort,
+  buildMemoryStatisticsAuthorizationSeedFromEnv,
   type MemoryStatisticsAuthorizationSeed,
 } from './memory-statistics-access';
+
+describe('buildMemoryStatisticsAuthorizationSeedFromEnv', () => {
+  const saved = { ...process.env };
+
+  afterEach(() => {
+    // 恢复环境变量，避免影响其他用例
+    process.env = { ...saved };
+  });
+
+  it('默认不设置 → 空种子（保持 fail-closed）', () => {
+    delete process.env['ORG_DEV_STATS_DEMO'];
+    delete process.env['ORG_DEV_STATS_DEMO_CLUBS'];
+    delete process.env['ORG_DEV_STATS_DEMO_SUPER_ADMIN'];
+    assert.deepEqual(buildMemoryStatisticsAuthorizationSeedFromEnv(), {});
+  });
+
+  it('ORG_DEV_STATS_DEMO=1 + clubs → 演示主体获得 club 级作用域', () => {
+    process.env['ORG_DEV_STATS_DEMO'] = '1';
+    process.env['ORG_DEV_STATS_DEMO_ACTOR'] = 'demo-user';
+    process.env['ORG_DEV_STATS_DEMO_CLUBS'] = 'club-acm, club-design';
+    const seed = buildMemoryStatisticsAuthorizationSeedFromEnv();
+    assert.ok(seed.clubScopes);
+    const scopes = seed.clubScopes['demo-user'];
+    assert.equal(scopes.length, 2);
+    assert.deepEqual(
+      scopes.map((s) => s.clubId),
+      ['club-acm', 'club-design'],
+    );
+    assert.equal(scopes[0].level, 'club');
+  });
+
+  it('ORG_DEV_STATS_DEMO=1 + superAdmin → 授予平台超管', () => {
+    process.env['ORG_DEV_STATS_DEMO'] = '1';
+    process.env['ORG_DEV_STATS_DEMO_SUPER_ADMIN'] = 'u_root';
+    const seed = buildMemoryStatisticsAuthorizationSeedFromEnv();
+    assert.deepEqual(seed.superAdminUserIds, ['u_root']);
+  });
+});
 
 describe('MemoryStatisticsAuthorizationPort', () => {
   // 当前 env 已配 ORG_DEV_ACTOR_HEADER=1（.env.test）；装配成功
