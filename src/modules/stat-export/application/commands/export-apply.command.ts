@@ -333,17 +333,20 @@ export class ExportApplyCommand {
   }> {
     // 个人副本
     if (request.kind === 'personal') {
-      // 与批量/联合导出统一：对象存储未接入前，includeFiles=true 一律显式拒绝，
-      // 避免附件开关语义在个人副本下被静默忽略。
+      const pc = authorizePersonalCopy(principal, request.targetUserId, {
+        clubId: request.clubId,
+        departmentId: request.departmentId,
+      });
+      // 对象存储未接入前，includeFiles=true 一律显式拒绝，避免附件开关语义在个人副本
+      // 下被静默忽略。
+      // 顺序说明：越权静态校验（authorizePersonalCopy）先于业务/能力校验（includeFiles），
+      // 与普通批量/联合分支的错误码优先级口径统一——越权（IFC-ERR-003）优先于能力不支持
+      // （IFC-ERR-005），避免越权者以 includeFiles 探测附件功能状态（信息泄露）。
       if (request.includeFiles) {
         throw exportErrors.validation(
           '当前版本暂不支持导出包含附件（includeFiles=true），请去除附件后重试（IFC-ERR-005）',
         );
       }
-      const pc = authorizePersonalCopy(principal, request.targetUserId, {
-        clubId: request.clubId,
-        departmentId: request.departmentId,
-      });
       // 回源校验被代申请人归属（EXP-003 越权边界）：
       // 部门负责人/社团负责人代申请个人副本时，须确认 target 确实在自身作用域内
       // （部门成员 + 进入本部门招新路径的申请人 / 本社团当前成员），否则可为任意
