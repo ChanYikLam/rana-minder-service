@@ -42,15 +42,20 @@ import { ExportTaskAggregate } from '../../domain/models/export-task';
 import { ExportTaskStateMachine } from '../../domain/state-machines/export-task.state-machine';
 import {
   assertPersonalCopyTargetInScope,
+  assertFreshReauth,
   authorizeBatchExportScope,
   authorizePersonalCopy,
   convergeJointExportScope,
+  SUPER_ADMIN_REAUTH_TTL_MS,
 } from '../export-authorization.policy';
 import { exportErrors, ExportError } from '../errors';
 import { deniedAuditEntry } from '../export-denied-audit';
 
-/** 超管高风险导出的重新认证有效期（10 分钟窗口，IFC-ERR-002） */
-export const SUPER_ADMIN_REAUTH_TTL_MS = 10 * 60 * 1000;
+/**
+ * 超管高风险导出的重新认证有效期（10 分钟窗口，IFC-ERR-002）。
+ * 复用 export-authorization.policy 的公共常量，与 retry 共用同一口径。
+ */
+export { SUPER_ADMIN_REAUTH_TTL_MS };
 
 export interface ExportApplyRequest {
   readonly kind: 'club' | 'department' | 'platform' | 'joint' | 'personal';
@@ -85,10 +90,20 @@ export interface ExportApplyResult {
 
 /**
  * 计算申请语义摘要（幂等键语义归一化；作用域/字段/数据集任一变化摘要即变）。
+ *
+ * 并入申请者身份（principalUserId）以避免"本人个人副本"（targetUserId 缺省）场景下
+ * 不同用户以同 key + 相同申请内容产生相同摘要：若摘要不含身份，第二个用户会命中下方
+ * 跨用户回放守卫抛 IFC-ERR-003（误导性强，且限制了同名 key 的合理复用）。并入后不同
+ * 用户摘要不同，回放前冲突预检直接以 IFC-ERR-009 语义拒绝，语义更清晰；同用户同 key
+ * 相同请求摘要仍一致，幂等回放不受影响。
  */
-export function applyIdempotencyHash(request: ExportApplyRequest): string {
+export function applyIdempotencyHash(
+  request: ExportApplyRequest,
+  principalUserId?: string,
+): string {
   return JSON.stringify({
     kind: request.kind,
+    principalUserId: principalUserId ?? null,
     clubId: request.clubId ?? null,
     departmentId: request.departmentId ?? null,
     jointActivityId: request.jointActivityId ?? null,
@@ -172,7 +187,7 @@ export class ExportApplyCommand {
     // 用途重认证等关键校验，避免回放路径绕过校验；真正原子判定由 claim() 完成。
     if (input.idempotencyKey) {
       const priorHash = await this.idem.hashForKey(input.idempotencyKey);
-      if (priorHash !== null && priorHash !== applyIdempotencyHash(request)) {
+      if (priorHash !== null && priorHash !== applyIdempotencyHash(request, principal.userId)) {
         throw exportErrors.conflict('同一幂等键对应不同申请内容，请更换幂等键（IFC-ERR-009）');
       }
     }
@@ -182,7 +197,7 @@ export class ExportApplyCommand {
 
     // 超管特权导出：用途 + 重新认证（IFC-ERR-002）+ 特权审计
     if (resolution.privileged) {
-      await this.requireReauth(principal.userId, request.reauthProofAt, now);
+      await assertFreshReauth(this.reauth, principal.userId, request.reauthProofAt, now);
       if (!request.purpose || request.purpose.trim().length === 0) {
         throw exportErrors.validation('超管特权导出必须填写用途（EXP-003）');
       }
@@ -227,7 +242,7 @@ export class ExportApplyCommand {
     if (input.idempotencyKey) {
       const claim = await this.idem.claim({
         key: input.idempotencyKey,
-        semanticHash: applyIdempotencyHash(request),
+        semanticHash: applyIdempotencyHash(request, principal.userId),
         taskId: id,
         now,
       });
@@ -240,9 +255,9 @@ export class ExportApplyCommand {
         if (existing === null) {
           throw exportErrors.stateConflict('幂等命中但任务不存在，请重试');
         }
-        // 跨用户回放防护：幂等键由请求内容归一化，不含调用者身份；
-        // 两个不同用户以同 key + 相同申请内容时，后者不得命中并拿到前者的任务
-        // （含 exportId），否则存在跨用户回放/越权取到他人任务标识的风险。
+        // 跨用户回放防护（纵深防御）：幂等摘要已并入申请者身份，正常情况下不同用户
+        // 以同 key 申请会在冲突预检处以 IFC-ERR-009 拒绝；此处仍保留归属复核，防止
+        // 摘要碰撞或服务端复用 key 等极端场景下拿到他人任务标识（IFC-ERR-003）。
         if (existing.requestedByUserId !== principal.userId) {
           throw exportErrors.forbidden('该幂等键已被其他用户申请，不能复用（IFC-ERR-003）');
         }
@@ -451,30 +466,7 @@ export class ExportApplyCommand {
     };
   }
 
-  private async requireReauth(
-    userId: string,
-    proofAt: string | undefined,
-    now: Date,
-  ): Promise<void> {
-    const latest = await this.reauth.latestReauthAt(userId);
-    if (latest === null) {
-      throw exportErrors.reauth('高风险导出前需重新认证（IFC-ERR-002）');
-    }
-    if (proofAt !== undefined) {
-      // 客户端声明的时间戳不得晚于服务端最近重认证时间（防捏造）；
-      // 无效时间戳 getTime() 为 NaN，NaN 比较恒为 false 会静默绕过校验，须显式拒绝。
-      const proofTs = new Date(proofAt).getTime();
-      if (Number.isNaN(proofTs)) {
-        throw exportErrors.reauth('重新认证凭证时间戳无效（IFC-ERR-002）');
-      }
-      if (proofTs > latest.getTime()) {
-        throw exportErrors.reauth('重新认证凭证无效（IFC-ERR-002）');
-      }
-    }
-    if (now.getTime() - latest.getTime() > SUPER_ADMIN_REAUTH_TTL_MS) {
-      throw exportErrors.reauth('重新认证已过期，请重新认证后再导出（IFC-ERR-002）');
-    }
-  }
+  /** 重新认证新鲜度校验（IFC-ERR-002）已抽为公共函数 assertFreshReauth，与 retry 共用。 */
 
   /**
    * 幂等回放时恢复被剔除的越权字段清单（IFC-ERR-009）。

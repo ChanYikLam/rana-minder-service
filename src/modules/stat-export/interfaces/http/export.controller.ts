@@ -99,17 +99,23 @@ export class ExportController {
 
   /**
    * POST /api/export/:exportId/retry —— 失败重试（沿用原快照，版本校验）。
+   * 超管特权导出重试与申请同口径复核重新认证新鲜度（IFC-ERR-002），故透传 reauthProofAt。
    */
   @Post(':exportId/retry')
   async retry(
     @StatisticsActor() actor: RequestActor,
     @Param('exportId') exportId: string,
-    @Body() body: { expectedRevision: number },
+    @Body() body: { expectedRevision: number; reauthProofAt?: string },
   ) {
     return this.catchErrors(async () => {
       const principal = await this.resolvePrincipal(actor.userId);
       const revision = this.parseRevision(body?.expectedRevision);
-      await this.retryCommand.execute({ principal, exportId, expectedRevision: revision });
+      await this.retryCommand.execute({
+        principal,
+        exportId,
+        expectedRevision: revision,
+        reauthProofAt: body?.reauthProofAt,
+      });
       const task = await this.repo.load(exportId);
       // 重试命令已成功保存，任务必然存在；load 返回 null 属仓储层异常，须明确报错
       // 避免 status 为 undefined / revision 回退为猜测值的含糊响应。

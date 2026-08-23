@@ -11,15 +11,21 @@ import { Inject } from '@nestjs/common';
 
 import {
   EXPORT_AUDIT_PORT,
+  EXPORT_REAUTH_PORT,
   EXPORT_SAFETY_SWITCH_PORT,
   type ExportAuditPort,
   type ExportPrincipal,
+  type ExportReauthPort,
   type ExportSafetySwitchPort,
 } from '../ports/export-authorization.port';
 import { EXPORT_TASK_REPOSITORY, type ExportTaskRepository } from '../ports/export-repository.port';
 import { EXPORT_FACT_SOURCE, type ExportFactSourcePort } from '../ports/export-fact-source.port';
 import { ExportTaskStatus } from '../../domain/state-machines/export-task.state-machine';
-import { assertNotSuspended, revalidateExportScopeWithFacts } from '../export-authorization.policy';
+import {
+  assertFreshReauth,
+  assertNotSuspended,
+  revalidateExportScopeWithFacts,
+} from '../export-authorization.policy';
 import { exportErrors, ExportError } from '../errors';
 import { deniedAuditEntry } from '../export-denied-audit';
 
@@ -27,6 +33,8 @@ export interface ExportRetryInput {
   readonly principal: ExportPrincipal;
   readonly exportId: string;
   readonly expectedRevision: number;
+  /** 超管特权导出重试的重新认证凭证时间戳（IFC-ERR-002；可缺省） */
+  readonly reauthProofAt?: string;
   readonly now?: Date;
 }
 
@@ -36,6 +44,7 @@ export class ExportRetryCommand {
     @Inject(EXPORT_AUDIT_PORT) private readonly audit: ExportAuditPort,
     @Inject(EXPORT_TASK_REPOSITORY) private readonly repo: ExportTaskRepository,
     @Inject(EXPORT_FACT_SOURCE) private readonly facts: ExportFactSourcePort,
+    @Inject(EXPORT_REAUTH_PORT) private readonly reauth: ExportReauthPort,
   ) {}
 
   async execute(input: ExportRetryInput): Promise<void> {
@@ -112,6 +121,13 @@ export class ExportRetryCommand {
     // 抽公共 assertNotSuspended：与下载控制器共用，保证口径统一。
     await assertNotSuspended(task.snapshot.data, this.facts);
 
+    // 超管特权导出重试（沿用原快照重新生成特权数据）：与申请同口径复核重新认证新鲜度
+    // （IFC-ERR-002）。若重认证已过期仍放行，特权导出重试会在重认证失效后被重新生成，
+    // 造成特权数据审计/对账缺口（与 apply 侧一致）。
+    if (input.principal.kind === 'platform_super_admin') {
+      await assertFreshReauth(this.reauth, input.principal.userId, input.reauthProofAt, now);
+    }
+
     // 版本竞争：并发写者先改写则拒绝
     if (input.expectedRevision !== task.revisionNumber) {
       throw exportErrors.versionConflict(
@@ -126,7 +142,9 @@ export class ExportRetryCommand {
       at: now.toISOString(),
       action: 'export_retry',
       principalId: input.principal.userId,
-      privileged: false,
+      // 特权审计须按操作者分类动态标记（STAT-002）：超管特权导出重试同样属特权行为，
+      // 硬编码 false 会导致特权导出重试在审计日志丢失特权标记，无法对账。
+      privileged: input.principal.kind === 'platform_super_admin',
       clubId: task.snapshot.data.scope.clubId,
       jointActivityId: task.snapshot.data.scope.jointActivityId,
       datasetType: null,

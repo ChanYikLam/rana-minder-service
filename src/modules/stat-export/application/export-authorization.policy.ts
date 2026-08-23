@@ -12,7 +12,7 @@
  * （该判定依赖事实回源，由 command 层配合上下文完成，见 export-apply.command.ts）。
  */
 
-import type { ExportPrincipal, ExportClubScope } from './ports/export-authorization.port';
+import type { ExportPrincipal, ExportClubScope, ExportReauthPort } from './ports/export-authorization.port';
 import type { ExportFactSourcePort } from './ports/export-fact-source.port';
 import { ExportError, exportErrors } from './errors';
 
@@ -525,4 +525,47 @@ export function clubLeaderPrincipal(
 /** 便捷：拒绝错误类型守卫 */
 export function isExportError(err: unknown): err is ExportError {
   return err instanceof ExportError;
+}
+
+/** 超管高风险导出的重新认证有效期（10 分钟窗口，IFC-ERR-002）。
+ * 由 apply（新建）与 retry（重试）共用，保证特权导出的新建与重试口径统一；
+ * export-apply.command 亦 re-export 该常量以保持对外引用兼容。 */
+export const SUPER_ADMIN_REAUTH_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * 校验高风险（超管特权）导出的重新认证新鲜度（IFC-ERR-002）。
+ *
+ * 与 apply 侧同一校验逻辑抽为公共函数，供申请（新建）与重试（沿用原快照重新生成）共用：
+ * 超管特权导出重试时同样可能重新生成特权数据，若重认证已过期仍放行会产生对账缺口，
+ * 故重试前须以与申请同口径复核重认证新鲜度。
+ *
+ * @param reauth 重新认证事实源端口
+ * @param userId  操作者用户 id
+ * @param proofAt 客户端声明的重新认证凭证时间戳（可缺省；缺省时仅依赖服务端最近重认证时间）
+ * @param now     当前时间
+ */
+export async function assertFreshReauth(
+  reauth: ExportReauthPort,
+  userId: string,
+  proofAt: string | undefined,
+  now: Date,
+): Promise<void> {
+  const latest = await reauth.latestReauthAt(userId);
+  if (latest === null) {
+    throw exportErrors.reauth('高风险导出前需重新认证（IFC-ERR-002）');
+  }
+  if (proofAt !== undefined) {
+    // 客户端声明的时间戳不得晚于服务端最近重认证时间（防捏造）；
+    // 无效时间戳 getTime() 为 NaN，NaN 比较恒为 false 会静默绕过校验，须显式拒绝。
+    const proofTs = new Date(proofAt).getTime();
+    if (Number.isNaN(proofTs)) {
+      throw exportErrors.reauth('重新认证凭证时间戳无效（IFC-ERR-002）');
+    }
+    if (proofTs > latest.getTime()) {
+      throw exportErrors.reauth('重新认证凭证无效（IFC-ERR-002）');
+    }
+  }
+  if (now.getTime() - latest.getTime() > SUPER_ADMIN_REAUTH_TTL_MS) {
+    throw exportErrors.reauth('重新认证已过期，请重新认证后再导出（IFC-ERR-002）');
+  }
 }

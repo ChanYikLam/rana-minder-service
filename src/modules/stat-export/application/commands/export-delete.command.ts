@@ -141,6 +141,11 @@ export class ExportDeleteCommand {
    * AUD-009 不可绕删：状态机允许 EXPIRED/REVOKED --formal_delete_hit--> PRE_DELETED，
    * 故通过 includeTerminal=true 把已过期/已失权但仍保留导出文件的任务也纳入联动清理，
    * 否则已过期文件永远不会被正式删除清理。
+   *
+   * 设计取舍（显式声明）：此为"清理/合规删除"系统操作，语义上是撤销对已删除内容的导出
+   * 访问，而非新的导出授权。故与 byApplicant（申请方主动删除）不同，不校验导出安全开关
+   * （GOV-004）——即使开关关闭，也不得让已删除内容因开关关闭而残留可访问导出链接。
+   * 对应地，系统级 audit 的 privileged 恒为 false（非用户特权行为），属预期行为。
    */
   async applyFormalDelete(input: {
     selection: { clubId?: string; jointActivityId?: string };
@@ -180,6 +185,11 @@ export class ExportDeleteCommand {
   /**
    * 参与社团紧急停用（JNT-023）：已有未过期（待生成/生成中/可下载）链接立即失权，
    * 使其不可再下载。返回失效任务数。
+   *
+   * 设计取舍（显式声明）：此为"失权"系统操作，撤销紧急停用社团的既有导出访问，语义上
+   * 是安全收敛而非新的授权。故不校验导出安全开关（GOV-004）——即使开关关闭，也不得让
+   * 被紧急停用社团的导出链接继续可访问（否则封锁即被绕过）。对应地，系统级 audit 的
+   * privileged 恒为 false，属预期行为。
    */
   async invalidateUnexpiredBySuspension(input: {
     clubId: string;

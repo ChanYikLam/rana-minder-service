@@ -29,6 +29,7 @@ import {
 import { InMemoryExportFactSource } from '../../infrastructure/in-memory-export-fact-source';
 import { InMemoryExportTaskRepository } from '../../infrastructure/in-memory-export-repository';
 import { InMemoryExportIdempotency } from '../../infrastructure/in-memory-export-idempotency';
+import type { ExportApplyIdempotencyPort } from '../ports/export-idempotency.port';
 import { ExportApplyCommand, applyIdempotencyHash } from './export-apply.command';
 import { ExportRetryCommand } from './export-retry.command';
 import { ExportDeleteCommand } from './export-delete.command';
@@ -58,7 +59,7 @@ function makeHarness(seed: MemoryExportAuthorizationSeed): Harness {
   const safety = new MemoryExportSafetySwitchPort();
   const reauth = new MemoryExportReauthPort();
   const apply = new ExportApplyCommand(SPEC, authz, audit, safety, reauth, facts, repo, idem);
-  const retry = new ExportRetryCommand(safety, audit, repo, facts);
+  const retry = new ExportRetryCommand(safety, audit, repo, facts, reauth);
   const del = new ExportDeleteCommand(safety, audit, repo);
   return { authz, audit, facts, repo, idem, apply, retry, del, safety, reauth };
 }
@@ -74,7 +75,7 @@ function makeHarnessWithRepo(
   const safety = new MemoryExportSafetySwitchPort();
   const reauth = new MemoryExportReauthPort();
   const apply = new ExportApplyCommand(SPEC, authz, audit, safety, reauth, facts, repo, idem);
-  const retry = new ExportRetryCommand(safety, audit, repo, facts);
+  const retry = new ExportRetryCommand(safety, audit, repo, facts, reauth);
   const del = new ExportDeleteCommand(safety, audit, repo);
   return {
     authz,
@@ -316,6 +317,49 @@ describe('P2 导出申请（幂等/快照/越权/停用/联合失效）', () => 
     // 再次申请同 key 应能正常创建（不命中毒化槽位）
     const ok = await apply.execute(input);
     assert.equal(ok.replayed, false);
+  });
+
+  it('申请幂等：replayed 命中但任务未落库 → 抛清晰状态冲突（不永久毒化/不回放幽灵任务）', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    // 模拟瞬态竞态：幂等槽位已被领取（claim=replayed）但任务尚未/未能落库（仓库中不存在）。
+    // 并发下"幂等槽位领取 + 任务落库"非同一事务时可能出现该窗口（评审 warning#2）；
+    // 当前实现对"回放命中但任务不存在"抛清晰 IFC-ERR-007，避免静默返回幽灵任务或永久毒化。
+    const ghostIdem: ExportApplyIdempotencyPort = {
+      async claim() {
+        return { status: 'replayed', taskId: 'ghost-task-not-in-repo' };
+      },
+      async taskIdForKey() {
+        return 'ghost-task-not-in-repo';
+      },
+      async hashForKey() {
+        return null;
+      },
+      async release() {
+        /* 无槽位变更 */
+      },
+    };
+    const apply = new ExportApplyCommand(
+      SPEC,
+      h.authz,
+      h.audit,
+      h.safety,
+      h.reauth,
+      h.facts,
+      h.repo,
+      ghostIdem,
+    );
+    await assert.rejects(
+      apply.execute({
+        principal: clubLeaderPrincipal('hr', 'C1'),
+        idempotencyKey: 'k-ghost',
+        request: { kind: 'club' as const, clubId: 'C1' },
+      }),
+      (e: ExportError) =>
+        e.code === 'IFC-ERR-007' && e.message.includes('幂等命中但任务不存在'),
+    );
   });
 
   it('社团强制停用 → 拒绝新建导出（JNT-023，IFC-ERR-006）', async () => {
@@ -659,6 +703,88 @@ describe('P3 失败重试', () => {
     );
     const after = (await h.repo.load(failedTask.id)) as ExportTaskAggregate;
     assert.equal(after.status, ExportTaskStatus.FAILED);
+  });
+
+  it('超管特权导出重试：重认证过期 → 拒绝（IFC-ERR-002），不重新生成特权数据', async () => {
+    const h = makeHarness({ superAdminUserIds: ['super'] });
+    h.reauth.recordReauth('super');
+    const res = await h.apply.execute({
+      principal: platformSuperAdminPrincipal('super'),
+      request: { kind: 'platform' as const, purpose: '审计' },
+    });
+    const genTask = (await h.repo.load(res.task.id)) as ExportTaskAggregate;
+    genTask.claimGeneration('worker-1', 60 * 1000, new Date());
+    genTask.markGenerationFailed('磁盘故障', new Date());
+    await h.repo.save(genTask);
+    const failedTask = (await h.repo.load(res.task.id)) as ExportTaskAggregate;
+    assert.equal(failedTask.status, ExportTaskStatus.FAILED);
+
+    // 重认证已超过 10 分钟窗口（IFC-ERR-002）→ 重试拒绝，特权数据不重新生成
+    const now = new Date();
+    h.reauth.recordReauth('super', new Date(now.getTime() - 11 * 60 * 1000));
+    await assert.rejects(
+      h.retry.execute({
+        principal: platformSuperAdminPrincipal('super'),
+        exportId: failedTask.id,
+        expectedRevision: failedTask.revisionNumber,
+        now,
+      }),
+      (e: ExportError) => e.code === 'IFC-ERR-002',
+    );
+    const after = (await h.repo.load(failedTask.id)) as ExportTaskAggregate;
+    assert.equal(after.status, ExportTaskStatus.FAILED);
+  });
+
+  it('超管特权导出重试成功：审计 privileged=true（STAT-002 特权留痕）', async () => {
+    const h = makeHarness({ superAdminUserIds: ['super'] });
+    h.reauth.recordReauth('super');
+    const res = await h.apply.execute({
+      principal: platformSuperAdminPrincipal('super'),
+      request: { kind: 'platform' as const, purpose: '审计' },
+    });
+    const genTask = (await h.repo.load(res.task.id)) as ExportTaskAggregate;
+    genTask.claimGeneration('worker-1', 60 * 1000, new Date());
+    genTask.markGenerationFailed('磁盘故障', new Date());
+    await h.repo.save(genTask);
+    const failedTask = (await h.repo.load(res.task.id)) as ExportTaskAggregate;
+    assert.equal(failedTask.status, ExportTaskStatus.FAILED);
+
+    h.audit.clear();
+    await h.retry.execute({
+      principal: platformSuperAdminPrincipal('super'),
+      exportId: failedTask.id,
+      expectedRevision: failedTask.revisionNumber,
+    });
+    const retryAudits = h.audit.findBy('export_retry');
+    assert.equal(retryAudits.length, 1);
+    // 特权标记须按操作者分类动态写入（此前硬编码 false 会导致超管特权重试丢失特权审计）
+    assert.equal(retryAudits[0].privileged, true);
+  });
+
+  it('非超管重试：审计 privileged 恒为 false', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: { kind: 'club' as const, clubId: 'C1' },
+    });
+    const genTask = (await h.repo.load(res.task.id)) as ExportTaskAggregate;
+    genTask.claimGeneration('worker-1', 60 * 1000, new Date());
+    genTask.markGenerationFailed('磁盘故障', new Date());
+    await h.repo.save(genTask);
+    const failedTask = (await h.repo.load(res.task.id)) as ExportTaskAggregate;
+
+    h.audit.clear();
+    await h.retry.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      exportId: failedTask.id,
+      expectedRevision: failedTask.revisionNumber,
+    });
+    const retryAudits = h.audit.findBy('export_retry');
+    assert.equal(retryAudits.length, 1);
+    assert.equal(retryAudits[0].privileged, false);
   });
 });
 
@@ -1011,5 +1137,17 @@ describe('工具函数', () => {
       fields: { current_members: ['x'], club_summary: ['a', 'b'] },
     });
     assert.equal(a, b);
+  });
+
+  it('applyIdempotencyHash 并入申请者身份：不同用户同 key 摘要不同，同用户一致', () => {
+    const base = { kind: 'personal' as const, clubId: 'C1', departmentId: 'D1' };
+    // 不同用户对"本人个人副本"（targetUserId 缺省）以同 key 申请 → 摘要不同，
+    // 从而在冲突预检处以 IFC-ERR-009 拒绝，而非误导性的跨用户回放 IFC-ERR-003。
+    const a = applyIdempotencyHash(base, 'user-A');
+    const b = applyIdempotencyHash(base, 'user-B');
+    assert.notEqual(a, b);
+    // 同用户同 key 相同请求 → 摘要一致，幂等回放不受影响。
+    const c = applyIdempotencyHash(base, 'user-A');
+    assert.equal(a, c);
   });
 });
