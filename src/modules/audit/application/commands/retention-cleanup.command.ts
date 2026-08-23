@@ -71,24 +71,31 @@ export class RetentionCleanupCommand {
       }
       const result = await this.executor.deleteAndVerify(item.itemId, item.kind);
       if (result.ok) {
-        cleaned.push(item.itemId);
         // 实际删除 + 回读核验成功 → 落审计留痕（AUD-007/009；仅内部标识/类型，不含正文）
         // 语义：保留期清理属平台级保留策略操作（AUD-007），非超管敏感操作。
         // 由显式 audit 上下文驱动的清理（如超管手动触发）标注 SUPER_ADMIN；
         // 缺省的系统任务/自动清理标注 SYSTEM_TASK，避免把 system 操作误记为超管角色。
         const isSystemRun = input.audit === undefined;
-        await this.auditWriter.write({
-          eventType: AuditEventType.SUPER_ADMIN_OP,
-          actorId: input.audit?.actorId ?? 'system',
-          actorRoles: isSystemRun ? ['SYSTEM_TASK'] : ['SUPER_ADMIN'],
-          scope: null,
-          source: input.audit?.source ?? { channel: 'SYSTEM_TASK' },
-          target: { objectType: `RETENTION_${item.kind}`, objectId: item.itemId },
-          oldValues: null,
-          newValues: { kind: item.kind, retained: false },
-          outcome: AuditOutcome.SUCCESS,
-          requestId: input.audit?.requestId ?? `retention-${item.itemId}`,
-        });
+        // 逐项审计写入失败不得中断整批（评审意见）：已删除项未落审计 + 后续项被跳过
+        // 会扩大审计缺口；失败项并入 skipped 由重试任务收敛（同 fail-closed 语义）
+        try {
+          await this.auditWriter.write({
+            eventType: AuditEventType.SUPER_ADMIN_OP,
+            actorId: input.audit?.actorId ?? 'system',
+            actorRoles: isSystemRun ? ['SYSTEM_TASK'] : ['SUPER_ADMIN'],
+            scope: null,
+            source: input.audit?.source ?? { channel: 'SYSTEM_TASK' },
+            target: { objectType: `RETENTION_${item.kind}`, objectId: item.itemId },
+            oldValues: null,
+            newValues: { kind: item.kind, retained: false },
+            outcome: AuditOutcome.SUCCESS,
+            requestId: input.audit?.requestId ?? `retention-${item.itemId}`,
+          });
+          cleaned.push(item.itemId);
+        } catch {
+          // 审计写入失败：删除已发生但审计缺口，交由重试任务收敛（不静默丢审计）
+          skipped.push(item.itemId);
+        }
       } else {
         // 删除/核验失败：保持未清理（重试任务收敛）
         skipped.push(item.itemId);

@@ -124,10 +124,10 @@ export class ExecuteDeletionChecklistCommand {
       }),
     );
 
-    // 存在超出重试上限的步骤 → 需人工介入（防无限重试，接线层据此告警）
-    const exhaustedRetries = checklist.steps.some(
-      (s) => (s.retryCount ?? 0) >= MAX_STEP_RETRY_COUNT,
-    );
+    // 存在超出重试上限的步骤 → 需人工介入（防无限重试，接线层据此告警）。
+    // 基于**本次执行后**的 steps 判定（评审意见：不得用执行前的旧 steps，
+    // 否则本次成功归零的步骤仍按旧上限计入，重试上限判定滞后一轮）
+    const exhaustedRetries = steps.some((s) => (s.retryCount ?? 0) >= MAX_STEP_RETRY_COUNT);
 
     const completed =
       failed === 0 && verified === checklist.steps.length && checklist.steps.length > 0;

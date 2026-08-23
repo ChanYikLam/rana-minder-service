@@ -471,4 +471,86 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
       /已达上限/,
     );
   });
+
+  it('评审修复：assertScopeComplete 未知 scope.kind 前置拒绝（default 防御）', async () => {
+    const rig = makeRig();
+    // 未知删除范围 kind：其余字段有效，也须在前置校验阶段被拒绝（防静默通过到 scopeRef）
+    const unknownScope = {
+      ...deleteInput,
+      scope: { kind: 'UNKNOWN_KIND' as never, principalId: 'u1' },
+    };
+    await assert.rejects(
+      rig.formalDelete.execute(unknownScope as never),
+      /IFC-ERR-005: 未知删除范围/,
+    );
+  });
+
+  it('评审修复：重试上限基于本次执行后的 steps 判定——上限步骤本次成功归零则不再抛“需人工介入”', async () => {
+    const repo = new InMemoryDeletionChecklistRepository();
+    const policy = new DeletionPolicy();
+    const checklist = await new FormalDeleteCommand(
+      repo,
+      policy,
+      makeAuditWriterStub().writer,
+    ).execute(deleteInput);
+    // 构造某步骤已重试到上限（retryCount=5）的 FAILED 清单
+    const exhausted = await repo.load(checklist.checklistId);
+    const staleSteps = exhausted!.steps.map((s, i) => ({
+      ...s,
+      status: DeletionStepStatus.FAILED,
+      retryCount: i === 0 ? 5 : 1, // 首步骤已超上限（== MAX_STEP_RETRY_COUNT）
+    }));
+    await repo.save({ ...exhausted!, steps: staleSteps, completed: false, version: 1 });
+    // 本次全部删除成功 → 首步骤 retryCount 归零，不应再按旧值判定为“已超上限”
+    const execute = new ExecuteDeletionChecklistCommand(
+      repo,
+      { deleteAndVerify: async () => ({ ok: true }) } as never,
+      makeAuditWriterStub().writer,
+    );
+    const result = await execute.execute(execInput(checklist.checklistId));
+    assert.equal(result.completed, true);
+    // 首步骤本次成功后 retryCount 归零
+    assert.equal(result.checklist.steps[0].retryCount, 0);
+  });
+
+  it('评审修复：临时清理逐项审计失败不中断整批——失败项并入 skipped，其余项仍清理落审计', async () => {
+    const repo = new InMemoryDeletionChecklistRepository();
+    const policy = new DeletionPolicy();
+    await new FormalDeleteCommand(repo, policy, makeAuditWriterStub().writer).execute(deleteInput);
+    // 审计写入对第一项失败（模拟持久化故障），其余正常
+    const failingWrites: string[] = [];
+    const auditWriter = {
+      write: async (e: { target: { objectId: string }; outcome: string }) => {
+        failingWrites.push(e.target.objectId);
+        if (e.target.objectId === 'draft-1') {
+          throw new Error('IFC-ERR-012: 审计写入失败');
+        }
+      },
+    };
+    const cleanup = new RetentionCleanupCommand(
+      { deleteAndVerify: async () => ({ ok: true }) } as never,
+      auditWriter as never,
+    );
+    const items = [
+      {
+        itemId: 'draft-1',
+        kind: TemporaryItemKind.UNSUBMITTED_DRAFT,
+        retentionExpired: true,
+        hasValidReference: false,
+      },
+      {
+        itemId: 'scan-2',
+        kind: TemporaryItemKind.SCAN_FAILED,
+        retentionExpired: true,
+        hasValidReference: false,
+      },
+    ];
+    const result = await cleanup.execute({
+      items,
+      audit: { actorId: 'sa1', source: { channel: 'SYSTEM_TASK' }, requestId: 'req' },
+    });
+    // 第一项审计失败 → 并入 skipped；第二项审计成功 → 清理
+    assert.deepEqual(result.cleaned, ['scan-2']);
+    assert.deepEqual(result.skipped, ['draft-1']);
+  });
 });

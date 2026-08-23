@@ -156,6 +156,10 @@ export class FormalDeleteCommand {
           throw new DeletionPolicyError('IFC-ERR-005', '用户全部数据删除需提供 principalId');
         }
         return;
+      default:
+        // 未知删除范围 kind：前置防御拒绝（评审意见：补 default，防未知 kind 静默通过
+        // 到 scopeRef 生成阶段才报错）
+        throw new DeletionPolicyError('IFC-ERR-005', '未知删除范围');
     }
   }
 }
