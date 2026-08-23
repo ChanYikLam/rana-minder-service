@@ -26,6 +26,29 @@ const normalizeField = (name: string): string => name.replace(/[^a-z0-9]/gi, '')
 /** 递归下钻的最大深度：防止攻击者可控的深嵌套输入导致递归栈溢出（RangeError） */
 const MAX_SANITIZE_DEPTH = 100;
 
+// ---------- 自由文本内联凭证脱敏正则（redactInlineCredentials 共用） ----------
+// 敏感前缀可组合成 access_token / client-secret / api.key 等复合敏感键；
+// 分隔符支持 下划线 / 连字符 / 点号，避免 access-token、api.token 等变体绕过。
+const SENSITIVE_PREFIX_SRC =
+  '(?:access|refresh|auth|client|smtp|email|api|secret|session|activation|reset|jwt|bearer|verify|verification|private|public|user|login)';
+// 独立出现即敏感的字段词（无需前缀）：token/secret/password 等真凭证词
+const STANDALONE_SENSITIVE_SRC = '(?:token|secret|password|passwd|apikey|credential)';
+// 仅带敏感前缀才敏感的字段词（key/code 独立出现多为普通排查信息，避免过度脱敏）
+const PREFIXED_SENSITIVE_SRC = '(?:key|code)';
+// 敏感键名整体：(前缀[分隔符]基础词) 或 (独立敏感词)
+const SENSITIVE_NAME_SRC = `(?:${SENSITIVE_PREFIX_SRC}[_.-]?(?:${STANDALONE_SENSITIVE_SRC}|${PREFIXED_SENSITIVE_SRC})|${STANDALONE_SENSITIVE_SRC})`;
+// 敏感值：无引号 / 单引号 / 双引号三类形态（防引号包裹导致提前截断漏脱敏）
+const SENSITIVE_VALUE_SRC = `(?:"[^"]*"|'[^']*'|[^&;\\s,"':]+)`;
+// JSON 键值对里的敏感值
+const JSON_VALUE_SRC = `(?:"[^"]*"|'[^']*'|[^,}\\s]+)`;
+// key=value / key:value 自由文本形态
+const INLINE_KEY_VALUE_RE = new RegExp(
+  `(^|[&;\\s,"':])(${SENSITIVE_NAME_SRC})\\b\\s*[=:]\\s*(${SENSITIVE_VALUE_SRC})`,
+  'gi',
+);
+// JSON 键值对形态：{"password":"abc"} / {"access_token": "tok"}
+const INLINE_JSON_RE = new RegExp(`("${SENSITIVE_NAME_SRC}"\\s*:\\s*)(${JSON_VALUE_SRC})`, 'gi');
+
 /** 是否属于敏感字段名（含复数词干匹配：tokens→token、secrets→secret 等） */
 const isSensitiveField = (name: string): boolean => {
   const norm = normalizeField(name);
@@ -217,14 +240,16 @@ export class AuditSanitizer {
     let text = input;
     // 敏感值可能是无引号、单引号或双引号包裹（如 token="abc"、password: 'pw'），
     // 若只用 [^...]+ 会因遇到引号提前截断而漏脱敏，导致凭证正文泄漏，故统一支持三类形态。
-    // 采用「整词/受限前缀」匹配，避免过度脱敏：通用词（key/code/token）仅作为独立词，
-    // 或由特定敏感前缀（access_/client_/api_ 等）组成复合键时才脱敏；
-    // 不再用任意 [a-z0-9_-] 前缀吸收普通单词，避免误伤 postcode、status_code、
-    // monkey、bank_code 等正常字段。
+    // key=value / key:value 自由文本形态：
+    // - 复合键分隔符支持 下划线/连字符/点号（access_token / access-token / api.token）；
+    // - 独立词 key/code 不再作为敏感词（key=1、code=404 属正常排查信息，避免过度脱敏），
+    //   仅当由敏感前缀组成复合键（api_key、verify_code、client_secret 等）时才脱敏。
     text = text.replace(
-      /(^|[&;\s,"':])((?:(?:access|refresh|auth|client|smtp|email|api|secret|session|activation|reset|jwt|bearer|verify|verification|private|public|user|login)_?)?(?:token|secret|password|passwd|apikey|credential|key|code))\b\s*[=:]\s*(?:"[^"]*"|'[^']*'|[^&;\s,"':]+)/gi,
+      INLINE_KEY_VALUE_RE,
       (_m, sep: string, name: string) => `${sep}${name}=<REDACTED>`,
     );
+    // JSON 键值对形态：{"password":"abc"}、{"access_token": "tok"}
+    text = text.replace(INLINE_JSON_RE, '$1<REDACTED>');
     // 抹掉 Authorization 认证头里的凭证正文（Bearer/Basic/Digest token，含引号包裹）
     text = text.replace(
       /([a-z-]*authorization)\s*:\s*(?:bearer|basic|digest|token)?\s*(?:"[^"]*"|'[^']*'|[^\s,;，。：:"]+)/gi,
@@ -235,9 +260,9 @@ export class AuditSanitizer {
       /(cookie|set-cookie)\s*:\s*(?:"[^"]*"|'[^']*'|[^\s,;，。：:"]+)/gi,
       '$1: <REDACTED>',
     );
-    // 抹掉 URL 查询串里的凭证参数（含引号包裹）
+    // 抹掉 URL 查询串里的凭证参数（含引号包裹；key/code 同样仅复合前缀才脱敏，防过度脱敏）
     text = text.replace(
-      /([?&])(?:token|access_token|secret|password|key|code|verifycode)=(?:"[^"]*"|'[^']*'|[^&\s]*)/gi,
+      new RegExp(`([?&])${SENSITIVE_NAME_SRC}=(?:"[^"]*"|'[^']*'|[^&\\s]*)`, 'gi'),
       '$1<REDACTED>',
     );
     return text;

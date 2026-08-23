@@ -297,6 +297,49 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.ok(sf.includes('token=<REDACTED>'), '独立 token 应脱敏');
   });
 
+  it('失败原因脱敏：连字符/点号复合键与 JSON 键值对凭证不得落盘（防绕过）', async () => {
+    const rig = makeRig();
+    // 连字符复合键（access-token）、点号复合键（api.token）此前因分隔符仅支持下划线而绕过
+    const hyphen = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: '调用失败 access-token=HYPTOK api.token=DOTTEDSECRET',
+    });
+    assert.ok(!hyphen.failureReason?.includes('HYPTOK'), '连字符复合键令牌不得落盘');
+    assert.ok(!hyphen.failureReason?.includes('DOTTEDSECRET'), '点号复合键密钥不得落盘');
+    assert.ok(hyphen.failureReason?.includes('access-token=<REDACTED>'), '连字符复合键应脱敏');
+    assert.ok(hyphen.failureReason?.includes('api.token=<REDACTED>'), '点号复合键应脱敏');
+    // JSON 键值对形态：{"password":..} / {"access_token":..} 不得落盘
+    const json = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: '响应异常 {"password":"JPWD_ABC","access_token": "JTOK_XYZ"}',
+    });
+    assert.ok(!json.failureReason?.includes('JPWD_ABC'), 'JSON 密码不得落盘');
+    assert.ok(!json.failureReason?.includes('JTOK_XYZ'), 'JSON 令牌不得落盘');
+  });
+
+  it('失败原因脱敏：独立 key/code 不脱敏（避免过度脱敏），真敏感键仍脱敏', async () => {
+    const rig = makeRig();
+    // 独立 key=1 / code=404 属正常排查信息，不得被误抹（防止过度脱敏）
+    const normal = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: '记录 id=42 key=1 code=404 status=OK',
+    });
+    assert.ok(normal.failureReason?.includes('key=1'), '独立 key 不应被脱敏');
+    assert.ok(normal.failureReason?.includes('code=404'), '独立 code 不应被脱敏');
+    // 复合前缀键仍须脱敏，不得因收紧而漏报
+    const composite = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: '失败 api_key=APIKEYVAL verify_code=VERIFYCODEVAL client_secret=CSVAL',
+    });
+    for (const sec of ['APIKEYVAL', 'VERIFYCODEVAL', 'CSVAL']) {
+      assert.ok(!composite.failureReason?.includes(sec), `复合敏感键 ${sec} 不得落盘`);
+    }
+  });
+
   it('仓储查询 limit<=0 返回空，缺省/正数返回最近 N 条', async () => {
     const rig = makeRig();
     await rig.writer.write({ ...baseEvent, actorId: 'u1' });
