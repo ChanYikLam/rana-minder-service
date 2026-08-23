@@ -18,6 +18,11 @@ import { InMemoryCorrectionRepository } from './infrastructure/correction-reposi
 import { AUDIT_REPOSITORY } from './infrastructure/audit-repository';
 import { PostgresAuditRepository } from './infrastructure/postgres-audit-repository';
 import { AuditUnitOfWork } from './infrastructure/audit-unit-of-work';
+import { ArchiveActivityCommand } from './application/commands/archive-activity.command';
+import { ArchiveAccessQuery } from './application/queries/archive-access.query';
+import { ArchiveAccessPolicy } from './domain/services/archive-access-policy';
+import { ARCHIVE_REPOSITORY } from './infrastructure/archive-repository';
+import { InMemoryArchiveRepository } from './infrastructure/archive-repository';
 
 /**
  * 领域模块：纠错、审计与数据生命周期（5.3，SRS-SM-AUD-001）。
@@ -60,6 +65,10 @@ import { AuditUnitOfWork } from './infrastructure/audit-unit-of-work';
     CorrectionStatusQuery,
     AuditWriter,
     AuditQuery,
+    ArchiveActivityCommand,
+    ArchiveAccessQuery,
+    ArchiveAccessPolicy,
+    { provide: ARCHIVE_REPOSITORY, useClass: InMemoryArchiveRepository },
   ],
   exports: [
     SaveCorrectionDraftCommand,
@@ -70,8 +79,11 @@ import { AuditUnitOfWork } from './infrastructure/audit-unit-of-work';
     CorrectionStatusQuery,
     AuditWriter,
     AuditQuery,
+    ArchiveActivityCommand,
+    ArchiveAccessQuery,
     CORRECTION_REPOSITORY,
     AUDIT_REPOSITORY,
+    ARCHIVE_REPOSITORY,
     AuditUnitOfWork,
   ],
 })
