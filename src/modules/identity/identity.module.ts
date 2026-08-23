@@ -139,11 +139,16 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
           return new OidcAuthSessionProvider({
             sessionSecret,
             // CAS-REC-002 实时读回：每次请求复查账号状态（禁用/删除即时拒绝）。
+            // 同时把读回观测写回 tracker（CAS-FAIL-001）：Casdoor 不可达时收紧降级窗口。
             checkAccountState: async (subjectId): Promise<AccountStateObservation> => {
               const user = await casdoor.getUser(subjectId);
               if (user.status !== 'SUCCESS' || user.data === null) {
-                return null; // 无法确定（未接线/不可达）
+                // 无法确定（未接线/不可达）→ 同步标记不可用，让降级窗口生效。
+                tracker.setAvailable(false);
+                return null;
               }
+              // 读回成功 → Casdoor 可达，恢复可用观测。
+              tracker.setAvailable(true);
               const state = user.data.state;
               if (state === 'ACTIVE' || state === 'DISABLED' || state === 'DELETED') {
                 return state;

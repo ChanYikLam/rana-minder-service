@@ -18,12 +18,14 @@
  */
 
 import { Controller, Delete, Get, HttpCode, Inject } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { type Request as ExpressRequest, type Response } from 'express';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../../../config';
 import { CasdoorOidcClient } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import type { CasdoorOidcConfig } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-provider';
 import { CasdoorAvailabilityTracker } from './casdoor-availability-tracker';
+import { InMemoryOidcNonceStore } from './oidc-nonce-store';
 import { resolveCasdoorClientSecret, deriveSessionSecret } from './session-security';
 
 /** GET /api/auth/session 响应（API-AUTH-001） */
@@ -49,6 +51,7 @@ export interface SessionResponse {
 export class CasdoorSessionController {
   private oidcClient?: CasdoorOidcClient;
   private sessionSecret?: Uint8Array;
+  private readonly nonceStore = new InMemoryOidcNonceStore();
 
   constructor(
     @Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig,
@@ -59,7 +62,9 @@ export class CasdoorSessionController {
   @Get('casdoor/login-url')
   async getLoginUrl(_req: ExpressRequest): Promise<{ url: string }> {
     const client = this.ensureClient();
-    const nonce = crypto.randomUUID();
+    const nonce = randomUUID();
+    // 服务端记录本次授权请求的 nonce，回调时校验并一次性消费（登录 CSRF/会话固定防护）。
+    this.nonceStore.issue(nonce);
     const state = { nonce };
     const url = await client.buildAuthorizationUrl(state);
     return { url };
@@ -76,13 +81,17 @@ export class CasdoorSessionController {
       throw new SessionError('Missing code or state', 400);
     }
 
-    // 解码 state → nonce
+    // 解码 state → nonce，并校验该 nonce 确由本服务签发（一次性消费）。
+    // 未签发/已消费/过期一律拒绝，防登录 CSRF 与会话固定（CAS-CAP-004）。
     let nonce: string;
     try {
       const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8'));
       nonce = state.nonce;
     } catch {
       throw new SessionError('Invalid state', 400);
+    }
+    if (typeof nonce !== 'string' || !this.nonceStore.consume(nonce)) {
+      throw new SessionError('Invalid or expired state (nonce not issued by this service)', 400);
     }
 
     // 交换授权码 → TokenSet
@@ -105,11 +114,12 @@ export class CasdoorSessionController {
     let degradedSince: string | null = null;
     try {
       const accountState = await client.fetchAccountState(tokens.accessToken);
-      if (accountState === 'DISABLED' || accountState === 'DELETED') {
-        throw new SessionError('账号已被禁用或删除', 403, 'IFC-ERR-011');
+      // UNKNOWN fail-closed（CAS-CAP-005）：字段缺失时不宣称账号有效，拒绝建立会话。
+      if (accountState === 'DISABLED' || accountState === 'DELETED' || accountState === 'UNKNOWN') {
+        throw new SessionError('账号已被禁用/删除或状态不可确认', 403, 'IFC-ERR-011');
       }
     } catch (err) {
-      // 账号确认为禁用/删除 → 403（rethrow 保持语义）
+      // 账号确认为禁用/删除/不可确认 → 403（rethrow 保持语义）
       if (err instanceof SessionError) {
         throw err;
       }
@@ -133,8 +143,13 @@ export class CasdoorSessionController {
       this.sessionSecret!,
     );
 
-    // Set-Cookie (HttpOnly, Secure 在 dev 环境不强制)
-    res.setHeader('Set-Cookie', `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
+    // Set-Cookie：HttpOnly + SameSite=Lax 强制；Secure 在 HTTPS 下启用（防明文截获）。
+    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    const secureAttr = secure ? '; Secure' : '';
+    res.setHeader(
+      'Set-Cookie',
+      `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax${secureAttr}`,
+    );
 
     return {
       user: {
@@ -153,8 +168,14 @@ export class CasdoorSessionController {
   /** DELETE /api/auth/logout */
   @Delete('logout')
   @HttpCode(200)
-  async logout(_req: ExpressRequest, res: Response): Promise<{ ok: boolean }> {
-    res.setHeader('Set-Cookie', 'session_token=; Path=/; Max-Age=0');
+  async logout(req: ExpressRequest, res: Response): Promise<{ ok: boolean }> {
+    // 清 cookie 时使用与写入一致的 Path/HttpOnly/SameSite/Secure 属性，确保真正清除。
+    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    const secureAttr = secure ? '; Secure' : '';
+    res.setHeader(
+      'Set-Cookie',
+      `session_token=; Path=/; HttpOnly; SameSite=Lax${secureAttr}; Max-Age=0`,
+    );
     return { ok: true };
   }
 
