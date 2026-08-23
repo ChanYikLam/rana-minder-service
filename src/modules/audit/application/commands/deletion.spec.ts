@@ -29,7 +29,9 @@ const makeRig = (executor: { ok: boolean } = { ok: true }) => {
     { deleteAndVerify: async () => executor } as never,
     audit.writer,
   );
-  const cleanup = new RetentionCleanupCommand();
+  const cleanup = new RetentionCleanupCommand({
+    deleteAndVerify: async () => ({ ok: true }),
+  } as never);
   const query = new DeletionChecklistQuery(repo, policy);
   return { repo, formalDelete, execute, cleanup, query, writes: audit.writes };
 };
@@ -44,7 +46,7 @@ const deleteInput = {
   initiator: { principalId: 'sa1', roles: ['SUPER_ADMIN'] },
   scope: { kind: DeletionScopeKind.USER_ALL_DATA, principalId: 'u1' },
   reason: '用户申请彻底删除本地数据',
-  purpose: '合规删除',
+  purpose: 'LEGAL_REQUIREMENT',
   confirmed: true,
   affectedObjects: ['报名:r1', '评价:e1'],
   activeRelations: [],
@@ -71,10 +73,14 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
       rig.formalDelete.execute({ ...deleteInput, confirmed: false }),
       /二次确认/,
     );
-    // 变相匿名化（不建设匿名化；AUD-010）
+    // 白名单外用途（含匿名化措辞）→ 拒绝（I1 结构化白名单，防措辞绕过；AUD-010 不建设匿名化）
     await assert.rejects(
       rig.formalDelete.execute({ ...deleteInput, purpose: '匿名化保留统计' }),
-      /不建设匿名化/,
+      /不支持的删除用途/,
+    );
+    await assert.rejects(
+      rig.formalDelete.execute({ ...deleteInput, purpose: 'LEGAL_REQUIREMENT2' }),
+      /不支持的删除用途/,
     );
     // 业务关系未结束（有效邀请未结束 → 拒绝，AUD-008）
     await assert.rejects(
@@ -194,7 +200,7 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(b, false); // 第二个提交失败（版本冲突，防重复删除）
   });
 
-  it('评审修复：最小审计写入失败 → 清单不宣称完成（先审计后提交，杜绝审计丢失）', async () => {
+  it('评审修复：审计写入失败 → 命令抛错（删除已核验完成；恢复重放补写审计）', async () => {
     const repo = new InMemoryDeletionChecklistRepository();
     const policy = new DeletionPolicy();
     const formalDelete = new FormalDeleteCommand(repo, policy);
@@ -209,10 +215,23 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
       failingAudit as never,
     );
     const checklist = await formalDelete.execute(deleteInput);
-    // 审计失败 → 命令抛错且清单保持未完成（不得宣称完成）
+    // 审计写入失败 → 命令抛错（调用方知悉审计缺失）；删除步骤已核验完成（事实）
     await assert.rejects(execute.execute(execInput(checklist.checklistId)), /audit db down/);
     const after = await repo.load(checklist.checklistId);
-    assert.equal(after!.completed, false);
+    assert.equal(after!.completed, true); // CAS 已提交（删除完成是事实）
+    // 恢复重放可补写审计：换可用审计后 replay 重执行并落审计
+    const retryAudit = {
+      writes: [] as unknown[],
+      write: async (e: unknown) => void retryAudit.writes.push(e),
+    };
+    const retry = new ExecuteDeletionChecklistCommand(
+      repo,
+      { deleteAndVerify: async () => ({ ok: true }) } as never,
+      retryAudit as never,
+    );
+    const replayed = await retry.execute(execInput(checklist.checklistId, { replay: true }));
+    assert.equal(replayed.completed, true);
+    assert.equal(retryAudit.writes.length, 1); // 重放补写 SUCCESS 最小审计
   });
 
   it('部分失败保持未完成：不宣称完成，持续重试（AUD-009/IFC-TX-007）', async () => {

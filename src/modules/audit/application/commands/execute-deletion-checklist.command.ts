@@ -96,6 +96,23 @@ export class ExecuteDeletionChecklistCommand {
     const completed =
       failed === 0 && verified === checklist.steps.length && checklist.steps.length > 0;
 
+    const updated: DeletionChecklist = {
+      ...checklist,
+      steps,
+      completed,
+      replayCount: input.replay === true ? checklist.replayCount + 1 : checklist.replayCount,
+      version: checklist.version + 1,
+    };
+    // 乐观锁提交：并发执行（同一清单）只一个成功（W1）；**先提交成功再落审计**，
+    // 失败方在 CAS 处抛 IFC-ERR-016，不遗留误导性审计（评审意见）
+    const committed = await this.repo.compareAndSwap(checklist, updated);
+    if (!committed) {
+      throw new DeletionPolicyError(
+        'IFC-ERR-016',
+        '删除清单已被并发执行修改，本次执行作废，请重试',
+      );
+    }
+
     // 最小审计（仅内部标识/时间/超管/类型；不含敏感正文，AUD-006/008）
     const minimalAudit: MinimalDeletionAudit | null = completed
       ? {
@@ -106,8 +123,8 @@ export class ExecuteDeletionChecklistCommand {
           note: 'minimal-audit-only',
         }
       : null;
-    // **先写审计成功，再提交清单**（W2/事务顺序）：审计写入失败则清单保持
-    // 未完成（删除步骤已执行但不得宣称完成，重试补写审计），杜绝"已完成但审计丢失"
+    // 仅对**真正提交成功的执行**落审计（CAS 已成功）：成功 → SUCCESS 最小审计；
+    // 部分失败 → FAILURE 尝试审计（AUD-009 保留尝试审计，失败详情脱敏）
     if (minimalAudit !== null) {
       await this.auditWriter.write({
         eventType: AuditEventType.SUPER_ADMIN_OP,
@@ -122,7 +139,6 @@ export class ExecuteDeletionChecklistCommand {
         requestId: input.audit.requestId,
       });
     } else if (failed > 0) {
-      // 部分失败：保留尝试审计（AUD-009），失败详情脱敏；清单保持未完成持续重试
       await this.auditWriter.write({
         eventType: AuditEventType.SUPER_ADMIN_OP,
         actorId: checklist.initiatedBy,
@@ -136,22 +152,6 @@ export class ExecuteDeletionChecklistCommand {
         failureReason: 'deletion-steps-not-verified',
         requestId: input.audit.requestId,
       });
-    }
-
-    const updated: DeletionChecklist = {
-      ...checklist,
-      steps,
-      completed,
-      replayCount: input.replay === true ? checklist.replayCount + 1 : checklist.replayCount,
-      version: checklist.version + 1,
-    };
-    // 乐观锁提交：并发执行（同一清单）只一个成功，防重复删除（W1）
-    const committed = await this.repo.compareAndSwap(checklist, updated);
-    if (!committed) {
-      throw new DeletionPolicyError(
-        'IFC-ERR-016',
-        '删除清单已被并发执行修改，本次执行作废，请重试',
-      );
     }
     return { checklist: updated, completed, minimalAudit };
   }

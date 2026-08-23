@@ -10,6 +10,25 @@
  */
 export const SUPER_ADMIN_ROLE = 'SUPER_ADMIN';
 
+/**
+ * 正式删除用途（结构化白名单；I1 评审意见——防自由文本措辞绕过合规校验）。
+ * 不包含任何匿名化类用途：不建设匿名化（AUD-010），完整删除不属于匿名化。
+ */
+export const DeletionPurpose = {
+  /** 用户申请删除其本地数据 */
+  USER_REQUEST: 'USER_REQUEST',
+  /** 法律/合规要求 */
+  LEGAL_REQUIREMENT: 'LEGAL_REQUIREMENT',
+  /** 数据质量纠错（违规内容/重复数据） */
+  DATA_QUALITY: 'DATA_QUALITY',
+  /** 保留策略违规数据处置 */
+  RETENTION_VIOLATION: 'RETENTION_VIOLATION',
+} as const;
+
+export type DeletionPurpose = (typeof DeletionPurpose)[keyof typeof DeletionPurpose];
+
+const ALLOWED_PURPOSES: readonly string[] = Object.values(DeletionPurpose);
+
 /** 前置失败（IFC-ERR-003 无权 / IFC-ERR-005 输入无效 / IFC-ERR-006 前置失败 / IFC-ERR-015 结果不可见 / IFC-ERR-016 内部提交失败） */
 export class DeletionPolicyError extends Error {
   constructor(
@@ -56,12 +75,15 @@ export class DeletionPolicy {
   }
 
   /**
-   * 不建设匿名化（AUD-010）：拒绝变相匿名化（保留统计/身份字段清除等）。
-   * 完整删除不属于匿名化——本命令只做删除，不提供匿名化流程。
+   * 删除用途白名单校验（I1 评审意见）：结构化用途枚举，防自由文本措辞绕过；
+   * 白名单不含匿名化类用途（不建设匿名化，AUD-010；完整删除不属于匿名化）。
    */
-  assertNotAnonymization(purpose: string): void {
-    if (/匿名|脱敏保留统计|身份字段清除|pseudonym/i.test(purpose)) {
-      throw new DeletionPolicyError('IFC-ERR-006', '不建设匿名化；完整删除不属于匿名化');
+  assertPurposeAllowed(purpose: string): void {
+    if (!ALLOWED_PURPOSES.includes(purpose)) {
+      throw new DeletionPolicyError(
+        'IFC-ERR-005',
+        '不支持的删除用途（白名单：USER_REQUEST/LEGAL_REQUIREMENT/DATA_QUALITY/RETENTION_VIOLATION）；不建设匿名化',
+      );
     }
   }
 }

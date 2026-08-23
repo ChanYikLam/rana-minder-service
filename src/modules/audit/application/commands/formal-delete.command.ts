@@ -46,7 +46,7 @@ export class FormalDeleteCommand {
   async execute(input: FormalDeleteInput): Promise<DeletionChecklist> {
     this.policy.assertSuperAdmin(input.initiator.roles);
     this.policy.assertReason(input.reason);
-    this.policy.assertNotAnonymization(input.purpose);
+    this.policy.assertPurposeAllowed(input.purpose);
     this.policy.assertConfirmed(input.confirmed);
     this.policy.assertBusinessRelationsEnded(input.activeRelations);
     this.assertScopeComplete(input.scope);

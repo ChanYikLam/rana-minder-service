@@ -30,10 +30,14 @@ import {
   DELETION_STEP_EXECUTOR,
 } from './application/commands/execute-deletion-checklist.command';
 import { RetentionCleanupCommand } from './application/commands/retention-cleanup.command';
+import {
+  RETENTION_CLEANUP_EXECUTOR,
+  DefaultRetentionCleanupExecutor,
+} from './application/commands/retention-cleanup.command';
 import { DeletionChecklistQuery } from './application/queries/deletion-checklist.query';
 import { DeletionPolicy } from './domain/services/deletion-policy';
 import { DELETION_CHECKLIST_REPOSITORY } from './infrastructure/deletion-checklist-repository';
-import { InMemoryDeletionChecklistRepository } from './infrastructure/deletion-checklist-repository';
+import { PostgresDeletionChecklistRepository } from './infrastructure/postgres-deletion-checklist-repository';
 
 /**
  * 领域模块：纠错、审计与数据生命周期（5.3，SRS-SM-AUD-001）。
@@ -81,11 +85,27 @@ import { InMemoryDeletionChecklistRepository } from './infrastructure/deletion-c
     ArchiveAccessPolicy,
     { provide: ARCHIVE_REPOSITORY, useClass: InMemoryArchiveRepository },
     DeletionPolicy,
-    { provide: DELETION_CHECKLIST_REPOSITORY, useClass: InMemoryDeletionChecklistRepository },
-    { provide: DELETION_STEP_EXECUTOR, useClass: DefaultDeletionStepExecutor },
+    {
+      provide: DELETION_CHECKLIST_REPOSITORY,
+      // 生产默认 PostgreSQL 落盘（删除清单独立持久化，重启不丢、恢复重放有效；
+      // W2 评审意见）；DB 未连接（NotWired 桩）时失败关闭。内存实现仅保留为测试占位。
+      useFactory: (db) => new PostgresDeletionChecklistRepository(db),
+      inject: [DB_ADAPTER],
+    },
+    {
+      provide: DELETION_STEP_EXECUTOR,
+      // 开发期占位（恒确认）；上线前须接入真实各存储删除执行器（在线库/附件/缓存/
+      // 索引/未过期导出），接入后 deleteAndVerify 执行删除并回读核验（AUD-009/IFC-TX-007）
+      useClass: DefaultDeletionStepExecutor,
+    },
     FormalDeleteCommand,
     ExecuteDeletionChecklistCommand,
     RetentionCleanupCommand,
+    {
+      provide: RETENTION_CLEANUP_EXECUTOR,
+      // 开发期占位（恒确认）；生产接真实临时清理执行器（I2 评审意见）
+      useClass: DefaultRetentionCleanupExecutor,
+    },
     DeletionChecklistQuery,
   ],
   exports: [
@@ -108,6 +128,7 @@ import { InMemoryDeletionChecklistRepository } from './infrastructure/deletion-c
     ARCHIVE_REPOSITORY,
     DELETION_CHECKLIST_REPOSITORY,
     DELETION_STEP_EXECUTOR,
+    RETENTION_CLEANUP_EXECUTOR,
     AuditUnitOfWork,
   ],
 })
