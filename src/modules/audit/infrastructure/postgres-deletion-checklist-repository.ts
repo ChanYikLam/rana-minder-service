@@ -17,6 +17,7 @@ interface DeletionChecklistRow {
   readonly checklist_id: string;
   readonly scope: unknown;
   readonly reason: string;
+  readonly purpose: string;
   readonly initiated_by: string;
   readonly initiated_at: Date;
   readonly confirmed: boolean;
@@ -33,6 +34,7 @@ function toRow(c: DeletionChecklist): DeletionChecklistRow {
     checklist_id: c.checklistId,
     scope: JSON.stringify(c.scope),
     reason: c.reason,
+    purpose: c.purpose,
     initiated_by: c.initiatedBy,
     initiated_at: new Date(c.initiatedAt),
     confirmed: c.confirmed,
@@ -50,6 +52,7 @@ function fromRow(r: DeletionChecklistRow): DeletionChecklist {
     checklistId: r.checklist_id,
     scope: JSON.parse(r.scope as string) as DeletionChecklist['scope'],
     reason: r.reason,
+    purpose: r.purpose,
     initiatedBy: r.initiated_by,
     initiatedAt: (r.initiated_at as Date).toISOString(),
     confirmed: r.confirmed,
@@ -90,13 +93,14 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
       await this.db.query(
         tx,
         `INSERT INTO deletion_checklist (
-           checklist_id, scope, reason, initiated_by, initiated_at, confirmed,
+           checklist_id, scope, reason, purpose, initiated_by, initiated_at, confirmed,
            affected_objects, business_relations_ended, steps, completed, replay_count, version
-         ) VALUES ($1, $2::jsonb, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12)`,
+         ) VALUES ($1, $2::jsonb, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13)`,
         [
           row.checklist_id,
           row.scope,
           row.reason,
+          row.purpose,
           row.initiated_by,
           row.initiated_at,
           row.confirmed,
@@ -115,7 +119,7 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
     return this.inTx(async (tx) => {
       const rows = await this.db.query<DeletionChecklistRow>(
         tx,
-        `SELECT checklist_id, scope, reason, initiated_by, initiated_at, confirmed,
+        `SELECT checklist_id, scope, reason, purpose, initiated_by, initiated_at, confirmed,
                 affected_objects, business_relations_ended, steps, completed, replay_count, version
          FROM deletion_checklist WHERE checklist_id = $1`,
         [checklistId],
@@ -139,14 +143,15 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
       await this.db.query(
         tx,
         `UPDATE deletion_checklist SET
-           scope = $2::jsonb, reason = $3, initiated_by = $4, initiated_at = $5,
-           confirmed = $6, affected_objects = $7::jsonb, business_relations_ended = $8,
-           steps = $9::jsonb, completed = $10, replay_count = $11, version = $12
-         WHERE checklist_id = $1 AND version = $13`,
+           scope = $2::jsonb, reason = $3, purpose = $4, initiated_by = $5, initiated_at = $6,
+           confirmed = $7, affected_objects = $8::jsonb, business_relations_ended = $9,
+           steps = $10::jsonb, completed = $11, replay_count = $12, version = $13
+         WHERE checklist_id = $1 AND version = $14`,
         [
           row.checklist_id,
           row.scope,
           row.reason,
+          row.purpose,
           row.initiated_by,
           row.initiated_at,
           row.confirmed,
@@ -173,7 +178,7 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
 
   private async listWhere(where: string): Promise<readonly DeletionChecklist[]> {
     return this.inTx(async (tx) => {
-      const sql = `SELECT checklist_id, scope, reason, initiated_by, initiated_at, confirmed,
+      const sql = `SELECT checklist_id, scope, reason, purpose, initiated_by, initiated_at, confirmed,
                           affected_objects, business_relations_ended, steps, completed, replay_count, version
                    FROM deletion_checklist${where.length > 0 ? ` WHERE ${where}` : ''}
                    ORDER BY initiated_at`;

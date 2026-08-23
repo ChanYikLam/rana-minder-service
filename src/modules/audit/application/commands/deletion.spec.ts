@@ -128,6 +128,7 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
   it('正式删除排队：生成 5 类步骤清单 + 受影响对象预览', async () => {
     const rig = makeRig();
     const checklist = await rig.formalDelete.execute(deleteInput);
+    assert.equal(checklist.purpose, 'LEGAL_REQUIREMENT'); // 结构化用途随清单落库（合规追溯）
     assert.equal(checklist.completed, false);
     assert.equal(checklist.businessRelationsEnded, true);
     assert.equal(checklist.steps.length, 5);

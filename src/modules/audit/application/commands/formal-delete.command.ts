@@ -75,6 +75,7 @@ export class FormalDeleteCommand {
       checklistId: randomUUID(),
       scope: input.scope,
       reason: input.reason,
+      purpose: input.purpose,
       initiatedBy: input.initiator.principalId,
       initiatedAt: new Date().toISOString(),
       confirmed: input.confirmed,

@@ -138,7 +138,8 @@ export class ExecuteDeletionChecklistCommand {
         outcome: AuditOutcome.SUCCESS,
         requestId: input.audit.requestId,
       });
-    } else if (failed > 0) {
+    } else if (failed > 0 || checklist.steps.length === 0) {
+      // 部分失败或空清单（理论防御）：保留尝试审计（AUD-009），失败详情脱敏
       await this.auditWriter.write({
         eventType: AuditEventType.SUPER_ADMIN_OP,
         actorId: checklist.initiatedBy,

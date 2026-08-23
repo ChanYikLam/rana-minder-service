@@ -60,6 +60,8 @@ export interface DeletionChecklist {
   readonly scope: DeletionScope;
   /** 删除原因（超管必填；AUD-005） */
   readonly reason: string;
+  /** 结构化删除用途（I1 白名单；随清单落库供合规追溯） */
+  readonly purpose: string;
   readonly initiatedBy: string;
   readonly initiatedAt: string;
   /** 二次确认（展示受影响对象清单后确认；AUD-005/009） */
