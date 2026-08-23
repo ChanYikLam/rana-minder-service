@@ -294,10 +294,12 @@ export class ExportApplyCommand {
         // 回放展示的 rejectedFields 读取首次冻结时固化进快照的历史值（评审②幂等回放纵深：
         // 与实时 STATISTICS_SPECIFICATION 基线彻底解耦，保证回放展示与首次创建永远一致，
         // 即便基线在 hashVersion 递增滞后/被意外修改时也不漂移）。
+        // 兼容历史/反序列化的旧快照（#138 固化前创建、可能不含 rejectedFields 字段）：
+        // 用 ?? [] 兜底，避免回放返回 undefined 破坏 ExportApplyResult.rejectedFields 数组契约。
         return {
           task: existing,
           replayed: true,
-          rejectedFields: existing.snapshot.data.rejectedFields,
+          rejectedFields: existing.snapshot.data.rejectedFields ?? [],
           request,
         };
       }

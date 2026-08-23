@@ -18,7 +18,11 @@ import {
   type ExportDatasetType,
 } from '../../domain/models/statistics-specification';
 import { ExportTaskAggregate } from '../../domain/models/export-task';
-import { ExportTaskStatus } from '../../domain/state-machines/export-task.state-machine';
+import type { ExportSnapshot } from '../../domain/models/export-snapshot';
+import {
+  ExportTaskStatus,
+  ExportTaskStateMachine,
+} from '../../domain/state-machines/export-task.state-machine';
 import { ExportError } from '../errors';
 import { platformSuperAdminPrincipal, clubLeaderPrincipal } from '../export-authorization.policy';
 import type { ExportPrincipal } from '../ports/export-authorization.port';
@@ -305,6 +309,45 @@ describe('P2 导出申请（幂等/快照/越权/停用/联合失效）', () => 
     // 回放应恢复与首次创建一致的越权字段剔除清单
     assert.deepEqual(b.rejectedFields, a.rejectedFields);
     assert.ok(b.rejectedFields.includes('phone'));
+  });
+
+  it('申请幂等：历史/反序列化旧快照缺 rejectedFields 字段时，回放兜底为空数组（兼容评审②三方反馈）', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const input = {
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      idempotencyKey: 'k-legacy-snapshot',
+      request: {
+        kind: 'club' as const,
+        clubId: 'C1',
+        datasets: ['club_summary'] as const,
+        // phone 属 NEVER_EXPORT（EXP-002），首次创建即被剔除
+        fields: { club_summary: ['memberCount', 'phone'] },
+      },
+    };
+    const first = await h.apply.execute(input);
+    assert.equal(first.replayed, false);
+
+    // 模拟历史/反序列化的旧快照（#138 固化 rejectedFields 之前创建）：
+    // 把仓库中该任务快照的 rejectedFields 字段剥离，重现旧快照的运行时形状。
+    const loaded = await h.repo.load(first.task.id);
+    assert.ok(loaded);
+    const legacyData = loaded.toData();
+    const legacySnapshotData = { ...legacyData.snapshot.data };
+    delete (legacySnapshotData as { rejectedFields?: unknown }).rejectedFields;
+    const legacyTask = ExportTaskAggregate.fromSnapshot(new ExportTaskStateMachine(), {
+      ...legacyData,
+      snapshot: { data: legacySnapshotData } as unknown as ExportSnapshot,
+    });
+    await h.repo.save(legacyTask, { expectedRevision: loaded.revisionNumber });
+
+    // 同 key 回放 → 旧快照缺 rejectedFields，应兜底为空数组而非 undefined，
+    // 保证 ExportApplyResult.rejectedFields 始终满足 readonly string[] 契约。
+    const replay = await h.apply.execute(input);
+    assert.equal(replay.replayed, true);
+    assert.deepEqual(replay.rejectedFields, []);
   });
 
   it('申请幂等：回放 rejectedFields 读取快照固化值，与实时基线漂移解耦（评审②纵深）', async () => {
