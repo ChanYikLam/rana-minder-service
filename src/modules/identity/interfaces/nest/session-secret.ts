@@ -1,42 +1,21 @@
 /**
- * 本地会话 JWT 签名密钥解析（interfaces/nest；CAS-AUTH-001）。
+ * 会话密钥派生（interfaces/nest；API-AUTH-001）。
  *
- * 安全要求：签名密钥必须是高熵、不可预测的（否则本地会话令牌可被伪造/提权）。
+ * 会话 JWT 的本地签名密钥由 Casdoor clientSecret 的实际值派生。此派生规则必须在
+ * 模块装配（签发方）与会话控制器（签发）之间保持一致——二者任一不同步都会
+ * 导致签发的会话 JWT 无法被 OidcAuthSessionProvider 验证。故收敛为单一共享
+ * 工具，消除两处重复实现。
  *
- * 解析优先级（ADR-010 外置秘密引用）：
- *   1. casdoor.sessionSecretRef 配置（独立随机高熵密钥，推荐）——解析后直接作为密钥；
- *   2. 未配置时回退到解析后的 Casdoor clientSecret（生产为 Casdoor 随机生成的高熵
- *      密钥，HMAC 派生）。**禁止**从 clientSecretRef 引用串派生——引用串（如
- *      ${env:CASDOOR_CLIENT_SECRET}）是低熵、可被猜测的，用作签名密钥可导致
- *      本地会话令牌被伪造。
+ * 安全要求（ADR-010）：调用方必须先 resolveSecret(clientSecretRef) 得到真实
+ * 秘密后再传入，**禁止**直接传入未解析的引用串（如 ${env:...}）。引用串是
+ * 仓库/配置里固定的公开常量，若直接以其派生，会话签名密钥对所有环境恒定且可
+ * 离线推导，等同会话劫持（Critical）。
  */
 
 import { createHash } from 'node:crypto';
-import { isSecretRef, resolveSecret } from '../../../../config';
-import type { CasdoorConfig } from '../../../../config';
 
-/**
- * 解析本地会话签名密钥（Uint8Array，供 jose HS256 使用）。
- * @param casdoor Casdoor 配置
- * @param logWarning 可选回调，用于在回退到 clientSecret 派生时记录提示（避免日志泄漏）
- */
-export function resolveSessionSecret(
-  casdoor: CasdoorConfig,
-  logWarning?: (message: string) => void,
-): Uint8Array {
-  if (casdoor.sessionSecretRef) {
-    const secret = isSecretRef(casdoor.sessionSecretRef)
-      ? resolveSecret(casdoor.sessionSecretRef)
-      : casdoor.sessionSecretRef;
-    return new TextEncoder().encode(secret);
-  }
-  logWarning?.(
-    'CAS-AUTH-001: 未配置 casdoor.sessionSecretRef，会话签名密钥回退到 Casdoor clientSecret 派生（建议配置独立随机高熵密钥）',
-  );
-  // 从解析后的真实 clientSecret（高熵）派生，而非 clientSecretRef 引用串。
-  const clientSecret = isSecretRef(casdoor.clientSecretRef)
-    ? resolveSecret(casdoor.clientSecretRef)
-    : casdoor.clientSecretRef;
+/** 由 casdoor.clientSecret 的真实值派生会话签名密钥（HS256 32 字节）。 */
+export function deriveSessionSecret(clientSecret: string): Uint8Array {
   return new TextEncoder().encode(
     createHash('sha256').update(`ranaminder-session:${clientSecret}`).digest('hex'),
   );

@@ -74,6 +74,14 @@ export class ControlledBatchStateMachine {
     retry_items_finished: ['failed_items_retrying'],
   };
 
+  /**
+   * 受控批量已知事件集合（唯一来源：状态机转换表）。
+   * 供用例层 drive 校验事件合法性，避免与 TABLE 双份维护造成漂移（DRY）。
+   */
+  static knownEvents(): ReadonlySet<BatchEvent> {
+    return new Set<BatchEvent>(Object.keys(ControlledBatchStateMachine.TABLE) as BatchEvent[]);
+  }
+
   private allowedFrom(event: BatchEvent, status: ControlledBatchStatus): boolean {
     return ControlledBatchStateMachine.TABLE[event].includes(status);
   }
