@@ -19,7 +19,7 @@ import { randomUUID } from 'node:crypto';
  * position（具体/高权限）逐级收敛；未登记用途视为最高风险，置末（rank 4）。
  * 模块级常量，避免 orderFor 每次调用重建。
  */
-const PURPOSE_RANK: Readonly<Record<NonNullable<GroupPurpose>, number>> = {
+const PURPOSE_RANK: Readonly<Record<GroupPurpose, number>> = {
   club: 1,
   department: 2,
   position: 3,
@@ -234,7 +234,8 @@ export class RelationCommandUseCase {
       throw orgError.precondition('回读目标 Group 实况/用途失败，请稍后重试（ORG-027）', '', cause);
     }
 
-    // 2) 排序：remove 优先；同 kind 内 add 按用途升序
+    // 2) 排序：remove 优先；同 kind 内 add 按用途升序。相同 order 时用输入索引
+    // 作显式 tie-breaker，保证稳定且确定的次序（不依赖引擎 stable sort 隐式行为）。
     const ordered = annotated
       .map((a) => ({
         stepId: `step-${a.index}`,
@@ -243,10 +244,11 @@ export class RelationCommandUseCase {
         subjectId: input.subjectId,
         idempotencyKey: `${input.idempotencyKey}:${a.index}`,
         order: this.orderFor(a.kind, a.purpose),
+        index: a.index,
         purpose: a.purpose,
         present: a.present,
       }))
-      .sort((a, b) => a.order - b.order);
+      .sort((a, b) => a.order - b.order || a.index - b.index);
 
     // 3) 目标关系图（执行计划）：不携带运行时 result
     const target: RelationWriteStep[] = ordered.map((s) => ({
