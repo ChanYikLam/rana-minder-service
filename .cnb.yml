@@ -58,19 +58,20 @@
         - "!*.md"
         - "!(scripts/ci/**)"
       stages:
-        # 防线三 · 模拟合并（simulate-merge）：显式把 PR 源分支合入目标分支（默认 dev），
+        # 防线三 · 模拟合并（simulate-merge）：显式把 PR 源分支合入目标分支（默认取目标分支），
         # 精确检测合并冲突（add/add、rename/delete 等 CNB 隐式合并无法提前暴露的场景），
         # 冲突即 exit 1 标红，禁止异常合入（等价 GitHub merge-group）。
-        # 目标分支可经 TARGET_BRANCH 覆盖；本阶段在依赖安装前执行，尽早失败以节省资源。
+        # 目标分支默认取 CNB_BRANCH（PR 事件下即目标分支），可经 TARGET_BRANCH 覆盖；
+        # 本阶段在依赖安装前执行，尽早失败以节省资源。
         - name: 0-模拟合并冲突检测
           script: |
             set -e
             echo "== PR 源分支: ${CNB_PULL_REQUEST_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
-            echo "== 模拟合并目标分支: ${TARGET_BRANCH:-dev}"
-            git fetch origin "${TARGET_BRANCH:-dev}"
+            echo "== 模拟合并目标分支: ${TARGET_BRANCH:-$CNB_BRANCH}"
+            git fetch origin "${TARGET_BRANCH:-$CNB_BRANCH}"
             # 切到目标分支（detached），再把 PR 源分支合进来，
-            # 精确模拟“把本 PR 合入 dev 之后”的代码状态。
-            git checkout --detach "origin/${TARGET_BRANCH:-dev}"
+            # 精确模拟“把本 PR 合入目标分支之后”的代码状态。
+            git checkout --detach "origin/${TARGET_BRANCH:-$CNB_BRANCH}"
             # --no-commit --no-ff：只做合并动作、不生成提交，便于检测冲突
             if git merge --no-commit --no-ff "${CNB_PULL_REQUEST_SHA:-HEAD}"; then
               echo "== 模拟合并成功：无冲突 ✅"
