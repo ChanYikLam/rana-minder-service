@@ -23,6 +23,17 @@ import { ArchiveAccessQuery } from './application/queries/archive-access.query';
 import { ArchiveAccessPolicy } from './domain/services/archive-access-policy';
 import { ARCHIVE_REPOSITORY } from './infrastructure/archive-repository';
 import { InMemoryArchiveRepository } from './infrastructure/archive-repository';
+import { FormalDeleteCommand } from './application/commands/formal-delete.command';
+import {
+  ExecuteDeletionChecklistCommand,
+  DefaultDeletionStepExecutor,
+  DELETION_STEP_EXECUTOR,
+} from './application/commands/execute-deletion-checklist.command';
+import { RetentionCleanupCommand } from './application/commands/retention-cleanup.command';
+import { DeletionChecklistQuery } from './application/queries/deletion-checklist.query';
+import { DeletionPolicy } from './domain/services/deletion-policy';
+import { DELETION_CHECKLIST_REPOSITORY } from './infrastructure/deletion-checklist-repository';
+import { InMemoryDeletionChecklistRepository } from './infrastructure/deletion-checklist-repository';
 
 /**
  * 领域模块：纠错、审计与数据生命周期（5.3，SRS-SM-AUD-001）。
@@ -69,6 +80,13 @@ import { InMemoryArchiveRepository } from './infrastructure/archive-repository';
     ArchiveAccessQuery,
     ArchiveAccessPolicy,
     { provide: ARCHIVE_REPOSITORY, useClass: InMemoryArchiveRepository },
+    DeletionPolicy,
+    { provide: DELETION_CHECKLIST_REPOSITORY, useClass: InMemoryDeletionChecklistRepository },
+    { provide: DELETION_STEP_EXECUTOR, useClass: DefaultDeletionStepExecutor },
+    FormalDeleteCommand,
+    ExecuteDeletionChecklistCommand,
+    RetentionCleanupCommand,
+    DeletionChecklistQuery,
   ],
   exports: [
     SaveCorrectionDraftCommand,
@@ -81,9 +99,15 @@ import { InMemoryArchiveRepository } from './infrastructure/archive-repository';
     AuditQuery,
     ArchiveActivityCommand,
     ArchiveAccessQuery,
+    FormalDeleteCommand,
+    ExecuteDeletionChecklistCommand,
+    RetentionCleanupCommand,
+    DeletionChecklistQuery,
     CORRECTION_REPOSITORY,
     AUDIT_REPOSITORY,
     ARCHIVE_REPOSITORY,
+    DELETION_CHECKLIST_REPOSITORY,
+    DELETION_STEP_EXECUTOR,
     AuditUnitOfWork,
   ],
 })
