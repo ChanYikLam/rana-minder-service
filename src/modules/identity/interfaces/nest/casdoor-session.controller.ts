@@ -9,24 +9,33 @@
  * 端点不加 @UseGuards(AuthGuard)（会话建立前无认证主体）。
  * 会话 JWT 以 Set-Cookie 和 JSON body 双通道返回。
  *
- * 配置驱动：casdoor.endpoint 为空时本控制器不出现在路由表中（模块不注册），
- * 会话解析退回到 RejectAllAuthSessionProvider（fail-closed）。
- *
- * 密钥处理（ADR-010）：clientSecretRef 先经 resolveCasdoorClientSecret 解析为
- * 明文，再用于 OIDC client_secret 与派生会话 HMAC 密钥（单点化，见
- * session-security.ts，避免引用串直接当密钥导致的低熵可预测）。
+ * 配置驱动：casdoor.endpoint/clientId/clientSecretRef 缺失时，登录/会话端点
+ * 抛 SessionError(503 CAS-ERR-NOT_CONFIGURED)（fail-closed，不签发会话 JWT）；
+ * 会话解析退回到 RejectAllAuthSessionProvider（受保护端点 401 IFC-ERR-001）。
  */
 
-import { Controller, Delete, Get, HttpCode, Inject } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, HttpException, Inject } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { type Request as ExpressRequest, type Response } from 'express';
-import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../../../config';
+import {
+  RANA_MINDER_CONFIG,
+  isSecretRef,
+  resolveSecret,
+  type RanaMinderConfig,
+} from '../../../../config';
 import { CasdoorOidcClient } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
-import type { CasdoorOidcConfig } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
+import type {
+  CasdoorOidcConfig,
+  TokenSet,
+} from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-provider';
-import { CasdoorAvailabilityTracker } from './casdoor-availability-tracker';
+import { deriveSessionSecret } from './session-secret';
+import { CasdoorAvailability } from './casdoor-availability';
 import { InMemoryOidcNonceStore } from './oidc-nonce-store';
-import { resolveCasdoorClientSecret, deriveSessionSecret } from './session-security';
+import { CASDOOR_AVAILABILITY } from '../../tokens';
+
+/** Casdoor 账号状态（与 CasdoorOidcClient.fetchAccountState 返回值一致）。 */
+type AccountState = 'ACTIVE' | 'DISABLED' | 'DELETED' | 'UNKNOWN';
 
 /** GET /api/auth/session 响应（API-AUTH-001） */
 export interface SessionResponse {
@@ -55,7 +64,7 @@ export class CasdoorSessionController {
 
   constructor(
     @Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig,
-    private readonly availabilityTracker: CasdoorAvailabilityTracker,
+    @Inject(CASDOOR_AVAILABILITY) private readonly availability: CasdoorAvailability,
   ) {}
 
   /** GET /api/auth/casdoor/login-url */
@@ -66,14 +75,23 @@ export class CasdoorSessionController {
     // 服务端记录本次授权请求的 nonce，回调时校验并一次性消费（登录 CSRF/会话固定防护）。
     this.nonceStore.issue(nonce);
     const state = { nonce };
-    const url = await client.buildAuthorizationUrl(state);
-    return { url };
+    try {
+      const url = await client.buildAuthorizationUrl(state);
+      this.availability.markAvailable();
+      return { url };
+    } catch (error) {
+      this.availability.markUnavailable();
+      throw error;
+    }
   }
 
   /** GET /api/auth/session?code=xxx&state=yyy */
   @Get('session')
   async establishSession(req: ExpressRequest, res: Response): Promise<SessionResponse> {
     const client = this.ensureClient();
+    // 记录本次登录尝试开始前的 Casdoor 连通状态：若此前探测已判定不可用，则本次
+    // 成功建立的会话仍标记为 degraded，受 CAS-FAIL-001 的 15 分钟降级窗口约束。
+    const wasAvailable = this.availability.available;
     const code = req.query['code'] as string | undefined;
     const stateRaw = req.query['state'] as string | undefined;
 
@@ -82,7 +100,7 @@ export class CasdoorSessionController {
     }
 
     // 解码 state → nonce，并校验该 nonce 确由本服务签发（一次性消费）。
-    // 未签发/已消费/过期一律拒绝，防登录 CSRF 与会话固定（CAS-CAP-004）。
+    // 未签发/已消费/过期一律拒绝，防登录 CSRF 与会话固定。
     let nonce: string;
     try {
       const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8'));
@@ -94,13 +112,17 @@ export class CasdoorSessionController {
       throw new SessionError('Invalid or expired state (nonce not issued by this service)', 400);
     }
 
-    // 交换授权码 → TokenSet
-    const tokens = await client.exchangeCode(code);
+    // 交换授权码 → TokenSet（Casdoor 连通失败时标记降级窗口，CAS-FAIL-001）
+    let tokens: TokenSet;
+    try {
+      tokens = await client.exchangeCode(code);
+    } catch (error) {
+      this.availability.markUnavailable();
+      throw error;
+    }
     if (!tokens.idToken) {
       throw new SessionError('Token exchange failed', 401);
     }
-    // token 交换成功 → Casdoor 可达
-    this.availabilityTracker.setAvailable(true);
 
     // 验证 id_token（CAS-CAP-004：签发方/受众/有效期/主体绑定）
     const claims = await client.verifyIdToken(tokens.idToken, nonce);
@@ -109,27 +131,24 @@ export class CasdoorSessionController {
       throw new SessionError('Invalid id_token: missing sub', 401);
     }
 
-    // 检查账号状态（CAS-REC-002 实时读回）；Casdoor 不可达时降级签发。
-    let degraded = false;
-    let degradedSince: string | null = null;
+    // 检查账号状态（CAS-REC-002 实时读回；UNKNOWN fail-closed，不宣称有效）
+    let accountState: AccountState;
     try {
-      const accountState = await client.fetchAccountState(tokens.accessToken);
-      // UNKNOWN fail-closed（CAS-CAP-005）：字段缺失时不宣称账号有效，拒绝建立会话。
-      if (accountState === 'DISABLED' || accountState === 'DELETED' || accountState === 'UNKNOWN') {
-        throw new SessionError('账号已被禁用/删除或状态不可确认', 403, 'IFC-ERR-011');
-      }
-    } catch (err) {
-      // 账号确认为禁用/删除/不可确认 → 403（rethrow 保持语义）
-      if (err instanceof SessionError) {
-        throw err;
-      }
-      // 其余异常视为 Casdoor 不可达：降级签发（CAS-FAIL-001），并标记不可用。
-      this.availabilityTracker.setAvailable(false);
-      degraded = true;
-      degradedSince = new Date().toISOString();
+      accountState = await client.fetchAccountState(tokens.accessToken);
+    } catch (error) {
+      this.availability.markUnavailable();
+      throw error;
+    }
+    if (accountState === 'DISABLED' || accountState === 'DELETED' || accountState === 'UNKNOWN') {
+      throw new SessionError('账号已被禁用/删除或状态不可确认', 403, 'IFC-ERR-011');
     }
 
-    // 签发本地会话 JWT
+    // Casdoor 链路整体可用（探测恢复）
+    this.availability.markAvailable();
+
+    // 签发本地会话 JWT。degraded 联动本次登录尝试开始前的 Casdoor 连通状态
+    // （CAS-FAIL-001）：此前不可用时，本会话标记为 degraded，受 15 分钟降级窗口约束。
+    const degraded = !wasAvailable;
     const now = Math.floor(Date.now() / 1000);
     const sessionClaims: SessionClaims = {
       sub,
@@ -151,15 +170,22 @@ export class CasdoorSessionController {
       `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax${secureAttr}`,
     );
 
+    // profileGate 联动真实账号/声明（CAS-REC-002）：emailVerified 来自 id_token 声明，
+    // profileComplete 依据核心资料字段是否齐备（name 与 email 均存在）。
+    const email = typeof claims['email'] === 'string' ? claims['email'] : undefined;
+    const name = (claims['name'] as string) ?? sub;
+    const emailVerified = claims['email_verified'] === true;
+    const profileComplete = Boolean(name && email);
+
     return {
       user: {
         sub,
-        name: (claims['name'] as string) ?? sub,
-        email: claims['email'] as string | undefined,
+        name,
+        email,
       },
-      profileGate: { profileComplete: true, emailVerified: false },
+      profileGate: { profileComplete, emailVerified },
       degraded,
-      degradedSince,
+      degradedSince: degraded ? new Date(now * 1000).toISOString() : null,
       permissions: [],
       workspace: null,
     };
@@ -174,7 +200,7 @@ export class CasdoorSessionController {
     const secureAttr = secure ? '; Secure' : '';
     res.setHeader(
       'Set-Cookie',
-      `session_token=; Path=/; HttpOnly; SameSite=Lax${secureAttr}; Max-Age=0`,
+      `session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureAttr}`,
     );
     return { ok: true };
   }
@@ -185,14 +211,14 @@ export class CasdoorSessionController {
     if (this.oidcClient) return this.oidcClient;
     const c = this.config.casdoor;
     if (!c.endpoint || !c.clientId || !c.clientSecretRef) {
+      this.availability.markUnavailable();
       throw new SessionError(
         'Casdoor OIDC 未配置（endpoint/clientId/clientSecretRef 缺失）',
         503,
         'CAS-ERR-NOT_CONFIGURED',
       );
     }
-    // ADR-010：先解析引用为明文，再用于 OIDC client_secret 与密钥派生（单点化）。
-    const clientSecret = resolveCasdoorClientSecret(c.clientSecretRef);
+    const clientSecret = this.resolveClientSecret(c.clientSecretRef);
     const oidcConfig: CasdoorOidcConfig = {
       endpoint: c.endpoint,
       clientId: c.clientId,
@@ -203,15 +229,24 @@ export class CasdoorSessionController {
     this.sessionSecret = deriveSessionSecret(clientSecret);
     return this.oidcClient;
   }
+
+  /**
+   * 解析 Casdoor clientSecret 引用为真实秘密（ADR-010）。引用串（如
+   * ${env:...}）是公开常量，**禁止**直接作为 OIDC clientSecret 或会话派生
+   * 输入（Critical：会话伪造 / token 交换失败）。
+   */
+  private resolveClientSecret(ref: string): string {
+    return isSecretRef(ref) ? resolveSecret(ref) : ref;
+  }
 }
 
-export class SessionError extends Error {
+export class SessionError extends HttpException {
   constructor(
     message: string,
-    public readonly statusCode: number,
+    statusCode: number,
     public readonly code?: string,
   ) {
-    super(message);
+    super({ message, statusCode, ...(code ? { code } : {}) }, statusCode);
     this.name = 'SessionError';
   }
 }

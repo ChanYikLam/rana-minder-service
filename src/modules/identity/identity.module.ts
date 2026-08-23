@@ -8,7 +8,8 @@
  *
  * 会话：Casdoor OIDC 会话链路按 API-AUTH-001 条件装配——casdoor.endpoint 配置
  * 存在时绑定 OidcAuthSessionProvider（本地 JWT 验证），缺失时退回 RejectAllAuth
- * SessionProvider（fail-closed，受保护端点 401 IFC-ERR-001）。
+ * SessionProvider（fail-closed，受保护端点 401 IFC-ERR-001）。登录/会话控制器始终
+ * 注册，但配置缺失时端点抛 SessionError(503 CAS-ERR-NOT_CONFIGURED) 而非签发会话。
  */
 
 import { forwardRef, Module } from '@nestjs/common';
@@ -54,6 +55,7 @@ import {
   ACCOUNT_ACCESS_CONTROLLER,
   NAME_CORRECTION_CONTROLLER,
   AUTH_SESSION_PROVIDER,
+  CASDOOR_AVAILABILITY,
 } from './tokens';
 
 import { IdentityUnitOfWork } from './infrastructure/unit-of-work';
@@ -97,17 +99,16 @@ import { AccountAccessController } from './interfaces/controllers/account-access
 import { NameCorrectionController } from './interfaces/controllers/name-correction.controller';
 
 import { RejectAllAuthSessionProvider } from './interfaces/nest/auth-session';
-import {
-  OidcAuthSessionProvider,
-  type AccountStateObservation,
-} from './interfaces/nest/oidc-session-provider';
+import { OidcAuthSessionProvider } from './interfaces/nest/oidc-session-provider';
 import { CasdoorSessionController } from './interfaces/nest/casdoor-session.controller';
-import { CasdoorAvailabilityTracker } from './interfaces/nest/casdoor-availability-tracker';
+import { deriveSessionSecret } from './interfaces/nest/session-secret';
+import { CasdoorAvailability } from './interfaces/nest/casdoor-availability';
 import {
-  resolveCasdoorClientSecret,
-  deriveSessionSecret,
-} from './interfaces/nest/session-security';
-import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../config';
+  RANA_MINDER_CONFIG,
+  isSecretRef,
+  resolveSecret,
+  type RanaMinderConfig,
+} from '../../config';
 import { AuthGuard } from './interfaces/nest/auth.guard';
 import { ProfilesNestController } from './interfaces/nest/profiles.nest.controller';
 import { AccountAccessNestController } from './interfaces/nest/account-access.nest.controller';
@@ -122,45 +123,31 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     CasdoorSessionController,
   ],
   providers: [
-    // ----- Casdoor 运行时可用性跟踪（供 controller 观测 + provider 降级判定共享）-----
-    CasdoorAvailabilityTracker,
-    // ----- 会话（条件装配：Casdoor endpoint 配置时启用 OIDC；否则 fail-closed）-----
+    // ----- Casdoor 运行时可用性（供 controller 观测 + provider 降级判定共享）-----
+    {
+      provide: CASDOOR_AVAILABILITY,
+      useFactory: (config: RanaMinderConfig) =>
+        // 配置存在时视为可用（由会话控制器在真实调用失败后下调，CAS-FAIL-001）
+        new CasdoorAvailability(config.casdoor.endpoint.length > 0),
+      inject: [RANA_MINDER_CONFIG],
+    },
     {
       provide: AUTH_SESSION_PROVIDER,
-      useFactory: (
-        config: RanaMinderConfig,
-        casdoor: CasdoorAdapter,
-        tracker: CasdoorAvailabilityTracker,
-      ) => {
+      useFactory: (config: RanaMinderConfig, availability: CasdoorAvailability) => {
         if (config.casdoor.endpoint && config.casdoor.clientId && config.casdoor.clientSecretRef) {
-          // ADR-010：先解析引用为明文，再派生会话 HMAC 密钥（单点化，session-security.ts）。
-          const clientSecret = resolveCasdoorClientSecret(config.casdoor.clientSecretRef);
-          const sessionSecret = deriveSessionSecret(clientSecret);
+          // 必须先解析引用得到真实秘密再派生，避免以公开引用串恒定派生（会话伪造）。
+          const clientSecret = isSecretRef(config.casdoor.clientSecretRef)
+            ? resolveSecret(config.casdoor.clientSecretRef)
+            : config.casdoor.clientSecretRef;
           return new OidcAuthSessionProvider({
-            sessionSecret,
-            // CAS-REC-002 实时读回：每次请求复查账号状态（禁用/删除即时拒绝）。
-            // 同时把读回观测写回 tracker（CAS-FAIL-001）：Casdoor 不可达时收紧降级窗口。
-            checkAccountState: async (subjectId): Promise<AccountStateObservation> => {
-              const user = await casdoor.getUser(subjectId);
-              if (user.status !== 'SUCCESS' || user.data === null) {
-                // 无法确定（未接线/不可达）→ 同步标记不可用，让降级窗口生效。
-                tracker.setAvailable(false);
-                return null;
-              }
-              // 读回成功 → Casdoor 可达，恢复可用观测。
-              tracker.setAvailable(true);
-              const state = user.data.state;
-              if (state === 'ACTIVE' || state === 'DISABLED' || state === 'DELETED') {
-                return state;
-              }
-              return null;
-            },
-            isCasdoorAvailable: () => tracker.isAvailable(),
+            sessionSecret: deriveSessionSecret(clientSecret),
+            // 运行时共享状态：Casdoor 不可用时降级窗口生效（CAS-FAIL-001）
+            casdoorAvailable: availability,
           });
         }
         return new RejectAllAuthSessionProvider();
       },
-      inject: [RANA_MINDER_CONFIG, CASDOOR_ADAPTER, CasdoorAvailabilityTracker],
+      inject: [RANA_MINDER_CONFIG, CASDOOR_AVAILABILITY],
     },
     AuthGuard,
     // ----- 工作单元（ambient 事务 + RLS 单目标上下文）-----
@@ -467,6 +454,7 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     AUTH_SESSION_PROVIDER,
     AuthGuard,
     SUPER_ADMIN_VERIFIER,
+    CASDOOR_AVAILABILITY,
   ],
 })
 export class IdentityModule {}

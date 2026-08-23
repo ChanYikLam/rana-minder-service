@@ -204,8 +204,12 @@ export interface CurrentPermissionsPort {
 // --------------------------------------------------------------------------
 
 export interface ControlledBatchPort {
-  /** 平台侧批量执行器接入点：执行一个批次阶段（骨架） */
-  execute(batchId: string, phase: string): Promise<{ ok: boolean; error?: string }>;
+  /** 平台侧批量执行器接入点：执行一个批次阶段，并消费该阶段声明的副作用标签 */
+  execute(
+    batchId: string,
+    phase: string,
+    requiredSideEffects?: readonly string[],
+  ): Promise<{ ok: boolean; error?: string }>;
 }
 
 // --------------------------------------------------------------------------

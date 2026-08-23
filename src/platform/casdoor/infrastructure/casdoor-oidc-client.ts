@@ -22,11 +22,12 @@ export interface CasdoorOidcConfig {
   readonly clientId: string;
   readonly clientSecret: string;
   readonly redirectUri: string;
+  /** 每次对 Casdoor 的 HTTP 请求超时（毫秒）。默认 10s，防 Casdoor 挂起拖死登录端点。 */
+  readonly timeoutMs?: number;
 }
 
 export interface OidcState {
   readonly nonce: string;
-  readonly redirectAfter?: string;
 }
 
 export interface TokenSet {
@@ -53,11 +54,17 @@ export interface OidcDiscovery {
   readonly end_session_endpoint?: string;
 }
 
+const DEFAULT_TIMEOUT_MS = 10_000;
+
 export class CasdoorOidcClient {
   private discovery?: OidcDiscovery;
+  private readonly timeoutMs: number;
+  /** 缓存的远程 JWKS（jose 内置缓存 + 自动刷新）；复用同一实例避免每次登录重新拉取。 */
+  private jwks?: ReturnType<typeof createRemoteJWKSet>;
 
-  constructor(private readonly config: CasdoorOidcConfig) {}
-
+  constructor(private readonly config: CasdoorOidcConfig) {
+    this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  }
   /**
    * 构造 Casdoor OIDC 授权码登录 URL（state 含 nonce 用于回验）。
    */
@@ -78,7 +85,7 @@ export class CasdoorOidcClient {
    */
   async exchangeCode(code: string): Promise<TokenSet> {
     const disco = await this.ensureDiscovery();
-    const res = await fetch(disco.token_endpoint, {
+    const res = await this.fetchWithTimeout(disco.token_endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -110,7 +117,7 @@ export class CasdoorOidcClient {
    */
   async verifyIdToken(idToken: string, nonce: string): Promise<JWTPayload> {
     const disco = await this.ensureDiscovery();
-    const JWKS = createRemoteJWKSet(new URL(disco.jwks_uri));
+    const JWKS = this.getJwks(disco);
     const { payload } = await jwtVerify(idToken, JWKS, {
       issuer: disco.issuer,
       audience: this.config.clientId,
@@ -126,7 +133,7 @@ export class CasdoorOidcClient {
    */
   async fetchUserInfo(accessToken: string): Promise<OidcUserInfo> {
     const disco = await this.ensureDiscovery();
-    const res = await fetch(disco.userinfo_endpoint, {
+    const res = await this.fetchWithTimeout(disco.userinfo_endpoint, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
@@ -157,7 +164,7 @@ export class CasdoorOidcClient {
     accessToken: string,
   ): Promise<'ACTIVE' | 'DISABLED' | 'DELETED' | 'UNKNOWN'> {
     const url = `${this.config.endpoint}/api/get-user`;
-    const res = await fetch(url, {
+    const res = await this.fetchWithTimeout(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
@@ -179,10 +186,16 @@ export class CasdoorOidcClient {
 
   // ----- 内部 -----
 
+  private getJwks(disco: OidcDiscovery): ReturnType<typeof createRemoteJWKSet> {
+    // JWKS 缓存实例以复用 jose 的缓存 + 自动刷新能力，避免每次登录重复拉取密钥集。
+    this.jwks ??= createRemoteJWKSet(new URL(disco.jwks_uri));
+    return this.jwks;
+  }
+
   private async ensureDiscovery(): Promise<OidcDiscovery> {
     if (this.discovery) return this.discovery;
     const url = `${this.config.endpoint}/.well-known/openid-configuration`;
-    const res = await fetch(url);
+    const res = await this.fetchWithTimeout(url);
     if (!res.ok) {
       throw new Error(`Casdoor OIDC discovery failed: ${res.status}`);
     }
@@ -201,5 +214,23 @@ export class CasdoorOidcClient {
 
   private encodeState(state: OidcState): string {
     return Buffer.from(JSON.stringify(state)).toString('base64url');
+  }
+
+  /**
+   * 带超时的 fetch。超时后抛出明确错误，避免 Casdoor 挂起导致登录端点
+   * 长期阻塞（CAS-FAIL-001：连通失败应快速失败进入降级/重试）。
+   */
+  private async fetchWithTimeout(url: string | URL, init?: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        throw new Error(`Casdoor request timed out after ${this.timeoutMs}ms: ${url}`);
+      }
+      throw error;
+    }
   }
 }

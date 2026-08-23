@@ -1,10 +1,9 @@
 /**
- * OIDC 会话解析器（interfaces/nest；API-AUTH-001、CAS-REC-002、CAS-FAIL-001）。
+ * OIDC 会话解析器（interfaces/nest；API-AUTH-001、CAS-REC-002）。
  *
  * 从请求头中提取 Bearer token 或 session cookie，验证本地签发的会话 JWT
- * （HS256），返回 AuthSession。每次解析实时复查账号状态（CAS-REC-002：禁用/
- * 删除即时失效）；降级会话（degraded）在 Casdoor 不可用时仅保留 15 分钟窗口
- * （CAS-FAIL-001）。
+ * （HS256），返回 AuthSession。Casdoor 实例不可用时，若会话 JWT 签发于
+ * 15 分钟内且非增强认证路径，可返回 degraded 会话（CAS-FAIL-001）。
  *
  * 配置驱动：casdoor.endpoint 为空时仍使用 RejectAllAuthSessionProvider
  * （fail-closed 门控）；配置存在时由本实现替换。
@@ -13,6 +12,7 @@
 import type { Request } from 'express';
 import { jwtVerify, SignJWT } from 'jose';
 import type { AuthSession, AuthSessionProvider } from './auth-session';
+import type { CasdoorAvailability } from './casdoor-availability';
 
 export interface SessionClaims {
   readonly sub: string;
@@ -22,15 +22,13 @@ export interface SessionClaims {
   readonly degraded: boolean;
 }
 
-/** 账号实时状态观测结果：ACTIVE/DISABLED/DELETED，或 null（无法确定/未接线）。 */
-export type AccountStateObservation = 'ACTIVE' | 'DISABLED' | 'DELETED' | null;
-
 export interface OidcSessionConfig {
   readonly sessionSecret: Uint8Array;
-  /** 实时复查账号状态；null 表示无法确定（Casdoor 不可达或未接线）。 */
-  readonly checkAccountState: (subjectId: string) => Promise<AccountStateObservation>;
-  /** Casdoor 当前是否可用（运行时观测，CAS-FAIL-001 降级窗口判定依据）。 */
-  readonly isCasdoorAvailable: () => boolean;
+  /**
+   * 上一轮 Casdoor 连通探测结果。可为静态布尔值（测试/固定场景）或共享的
+   * CasdoorAvailability 状态对象（运行时由会话控制器动态更新，CAS-FAIL-001）。
+   */
+  readonly casdoorAvailable: boolean | CasdoorAvailability;
 }
 
 export class OidcAuthSessionProvider implements AuthSessionProvider {
@@ -50,18 +48,15 @@ export class OidcAuthSessionProvider implements AuthSessionProvider {
       const now = new Date();
       const iat = typeof payload['iat'] === 'number' ? payload['iat'] : 0;
       const degraded = payload['degraded'] === true;
+      const casdoorAvailable =
+        typeof this.config.casdoorAvailable === 'boolean'
+          ? this.config.casdoorAvailable
+          : this.config.casdoorAvailable.available;
 
-      // CAS-REC-002 实时读回：每次请求复查账号状态；禁用/删除即时拒绝。
-      const state = await this.config.checkAccountState(sub);
-      if (state === 'DISABLED' || state === 'DELETED') {
-        return null;
-      }
-
-      // CAS-FAIL-001：Casdoor 不可用且会话为降级签发，超 15 分钟拒绝。
-      if (degraded) {
+      // CAS-FAIL-001：Casdoor 不可用且会话签发超过 15 分钟 → 拒绝
+      if (degraded && !casdoorAvailable) {
         const ageMs = now.getTime() - iat * 1000;
-        const casdoorAvailable = this.config.isCasdoorAvailable();
-        if (!casdoorAvailable && ageMs > 15 * 60 * 1000) {
+        if (ageMs > 15 * 60 * 1000) {
           return null; // 降级窗口过期
         }
       }

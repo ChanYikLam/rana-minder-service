@@ -80,6 +80,10 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
+        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
+        - name: 4b-DI引导测试
+          if: "[ -f package.json ]"
+          script: npm run test:di
         # 阶段 5：集成测试 L2（真实 PG18：pg_trgm/btree_gist 扩展；dind 已声明）
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
@@ -129,6 +133,38 @@
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
+        # 阶段 8b：镜像安全扫描（trivy；HIGH/CRITICAL 为失败门，DEP-003 / SRS-NFR-022/023）
+        # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
+        # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
+        - name: 8b-镜像安全扫描
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! (command -v trivy >/dev/null 2>&1 && trivy --version 2>&1 | grep -q '0.69.3'); then
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              rm -f /tmp/trivy.tar.gz
+            fi
+            # 扫描已构建镜像；HIGH/CRITICAL 漏洞使扫描失败（镜像层、OS 包、应用依赖）
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
+              ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT}
+        # 阶段 8c：镜像 SBOM 生成与复核（DEP-003 第三方依赖清单，供发布归档）
+        - name: 8c-镜像SBOM与许可证复核
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! (command -v syft >/dev/null 2>&1 && syft --version 2>&1 | grep -q '1.51.0'); then
+              curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
+              echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+              rm -f /tmp/syft.tar.gz
+            fi
+            # 生成镜像 SBOM 并输出（发布门证据归档用，不推送产物）
+            syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
+            echo "镜像 SBOM 已生成（spdx-json），作为第三方依赖/许可证清单证据归档，供发布门复核。"
+            wc -c /tmp/ranaminder-sbom.spdx.json
         # 阶段 10：依赖审计与许可证登记（DEP-003）
         - name: 10-依赖审计与许可证登记
           if: "[ -f pnpm-lock.yaml ]"
@@ -183,6 +219,10 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
+        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
+        - name: 4b-DI引导测试
+          if: "[ -f package.json ]"
+          script: npm run test:di
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
           script: |
@@ -225,6 +265,36 @@
           if: "[ -f package.json ] && [ -f Dockerfile ]"
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
+        # 阶段 8b：镜像安全扫描（trivy；HIGH/CRITICAL 为失败门，DEP-003 / SRS-NFR-022/023）
+        # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
+        # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
+        - name: 8b-镜像安全扫描
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! (command -v trivy >/dev/null 2>&1 && trivy --version 2>&1 | grep -q '0.69.3'); then
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              rm -f /tmp/trivy.tar.gz
+            fi
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
+              ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT}
+        # 阶段 8c：镜像 SBOM 生成与复核（DEP-003 第三方依赖清单，供发布归档）
+        - name: 8c-镜像SBOM与许可证复核
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! (command -v syft >/dev/null 2>&1 && syft --version 2>&1 | grep -q '1.51.0'); then
+              curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
+              echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+              rm -f /tmp/syft.tar.gz
+            fi
+            syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
+            echo "镜像 SBOM 已生成（spdx-json），作为第三方依赖/许可证清单证据归档，供发布门复核。"
+            wc -c /tmp/ranaminder-sbom.spdx.json
         - name: 10-依赖审计与许可证登记
           if: "[ -f pnpm-lock.yaml ]"
           script: |
@@ -273,6 +343,10 @@
         - name: 4-单元测试L1
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run test:unit
+        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
+        - name: 4b-DI引导测试
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run test:di
         - name: 5-集成测试L2
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |
@@ -311,11 +385,59 @@
           script: |
             npm run build
             npm run build:worker
-        # 阶段 8：镜像构建并推送（Tag 即版本号，非 latest）
-        - name: 8-镜像构建推送
+        # 阶段 8：镜像构建（Tag 即版本号，非 latest）；推送移至阶段 8e（扫描/SBOM 通过后才 push，
+        # 确保发布门在危险镜像进入制品库前拦截，避免“先 push 后扫描”使门禁落空）
+        - name: 8-镜像构建
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
           script: |
             docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} .
+        # 阶段 8b：发布镜像安全扫描（trivy；HIGH/CRITICAL 失败即阻断发布，DEP-003 / SRS-NFR-022/023 / OPS-REL）
+        # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
+        # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
+        - name: 8b-镜像安全扫描
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
+            set -e
+            if ! (command -v trivy >/dev/null 2>&1 && trivy --version 2>&1 | grep -q '0.69.3'); then
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              rm -f /tmp/trivy.tar.gz
+            fi
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
+              ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
+        # 阶段 8c：发布镜像 SBOM 生成（DEP-003 第三方依赖/许可证清单，发布门证据归档）
+        - name: 8c-镜像SBOM生成
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
+            set -e
+            if ! (command -v syft >/dev/null 2>&1 && syft --version 2>&1 | grep -q '1.51.0'); then
+              curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
+              echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+              rm -f /tmp/syft.tar.gz
+            fi
+            syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
+            echo "发布镜像 SBOM 已生成（spdx-json），作为第三方依赖/许可证清单证据归档，供发布门复核。"
+            wc -c /tmp/ranaminder-sbom.spdx.json
+            # 复制到工作目录，供阶段 8d 归档到附件（发布门证据可追溯）
+            mkdir -p artifacts && cp /tmp/ranaminder-sbom.spdx.json artifacts/ranaminder-sbom.spdx.json
+        # 阶段 8d：归档 SBOM 到 commit 附件（DEP-003 发布门证据持久化，供人工门复核）
+        # 上传到当前 commit 附件，不依赖 release 是否存在；文件在构建容器销毁后仍可追溯
+        # 8d 使用固定版本 attachments 插件镜像 v1.1.4，避免 :latest 不可复现的供应链风险（同 trivy/syft 固定版本；v1.1.4 与 latest 为不同 digest，按固定版本拉取）
+        - name: 8d-归档SBOM证据
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          image: cnbcool/attachments:v1.1.4
+          settings:
+            commit: $CNB_COMMIT
+            attachments:
+              - "./artifacts/ranaminder-sbom.spdx.json"
+        # 阶段 8e：推送发布镜像（仅在前序 8b 扫描、8c SBOM、8d 归档均成功后执行）
+        # 危险镜像不会进入制品库；扫描失败时流水线在此前中断，实现真正的“扫描失败阻断发布”
+        - name: 8e-镜像推送
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
             docker push ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
         - name: 10-依赖审计与许可证登记
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f pnpm-lock.yaml ]'
@@ -334,4 +456,6 @@
             echo "3) OPS-VER-001~024 部署/升级/恢复演练：人工门，见 docs/operations/部署运维与恢复手册-v1.0.md"
             echo "4) 生产 DDL 与迁移评审：人工门"
             echo "5) 秘密扫描/依赖审计/许可证：本流水线已执行（上方阶段日志即证据）"
-            echo "6) 镜像与版本锁定（非 latest）：本流水线已执行（阶段 8 日志即证据）"
+            echo "6) 镜像与版本锁定（非 latest）：本流水线已执行（阶段 8 构建、阶段 8e 推送日志即证据）"
+            echo "7) 镜像安全扫描（trivy HIGH/CRITICAL 失败门）：本流水线已执行且先于推送（阶段 8b 日志即证据）"
+            echo "8) 镜像 SBOM（第三方依赖/许可证清单，DEP-003）：本流水线已生成并归档（阶段 8c 日志与 8d 附件即证据）"
