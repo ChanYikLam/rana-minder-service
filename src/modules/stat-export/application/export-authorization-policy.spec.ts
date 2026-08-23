@@ -119,6 +119,13 @@ describe('authorizeBatchExportScope 批量导出收敛（EXP-003）', () => {
     );
   });
 
+  it('部门负责人：请求导出部门但缺 departmentId → 校验错误（IFC-ERR-005）', () => {
+    expectErrorCode(
+      () => authorizeBatchExportScope(DEPT_LEADER, { kind: 'department', clubId: 'club-1' }),
+      'IFC-ERR-005',
+    );
+  });
+
   it('部门负责人：无该社团作用域 → 拒绝（IFC-ERR-003）', () => {
     expectErrorCode(
       () =>
@@ -374,6 +381,26 @@ describe('revalidateExportScope 静态作用域重验', () => {
     },
     personalTargetUserId: null,
   };
+  const deptSnap: ExportScopeRevalidateInput = {
+    scope: {
+      kind: 'department',
+      clubId: 'club-1',
+      departmentId: 'dept-A',
+      jointActivityId: null,
+      participantClubIds: [],
+    },
+    personalTargetUserId: null,
+  };
+  const platformSnap: ExportScopeRevalidateInput = {
+    scope: {
+      kind: 'platform',
+      clubId: null,
+      departmentId: null,
+      jointActivityId: null,
+      participantClubIds: [],
+    },
+    personalTargetUserId: null,
+  };
 
   it('member 重验 personal 通过，重验批量被拒', () => {
     assert.doesNotThrow(() => revalidateExportScope(MEMBER, personalSnap));
@@ -392,6 +419,24 @@ describe('revalidateExportScope 静态作用域重验', () => {
 
   it('部门负责人重验 club 作用域被拒（IFC-ERR-004）', () => {
     expectErrorCode(() => revalidateExportScope(DEPT_LEADER, clubSnap), 'IFC-ERR-004');
+  });
+
+  it('部门负责人重验 department 走 default 分支：合法部门通过、缺 departmentId 拒绝（IFC-ERR-005）', () => {
+    // platform / department 走 default → authorizeBatchExportScope
+    assert.doesNotThrow(() => revalidateExportScope(DEPT_LEADER, deptSnap));
+    expectErrorCode(
+      () =>
+        revalidateExportScope(DEPT_LEADER, {
+          ...deptSnap,
+          scope: { ...deptSnap.scope, departmentId: null },
+        }),
+      'IFC-ERR-005',
+    );
+  });
+
+  it('平台超管重验 platform 走 default 分支 → 特权通过', () => {
+    const admin = platformSuperAdminPrincipal('admin-1');
+    assert.doesNotThrow(() => revalidateExportScope(admin, platformSnap));
   });
 });
 
@@ -548,6 +593,12 @@ describe('assertNotSuspended 停用封锁（JNT-023）', () => {
   it('personal 无社团边界（clubId=null）→ 不拦截', async () => {
     const f = makeFacts(() => {});
     await assertNotSuspended({ ...base, scope: { ...base.scope, kind: 'personal' } }, f);
+  });
+
+  it('platform 平台级导出 → 不涉及停用拦截（超管平台导出直达）', async () => {
+    // 平台超管平台级导出（kind=platform，clubId=null）不涉社团停用封锁
+    const f = makeFacts(() => {});
+    await assertNotSuspended({ ...base, scope: { ...base.scope, kind: 'platform' } }, f);
   });
 
   it('joint：任一参与社团紧急停用 → 拒绝；全部未停用 → 通过', async () => {
