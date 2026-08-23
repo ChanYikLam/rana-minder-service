@@ -21,7 +21,11 @@ import {
   TOTAL_CONTROLS,
   TOTAL_THREATS,
 } from '../helpers/security-controls-inventory';
-import { resolveThreatIdsFromDoc, THREAT_MODEL_DOC } from '../helpers/authority-docs';
+import {
+  resolveThreatIdsFromDoc,
+  threatDisplayId,
+  THREAT_MODEL_DOC,
+} from '../helpers/authority-docs';
 
 const ROOT = path.resolve(__dirname, '../..');
 const exists = (rel: string): boolean => fs.existsSync(path.join(ROOT, rel));
@@ -43,9 +47,7 @@ describe('TST-SEC 安全控制证据', () => {
       TOTAL_THREATS,
       `权威威胁模型文档 ${THREAT_MODEL_DOC} 应声明 ${TOTAL_THREATS} 个威胁，实际 ${docThreatIds.length}`,
     );
-    const mapped = docThreatIds.map((thr) =>
-      thr.replace('SEC-THR-', '').replace(/^0+/, '').padStart(2, '0'),
-    );
+    const mapped = docThreatIds.map(threatDisplayId);
     assert.deepEqual(
       [...ids].sort(),
       mapped.map((n) => `TST-SEC-THR-${n}`).sort(),

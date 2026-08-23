@@ -20,20 +20,18 @@ export interface TxBoundaryEntry {
   readonly liveProbe?: 'uow-rollback' | 'notify-swallow';
 }
 
-const R = (p: string): string => p;
-
 export const TX_INVENTORY: readonly TxBoundaryEntry[] = [
   {
     id: 'IFC-TX-001',
     title: '本地业务状态转换',
     semantic: '必需事实任一失败整体拒绝；同幂等键重放返回原结果',
     anchors: [
-      R('src/modules/form/infrastructure/unit-of-work.ts'),
-      R('src/modules/identity/infrastructure/unit-of-work.ts'),
+      'src/modules/form/infrastructure/unit-of-work.ts',
+      'src/modules/identity/infrastructure/unit-of-work.ts',
     ],
     evidence: [
-      R('src/modules/form/application/commands/form-lifecycle.spec.ts'),
-      R('src/modules/organization/domain/state-machines/relation-command.state-machine.spec.ts'),
+      'src/modules/form/application/commands/form-lifecycle.spec.ts',
+      'src/modules/organization/domain/state-machines/relation-command.state-machine.spec.ts',
     ],
     liveProbe: 'uow-rollback',
   },
@@ -42,11 +40,11 @@ export const TX_INVENTORY: readonly TxBoundaryEntry[] = [
     title: '直接权益与通知',
     semantic: '通知事实保存失败则权益命令回滚；渠道失败不回滚已提交权益',
     anchors: [
-      R('src/modules/notification/interfaces/notification.controller.ts'),
-      R('src/modules/notification/application/commands/deliver-inbox.command.ts'),
+      'src/modules/notification/interfaces/notification.controller.ts',
+      'src/modules/notification/application/commands/deliver-inbox.command.ts',
     ],
     evidence: [
-      R('src/modules/notification/application/commands/create-notification-fact.dedup.spec.ts'),
+      'src/modules/notification/application/commands/create-notification-fact.dedup.spec.ts',
     ],
   },
   {
@@ -54,30 +52,30 @@ export const TX_INVENTORY: readonly TxBoundaryEntry[] = [
     title: 'Casdoor 外部写入',
     semantic: '同步受理 + casdoorSync 轮询；未可信回读确认不授新权限',
     anchors: [
-      R('src/platform/casdoor/application/casdoor-write.service.ts'),
-      R('src/platform/tasks/executors/handlers/casdoor-group.handler.ts'),
+      'src/platform/casdoor/application/casdoor-write.service.ts',
+      'src/platform/tasks/executors/handlers/casdoor-group.handler.ts',
     ],
-    evidence: [R('src/platform/casdoor/application/casdoor-write.service.spec.ts')],
+    evidence: ['src/platform/casdoor/application/casdoor-write.service.spec.ts'],
   },
   {
     id: 'IFC-TX-004',
     title: '文件上传/检查/绑定',
     semantic: '跨存储不伪造原子；未核验不可绑定或访问',
     anchors: [
-      R('src/modules/file/application/commands/initiate-upload.command.ts'),
-      R('src/modules/file/application/commands/promote-file.command.ts'),
+      'src/modules/file/application/commands/initiate-upload.command.ts',
+      'src/modules/file/application/commands/promote-file.command.ts',
     ],
-    evidence: [R('src/modules/file/application/commands/upload-flow.spec.ts')],
+    evidence: ['src/modules/file/application/commands/upload-flow.spec.ts'],
   },
   {
     id: 'IFC-TX-005',
     title: '通知渠道投递',
     semantic: '后台任务承载；永久失败保留证据；不冒充已读',
     anchors: [
-      R('src/platform/tasks/executors/handlers/notification-delivery.handler.ts'),
-      R('src/platform/tasks/outbox/task-intent-outbox.ts'),
+      'src/platform/tasks/executors/handlers/notification-delivery.handler.ts',
+      'src/platform/tasks/outbox/task-intent-outbox.ts',
     ],
-    evidence: [R('src/platform/tasks/executors/handlers/notification-delivery.handler.spec.ts')],
+    evidence: ['src/platform/tasks/executors/handlers/notification-delivery.handler.spec.ts'],
     liveProbe: 'notify-swallow',
   },
   {
@@ -85,29 +83,29 @@ export const TX_INVENTORY: readonly TxBoundaryEntry[] = [
     title: '受控批量',
     semantic: '同步逐项结果；成功项保留；只可重试原失败项',
     anchors: [
-      R('src/platform/tasks/batch/batch-orchestrator.ts'),
-      R('src/platform/tasks/batch/batch-rules.ts'),
+      'src/platform/tasks/batch/batch-orchestrator.ts',
+      'src/platform/tasks/batch/batch-rules.ts',
     ],
-    evidence: [R('src/platform/tasks/batch/batch.spec.ts')],
+    evidence: ['src/platform/tasks/batch/batch.spec.ts'],
   },
   {
     id: 'IFC-TX-007',
     title: '正式删除',
     semantic: '重认证+预览版本+原因+二次确认；先撤权；失败保持未完成',
     anchors: [
-      R('src/platform/tasks/executors/handlers/formal-delete.handler.ts'),
-      R('src/modules/file/application/commands/delete-manifest.handler.ts'),
+      'src/platform/tasks/executors/handlers/formal-delete.handler.ts',
+      'src/modules/file/application/commands/delete-manifest.handler.ts',
     ],
-    evidence: [R('src/modules/file/application/commands/lifecycle.spec.ts')],
+    evidence: ['src/modules/file/application/commands/lifecycle.spec.ts'],
   },
   {
     id: 'IFC-TX-008',
     title: '派生刷新与重建',
     semantic: '派生失败不改源业务；可回源重建或明确不可用',
     anchors: [
-      R('src/platform/read-model/refresh/refresh-handler.ts'),
-      R('src/platform/read-model/projection/projection-store.ts'),
+      'src/platform/read-model/refresh/refresh-handler.ts',
+      'src/platform/read-model/projection/projection-store.ts',
     ],
-    evidence: [R('src/platform/read-model/refresh/refresh-handler.spec.ts')],
+    evidence: ['src/platform/read-model/refresh/refresh-handler.spec.ts'],
   },
 ];

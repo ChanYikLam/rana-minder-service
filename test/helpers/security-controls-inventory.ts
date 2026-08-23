@@ -10,7 +10,7 @@
  * evidence 文件路径（套件内断言存在），否则清单测试失败。
  */
 
-import { resolveThreatIdsFromDoc } from './authority-docs';
+import { resolveThreatIdsFromDoc, threatDisplayId } from './authority-docs';
 
 export const TOTAL_THREATS = 26;
 export const TOTAL_CONTROLS = 38;
@@ -103,7 +103,7 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
  */
 export function threatStubs(): readonly { id: string; status: '未执行' }[] {
   return resolveThreatIdsFromDoc().map((thr) => ({
-    id: `TST-SEC-THR-${thr.replace('SEC-THR-', '').replace(/^0+/, '').padStart(2, '0')}`,
+    id: `TST-SEC-THR-${threatDisplayId(thr)}`,
     status: '未执行' as const,
   }));
 }

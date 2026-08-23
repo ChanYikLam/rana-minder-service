@@ -41,6 +41,7 @@ function readDoc(file: string, what: string): string {
  *
  * 匹配表格行 `| SEC-THR-### | ...`。返回按编号升序的稳定数组。
  */
+
 export function resolveThreatIdsFromDoc(): readonly string[] {
   const content = readDoc(THREAT_MODEL_DOC, '威胁模型');
   const ids = new Set<string>();
@@ -50,6 +51,17 @@ export function resolveThreatIdsFromDoc(): readonly string[] {
     ids.add(m[1]);
   }
   return [...ids].sort();
+}
+
+/**
+ * 将权威威胁编号 `SEC-THR-###` 转为清单展示用的短编号。
+ *
+ * 统一去除前缀与前导零，并保留至少两位（如 `SEC-THR-001` → `01`、
+ * `SEC-THR-026` → `26`）。供 threatStubs 生成 `TST-SEC-THR-xx` 与
+ * 套件断言桩位编号时共用，避免同一 padStart 逻辑在多处重复。
+ */
+export function threatDisplayId(thr: string): string {
+  return thr.replace('SEC-THR-', '').replace(/^0+/, '').padStart(2, '0');
 }
 
 /**
