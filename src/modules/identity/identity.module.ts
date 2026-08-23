@@ -127,13 +127,17 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
       provide: CASDOOR_AVAILABILITY,
       useFactory: (config: RanaMinderConfig) =>
         // 配置存在时视为可用（由会话控制器在真实调用失败后下调，CAS-FAIL-001）
-        new CasdoorAvailability(config.casdoor.endpoint.length > 0),
+        new CasdoorAvailability((config.casdoor?.endpoint?.length ?? 0) > 0),
       inject: [RANA_MINDER_CONFIG],
     },
     {
       provide: AUTH_SESSION_PROVIDER,
       useFactory: (config: RanaMinderConfig, availability: CasdoorAvailability) => {
-        if (config.casdoor.endpoint && config.casdoor.clientId && config.casdoor.clientSecretRef) {
+        if (
+          config.casdoor?.endpoint &&
+          config.casdoor?.clientId &&
+          config.casdoor?.clientSecretRef
+        ) {
           // 必须先解析引用得到真实秘密再派生，避免以公开引用串恒定派生（会话伪造）。
           const clientSecret = isSecretRef(config.casdoor.clientSecretRef)
             ? resolveSecret(config.casdoor.clientSecretRef)
@@ -454,6 +458,7 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     AuthGuard,
     SUPER_ADMIN_VERIFIER,
     CASDOOR_AVAILABILITY,
+    CASDOOR_USER_PORT,
   ],
 })
 export class IdentityModule {}

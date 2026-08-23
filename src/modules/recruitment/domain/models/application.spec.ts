@@ -112,7 +112,7 @@ describe('Application (REC-003)', () => {
     assert.equal(app.revisionNumber, 3);
   });
 
-  it('退出后不可重提（终态）', () => {
+  it('退出后报名截止前可重提（SRS-SM-REC-003：已退出 → 重新提交）', () => {
     const app = draft();
     app.submit(MACHINE, NOW, {
       departmentChoices: choices('d1'),
@@ -123,6 +123,8 @@ describe('Application (REC-003)', () => {
     });
     assert.equal(app.exit(NOW), true);
     assert.equal(app.status, 'EXITED');
+    // 已退出为可恢复业务终态：截止前重提/个人恢复窗口内重提 → 已提交；
+    // 截止时间与恢复窗口有效性由应用层命令守卫（REC-009）
     assert.equal(
       app.resubmit(MACHINE, NOW, {
         departmentChoices: choices('d1'),
@@ -131,8 +133,11 @@ describe('Application (REC-003)', () => {
         minChoices: 1,
         maxChoices: 3,
       }),
-      false,
+      true,
     );
+    assert.equal(app.status, 'SUBMITTED');
+    // 提交 → 退出 → 重提：每次状态变迁均递增修订号
+    assert.equal(app.revisionNumber, 3);
   });
 
   it('身份异常标记与恢复', () => {

@@ -145,7 +145,12 @@ export class Application {
       maxChoices: number;
     },
   ): boolean {
-    if (this.snapshot.status !== ApplicationStatus.WITHDRAWN) {
+    // 已退出可重提（SRS-SM-REC-003：截止前本人重提或个人恢复窗口内重提）；
+    // 截止时间与恢复窗口有效性由应用层命令守卫，领域层仅校验状态合法性。
+    if (
+      this.snapshot.status !== ApplicationStatus.WITHDRAWN &&
+      this.snapshot.status !== ApplicationStatus.EXITED
+    ) {
       return false;
     }
     this.validateChoices(input.departmentChoices, input.minChoices, input.maxChoices);

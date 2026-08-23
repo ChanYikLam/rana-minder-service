@@ -16,9 +16,11 @@ export interface AcceptInvitationInput {
 
 /** 接受前置失败（IFC-ERR-003/006/007） */
 export class AcceptInvitationError extends Error {
+  readonly code: 'IFC-ERR-003' | 'IFC-ERR-006' | 'IFC-ERR-007';
   constructor(code: 'IFC-ERR-003' | 'IFC-ERR-006' | 'IFC-ERR-007', message: string) {
     super(`${code}: ${message}`);
     this.name = 'AcceptInvitationError';
+    this.code = code;
   }
 }
 

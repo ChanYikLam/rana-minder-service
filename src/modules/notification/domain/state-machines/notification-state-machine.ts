@@ -128,9 +128,15 @@ export class NotificationStateMachine {
 
   /**
    * 转换 2：超级管理员紧急关闭站内信。
-   * 已创建＋待投递/失败重试 → 已创建＋暂停投递
+   * 已创建＋待投递/失败重试（站内信）→ 已创建＋暂停投递
+   *
+   * SRS-SM-NTF-001 §10.1：紧急关闭仅作用于站内信渠道；
+   * 邮件渠道的失败重试不受影响，也不得据此改写通知事实主状态。
    */
   private evaluateKillInbox(command: StateTransitionCommand): TransitionResult {
+    if (command.channel === 'EMAIL') {
+      return this.reject('紧急关闭仅作用于站内信渠道，邮件渠道不受影响');
+    }
     if (
       command.currentStatus === 'CREATED_PENDING_DELIVERY' ||
       command.currentChannelStatus === 'FAILED_RETRY'
@@ -218,8 +224,13 @@ export class NotificationStateMachine {
 
   /**
    * 转换 5b：全部已读。
+   * SRS-SM-NTF-001 §10.1：与单条已读一致，仅作用于「已投递」通知；
+   * 未投递通知不得被批量置为已读（批量入口应逐条校验）。
    */
-  private evaluateMarkAllRead(_command: StateTransitionCommand): TransitionResult {
+  private evaluateMarkAllRead(command: StateTransitionCommand): TransitionResult {
+    if (command.currentStatus !== 'DELIVERED') {
+      return this.reject('通知尚未投递，不能标记已读');
+    }
     return {
       allowed: true,
       newStatus: null,
@@ -269,8 +280,17 @@ export class NotificationStateMachine {
   /**
    * 转换 6：评估邮件资格。
    * 已创建 → 待投递（邮件子状态）/ 状态不变
+   *
+   * SRS-SM-NTF-001 §10.1：邮件资格评估仅适用于「已创建」事实状态；
+   * 已投递等其他事实状态不得再创建/推进邮件任务。
    */
   private evaluateEmailEligibility(command: StateTransitionCommand): TransitionResult {
+    if (
+      command.currentStatus !== 'CREATED_PENDING_DELIVERY' &&
+      command.currentStatus !== 'CREATED_PAUSED_DELIVERY'
+    ) {
+      return this.reject('仅已创建状态可评估邮件发送资格');
+    }
     // 邮件资格评估不改变通知事实主状态
     return {
       allowed: true,

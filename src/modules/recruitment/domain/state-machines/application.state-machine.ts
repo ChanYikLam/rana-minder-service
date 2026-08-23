@@ -5,6 +5,10 @@
  * 撤回 WITHDRAWN（可重提回 SUBMITTED）；接受录取前可 EXITED（主动退出）；
  * 身份异常 IDENTITY_EXCEPTION（恢复回 SUBMITTED）；最终未录取 FINAL_REJECTED。
  * 补充窗口为标记（不切换主状态，FORM-011）。
+ *
+ * 已退出可恢复（SRS-SM-REC-003：业务终态（已退出）→ 报名截止前重新提交 → 已提交；
+ * 个人恢复窗口内重提同样回到已提交，窗口有效性由应用层命令守卫，REC-009），
+ * 故 EXITED 保留 RESUBMIT 出边；截止/窗口校验不在状态机层。
  */
 
 export const ApplicationStatus = {
@@ -60,6 +64,9 @@ export class DefaultApplicationStateMachine implements ApplicationStateMachine {
       RESUBMIT: ApplicationStatus.SUBMITTED,
       EXIT: ApplicationStatus.EXITED,
     },
+    // 已退出为可恢复业务终态：截止前重提/恢复窗口内重提 → 已提交
+    // （SRS-SM-REC-003；截止与个人恢复窗口校验由应用层命令守卫，REC-009）
+    EXITED: { RESUBMIT: ApplicationStatus.SUBMITTED },
     IDENTITY_EXCEPTION: { RESTORE_IDENTITY: ApplicationStatus.SUBMITTED },
     ADMITTED: {
       ACCEPT_INVITATION: ApplicationStatus.ACCEPTED,
