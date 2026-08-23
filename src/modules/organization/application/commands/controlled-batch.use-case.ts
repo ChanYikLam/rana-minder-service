@@ -1,59 +1,173 @@
 /**
- * ORG-004 受控批量操作用例骨架（SRS-SM-ORG-004）。
+ * ORG-004 受控批量操作用例（SRS-SM-ORG-004）。
  *
- * 属平台模块能力，本模块仅承载状态机驱动与端口接线：平台侧 batch 执行器经
- * ControlledBatchPort 进入，逐阶段调用本用例推进批次状态机。
+ * 仍属平台模块能力的轻量包装：状态机驱动 + 领域不变量守卫 +
+ * 批次部分成功逆序补偿。平台侧 batch 执行器经 ControlledBatchPort 进入，
+ * 逐阶段调用本用例推进批次状态机；逐项执行与重试关联在平台模块落地
+ * （ORG-040），本用例负责把"业务级"约束钉在状态机驱动之外：
+ *
+ * - 部分成功逆序补偿（ORG-034 关联）：若批次项声明 `requiresCompensation=true`，
+ *   出现 partial_success 时按登记的 stepOrder 逆序调用关系命令补偿
+ *   （RelationCommandStateMachine.partial_write / compensation_confirmed）。
+ * - 最后负责人连续性守卫（ORG-024）：批次确认前若触及负责人 Group，须同
+ *   操作指定继任者或显式声明 emergencyBypass（ORG-028 紧急停用豁免）。
+ * - 已知事件校验：仅放行状态机 8 条转换对应的事件名，未知事件直接拒绝。
  */
 
-import { ControlledBatchStateMachine } from '../../domain/state-machines/controlled-batch.state-machine';
+import {
+  ControlledBatchStateMachine,
+  type BatchItemResult,
+} from '../../domain/state-machines/controlled-batch.state-machine';
 import type { ControlledBatchStatus } from '../../domain/types';
 import { orgError } from '../../domain/types';
+import { LastOwnerContinuityPolicy } from '../../domain/services/last-owner-continuity.policy';
 import { CONTROLLED_BATCH_PORT, type ControlledBatchPort } from '../ports';
 
 export interface BatchPhaseInput {
   batchId: string;
-  event: string;
+  event: BatchEventName;
   status: ControlledBatchStatus;
   facts: {
     scopeFixed?: boolean;
     previewFresh?: boolean;
     inputsFrozen?: boolean;
     operatorAuthorized?: boolean;
-    items?: Array<{ itemId: string; result: 'success' | 'failure'; error?: string }>;
-    retryItems?: Array<{ itemId: string; result: 'success' | 'failure'; error?: string }>;
+    items?: BatchItemResult[];
+    retryItems?: BatchItemResult[];
   };
 }
 
-/**
- * 批次阶段驱动骨架：校验事件名在状态机内，执行转换并返回新状态与副作用标签。
- * 真实批次的筛选、冻结输入、逐项执行与重试关联在平台模块落地（ORG-040）。
- */
-export class ControlledBatchSkeleton {
+export type BatchEventName =
+  | 'generate_preview'
+  | 'modify_selection'
+  | 'confirm_execute'
+  | 'item_succeeded'
+  | 'item_failed'
+  | 'all_items_finished'
+  | 'retry_failed_items'
+  | 'retry_items_finished';
+
+const KNOWN_EVENTS: ReadonlySet<BatchEventName> = new Set<BatchEventName>([
+  'generate_preview',
+  'modify_selection',
+  'confirm_execute',
+  'item_succeeded',
+  'item_failed',
+  'all_items_finished',
+  'retry_failed_items',
+  'retry_items_finished',
+]);
+
+/** 批次中需要逆序补偿的项（ORG-034：复合关系写入部分失败） */
+export interface BatchCompensationItem {
+  readonly itemId: string;
+  readonly stepOrder: number;
+  readonly compensate: () => Promise<void>;
+}
+
+/** 确认批次前的负责人守卫上下文 */
+export interface BatchOwnerGuardContext {
+  readonly clubName: string;
+  readonly currentOwnerIds: readonly string[];
+  readonly revokingSubjectIds: readonly string[];
+  readonly successorIds: readonly string[];
+  /** ORG-028 强停豁免：紧急停用场景允许暂时无负责人 */
+  readonly emergencyBypass?: boolean;
+}
+
+export class ControlledBatchUseCase {
   private readonly stateMachine = new ControlledBatchStateMachine();
 
   constructor(private readonly platformPort: ControlledBatchPort) {}
 
+  /**
+   * 状态机阶段驱动：仅放行 8 条已知事件，调用平台端口执行并返回新状态。
+   * 平台侧负责实际批次的筛选、冻结输入、逐项执行与重试关联（ORG-040）。
+   */
   async drive(input: BatchPhaseInput): Promise<ControlledBatchStatus> {
-    const knownEvents = new Set([
-      'generate_preview',
-      'modify_selection',
-      'confirm_execute',
-      'item_succeeded',
-      'item_failed',
-      'all_items_finished',
-      'retry_failed_items',
-      'retry_items_finished',
-    ]);
-    if (!knownEvents.has(input.event)) {
+    if (!KNOWN_EVENTS.has(input.event)) {
       throw orgError.validation(`未知批次事件 ${input.event}`);
     }
     const result = this.stateMachine.transition({
       status: input.status,
-      event: input.event as Parameters<ControlledBatchStateMachine['transition']>[0]['event'],
+      event: input.event,
       facts: input.facts,
     });
     await this.platformPort.execute(input.batchId, input.event);
     return result.status;
+  }
+
+  /**
+   * 批次部分成功逆序补偿（ORG-034 关联）。
+   *
+   * 仅当批次处于 partial_success / failed_items_retrying 且存在 requiresCompensation
+   * 项时调用；按 stepOrder 降序执行，确保"先补偿后置步骤、再补偿前置步骤"，
+   * 避免回退顺序错误导致部分关系泄漏。
+   *
+   * 返回补偿执行轨迹（已尝试 + 已失败），供审计/回滚使用。
+   */
+  async compensateInReverseOrder(items: readonly BatchCompensationItem[]): Promise<{
+    compensated: string[];
+    failed: Array<{ itemId: string; error: string }>;
+  }> {
+    if (items.length === 0) {
+      return { compensated: [], failed: [] };
+    }
+    // 逆序：stepOrder 大的先补偿（执行顺序中靠后的先撤销）
+    const ordered = [...items].sort((a, b) => b.stepOrder - a.stepOrder);
+    const compensated: string[] = [];
+    const failed: Array<{ itemId: string; error: string }> = [];
+    for (const item of ordered) {
+      try {
+        await item.compensate();
+        compensated.push(item.itemId);
+      } catch (err) {
+        const error = err instanceof Error ? err.message : String(err);
+        failed.push({ itemId: item.itemId, error });
+        // 单项补偿失败不阻断后续补偿（继续回退到最早项以缩小影响面）
+      }
+    }
+    return { compensated, failed };
+  }
+
+  /**
+   * 接入最后负责人连续性守卫（ORG-024）。
+   * 确认批次前必须确保：撤销后（含同一操作授予的继任者）不会产生零负责人窗口
+   * （除非 emergencyBypass）。
+   */
+  assertMaintainsLastOwner(ctx: BatchOwnerGuardContext): void {
+    // 先校验"撤销最后一名负责人"路径：必须同操作指定继任者或紧急停用豁免
+    for (const subjectId of ctx.revokingSubjectIds) {
+      LastOwnerContinuityPolicy.assertNoZeroOwnerWindow({
+        currentOwners: ctx.currentOwnerIds,
+        subjectId,
+        successors: ctx.successorIds,
+        emergencyBypass: ctx.emergencyBypass === true,
+      });
+    }
+    // 再校验"批次执行后"的最终剩余负责人（含已授予的继任者）
+    const projected = this.projectOwnersAfterBatch(ctx);
+    LastOwnerContinuityPolicy.assertClubHasOwner(
+      projected,
+      ctx.clubName,
+      ctx.emergencyBypass === true,
+    );
+  }
+
+  /**
+   * 工具：算出"本批次（含撤销 + 继任授予）执行后"的最终负责人集合。
+   * 逻辑：先去掉 revokingSubjectIds，再加上 successorIds（去重）。
+   */
+  private projectOwnersAfterBatch(ctx: BatchOwnerGuardContext): readonly string[] {
+    const revoking = new Set(ctx.revokingSubjectIds);
+    const next = new Set<string>();
+    for (const id of ctx.currentOwnerIds) {
+      if (!revoking.has(id)) next.add(id);
+    }
+    for (const id of ctx.successorIds) {
+      next.add(id);
+    }
+    return [...next];
   }
 }
 
