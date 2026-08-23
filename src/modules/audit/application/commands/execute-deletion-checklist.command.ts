@@ -158,8 +158,8 @@ export class ExecuteDeletionChecklistCommand {
         version: checklist.version + 1,
         auditCommitted: false,
       };
-      const blocked = await this.repo.compareAndSwap(checklist, updatedWithRetry);
-      if (blocked) {
+      const committed = await this.repo.compareAndSwap(checklist, updatedWithRetry);
+      if (committed) {
         // 人工介入审计落库（状态不滞留"上限-1"，重试任务不再拉取该清单空转）
         await this.auditWriter.write({
           eventType: AuditEventType.SUPER_ADMIN_OP,

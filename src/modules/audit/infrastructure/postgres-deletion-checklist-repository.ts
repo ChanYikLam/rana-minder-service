@@ -159,6 +159,8 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
            confirmed = $7, affected_objects = $8::jsonb, business_relations_ended = $9,
            steps = $10::jsonb, completed = $11, replay_count = $12, retry_count = $13,
            needs_manual_review = $16, version = $14, audit_committed = $15
+         -- WHERE version 为防御性双重校验：前方 SELECT ... FOR UPDATE 已锁行并校验版本，
+         -- 但保留条件使非锁内（异常/直连）UPDATE 也不会覆盖并发写入的较新版本
          WHERE checklist_id = $1 AND version = $17`,
         [
           row.checklist_id,
