@@ -53,6 +53,8 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_deletion_checklist_completed
       ON public.deletion_checklist (completed, initiated_at DESC)
   `);
+  // 预留索引（当前无查询使用）：按删除范围 kind 过滤（如审计中心按范围查询删除清单）；
+  // 接入对应查询时启用，避免后期 DDL 变更窗口
   await runner.query(`
     CREATE INDEX IF NOT EXISTS idx_deletion_checklist_scope
       ON public.deletion_checklist (((scope->>'kind')), initiated_at DESC)

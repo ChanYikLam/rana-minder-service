@@ -176,13 +176,18 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
       /仅超级管理员/,
     );
     // 发起正式删除（超管敏感操作）本身落审计留痕（AUD-006/008；评审 warning 修复）
-    assert.equal(rig.initiateWrites.length, 1);
+    assert.equal(rig.initiateWrites.length, 2);
     const initWrite = rig.initiateWrites[0] as {
       eventType: string;
       actorId: string;
       target: { objectId: string };
+      newValues: { checklistPersisted: boolean };
     };
     assert.equal(initWrite.eventType, 'SUPER_ADMIN_OP');
+    // 孤儿审计对账链：发起审计（persisted=false）→ save 后对账审计（persisted=true）
+    assert.equal(initWrite.newValues.checklistPersisted, false);
+    const persistedWrite = rig.initiateWrites[1] as { newValues: { checklistPersisted: boolean } };
+    assert.equal(persistedWrite.newValues.checklistPersisted, true);
     assert.equal(initWrite.actorId, 'sa1');
     assert.equal(initWrite.target.objectId, checklist.checklistId);
   });
@@ -215,7 +220,7 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(audit.performedBy, 'sa1');
     assert.equal(audit.note, 'minimal-audit-only');
     // 审计已落库：发起删除（initiateWrites 1 条）+ 完成最小审计（rig.writes 1 条）
-    assert.equal(rig.initiateWrites.length, 1);
+    assert.equal(rig.initiateWrites.length, 2);
     assert.equal(rig.writes.length, 1);
     const written = rig.writes[0] as { target: { objectId: string } };
     assert.equal(written.target.objectId, checklist.checklistId);
@@ -338,7 +343,7 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(result.checklist.completed, false);
     assert.equal(result.minimalAudit, null); // 未完成不得生成最小审计/宣称完成
     // 审计已落库：发起删除（initiateWrites 1 条）+ 部分失败尝试审计（rig.writes 1 条，FAILURE 脱敏详情）
-    assert.equal(rig.initiateWrites.length, 1);
+    assert.equal(rig.initiateWrites.length, 2);
     assert.equal(rig.writes.length, 1);
     const written = rig.writes[0] as { outcome: string; failureReason: string };
     assert.equal(written.outcome, 'FAILURE');

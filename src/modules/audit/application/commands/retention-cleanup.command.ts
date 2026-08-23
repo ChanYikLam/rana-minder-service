@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AuditEventType, AuditOutcome } from '../../domain/models/audit-event';
 import type { TemporaryItem, TemporaryItemKind } from '../../domain/models/deletion';
 import { AuditWriter } from './audit-writer';
+import { DeletionPolicyError } from '../../domain/services/deletion-policy';
 
 /** 临时清理执行器注入令牌（RetentionCleanupExecutorPort 为接口，注入须用显式 token） */
 export const RETENTION_CLEANUP_EXECUTOR = Symbol('RETENTION_CLEANUP_EXECUTOR');
@@ -22,7 +23,11 @@ export interface RetentionCleanupExecutorPort {
 @Injectable()
 export class DefaultRetentionCleanupExecutor implements RetentionCleanupExecutorPort {
   async deleteAndVerify(_itemId: string, _kind: TemporaryItemKind): Promise<{ ok: boolean }> {
-    throw new Error('清理执行器未接线（占位实现 fail-closed）：请先接入真实临时清理执行器');
+    // 与删除步骤执行器（DefaultDeletionStepExecutor）统一 DeletionPolicyError（建议级评审意见）
+    throw new DeletionPolicyError(
+      'IFC-ERR-016',
+      '清理执行器未接线（占位实现 fail-closed）：请先接入真实临时清理执行器',
+    );
   }
 }
 

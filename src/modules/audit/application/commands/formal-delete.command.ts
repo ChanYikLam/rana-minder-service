@@ -101,7 +101,9 @@ export class FormalDeleteCommand {
       auditCommitted: false,
     };
     // **先写审计成功，再落清单**（warning 评审意见）：审计失败则清单不落库，
-    // 杜绝"无审计留痕的孤儿清单"（发起删除事件脱敏，仅记录范围与用途）
+    // 杜绝"无审计留痕的孤儿清单"（发起删除事件脱敏，仅记录范围与用途）；
+    // 发起审计带 checklistPersisted=false 标志（建议级评审意见）：save 成功后补写
+    // persisted=true 对账审计——对账规则：仅发起审计而无落库审计 = save 失败孤儿审计
     await this.auditWriter.write({
       eventType: AuditEventType.SUPER_ADMIN_OP,
       actorId: input.initiator.principalId,
@@ -110,11 +112,28 @@ export class FormalDeleteCommand {
       source: input.audit.source,
       target: { objectType: 'DELETION_REQUEST', objectId: checklist.checklistId },
       oldValues: null,
-      newValues: { deletionKind: input.scope.kind, purpose: input.purpose },
+      newValues: {
+        deletionKind: input.scope.kind,
+        purpose: input.purpose,
+        checklistPersisted: false,
+      },
       outcome: AuditOutcome.SUCCESS,
       requestId: input.audit.requestId,
     });
     await this.repo.save(checklist);
+    // 清单已落库 → 补写对账审计（孤儿审计可被对账任务识别并收敛）
+    await this.auditWriter.write({
+      eventType: AuditEventType.SUPER_ADMIN_OP,
+      actorId: input.initiator.principalId,
+      actorRoles: ['SUPER_ADMIN'],
+      scope: null,
+      source: input.audit.source,
+      target: { objectType: 'DELETION_CHECKLIST', objectId: checklist.checklistId },
+      oldValues: null,
+      newValues: { checklistPersisted: true },
+      outcome: AuditOutcome.SUCCESS,
+      requestId: input.audit.requestId,
+    });
     return checklist;
   }
 
