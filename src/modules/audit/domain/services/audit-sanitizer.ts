@@ -138,7 +138,10 @@ export class AuditSanitizer {
           continue;
         }
         if (child !== undefined && child !== null) {
-          const s = this.sanitizeField(leafName, child);
+          const s = this.sanitizeField(
+            leafName,
+            typeof child === 'string' ? this.redactInlineCredentials(child) : child,
+          );
           diffs.push(`${path}=${s.display}`);
         }
       }
@@ -155,31 +158,45 @@ export class AuditSanitizer {
     if (message === null || message === undefined) {
       return undefined;
     }
-    let text = message;
-    // 抹掉 key=value / key:value 形式的敏感键值（覆盖 token/secret/password/key/code 等）。
+    let text = this.redactInlineCredentials(message);
+    if (text.length > 256) {
+      text = `${text.slice(0, 256)}…(truncated:${message.length})`;
+    }
+    return text;
+  }
+
+  /**
+   * 抹掉自由文本内嵌的敏感键值/认证头/会话值/URL 凭证（不截断）。
+   * 供 sanitizeMessage 与 sanitizeObject 的字符串叶子共用，防止普通字段值
+   * 内嵌 `password=..`/`token=..` 等凭证被带进审计。
+   */
+  private redactInlineCredentials(input: string): string {
+    let text = input;
+    // 敏感值可能是无引号、单引号或双引号包裹（如 token="abc"、password: 'pw'），
+    // 若只用 [^...]+ 会因遇到引号提前截断而漏脱敏，导致凭证正文泄漏，故统一支持三类形态。
     // 采用「整词/受限前缀」匹配，避免过度脱敏：通用词（key/code/token）仅作为独立词，
     // 或由特定敏感前缀（access_/client_/api_ 等）组成复合键时才脱敏；
     // 不再用任意 [a-z0-9_-] 前缀吸收普通单词，避免误伤 postcode、status_code、
     // monkey、bank_code 等正常字段。
     text = text.replace(
-      /(^|[&;\s,"':])((?:(?:access|refresh|auth|client|smtp|email|api|secret|session|activation|reset|jwt|bearer|verify|verification|private|public|user|login)_?)?(?:token|secret|password|passwd|apikey|credential|key|code))\b\s*[=:]\s*[^&;\s,"':]+/gi,
+      /(^|[&;\s,"':])((?:(?:access|refresh|auth|client|smtp|email|api|secret|session|activation|reset|jwt|bearer|verify|verification|private|public|user|login)_?)?(?:token|secret|password|passwd|apikey|credential|key|code))\b\s*[=:]\s*(?:"[^"]*"|'[^']*'|[^&;\s,"':]+)/gi,
       (_m, sep: string, name: string) => `${sep}${name}=<REDACTED>`,
     );
-    // 抹掉 Authorization 认证头里的凭证正文（Bearer/Basic/Digest token）
+    // 抹掉 Authorization 认证头里的凭证正文（Bearer/Basic/Digest token，含引号包裹）
     text = text.replace(
-      /([a-z-]*authorization)\s*:\s*(?:bearer|basic|digest|token)?\s*[^\s,;，。：:"]+/gi,
+      /([a-z-]*authorization)\s*:\s*(?:bearer|basic|digest|token)?\s*(?:"[^"]*"|'[^']*'|[^\s,;，。：:"]+)/gi,
       (_m, header: string) => `${header}: <REDACTED>`,
     );
-    // 抹掉 Cookie / Set-Cookie 里的会话凭证值
-    text = text.replace(/(cookie|set-cookie)\s*:\s*[^\s,;，。：:"]+/gi, '$1: <REDACTED>');
-    // 抹掉 URL 查询串里的凭证参数
+    // 抹掉 Cookie / Set-Cookie 里的会话凭证值（含引号包裹）
     text = text.replace(
-      /([?&])(?:token|access_token|secret|password|key|code|verifycode)=[^&\s]*/gi,
+      /(cookie|set-cookie)\s*:\s*(?:"[^"]*"|'[^']*'|[^\s,;，。：:"]+)/gi,
+      '$1: <REDACTED>',
+    );
+    // 抹掉 URL 查询串里的凭证参数（含引号包裹）
+    text = text.replace(
+      /([?&])(?:token|access_token|secret|password|key|code|verifycode)=(?:"[^"]*"|'[^']*'|[^&\s]*)/gi,
       '$1<REDACTED>',
     );
-    if (text.length > 256) {
-      text = `${text.slice(0, 256)}…(truncated:${message.length})`;
-    }
     return text;
   }
 }

@@ -84,6 +84,14 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.ok(!v.includes('t1'), '数组内 token 不得落盘');
     assert.ok(v.includes('config.apiKey=<REDACTED'), '嵌套敏感键仅记脱敏差异');
     assert.ok(v.includes('items[0].name=n1'), '非敏感叶子保留');
+    // 普通字段值内嵌的敏感键值对（如错误消息）也应被抹掉，防正文带出凭证
+    const inline = await rig.writer.write({
+      ...baseEvent,
+      newValues: { note: '调用失败 password=INLINE_PWD token="INLINE_TOK" 继续' },
+    });
+    assert.ok(!inline.newValue?.includes('INLINE_PWD'), '普通字段值内嵌密码不得落盘');
+    assert.ok(!inline.newValue?.includes('INLINE_TOK'), '普通字段值内嵌令牌不得落盘');
+    assert.ok(inline.newValue?.includes('note=调用失败 password=<REDACTED>'), '内嵌凭证应被抹掉');
     // 循环引用对象不应抛错导致审计写入失败（避免业务整体失败被恶意输入触发）
     const circular: Record<string, unknown> = { a: {} };
     (circular.a as Record<string, unknown>).self = circular;
@@ -141,6 +149,17 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     });
     assert.ok(!auth.failureReason?.includes('eyJhbGciOiJIUzI1NiJ9.abc'), 'Bearer 令牌不得落盘');
     assert.ok(!auth.failureReason?.includes('abcd1234'), 'Cookie 会话值不得落盘');
+    // 引号包裹的敏感值（token=".." / password: '..' / Authorization Bearer ".."）同样不得落盘
+    const quoted = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '引号包裹 token="QTOK123" password: \'QPWD456\' access_token="QACC789" client_secret=\'QSEC999\'，Authorization: Bearer "eyJhbGci.QUOTED"，set-cookie: "session=QSESS"',
+    });
+    const qf = quoted.failureReason ?? '';
+    for (const secret of ['QTOK123', 'QPWD456', 'QACC789', 'QSEC999', 'QUOTED', 'QSESS']) {
+      assert.ok(!qf.includes(secret), `引号包裹敏感值 ${secret} 不得落盘`);
+    }
     // 超长文本截断
     const long = await rig.writer.write({
       ...baseEvent,
