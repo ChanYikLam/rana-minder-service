@@ -49,7 +49,7 @@ describe('ExportSnapshot.freeze — 数据集归一化', () => {
     assert.deepEqual(snapshot.data.datasets, EXPORT_DATASET_TYPES);
     // 每个数据集都有冻结字段基线
     for (const type of EXPORT_DATASET_TYPES) {
-      assert.ok(snapshot.data.fieldsByDataset[type].length > 0, `数据集 ${type} 应有字段`);
+      assert.ok(snapshot.fields(type).length > 0, `数据集 ${type} 应有字段`);
     }
   });
 
@@ -60,9 +60,12 @@ describe('ExportSnapshot.freeze — 数据集归一化', () => {
       datasets: ['club_summary', 'current_members'],
     });
     assert.deepEqual(snapshot.data.datasets, ['club_summary', 'current_members']);
-    assert.ok(snapshot.data.fieldsByDataset.club_summary.length > 0);
-    assert.ok(snapshot.data.fieldsByDataset.current_members.length > 0);
+    assert.ok(snapshot.fields('club_summary').length > 0);
+    assert.ok(snapshot.fields('current_members').length > 0);
+    // 契约收口：fieldsByDataset 类型为 Partial——未冻结的数据集 key 不存在
     assert.ok(snapshot.data.fieldsByDataset.admission_history === undefined);
+    // 且 fields() 读取缺省 key 时安全兜底为空数组（消费者契约不破）
+    assert.deepEqual(snapshot.fields('admission_history'), []);
   });
 });
 
