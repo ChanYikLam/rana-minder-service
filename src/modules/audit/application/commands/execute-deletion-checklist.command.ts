@@ -106,7 +106,7 @@ export class ExecuteDeletionChecklistCommand {
           note: 'minimal-audit-only',
         }
       : null;
-    // **先写审计成功，再提交清单完成**（W2/事务顺序）：审计写入失败则清单保持
+    // **先写审计成功，再提交清单**（W2/事务顺序）：审计写入失败则清单保持
     // 未完成（删除步骤已执行但不得宣称完成，重试补写审计），杜绝"已完成但审计丢失"
     if (minimalAudit !== null) {
       await this.auditWriter.write({
@@ -119,6 +119,21 @@ export class ExecuteDeletionChecklistCommand {
         oldValues: null,
         newValues: { deletionType: minimalAudit.deletionType },
         outcome: AuditOutcome.SUCCESS,
+        requestId: input.audit.requestId,
+      });
+    } else if (failed > 0) {
+      // 部分失败：保留尝试审计（AUD-009），失败详情脱敏；清单保持未完成持续重试
+      await this.auditWriter.write({
+        eventType: AuditEventType.SUPER_ADMIN_OP,
+        actorId: checklist.initiatedBy,
+        actorRoles: ['SUPER_ADMIN'],
+        scope: null,
+        source: input.audit.source,
+        target: { objectType: 'DELETION_CHECKLIST', objectId: checklist.checklistId },
+        oldValues: null,
+        newValues: { deletionType: checklist.scope.kind, failedSteps: failed },
+        outcome: AuditOutcome.FAILURE,
+        failureReason: 'deletion-steps-not-verified',
         requestId: input.audit.requestId,
       });
     }

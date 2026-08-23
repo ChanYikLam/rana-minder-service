@@ -222,6 +222,11 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(result.completed, false);
     assert.equal(result.checklist.completed, false);
     assert.equal(result.minimalAudit, null); // 未完成不得生成最小审计/宣称完成
+    // 部分失败保留尝试审计（AUD-009）：FAILURE 审计已落库（脱敏失败详情）
+    assert.equal(rig.writes.length, 1);
+    const written = rig.writes[0] as { outcome: string; failureReason: string };
+    assert.equal(written.outcome, 'FAILURE');
+    assert.equal(written.failureReason, 'deletion-steps-not-verified');
   });
 
   it('恢复后重放：即使清单已完成也重新执行全部步骤防复现（AUD-009）', async () => {
