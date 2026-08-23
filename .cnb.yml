@@ -80,8 +80,12 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
-        # 阶段 4b：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
-        - name: 4b-覆盖率门禁
+        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
+        - name: 4b-DI引导测试
+          if: "[ -f package.json ]"
+          script: npm run test:di
+        # 阶段 4c：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
+        - name: 4c-覆盖率门禁
           if: "[ -f package.json ]"
           script: |
             set -e
@@ -222,8 +226,12 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
-        # 阶段 4b：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
-        - name: 4b-覆盖率门禁
+        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
+        - name: 4b-DI引导测试
+          if: "[ -f package.json ]"
+          script: npm run test:di
+        # 阶段 4c：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
+        - name: 4c-覆盖率门禁
           if: "[ -f package.json ]"
           script: |
             set -e
@@ -349,7 +357,11 @@
         - name: 4-单元测试L1
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run test:unit
-        - name: 4b-覆盖率门禁
+        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
+        - name: 4b-DI引导测试
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run test:di
+        - name: 4c-覆盖率门禁
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |
             set -e

@@ -27,11 +27,57 @@ import { NotificationQueryService } from '../src/modules/notification/applicatio
 import { NotificationController } from '../src/modules/notification/interfaces';
 import { NotificationDeliveryHandler } from '../src/platform/tasks/executors/handlers/notification-delivery.handler';
 
+// DI 引导测试不关心真实外部依赖：提供一份完整且 fail-closed 的配置（casdoor/mail/外部
+// 服务 endpoint 均置空），使 @Global 的 AdaptersModule / identity 模块依赖可解析。
+const diTestConfig: RanaMinderConfig = {
+  server: {
+    host: '127.0.0.1',
+    port: 3000,
+    gracefulShutdownTimeoutMs: 5_000,
+  },
+  database: {
+    host: '127.0.0.1',
+    port: 5432,
+    name: 'test',
+    user: 'test',
+    schema: 'public',
+    ssl: false,
+    passwordRef: 'test-password',
+  },
+  casdoor: {
+    endpoint: '',
+    clientId: '',
+    clientSecretRef: '',
+    organization: '',
+    redirectUri: '',
+  },
+  storage: {
+    endpoint: '',
+    region: '',
+    accessKeyRef: '',
+    secretKeyRef: '',
+    buckets: { quarantine: '', primary: '', derived: '' },
+  },
+  mail: {
+    host: '',
+    port: 0,
+    fromAddress: '',
+  },
+  fileCheck: { endpoint: '' },
+  notify: { endpoint: '' },
+  backup: { endpoint: '' },
+  observability: { logLevel: 'info', traceSamplingRate: 1 },
+  job: { defaultLeaseMs: 60_000, schedulerIntervalMs: 1_000, maxAttempts: 5 },
+};
+
 describe('NotificationModule DI bootstrap', () => {
   it('NotificationModule 全部提供者可被解析（无接口注入回归）', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [NotificationModule],
-    }).compile();
+      imports: [ConfigurationModule.forRoot(), NotificationModule],
+    })
+      .overrideProvider(RANA_MINDER_CONFIG)
+      .useValue(diTestConfig)
+      .compile();
 
     const commands = [
       moduleRef.get(DeliverInboxCommand),
@@ -52,9 +98,7 @@ describe('NotificationModule DI bootstrap', () => {
       imports: [ConfigurationModule.forRoot(), TasksModule],
     })
       .overrideProvider(RANA_MINDER_CONFIG)
-      .useValue({
-        job: { defaultLeaseMs: 60_000, schedulerIntervalMs: 1_000, maxAttempts: 5 },
-      } as RanaMinderConfig)
+      .useValue(diTestConfig)
       .compile();
 
     const handler = moduleRef.get(NotificationDeliveryHandler);

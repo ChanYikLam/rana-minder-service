@@ -50,6 +50,3 @@ coverage/
 docs/_local/
 scripts/_local/
 .opencode/
-
-# ---------- 覆盖率产物（P1-A：c8 输出） ----------
-coverage/
