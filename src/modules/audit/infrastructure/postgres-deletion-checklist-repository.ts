@@ -196,7 +196,8 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
   private async listWhere(where: string): Promise<readonly DeletionChecklist[]> {
     return this.inTx(async (tx) => {
       const sql = `SELECT checklist_id, scope, reason, purpose, initiated_by, initiated_at, confirmed,
-                          affected_objects, business_relations_ended, steps, completed, replay_count, version, audit_committed
+                          affected_objects, business_relations_ended, steps, completed, replay_count,
+                          retry_count, needs_manual_review, version, audit_committed
                    FROM deletion_checklist${where.length > 0 ? ` WHERE ${where}` : ''}
                    ORDER BY initiated_at`;
       const rows = await this.db.query<DeletionChecklistRow>(tx, sql, []);

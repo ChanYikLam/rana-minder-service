@@ -80,6 +80,8 @@ const makeRow = (overrides: Record<string, unknown> = {}): Record<string, unknow
   ]),
   completed: false,
   replay_count: 0,
+  retry_count: 0,
+  needs_manual_review: false,
   version: 1,
   audit_committed: false,
   ...overrides,
@@ -94,14 +96,19 @@ describe('PostgresDeletionChecklistRepository（评审补测：防 SQL 列缺失
     const repo = new PostgresDeletionChecklistRepository(fake.db);
     const all = await repo.listAll();
     assert.equal(all.length, 2);
-    // audit_committed 必须为 boolean（undefined 会破坏幂等判断）
+    // 完整字段断言（评审回归：listWhere 曾漏列 retry_count/needs_manual_review，
+    // 导致 retryCount/needsManualReview 为 undefined——NaN 写入 PG 被拒、人工介入保护被绕过）
     for (const c of all) {
       assert.equal(typeof c.auditCommitted, 'boolean');
+      assert.equal(typeof c.retryCount, 'number');
+      assert.equal(typeof c.needsManualReview, 'boolean');
     }
     const incomplete = await repo.listIncomplete();
     assert.equal(incomplete.length, 1);
     assert.equal(incomplete[0].checklistId, 'cl-1');
     assert.equal(incomplete[0].auditCommitted, true);
+    assert.equal(incomplete[0].retryCount, 0);
+    assert.equal(incomplete[0].needsManualReview, false);
   });
 
   it('fromRow 兼容字符串/Date 两种 initiated_at（适配层类型统一）', async () => {
