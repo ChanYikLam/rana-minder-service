@@ -56,7 +56,7 @@ function fromRow(r: DeletionChecklistRow): DeletionChecklist {
     reason: r.reason,
     purpose: r.purpose,
     initiatedBy: r.initiated_by,
-    initiatedAt: (r.initiated_at as Date).toISOString(),
+    initiatedAt: new Date(r.initiated_at as Date | string).toISOString(),
     confirmed: r.confirmed,
     affectedObjects: JSON.parse(r.affected_objects as string) as readonly string[],
     businessRelationsEnded: r.business_relations_ended,
@@ -185,7 +185,7 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
   private async listWhere(where: string): Promise<readonly DeletionChecklist[]> {
     return this.inTx(async (tx) => {
       const sql = `SELECT checklist_id, scope, reason, purpose, initiated_by, initiated_at, confirmed,
-                          affected_objects, business_relations_ended, steps, completed, replay_count, version
+                          affected_objects, business_relations_ended, steps, completed, replay_count, version, audit_committed
                    FROM deletion_checklist${where.length > 0 ? ` WHERE ${where}` : ''}
                    ORDER BY initiated_at`;
       const rows = await this.db.query<DeletionChecklistRow>(tx, sql, []);
