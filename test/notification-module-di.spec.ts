@@ -27,11 +27,54 @@ import { NotificationQueryService } from '../src/modules/notification/applicatio
 import { NotificationController } from '../src/modules/notification/interfaces';
 import { NotificationDeliveryHandler } from '../src/platform/tasks/executors/handlers/notification-delivery.handler';
 
+/**
+ * 完整 mock 配置：DI 引导阶段会把 @Global AdaptersModule 的 factory 全部实例化，
+ * 它们依赖 RANA_MINDER_CONFIG 注入；IdentityModule 的 CASDOOR_AVAILABILITY factory
+ * 会读取 config.casdoor.endpoint（无 fail-closed 保护），故 mock 必须含 casdoor 字段，
+ * 否则 Nest 因缺 provider / config.casdoor 为 undefined 而启动失败。
+ * （各 ADAPTERS_*_REAL 未开启时对应适配保持桩，不读取 config 其余字段。）
+ */
+const mockRanaMinderConfig: RanaMinderConfig = {
+  server: { port: 3000, host: '0.0.0.0', gracefulShutdownTimeoutMs: 10_000 },
+  database: {
+    host: 'localhost',
+    port: 5432,
+    name: 'test',
+    user: 'test',
+    schema: 'public',
+    ssl: false,
+    passwordRef: 'test',
+  },
+  casdoor: {
+    endpoint: '',
+    clientId: '',
+    organization: '',
+    redirectUri: '',
+    clientSecretRef: '',
+  },
+  storage: {
+    endpoint: '',
+    region: '',
+    accessKeyRef: '',
+    secretKeyRef: '',
+    buckets: { quarantine: '', primary: '', derived: '' },
+  },
+  mail: { host: '', port: 25, fromAddress: '' },
+  fileCheck: { endpoint: '' },
+  notify: { endpoint: '' },
+  backup: { endpoint: '' },
+  observability: { logLevel: 'info', traceSamplingRate: 1 },
+  job: { schedulerIntervalMs: 1_000, defaultLeaseMs: 60_000, maxAttempts: 5 },
+};
+
 describe('NotificationModule DI bootstrap', () => {
   it('NotificationModule 全部提供者可被解析（无接口注入回归）', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [NotificationModule],
-    }).compile();
+      imports: [ConfigurationModule.forRoot(), NotificationModule],
+    })
+      .overrideProvider(RANA_MINDER_CONFIG)
+      .useValue(mockRanaMinderConfig)
+      .compile();
 
     const commands = [
       moduleRef.get(DeliverInboxCommand),
@@ -52,9 +95,7 @@ describe('NotificationModule DI bootstrap', () => {
       imports: [ConfigurationModule.forRoot(), TasksModule],
     })
       .overrideProvider(RANA_MINDER_CONFIG)
-      .useValue({
-        job: { defaultLeaseMs: 60_000, schedulerIntervalMs: 1_000, maxAttempts: 5 },
-      } as RanaMinderConfig)
+      .useValue(mockRanaMinderConfig)
       .compile();
 
     const handler = moduleRef.get(NotificationDeliveryHandler);
