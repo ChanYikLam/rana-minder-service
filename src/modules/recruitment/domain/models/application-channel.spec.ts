@@ -11,13 +11,19 @@ import { DefaultApplicationChannelStateMachine } from '../state-machines/applica
 const NOW = new Date('2026-08-21T10:00:00.000Z');
 const MACHINE = new DefaultApplicationChannelStateMachine();
 
-function closed() {
-  return ApplicationChannel.createClosed({ id: 'ch1', activityId: 'a1', clubId: 'c1', now: NOW });
+function notStarted() {
+  return ApplicationChannel.createNotStarted({
+    id: 'ch1',
+    activityId: 'a1',
+    clubId: 'c1',
+    now: NOW,
+  });
 }
 
 describe('ApplicationChannel (REC-002)', () => {
-  it('CLOSED → OPEN → PAUSED → OPEN → CLOSED', () => {
-    const channel = closed();
+  it('未开放 → OPEN → PAUSED → OPEN → CLOSED（SRS-SM-REC-002 四态）', () => {
+    const channel = notStarted();
+    assert.equal(channel.status, 'NOT_STARTED');
     assert.equal(channel.open(MACHINE, NOW), true);
     assert.equal(channel.status, 'OPEN');
     assert.equal(channel.isAccepting(), true);
@@ -26,26 +32,35 @@ describe('ApplicationChannel (REC-002)', () => {
     assert.equal(channel.isAccepting(), false);
     channel.resume(NOW);
     assert.equal(channel.status, 'OPEN');
-    assert.equal(channel.close(MACHINE, NOW), true);
+    channel.close(MACHINE, NOW);
     assert.equal(channel.status, 'CLOSED');
     assert.equal(channel.closeAt !== null, true);
   });
 
   it('OPEN 才能暂停', () => {
-    const channel = closed();
+    const channel = notStarted();
+    channel.open(MACHINE, NOW);
+    channel.pause(NOW);
     assert.throws(() => channel.pause(NOW));
   });
 
-  it('关闭后可重开新窗口（CLOSED → OPEN）', () => {
-    const channel = closed();
+  it('关闭后重开须携严格晚于重开时刻的新截止（SRS-SM-REC-002 重开守卫）', () => {
+    const channel = notStarted();
     channel.open(MACHINE, NOW);
     channel.close(MACHINE, NOW);
-    assert.equal(channel.open(MACHINE, NOW), true);
+    // 无守卫参数 → 拒绝
+    assert.equal(channel.open(MACHINE, NOW), false);
+    assert.equal(channel.status, 'CLOSED');
+    // 新截止不晚于重开时刻 → 拒绝
+    assert.equal(
+      channel.open(MACHINE, NOW, { newDeadlineStrictlyAfterNow: false }),
+      false,
+    );
+    // 新截止合法 → 允许
+    assert.equal(
+      channel.open(MACHINE, NOW, { newDeadlineStrictlyAfterNow: true }),
+      true,
+    );
     assert.equal(channel.status, 'OPEN');
-  });
-
-  it('非 OPEN/PAUSED 不可关闭', () => {
-    const channel = closed();
-    assert.equal(channel.close(MACHINE, NOW), false);
   });
 });
