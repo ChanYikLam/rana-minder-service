@@ -8,7 +8,8 @@
  *
  * 会话：Casdoor OIDC 会话链路按 API-AUTH-001 条件装配——casdoor.endpoint 配置
  * 存在时绑定 OidcAuthSessionProvider（本地 JWT 验证），缺失时退回 RejectAllAuth
- * SessionProvider（fail-closed，受保护端点 401 IFC-ERR-001）。
+ * SessionProvider（fail-closed，受保护端点 401 IFC-ERR-001）。登录/会话控制器始终
+ * 注册，但配置缺失时端点抛 SessionError(503 CAS-ERR-NOT_CONFIGURED) 而非签发会话。
  */
 
 import { forwardRef, Module } from '@nestjs/common';
@@ -53,6 +54,7 @@ import {
   ACCOUNT_ACCESS_CONTROLLER,
   NAME_CORRECTION_CONTROLLER,
   AUTH_SESSION_PROVIDER,
+  CASDOOR_AVAILABILITY,
 } from './tokens';
 
 import { IdentityUnitOfWork } from './infrastructure/unit-of-work';
@@ -98,7 +100,8 @@ import { NameCorrectionController } from './interfaces/controllers/name-correcti
 import { RejectAllAuthSessionProvider } from './interfaces/nest/auth-session';
 import { OidcAuthSessionProvider } from './interfaces/nest/oidc-session-provider';
 import { CasdoorSessionController } from './interfaces/nest/casdoor-session.controller';
-import { createHash } from 'node:crypto';
+import { deriveSessionSecret } from './interfaces/nest/session-secret';
+import { CasdoorAvailability } from './interfaces/nest/casdoor-availability';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../config';
 import { AuthGuard } from './interfaces/nest/auth.guard';
 import { ProfilesNestController } from './interfaces/nest/profiles.nest.controller';
@@ -116,22 +119,25 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
   providers: [
     // ----- 会话（条件装配：Casdoor endpoint 配置时启用 OIDC；否则 fail-closed）-----
     {
+      provide: CASDOOR_AVAILABILITY,
+      useFactory: (config: RanaMinderConfig) =>
+        // 配置存在时视为可用（由会话控制器在真实调用失败后下调，CAS-FAIL-001）
+        new CasdoorAvailability(config.casdoor.endpoint.length > 0),
+      inject: [RANA_MINDER_CONFIG],
+    },
+    {
       provide: AUTH_SESSION_PROVIDER,
-      useFactory: (config: RanaMinderConfig) => {
+      useFactory: (config: RanaMinderConfig, availability: CasdoorAvailability) => {
         if (config.casdoor.endpoint && config.casdoor.clientId && config.casdoor.clientSecretRef) {
-          const secret = new TextEncoder().encode(
-            createHash('sha256')
-              .update(`ranaminder-session:${config.casdoor.clientSecretRef}`)
-              .digest('hex'),
-          );
           return new OidcAuthSessionProvider({
-            sessionSecret: secret,
-            casdoorAvailable: true,
+            sessionSecret: deriveSessionSecret(config.casdoor.clientSecretRef),
+            // 运行时共享状态：Casdoor 不可用时降级窗口生效（CAS-FAIL-001）
+            casdoorAvailable: availability,
           });
         }
         return new RejectAllAuthSessionProvider();
       },
-      inject: [RANA_MINDER_CONFIG],
+      inject: [RANA_MINDER_CONFIG, CASDOOR_AVAILABILITY],
     },
     AuthGuard,
     // ----- 工作单元（ambient 事务 + RLS 单目标上下文）-----
@@ -438,6 +444,7 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     AUTH_SESSION_PROVIDER,
     AuthGuard,
     SUPER_ADMIN_VERIFIER,
+    CASDOOR_AVAILABILITY,
   ],
 })
 export class IdentityModule {}

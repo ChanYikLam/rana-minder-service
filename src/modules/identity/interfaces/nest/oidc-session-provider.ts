@@ -12,6 +12,7 @@
 import type { Request } from 'express';
 import { jwtVerify, SignJWT } from 'jose';
 import type { AuthSession, AuthSessionProvider } from './auth-session';
+import type { CasdoorAvailability } from './casdoor-availability';
 
 export interface SessionClaims {
   readonly sub: string;
@@ -23,7 +24,11 @@ export interface SessionClaims {
 
 export interface OidcSessionConfig {
   readonly sessionSecret: Uint8Array;
-  readonly casdoorAvailable: boolean; // 上一轮 Casdoor 连通探测结果
+  /**
+   * 上一轮 Casdoor 连通探测结果。可为静态布尔值（测试/固定场景）或共享的
+   * CasdoorAvailability 状态对象（运行时由会话控制器动态更新，CAS-FAIL-001）。
+   */
+  readonly casdoorAvailable: boolean | CasdoorAvailability;
 }
 
 export class OidcAuthSessionProvider implements AuthSessionProvider {
@@ -43,9 +48,13 @@ export class OidcAuthSessionProvider implements AuthSessionProvider {
       const now = new Date();
       const iat = typeof payload['iat'] === 'number' ? payload['iat'] : 0;
       const degraded = payload['degraded'] === true;
+      const casdoorAvailable =
+        typeof this.config.casdoorAvailable === 'boolean'
+          ? this.config.casdoorAvailable
+          : this.config.casdoorAvailable.available;
 
       // CAS-FAIL-001：Casdoor 不可用且会话签发超过 15 分钟 → 拒绝
-      if (degraded && !this.config.casdoorAvailable) {
+      if (degraded && !casdoorAvailable) {
         const ageMs = now.getTime() - iat * 1000;
         if (ageMs > 15 * 60 * 1000) {
           return null; // 降级窗口过期
