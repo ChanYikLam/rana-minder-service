@@ -17,6 +17,10 @@ export interface MigrationQueryRunner {
 export async function up(runner: MigrationQueryRunner): Promise<void> {
   await runner.query(
     `ALTER TABLE public.form_submissions
+       DROP CONSTRAINT IF EXISTS uq_form_submissions_form_version_submitter`,
+  );
+  await runner.query(
+    `ALTER TABLE public.form_submissions
        ADD CONSTRAINT uq_form_submissions_form_version_submitter
        UNIQUE (form_id, version_number, submitted_by)`,
   );
