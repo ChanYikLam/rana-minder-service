@@ -142,6 +142,54 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.ok(withDate.newValue?.includes('createdAt="2024-01-01'), 'Date 应正常序列化');
   });
 
+  it('敏感不落盘：数组名为敏感词时整体脱敏，数组内敏感元素不落盘', async () => {
+    const rig = makeRig();
+    // 数组字段名若为敏感词（tokens 复数），应整体脱敏，不得把数组元素明文落盘。
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { tokens: ['SECRET_ARRAY_TOKEN_1', 'SECRET_ARRAY_TOKEN_2'] },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('SECRET_ARRAY_TOKEN_1'), '数组内敏感 token 不得落盘');
+    assert.ok(!v.includes('SECRET_ARRAY_TOKEN_2'), '数组内敏感 token 不得落盘');
+    assert.ok(v.includes('tokens=<REDACTED'), '敏感数组应整体脱敏');
+  });
+
+  it('敏感不落盘：对象内数组元素为敏感字段时同样脱敏（剥离数组下标后匹配敏感词表）', async () => {
+    const rig = makeRig();
+    // 数组路径形如 items[0].token，若不剥离下标无法匹配敏感词表 token；
+    // 此处数组本身非敏感名，但元素内的敏感字段须被脱敏。
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { items: [{ token: 'ELEM_TOKEN_1', name: 'n1' }, { token: 'ELEM_TOKEN_2' }] },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('ELEM_TOKEN_1'), '数组元素内敏感 token 不得落盘');
+    assert.ok(!v.includes('ELEM_TOKEN_2'), '数组元素内敏感 token 不得落盘');
+    assert.ok(v.includes('items[0].token=<REDACTED'), '数组元素内敏感字段应脱敏');
+    assert.ok(v.includes('items[1].token=<REDACTED'), '数组每个元素的敏感字段都应脱敏');
+    assert.ok(v.includes('items[0].name=n1'), '数组元素内非敏感字段保留');
+  });
+
+  it('敏感不落盘：深嵌套对象不因递归栈溢出抛裸异常，仍可写入审计', async () => {
+    const rig = makeRig();
+    // 攻击者可控的深嵌套输入此前会抛裸 RangeError 从 AuditWriter 冒出；
+    // 修复后应在深度上限处停止递归，审计仍可写入、不泄漏内部细节。
+    const deep: Record<string, unknown> = { root: {} };
+    let cur: Record<string, unknown> = deep.root as Record<string, unknown>;
+    for (let i = 0; i < 20000; i++) {
+      cur.next = {};
+      cur = cur.next as Record<string, unknown>;
+    }
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { nested: deep },
+    });
+    assert.ok(event.auditId.length > 0, '深嵌套对象不应导致审计写入失败');
+    const v = event.newValue ?? '';
+    assert.ok(v.includes('depth-limit') || v.includes('unserializable'), '深嵌套超限应被占位标记');
+  });
+
   it('失败原因脱敏：错误信息中的令牌/密码不落盘，超长文本截断', async () => {
     const rig = makeRig();
     const event = await rig.writer.write({

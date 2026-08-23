@@ -23,9 +23,19 @@ const SENSITIVE_FIELD_WORDS: readonly string[] = [
 /** 归一化字段名（去分隔符转小写；smtpSecret → smtpsecret） */
 const normalizeField = (name: string): string => name.replace(/[^a-z0-9]/gi, '').toLowerCase();
 
-/** 是否属于敏感字段名 */
-const isSensitiveField = (name: string): boolean =>
-  SENSITIVE_FIELD_WORDS.includes(normalizeField(name));
+/** 递归下钻的最大深度：防止攻击者可控的深嵌套输入导致递归栈溢出（RangeError） */
+const MAX_SANITIZE_DEPTH = 100;
+
+/** 是否属于敏感字段名（含复数词干匹配：tokens→token、secrets→secret 等） */
+const isSensitiveField = (name: string): boolean => {
+  const norm = normalizeField(name);
+  if (SENSITIVE_FIELD_WORDS.includes(norm)) {
+    return true;
+  }
+  // 复数词干：去尾 s 后再匹配，覆盖 tokens/secrets/passwords 等复数形式；
+  // 长度>1 防单字符误判，仅去单个尾 s 避免 address/status 等被误伤。
+  return norm.length > 1 && norm.endsWith('s') && SENSITIVE_FIELD_WORDS.includes(norm.slice(0, -1));
+};
 
 /** 脱敏结果 */
 export interface SanitizedAuditValue {
@@ -90,7 +100,13 @@ export class AuditSanitizer {
     }
     const diffs: string[] = [];
     const stack = new Set<object>();
-    this.collectDiffs(input, '', diffs, stack);
+    try {
+      this.collectDiffs(input, '', diffs, stack, 0);
+    } catch {
+      // 兜底：任何意外异常（如深嵌套栈溢出）都不应让审计写入抛裸异常、拖垮业务；
+      // 改为记录一个不可序列化的占位差异，保证审计可写入且不泄漏内部细节。
+      return '<unserializable:depth-limit>';
+    }
     return diffs.length > 0 ? diffs.join(';') : null;
   }
 
@@ -128,10 +144,17 @@ export class AuditSanitizer {
     prefix: string,
     diffs: string[],
     stack: Set<object>,
+    depth: number,
   ): void {
     // 真正的循环引用（出现在当前祖先链上）才跳过，防止无限递归、不把循环体正文落盘；
     // 共享引用（同一对象被多处引用但非循环）应正常下钻，避免遗漏差异。
     if (stack.has(value)) {
+      return;
+    }
+    // 超过最大深度：不再继续递归，标记占位，防深嵌套对象导致递归栈溢出，
+    // 也不把超限部分整体序列化（其中可能含敏感字段明文）。
+    if (depth > MAX_SANITIZE_DEPTH) {
+      diffs.push(`${prefix || 'value'}=<depth-limit>`);
       return;
     }
     stack.add(value);
@@ -141,18 +164,20 @@ export class AuditSanitizer {
         : Object.entries(value).map(([k, v]) => [`${prefix ? `${prefix}.` : ''}${k}`, v] as const);
 
       for (const [path, child] of entries) {
-        const leafName = path.slice(path.lastIndexOf('.') + 1);
+        // 剥离数组下标（如 tokens[0] → tokens）后再判断是否敏感，
+        // 否则 tokens[0] 归一化为 tokens0 无法命中敏感词表，导致敏感值明文落盘。
+        const leafName = path.slice(path.lastIndexOf('.') + 1).replace(/\[\d+\]/g, '');
         if (isSensitiveField(leafName)) {
           const s = this.sanitizeField(leafName, child);
           diffs.push(`${path}=${s.display}`);
           continue;
         }
         if (Array.isArray(child)) {
-          this.collectDiffs(child, path, diffs, stack);
+          this.collectDiffs(child, path, diffs, stack, depth + 1);
           continue;
         }
         if (this.isPlainRecord(child)) {
-          this.collectDiffs(child, path, diffs, stack);
+          this.collectDiffs(child, path, diffs, stack, depth + 1);
           continue;
         }
         if (child !== undefined && child !== null) {
