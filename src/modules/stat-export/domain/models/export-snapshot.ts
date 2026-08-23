@@ -43,6 +43,8 @@ export interface ExportSnapshotData {
   /** 每个数据集冻结后的可导出字段基线（已 clamp 越权/秘密字段） */
   readonly fieldsByDataset: Readonly<Record<ExportDatasetType, readonly string[]>>;
   readonly datasets: readonly ExportDatasetType[];
+  /** 冻结时被 clamp 剔除的越权/秘密字段清单（幂等回放展示用；与快照一并固化，与实时基线解耦） */
+  readonly rejectedFields: readonly string[];
   readonly frozenAt: string; // ISO
   readonly academicYear: string | null;
   readonly timeRange: { from: string; to: string } | null;
@@ -95,10 +97,13 @@ export class ExportSnapshot {
       rejected.push(...clamped.rejected);
     }
 
+    const dedupRejected = [...new Set(rejected)];
+
     const snapshot = new ExportSnapshot({
       scope: input.scope,
       fieldsByDataset,
       datasets: normalized,
+      rejectedFields: dedupRejected,
       frozenAt: nowIso,
       academicYear: input.academicYear ?? null,
       timeRange: input.timeRange ?? null,
@@ -108,6 +113,6 @@ export class ExportSnapshot {
       attachmentRefs: input.attachmentRefs ?? [],
     });
 
-    return { snapshot, rejectedFields: [...new Set(rejected)] };
+    return { snapshot, rejectedFields: dedupRejected };
   }
 }
