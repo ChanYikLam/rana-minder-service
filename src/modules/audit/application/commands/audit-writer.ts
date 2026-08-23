@@ -5,6 +5,7 @@ import type { AuditEvent, AuditSource } from '../../domain/models/audit-event';
 import { AuditSanitizer } from '../../domain/services/audit-sanitizer';
 import { AUDIT_REPOSITORY } from '../../infrastructure/audit-repository';
 import type { AuditRepository } from '../../infrastructure/audit-repository';
+import type { AuditUnitOfWork } from '../../infrastructure/audit-unit-of-work';
 
 /** 审计写入输入（AuditWriter；AUD-003） */
 export interface AuditWriteInput {
@@ -44,6 +45,8 @@ export class AuditWriter {
   constructor(
     @Inject(AUDIT_REPOSITORY) private readonly repo: AuditRepository,
     private readonly sanitizer: AuditSanitizer,
+    /** 可选：PostgreSQL 接线时提供，保证审计与业务同一事务提交（AUD-003/IFC-TX-006） */
+    private readonly uow?: AuditUnitOfWork,
   ) {}
 
   async write(input: AuditWriteInput): Promise<AuditEvent> {
@@ -65,7 +68,12 @@ export class AuditWriter {
       requestId: input.requestId,
     };
     try {
-      await this.repo.append(event);
+      // 有事务边界时在事务内提交（写入失败业务整体失败）；内存占位实现直接追加
+      if (this.uow !== undefined) {
+        await this.uow.run({ kind: 'unprotected' }, () => this.repo.append(event));
+      } else {
+        await this.repo.append(event);
+      }
     } catch (e) {
       // 关键审计写入失败 → 调用方业务必须整体失败（不得异步补写）
       throw new AuditWriteFailedError(

@@ -349,7 +349,8 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.equal((await rig.repo.query({ limit: -1 })).length, 0);
     const lastTwo = await rig.repo.query({ limit: 2 });
     assert.equal(lastTwo.length, 2);
-    assert.equal(lastTwo[1]?.actorId, 'u3');
+    // 最近 N 条按 occurredAt 倒序（最新在前），u3 应排首位
+    assert.equal(lastTwo[0]?.actorId, 'u3');
   });
 
   it('审计只追加不可篡改：仓储无修改/删除方法；查询按条件过滤', async () => {

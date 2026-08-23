@@ -44,18 +44,30 @@ export class InMemoryAuditRepository implements AuditRepository {
     if (limit <= 0) {
       return [];
     }
-    return this.events
-      .filter((e) => {
-        if (filter.from !== undefined && e.occurredAt < filter.from) return false;
-        if (filter.to !== undefined && e.occurredAt > filter.to) return false;
-        if (filter.actorId !== undefined && e.actorId !== filter.actorId) return false;
-        if (filter.clubId !== undefined && e.scope?.clubId !== filter.clubId) return false;
-        if (filter.objectType !== undefined && e.target?.objectType !== filter.objectType)
-          return false;
-        if (filter.objectId !== undefined && e.target?.objectId !== filter.objectId) return false;
-        if (filter.eventType !== undefined && e.eventType !== filter.eventType) return false;
-        return true;
-      })
-      .slice(-limit);
+    // “最近 N 条”按 occurredAt 时间倒序（最新在前），而非插入顺序（slice(-limit) 是最后插入的 N 条）。
+    // 时间戳相同时用插入顺序兜底（后插入视为更新）。PostgreSQL 适配对应
+    // ORDER BY occurred_at DESC LIMIT（见 PostgresAuditRepository）。
+    const filtered = this.events.filter((e) => {
+      if (filter.from !== undefined && e.occurredAt < filter.from) return false;
+      if (filter.to !== undefined && e.occurredAt > filter.to) return false;
+      if (filter.actorId !== undefined && e.actorId !== filter.actorId) return false;
+      if (filter.clubId !== undefined && e.scope?.clubId !== filter.clubId) return false;
+      if (filter.objectType !== undefined && e.target?.objectType !== filter.objectType)
+        return false;
+      if (filter.objectId !== undefined && e.target?.objectId !== filter.objectId) return false;
+      if (filter.eventType !== undefined && e.eventType !== filter.eventType) return false;
+      return true;
+    });
+    return filtered
+      .map((event, index) => ({ event, index }))
+      .sort((a, b) =>
+        a.event.occurredAt < b.event.occurredAt
+          ? 1
+          : a.event.occurredAt > b.event.occurredAt
+            ? -1
+            : b.index - a.index,
+      )
+      .slice(0, limit)
+      .map(({ event }) => event);
   }
 }

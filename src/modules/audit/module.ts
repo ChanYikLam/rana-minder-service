@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+
+import { AdaptersModule } from '../../adapters/adapters.module';
+import { DB_ADAPTER } from '../../adapters/tokens';
 import { SaveCorrectionDraftCommand } from './application/commands/correction-submit.command';
 import { SubmitCorrectionCommand } from './application/commands/correction-submit.command';
 import { DecideCorrectionCommand } from './application/commands/correction-decide.command';
@@ -13,7 +16,8 @@ import { AuditSanitizer } from './domain/services/audit-sanitizer';
 import { CORRECTION_REPOSITORY } from './infrastructure/correction-repository';
 import { InMemoryCorrectionRepository } from './infrastructure/correction-repository';
 import { AUDIT_REPOSITORY } from './infrastructure/audit-repository';
-import { InMemoryAuditRepository } from './infrastructure/audit-repository';
+import { PostgresAuditRepository } from './infrastructure/postgres-audit-repository';
+import { AuditUnitOfWork } from './infrastructure/audit-unit-of-work';
 
 /**
  * 领域模块：纠错、审计与数据生命周期（5.3，SRS-SM-AUD-001）。
@@ -30,12 +34,24 @@ import { InMemoryAuditRepository } from './infrastructure/audit-repository';
  *   应用内无修改/删除审计入口；删除只留最小审计；不建设匿名化。
  */
 @Module({
+  imports: [AdaptersModule],
   providers: [
     CorrectionStateMachine,
     CorrectionPolicy,
     AuditSanitizer,
     { provide: CORRECTION_REPOSITORY, useClass: InMemoryCorrectionRepository },
-    { provide: AUDIT_REPOSITORY, useClass: InMemoryAuditRepository },
+    {
+      provide: AuditUnitOfWork,
+      useFactory: (db) => new AuditUnitOfWork(db),
+      inject: [DB_ADAPTER],
+    },
+    {
+      provide: AUDIT_REPOSITORY,
+      // 生产默认 PostgreSQL 落盘（审计持久化，重启不丢）；DB 未连接（NotWired 桩）
+      // 时审计写入失败关闭，绝不让关键审计静默丢失。内存实现仅保留为开发/测试占位。
+      useFactory: (db, uow) => new PostgresAuditRepository(db, uow),
+      inject: [DB_ADAPTER, AuditUnitOfWork],
+    },
     SaveCorrectionDraftCommand,
     SubmitCorrectionCommand,
     DecideCorrectionCommand,
@@ -56,6 +72,7 @@ import { InMemoryAuditRepository } from './infrastructure/audit-repository';
     AuditQuery,
     CORRECTION_REPOSITORY,
     AUDIT_REPOSITORY,
+    AuditUnitOfWork,
   ],
 })
 export class AuditModule {}
