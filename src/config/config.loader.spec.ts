@@ -43,6 +43,7 @@ casdoor:
   organization: myorg
   redirectUri: http://localhost:3000/api/auth/callback
   clientSecretRef: realsecret456
+  sessionSecretRef: realsession789
 storage:
   endpoint: http://minio:9000
   region: us-east-1
@@ -57,6 +58,7 @@ describe('config.loader 占位符 fail-closed', () => {
       const cfg = loadConfig({ configFilePath: file });
       assert.equal(cfg.database.passwordRef, 'realpassword123');
       assert.equal(cfg.casdoor.clientId, 'myclient');
+      assert.equal(cfg.casdoor.sessionSecretRef, 'realsession789');
       assert.equal(cfg.storage.secretKeyRef, 'realminkey');
     } finally {
       cleanupTemp(file);

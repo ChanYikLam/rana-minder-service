@@ -23,6 +23,18 @@ import type { InvitationRepository } from './invitation-repository';
 import type { RoutineInvitationRepository } from './routine-invitation-repository';
 import { Injectable } from '@nestjs/common';
 
+/**
+ * 幂等冲突（IFC-ERR-009）：同社团同对象已存在待处理邀请（MEM-018）。
+ * 由仓储将 PostgreSQL 部分唯一索引冲突（SQLSTATE 23505）映射为该领域错误，
+ * 供控制器 instanceof 识别并映射为约定 HTTP 状态。
+ */
+export class InvitationUniqueViolationError extends Error {
+  constructor(message = '同社团同对象已存在待处理邀请（IFC-ERR-009 幂等冲突）') {
+    super(`IFC-ERR-009: ${message}`);
+    this.name = 'InvitationUniqueViolationError';
+  }
+}
+
 interface InvitationRow {
   invitation_id: string;
   kind: string;
@@ -338,9 +350,7 @@ function mapUniqueViolation(error: unknown): Error {
   const err = error as { code?: string; constraint?: string };
   if (err?.code === '23505') {
     // MEM-018：同社团同对象最多一份待处理邀请（IFC-ERR-009 幂等冲突）
-    const e = new Error('IFC-ERR-009: 同社团同对象已存在待处理邀请');
-    e.name = 'InvitationUniqueViolationError';
-    return e;
+    return new InvitationUniqueViolationError();
   }
   return error as Error;
 }

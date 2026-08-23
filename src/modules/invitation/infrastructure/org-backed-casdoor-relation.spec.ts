@@ -168,4 +168,15 @@ describe('OrgBackedCasdoorRelationPort（REC-026/ORG-027）', () => {
     assert.equal(result.groupConfirmed, true);
     assert.equal(result.departmentConfirmed, false);
   });
+
+  it('组合关系：社团组写入失败 → 双 false（fail-closed，CAS-WR-010）', async () => {
+    const port = new OrgBackedCasdoorRelationPort(
+      fakeRegistry(),
+      fakeCasdoor({ writeOk: false, readbackMembers: [] }),
+    );
+    const result = await port.writeAndReadBackRelations('club-acm', 'u_1001', 'dept-tech');
+    assert.equal(result.groupConfirmed, false);
+    assert.equal(result.departmentConfirmed, false);
+    assert.equal(result.reason, 'CAS-BACK-WRITE_FAILED:DEPENDENCY_UNAVAILABLE');
+  });
 });

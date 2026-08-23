@@ -53,9 +53,10 @@ export class OrgBackedCasdoorRelationPort {
 
     const groupResult = await this.writeAndReadbackSingle(clubRef, principalId);
     if (!groupResult.confirmed) {
+      // 社团组未确认 → 部门亦不可能确认（fail-closed，CAS-WR-010 部分成功不得授权）
       return {
         groupConfirmed: false,
-        departmentConfirmed: true,
+        departmentConfirmed: false,
         reason: groupResult.reason,
       };
     }

@@ -24,6 +24,7 @@ import {
 } from '@nestjs/common';
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 import { InvitationAuthGuard, invitationSessionFromRequest } from './invitation-auth.guard';
+import { InvitationUniqueViolationError } from '../../infrastructure/postgres-invitation.repository';
 
 import { AcceptInvitationCommand } from '../../application/commands/accept-invitation.command';
 import { RejectInvitationCommand } from '../../application/commands/reject-invitation.command';
@@ -168,7 +169,8 @@ export class InvitationNestController {
       error instanceof RejectInvitationError ||
       error instanceof AcceptRoutineError ||
       error instanceof RoutineRejectError ||
-      error instanceof InvitationStatusQueryError
+      error instanceof InvitationStatusQueryError ||
+      error instanceof InvitationUniqueViolationError
         ? (error.message.split(':')[0] as string)
         : null;
     if (code === 'IFC-ERR-006') {

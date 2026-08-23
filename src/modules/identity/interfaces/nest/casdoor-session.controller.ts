@@ -13,13 +13,26 @@
  * 会话解析退回到 RejectAllAuthSessionProvider（fail-closed）。
  */
 
-import { Controller, Delete, Get, HttpCode, Inject } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpException,
+  HttpStatus,
+  Inject,
+} from '@nestjs/common';
 import { type Request as ExpressRequest, type Response } from 'express';
-import { createHash } from 'node:crypto';
-import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../../../config';
+import {
+  isSecretRef,
+  RANA_MINDER_CONFIG,
+  resolveSecret,
+  type RanaMinderConfig,
+} from '../../../../config';
 import { CasdoorOidcClient } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import type { CasdoorOidcConfig } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-provider';
+import { resolveSessionSecret } from './session-secret';
 
 /** GET /api/auth/session 响应（API-AUTH-001） */
 export interface SessionResponse {
@@ -65,7 +78,7 @@ export class CasdoorSessionController {
     const stateRaw = req.query['state'] as string | undefined;
 
     if (!code || !stateRaw) {
-      throw new SessionError('Missing code or state', 400);
+      throw new SessionError('Missing code or state', HttpStatus.BAD_REQUEST);
     }
 
     // 解码 state → nonce
@@ -74,26 +87,26 @@ export class CasdoorSessionController {
       const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8'));
       nonce = state.nonce;
     } catch {
-      throw new SessionError('Invalid state', 400);
+      throw new SessionError('Invalid state', HttpStatus.BAD_REQUEST);
     }
 
     // 交换授权码 → TokenSet
     const tokens = await client.exchangeCode(code);
     if (!tokens.idToken) {
-      throw new SessionError('Token exchange failed', 401);
+      throw new SessionError('Token exchange failed', HttpStatus.UNAUTHORIZED);
     }
 
     // 验证 id_token（CAS-CAP-004：签发方/受众/有效期/主体绑定）
     const claims = await client.verifyIdToken(tokens.idToken, nonce);
     const sub = typeof claims['sub'] === 'string' ? claims['sub'] : '';
     if (!sub) {
-      throw new SessionError('Invalid id_token: missing sub', 401);
+      throw new SessionError('Invalid id_token: missing sub', HttpStatus.UNAUTHORIZED);
     }
 
     // 检查账号状态（CAS-REC-002 实时读回）
     const accountState = await client.fetchAccountState(tokens.accessToken);
     if (accountState === 'DISABLED' || accountState === 'DELETED') {
-      throw new SessionError('账号已被禁用或删除', 403, 'IFC-ERR-011');
+      throw new SessionError('账号已被禁用或删除', HttpStatus.FORBIDDEN, 'IFC-ERR-011');
     }
 
     // 签发本地会话 JWT
@@ -143,31 +156,46 @@ export class CasdoorSessionController {
     if (!c.endpoint || !c.clientId || !c.clientSecretRef) {
       throw new SessionError(
         'Casdoor OIDC 未配置（endpoint/clientId/clientSecretRef 缺失）',
-        503,
+        HttpStatus.SERVICE_UNAVAILABLE,
         'CAS-ERR-NOT_CONFIGURED',
       );
     }
+    // clientSecretRef 可能是明文或 ${env:...} 引用；仅对引用形式执行解析（ADR-010）。
+    const clientSecret = isSecretRef(c.clientSecretRef)
+      ? resolveSecret(c.clientSecretRef)
+      : c.clientSecretRef;
     const oidcConfig: CasdoorOidcConfig = {
       endpoint: c.endpoint,
       clientId: c.clientId,
-      clientSecret: c.clientSecretRef,
+      clientSecret,
       redirectUri: c.redirectUri,
     };
     this.oidcClient = new CasdoorOidcClient(oidcConfig);
-    this.sessionSecret = new TextEncoder().encode(
-      createHash('sha256').update(`ranaminder-session:${c.clientSecretRef}`).digest('hex'),
-    );
+    // 会话签名密钥：优先独立 sessionSecretRef，否则从解析后的高熵 clientSecret 派生（CAS-AUTH-001）。
+    this.sessionSecret = resolveSessionSecret(c);
     return this.oidcClient;
   }
 }
 
-export class SessionError extends Error {
+/**
+ * 会话端点错误（CAS-AUTH-001）。
+ * 继承 HttpException 使 NestJS 内建异常处理按 statusCode 输出对应 HTTP 状态，
+ * 而非落入 500（IFC-ERR-500 之外走 ApiErrorBody：code/message）。
+ */
+export class SessionError extends HttpException {
   constructor(
     message: string,
-    public readonly statusCode: number,
+    statusCode: number,
     public readonly code?: string,
   ) {
-    super(message);
+    super(
+      {
+        code: code ?? 'IFC-ERR-001',
+        message,
+        supportId: '',
+      },
+      statusCode,
+    );
     this.name = 'SessionError';
   }
 }

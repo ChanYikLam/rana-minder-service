@@ -98,7 +98,7 @@ import { NameCorrectionController } from './interfaces/controllers/name-correcti
 import { RejectAllAuthSessionProvider } from './interfaces/nest/auth-session';
 import { OidcAuthSessionProvider } from './interfaces/nest/oidc-session-provider';
 import { CasdoorSessionController } from './interfaces/nest/casdoor-session.controller';
-import { createHash } from 'node:crypto';
+import { resolveSessionSecret } from './interfaces/nest/session-secret';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../config';
 import { AuthGuard } from './interfaces/nest/auth.guard';
 import { ProfilesNestController } from './interfaces/nest/profiles.nest.controller';
@@ -119,13 +119,8 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
       provide: AUTH_SESSION_PROVIDER,
       useFactory: (config: RanaMinderConfig) => {
         if (config.casdoor.endpoint && config.casdoor.clientId && config.casdoor.clientSecretRef) {
-          const secret = new TextEncoder().encode(
-            createHash('sha256')
-              .update(`ranaminder-session:${config.casdoor.clientSecretRef}`)
-              .digest('hex'),
-          );
           return new OidcAuthSessionProvider({
-            sessionSecret: secret,
+            sessionSecret: resolveSessionSecret(config.casdoor),
             casdoorAvailable: true,
           });
         }
