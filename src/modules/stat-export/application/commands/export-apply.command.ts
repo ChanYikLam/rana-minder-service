@@ -96,12 +96,26 @@ export interface ExportApplyResult {
  * 跨用户回放守卫抛 IFC-ERR-003（误导性强，且限制了同名 key 的合理复用）。并入后不同
  * 用户摘要不同，回放前冲突预检直接以 IFC-ERR-009 语义拒绝，语义更清晰；同用户同 key
  * 相同请求摘要仍一致，幂等回放不受影响。
+ *
+ * hashVersion 固化幂等语义摘要的版本（评审⑤跨分支耦合：摘要依赖
+ * STATISTICS_SPECIFICATION 的 EXPORT_DATASET_TYPES / clampExportFields 基线）。
+ * 基线跨版本漂移时，同 key 回放的 rejectedFields / 冲突语义可能漂移，导致幂等
+ * 回放与历史快照失配。通过显式版本号，当字段/数据集基线发生不兼容变更时须同步
+ * 递增本常量，使摘要变化显式化（旧 key 语义归为不同申请内容 → IFC-ERR-009），
+ * 而非静默复用错误基线。
+ *
+ * hashVersion 作为可选入参（缺省用常量），便于测试真正驱动版本递增验证摘要变化，
+ * 而非仅靠手动构造差异断言（避免测试自证）。生产调用不传，恒用常量，语义不变。
  */
+export const APPLY_IDEMPOTENCY_HASH_VERSION = 1;
+
 export function applyIdempotencyHash(
   request: ExportApplyRequest,
   principalUserId?: string,
+  hashVersion: number = APPLY_IDEMPOTENCY_HASH_VERSION,
 ): string {
   return JSON.stringify({
+    hashVersion,
     kind: request.kind,
     principalUserId: principalUserId ?? null,
     clubId: request.clubId ?? null,

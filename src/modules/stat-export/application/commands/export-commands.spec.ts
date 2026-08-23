@@ -1173,4 +1173,23 @@ describe('工具函数', () => {
     const c = applyIdempotencyHash(base, 'user-A');
     assert.equal(a, c);
   });
+
+  it('applyIdempotencyHash 固化语义版本：同版本摘要稳定，版本递增摘要必变（评审⑤基线漂移显式化）', () => {
+    const req = {
+      kind: 'club' as const,
+      clubId: 'C1',
+      datasets: ['club_summary', 'current_members'],
+    };
+    // 同版本同请求 → 摘要稳定，幂等回放语义一致；缺省版本恒用常量，生产语义不变。
+    assert.equal(applyIdempotencyHash(req, 'user-A'), applyIdempotencyHash(req, 'user-A'));
+    assert.equal(applyIdempotencyHash(req, 'user-A'), applyIdempotencyHash(req, 'user-A', 1));
+    // 显式驱动版本递增（模拟基线漂移后递增 APPLY_IDEMPOTENCY_HASH_VERSION）：
+    // 真正走函数内部分支驱动摘要变化，而非靠手动构造差异断言。
+    const v1 = applyIdempotencyHash(req, 'user-A', 1);
+    const v2 = applyIdempotencyHash(req, 'user-A', 2);
+    assert.notEqual(v1, v2);
+    // 版本号确实固化进摘要：基线漂移后旧 key 语义显式归为不同申请内容（IFC-ERR-009）。
+    assert.equal(JSON.parse(v1).hashVersion, 1);
+    assert.equal(JSON.parse(v2).hashVersion, 2);
+  });
 });
