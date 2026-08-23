@@ -57,6 +57,38 @@ describe('InterviewRecord (REC-005)', () => {
     assert.equal(iv.toSnapshot().skipReason, '表现优异免试');
   });
 
+  it('已安排可跳轮/免试（REC-040：待选择或已安排）', () => {
+    const iv = pending();
+    assert.equal(iv.schedule(MACHINE, 'i1', NOW, null, NOW), true);
+    assert.equal(iv.skip(MACHINE, '轮次冲突跳轮', NOW), true);
+    assert.equal(iv.status, 'SKIPPED');
+  });
+
+  it('出勤事件：请假/迟到/缺席 → 重排回已安排（SRS-SM-REC-005）', () => {
+    const leave = pending();
+    leave.schedule(MACHINE, 'i1', NOW, null, NOW);
+    assert.equal(leave.markOnLeave(MACHINE, NOW), true);
+    assert.equal(leave.status, 'ON_LEAVE');
+    assert.equal(leave.reschedule(MACHINE, NOW), true);
+    assert.equal(leave.status, 'SCHEDULED');
+
+    const absent = pending();
+    absent.schedule(MACHINE, 'i1', NOW, null, NOW);
+    assert.equal(absent.markAbsent(MACHINE, NOW), true);
+    assert.equal(absent.status, 'ABSENT');
+    assert.equal(absent.reschedule(MACHINE, NOW), true);
+    assert.equal(absent.status, 'SCHEDULED');
+  });
+
+  it('迟到可开始面试（SRS-SM-REC-005：已安排或迟到 → 进行中）', () => {
+    const iv = pending();
+    iv.schedule(MACHINE, 'i1', NOW, null, NOW);
+    assert.equal(iv.markLate(MACHINE, NOW), true);
+    assert.equal(iv.status, 'LATE');
+    assert.equal(iv.start(MACHINE, NOW), true);
+    assert.equal(iv.status, 'IN_PROGRESS');
+  });
+
   it('暂缓 → 恢复', () => {
     const iv = pending();
     assert.equal(iv.hold(MACHINE, new Date('2026-08-25T00:00:00.000Z'), NOW), true);

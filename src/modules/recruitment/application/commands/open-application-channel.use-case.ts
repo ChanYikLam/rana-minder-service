@@ -1,7 +1,7 @@
 /**
  * 开放报名通道用例（REC-002、SRS-SM-REC-002）。
  *
- * 活动须进行中；负责人/人事可创建并开放通道（CLOSED → OPEN）。
+ * 活动须进行中；负责人/人事可创建并开放通道（未开放 → 开放）。
  */
 
 import { randomUUID } from 'node:crypto';
@@ -66,7 +66,7 @@ export class DefaultOpenApplicationChannelUseCase implements OpenApplicationChan
       throw recruitmentErrors.validation('志愿上限不得小于下限');
     }
     const id = input.id ?? randomUUID();
-    const channel = ApplicationChannel.createClosed({
+    const channel = ApplicationChannel.createNotStarted({
       id,
       activityId: activity.id,
       clubId: activity.clubId,

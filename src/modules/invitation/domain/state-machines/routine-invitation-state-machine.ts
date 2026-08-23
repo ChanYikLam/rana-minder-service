@@ -70,8 +70,13 @@ const TRANSITIONS: Readonly<Record<RoutineInvitationStatus, readonly RoutineInvi
     RoutineInvitationStatus.ACTIVATED, // 已实际全部达成直接收口
     RoutineInvitationStatus.HIGH_PRIORITY_SYNC_ANOMALY, // 无法确认且无法补偿
   ],
-  // 高优先级同步异常：冻结普通重试（无普通重试出边；处置任务先回读）
-  [RoutineInvitationStatus.HIGH_PRIORITY_SYNC_ANOMALY]: [],
+  // 高优先级同步异常：冻结普通重试（无重试自环边）；任何后续处置先回读且幂等
+  // （SRS-SM-MEM-004），处置后按回读事实落到对应状态：
+  [RoutineInvitationStatus.HIGH_PRIORITY_SYNC_ANOMALY]: [
+    RoutineInvitationStatus.ACTIVATED, // 处置回读确认关系已全部达成 → 直接收口已生效
+    RoutineInvitationStatus.ACCEPTED_PENDING_ACTIVATION, // 处置确认可恢复同步 → 回待生效继续激活流程
+    RoutineInvitationStatus.TARGET_ALREADY_MEMBER, // 处置回读确认目标已通过其他路径成为成员 → 收口
+  ],
   [RoutineInvitationStatus.ACTIVATED]: [],
   [RoutineInvitationStatus.REJECTED]: [],
   [RoutineInvitationStatus.WITHDRAWN]: [],

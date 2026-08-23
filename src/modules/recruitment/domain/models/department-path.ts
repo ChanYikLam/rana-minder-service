@@ -122,18 +122,22 @@ export class DepartmentPath {
     return true;
   }
 
-  /** 恢复部门 Group 异常 */
-  restore(now: Date): void {
-    if (this.snapshot.status !== DepartmentPathStatus.SUSPENDED) {
-      throw new Error('部门路径未在异常暂停状态');
+  /** 恢复部门 Group 异常：经状态机恢复原主状态（SRS-SM-REC-004） */
+  restore(machine: DepartmentPathStateMachine, now: Date): boolean {
+    const result = machine.transitionOnRestore({
+      currentState: this.snapshot.status,
+      previousStatus: this.snapshot.previousStatusBeforeSuspend ?? DepartmentPathStatus.PENDING,
+    });
+    if (!result.allowed) {
+      return false;
     }
-    const previous = this.snapshot.previousStatusBeforeSuspend ?? DepartmentPathStatus.PENDING;
     this.snapshot = {
       ...this.snapshot,
-      status: previous,
+      status: result.nextState,
       previousStatusBeforeSuspend: null,
       updatedAt: now,
       revisionNumber: this.snapshot.revisionNumber + 1,
     };
+    return true;
   }
 }
