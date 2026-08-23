@@ -107,7 +107,7 @@ export class AuditSanitizer {
       child instanceof Map ||
       child instanceof Set ||
       child instanceof ArrayBuffer ||
-      typeof Buffer !== 'undefined' && Buffer.isBuffer(child) ||
+      (typeof Buffer !== 'undefined' && Buffer.isBuffer(child)) ||
       /^\[object (Date|RegExp|Map|Set|ArrayBuffer|Uint8Array)\]$/.test(tag)
     );
   }
