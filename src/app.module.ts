@@ -49,6 +49,7 @@ import { AdaptersModule } from './adapters/adapters.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { FormModule } from './modules/form/form.module';
 import { NotificationModule } from './modules/notification';
+import { JointModule } from './modules/joint/joint.module';
 import { InvitationModule } from './modules/invitation/module';
 import { MembershipModule } from './modules/membership/module';
 import { AuditModule } from './modules/audit/module';
@@ -78,6 +79,7 @@ import type { TaskRepository } from './platform/tasks/contracts';
     IdentityModule,
     FormModule,
     NotificationModule,
+    JointModule,
     InvitationModule,
     MembershipModule,
     AuditModule,

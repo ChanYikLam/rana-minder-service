@@ -102,7 +102,12 @@ import { OidcAuthSessionProvider } from './interfaces/nest/oidc-session-provider
 import { CasdoorSessionController } from './interfaces/nest/casdoor-session.controller';
 import { deriveSessionSecret } from './interfaces/nest/session-secret';
 import { CasdoorAvailability } from './interfaces/nest/casdoor-availability';
-import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../config';
+import {
+  RANA_MINDER_CONFIG,
+  isSecretRef,
+  resolveSecret,
+  type RanaMinderConfig,
+} from '../../config';
 import { AuthGuard } from './interfaces/nest/auth.guard';
 import { ProfilesNestController } from './interfaces/nest/profiles.nest.controller';
 import { AccountAccessNestController } from './interfaces/nest/account-access.nest.controller';
@@ -129,8 +134,12 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
       provide: AUTH_SESSION_PROVIDER,
       useFactory: (config: RanaMinderConfig, availability: CasdoorAvailability) => {
         if (config.casdoor.endpoint && config.casdoor.clientId && config.casdoor.clientSecretRef) {
+          // 必须先解析引用得到真实秘密再派生，避免以公开引用串恒定派生（会话伪造）。
+          const clientSecret = isSecretRef(config.casdoor.clientSecretRef)
+            ? resolveSecret(config.casdoor.clientSecretRef)
+            : config.casdoor.clientSecretRef;
           return new OidcAuthSessionProvider({
-            sessionSecret: deriveSessionSecret(config.casdoor.clientSecretRef),
+            sessionSecret: deriveSessionSecret(clientSecret),
             // 运行时共享状态：Casdoor 不可用时降级窗口生效（CAS-FAIL-001）
             casdoorAvailable: availability,
           });

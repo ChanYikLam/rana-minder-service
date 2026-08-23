@@ -16,7 +16,12 @@
 
 import { Controller, Delete, Get, HttpCode, HttpException, Inject } from '@nestjs/common';
 import { type Request as ExpressRequest, type Response } from 'express';
-import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../../../config';
+import {
+  RANA_MINDER_CONFIG,
+  isSecretRef,
+  resolveSecret,
+  type RanaMinderConfig,
+} from '../../../../config';
 import { CasdoorOidcClient } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import type {
   CasdoorOidcConfig,
@@ -181,15 +186,25 @@ export class CasdoorSessionController {
         'CAS-ERR-NOT_CONFIGURED',
       );
     }
+    const clientSecret = this.resolveClientSecret(c.clientSecretRef);
     const oidcConfig: CasdoorOidcConfig = {
       endpoint: c.endpoint,
       clientId: c.clientId,
-      clientSecret: c.clientSecretRef,
+      clientSecret,
       redirectUri: c.redirectUri,
     };
     this.oidcClient = new CasdoorOidcClient(oidcConfig);
-    this.sessionSecret = deriveSessionSecret(c.clientSecretRef);
+    this.sessionSecret = deriveSessionSecret(clientSecret);
     return this.oidcClient;
+  }
+
+  /**
+   * 解析 Casdoor clientSecret 引用为真实秘密（ADR-010）。引用串（如
+   * ${env:...}）是公开常量，**禁止**直接作为 OIDC clientSecret 或会话派生
+   * 输入（Critical：会话伪造 / token 交换失败）。
+   */
+  private resolveClientSecret(ref: string): string {
+    return isSecretRef(ref) ? resolveSecret(ref) : ref;
   }
 }
 
