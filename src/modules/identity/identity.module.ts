@@ -122,7 +122,7 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     CasdoorSessionController,
   ],
   providers: [
-    // ----- Casdoor 运行时可用性（供 controller 观测 + provider 降级判定共享）-----
+    // ----- 会话（条件装配：Casdoor endpoint 配置时启用 OIDC；否则 fail-closed）-----
     {
       provide: CASDOOR_AVAILABILITY,
       useFactory: (config: RanaMinderConfig) =>
