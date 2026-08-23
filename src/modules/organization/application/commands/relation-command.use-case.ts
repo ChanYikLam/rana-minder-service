@@ -14,17 +14,34 @@
 
 import { randomUUID } from 'node:crypto';
 
+/**
+ * Group 用途 → 排序权重（CAS-Q-001 方案 A）：club（基础/低权限）→ department →
+ * position（具体/高权限）逐级收敛；未登记用途视为最高风险，置末（rank 4）。
+ * 模块级常量，避免 orderFor 每次调用重建。
+ */
+const PURPOSE_RANK: Readonly<Record<GroupPurpose, number>> = {
+  club: 1,
+  department: 2,
+  position: 3,
+};
+
 import type { RelationCommand } from '../../domain/models/relation-command';
 import { createRelationCommand } from '../../domain/models/relation-command';
 import { PermissionCatalog } from '../../domain/models/permission-template';
 import { LastOwnerContinuityPolicy } from '../../domain/services/last-owner-continuity.policy';
 import { RelationCommandStateMachine } from '../../domain/state-machines/relation-command.state-machine';
-import type { RelationCommandType, RelationWriteStep } from '../../domain/types';
+import type {
+  GroupPurpose,
+  GroupStableRef,
+  RelationCommandType,
+  RelationWriteStep,
+} from '../../domain/types';
 import { IdPrefix, orgError } from '../../domain/types';
 import {
   CASDOOR_GROUP_PORT,
   CLUB_STORE,
   CURRENT_PERMISSIONS_PORT,
+  GROUP_MAPPING_REGISTRY,
   JOB_SCHEDULER,
   NOTIFICATION_PORT,
   RELATION_COMMAND_STORE,
@@ -32,6 +49,7 @@ import {
   type CasdoorGroupPort,
   type ClubStore,
   type CurrentPermissionsPort,
+  type GroupMappingRegistry,
   type JobSchedulerPort,
   type NotificationPort,
   type RelationCommandStore,
@@ -62,6 +80,7 @@ export class RelationCommandUseCase {
     private readonly store: RelationCommandStore,
     private readonly clubs: ClubStore,
     private readonly casdoor: CasdoorGroupPort,
+    private readonly mappingRegistry: GroupMappingRegistry,
     private readonly scheduler: JobSchedulerPort,
     private readonly notifications: NotificationPort,
     private readonly permissions: CurrentPermissionsPort,
@@ -107,10 +126,29 @@ export class RelationCommandUseCase {
     );
     if (existing !== null) return existing;
 
-    const steps = this.buildSteps(input, now);
+    // 先做不依赖远程回读的业务校验（成员前提 / 负责人连续性），再执行 buildSteps，
+    // 避免被这些校验拒绝的请求先做无谓的远程 I/O（ORG-021/024）。
     await this.assertMemberPrerequisite(club.clubGroup, input.subjectId);
     // 最后负责人连续性（ORG-024）：撤销最后一名负责人须有继任者，严禁零负责人窗口
     await this.assertOwnerContinuity(input, club);
+
+    // buildSteps 含并发远程回读，是 submit 耗时主路径。首次判重（上方）与这里的
+    // 保存之间隔着 async I/O，窗口被拉宽：同 subject 不同幂等键的两个并发请求可能
+    // 同时通过首次判重而各建一条处理中命令（TOCTOU）。故在远程回读之后再二次判重
+    // 收窄窗口——期间若已有并发方落库，此处将其拦截（IFC-ERR-007）。
+    const steps = await this.buildSteps(input, now);
+    const inFlightAfterRead = await this.store.findByProcessingForSubject(
+      input.clubId,
+      input.subjectId,
+    );
+    if (inFlightAfterRead !== null) {
+      if (inFlightAfterRead.idempotencyKey === input.idempotencyKey) {
+        return inFlightAfterRead; // 并发方已按同一幂等键落库，客户端重试幂等
+      }
+      throw orgError.stateConflict(
+        `同一目标存在处理中关系命令 ${inFlightAfterRead.id}，禁止并发冲突操作（IFC-ERR-007）`,
+      );
+    }
 
     const command = createRelationCommand({
       id: newId(IdPrefix.RELATION_COMMAND),
@@ -147,40 +185,111 @@ export class RelationCommandUseCase {
   /**
    * 登记目标关系图（CAS-Q-001 方案 A）。
    *
-   * 骨架阶段排序现状：orderFor 只按 add=1 / remove=0 排序，即"先撤销后新增"，
-   * 尚未实现文档所述"基础/低权限 → 具体/高权限"的按 Group 用途排序——因为
-   * SubmitRelationCommandInput.targetGroups 不携带 purpose 信息，无法区分
-   * 社团/部门/职位层级。真实适配器须在提供 Group purpose 后落地该排序。
+   * 排序（CAS-Q-001 方案 A，CAS-WR-013）：
+   * - 全部 `remove` 必须先于 `add`（先撤销再授予），避免临时特权窗口扩大。
+   * - `add` 步内按 Group 用途升序执行：club（基础/低权限）→ department → position
+   *   （具体/高权限），逐级收敛；未登记用途的 Group 视为最高风险，置末。
+   *
+   * 原关系快照（ORG-027）：`originalRelation` 在提交前回读 Casdoor 实际成员实况，
+   * `result: 'confirmed'` 表示主体当前已是该 Group 成员，`'failed'` 表示尚未是。
+   * 这是补偿/回退语义与不可变历史的事实基线。
    */
-  private buildSteps(
+  private async buildSteps(
     input: SubmitRelationCommandInput,
     _now: Date,
-  ): {
+  ): Promise<{
     original: RelationWriteStep[];
     target: RelationWriteStep[];
-  } {
-    const orderFor = (kind: 'add' | 'remove'): number => (kind === 'add' ? 1 : 0);
-    const targets = input.targetGroups.map((tg) => ({
-      ...tg,
-      ref: { owner: tg.ref.owner, name: tg.ref.name },
-    }));
-    const ordered = targets
-      .map((tg, index) => ({
-        stepId: `step-${index}`,
-        kind: tg.kind === 'add' ? ('add_member' as const) : ('remove_member' as const),
-        targetGroup: tg.ref,
-        subjectId: input.subjectId,
-        idempotencyKey: `${input.idempotencyKey}:${index}`,
-        order: orderFor(tg.kind),
-        attemptCount: 0,
-      }))
-      .sort((a, b) => a.order - b.order);
+  }> {
+    // 1) 解析每步的 Group 用途与当前成员实况（并发回读）
+    // 目标 Group 缺失时 `getGroupMembers` 与 readback 端口一致返回 []（空成员集 →
+    // present=false），不会抛裸 Error；端口级异常（网络/权限）统一收敛为可重试的
+    // 领域错误，保证 submit 失败路径可控，与 readback 容错语义一致。
+    interface AnnotatedStep {
+      index: number;
+      ref: GroupStableRef;
+      kind: 'add' | 'remove';
+      purpose: GroupPurpose | null;
+      present: boolean;
+    }
+    let annotated: AnnotatedStep[];
+    try {
+      annotated = await Promise.all(
+        input.targetGroups.map(async (tg, index) => {
+          const purpose = await this.lookupGroupPurpose(tg.ref);
+          const members = await this.casdoor.getGroupMembers(tg.ref);
+          const present = members.includes(input.subjectId);
+          return {
+            index,
+            ref: { owner: tg.ref.owner, name: tg.ref.name } as GroupStableRef,
+            kind: tg.kind,
+            purpose,
+            present,
+          } as AnnotatedStep;
+        }),
+      );
+    } catch (cause) {
+      // 端口级异常（网络/权限/故障或映射注册表查询失败）统一收敛为可重试的领域
+      // 错误，避免以裸 Error 冒出；保留原始根因便于排障定位（ORG-027）。
+      throw orgError.precondition('回读目标 Group 实况/用途失败，请稍后重试（ORG-027）', '', cause);
+    }
 
-    // 骨架限制：originalRelation 目前只是目标图的占位副本（标记 confirmed），
-    // 并未反映 Casdoor 实际既有关系。ORG-027「原关系/原权限继续有效」依赖真实原
-    // 关系快照，须由真实适配器在提交前回读 Casdoor 实况回填，否则补偿/回退语义不完整。
-    const original = ordered.map((s) => ({ ...s, result: 'confirmed' as const }));
-    return { original, target: ordered };
+    // 2) 排序：remove 优先；同 kind 内 add 按用途升序。相同 order 时用输入索引
+    // 作显式 tie-breaker，保证稳定且确定的次序（不依赖引擎 stable sort 隐式行为）。
+    const ordered = annotated
+      .map((a) => ({
+        stepId: `step-${a.index}`,
+        kind: a.kind === 'add' ? ('add_member' as const) : ('remove_member' as const),
+        targetGroup: a.ref,
+        subjectId: input.subjectId,
+        idempotencyKey: `${input.idempotencyKey}:${a.index}`,
+        order: this.orderFor(a.kind, a.purpose),
+        index: a.index,
+        purpose: a.purpose,
+        present: a.present,
+      }))
+      .sort((a, b) => a.order - b.order || a.index - b.index);
+
+    // 3) 目标关系图（执行计划）：不携带运行时 result
+    const target: RelationWriteStep[] = ordered.map((s) => ({
+      stepId: s.stepId,
+      kind: s.kind,
+      targetGroup: s.targetGroup,
+      subjectId: s.subjectId,
+      idempotencyKey: s.idempotencyKey,
+      order: s.order,
+      attemptCount: 0,
+    }));
+
+    // 4) 原关系快照：回读 Casdoor 实况；'confirmed'=当前已是成员，'failed'=当前不是
+    const original: RelationWriteStep[] = ordered.map((s) => ({
+      stepId: s.stepId,
+      kind: s.kind,
+      targetGroup: s.targetGroup,
+      subjectId: s.subjectId,
+      idempotencyKey: s.idempotencyKey,
+      order: s.order,
+      attemptCount: 0,
+      result: s.present ? ('confirmed' as const) : ('failed' as const),
+    }));
+
+    return { original, target };
+  }
+
+  /**
+   * `remove` 必须先于 `add`（rank 0/1），`add` 内按 Group 用途升序。
+   * 用途未在 GroupMappingRegistry 中登记的 Group 视为未识别，按"最高风险"置末，
+   * 避免无元数据的 Group 抢在受控 Group 之前执行。
+   */
+  private orderFor(kind: 'add' | 'remove', purpose: GroupPurpose | null): number {
+    if (kind === 'remove') return 0;
+    return purpose === null ? 4 : PURPOSE_RANK[purpose];
+  }
+
+  /** 用途未登记返回 null（视作未识别的最高风险 Group，由 orderFor 置末） */
+  private async lookupGroupPurpose(ref: GroupStableRef): Promise<GroupPurpose | null> {
+    const record = await this.mappingRegistry.findByRef(ref);
+    return record?.purpose ?? null;
   }
 
   /** 成员前提：须先属于社团 Group 才能被任命到部门/职位（ORG-021） */
@@ -390,14 +499,25 @@ export const relationCommandProvider = {
     store: RelationCommandStore,
     clubs: ClubStore,
     casdoor: CasdoorGroupPort,
+    mappingRegistry: GroupMappingRegistry,
     scheduler: JobSchedulerPort,
     notifications: NotificationPort,
     permissions: CurrentPermissionsPort,
-  ) => new RelationCommandUseCase(store, clubs, casdoor, scheduler, notifications, permissions),
+  ) =>
+    new RelationCommandUseCase(
+      store,
+      clubs,
+      casdoor,
+      mappingRegistry,
+      scheduler,
+      notifications,
+      permissions,
+    ),
   inject: [
     RELATION_COMMAND_STORE,
     CLUB_STORE,
     CASDOOR_GROUP_PORT,
+    GROUP_MAPPING_REGISTRY,
     JOB_SCHEDULER,
     NOTIFICATION_PORT,
     CURRENT_PERMISSIONS_PORT,

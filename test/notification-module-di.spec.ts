@@ -32,7 +32,12 @@ import { NotificationQueryService } from '../src/modules/notification/applicatio
 import { NotificationController } from '../src/modules/notification/interfaces';
 import { NotificationDeliveryHandler } from '../src/platform/tasks/executors/handlers/notification-delivery.handler';
 
-/** 最小完整配置：casdoor 为空串（fail-closed 桩），job 仅保留任务调度所需字段。 */
+/**
+ * 测试用完整配置。编译 NotificationModule/TasksModule 会经 @Global AdaptersModule
+ * 触发 RANA_MINDER_CONFIG 注入，且 identity 模块的会话装配会读取 casdoor.endpoint，
+ * 因此必须提供完整配置（不能只给 job 片段，否则 casdoor 为 undefined 会在工厂内抛错）。
+ * 通过 overrides 可覆盖个别字段，casdoor 缺省为空串 → fail-closed RejectAll 会话桩。
+ */
 function mockConfig(overrides: Partial<RanaMinderConfig> = {}): RanaMinderConfig {
   return {
     server: { host: '127.0.0.1', port: 3000, gracefulShutdownTimeoutMs: 30_000 },

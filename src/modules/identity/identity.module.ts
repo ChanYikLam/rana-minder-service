@@ -458,6 +458,7 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     AuthGuard,
     SUPER_ADMIN_VERIFIER,
     CASDOOR_AVAILABILITY,
+    CASDOOR_USER_PORT,
   ],
 })
 export class IdentityModule {}
