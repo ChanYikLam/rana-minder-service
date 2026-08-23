@@ -34,11 +34,31 @@ import {
   UPDATE_CLUB_PROFILE_COMMAND,
   GET_CLUB_PROFILE_QUERY,
   GET_PUBLIC_CLUB_PROFILE_QUERY,
+  CONFIG_POLICY_AUTHORIZATION,
+  SCOPED_POLICY_TABLE_REPOSITORY,
+  ACADEMIC_YEAR_BOUNDARY_REPOSITORY,
+  COHORT_REPOSITORY,
+  SET_PLATFORM_POLICY_COMMAND,
+  SET_CLUB_POLICY_COMMAND,
+  FREEZE_ACTIVITY_POLICY_COMMAND,
+  AMEND_ACTIVITY_POLICY_COMMAND,
+  GET_RESOLVED_POLICIES_QUERY,
+  UPDATE_ACADEMIC_YEAR_BOUNDARY_COMMAND,
+  GET_CURRENT_ACADEMIC_YEAR_QUERY,
+  CREATE_COHORT_COMMAND,
+  RENAME_COHORT_COMMAND,
+  LIST_COHORTS_QUERY,
 } from './tokens';
 
 import { InMemoryClubProfileRepository } from './application/testing/config-test-support';
 import {
+  InMemoryScopedPolicyTableRepository,
+  InMemoryAcademicYearBoundaryRepository,
+  InMemoryCohortRepository,
+} from './application/testing/config-test-support';
+import {
   OrgBackedConfigAuthorization,
+  OrgBackedPolicyAuthorization,
   OrgBackedClubMembership,
   NotWiredClubAccessInfoPort,
 } from './infrastructure/org-config-adapters';
@@ -46,6 +66,20 @@ import {
 import { DefaultUpdateClubProfileCommand } from './application/commands/update-club-profile.command';
 import { DefaultGetClubProfileQuery } from './application/queries/get-club-profile.query';
 import { DefaultGetPublicClubProfileQuery } from './application/queries/get-public-club-profile.query';
+import {
+  SetPlatformPolicyCommand,
+  SetClubPolicyCommand,
+  FreezeActivityPolicyCommand,
+  AmendActivityPolicyCommand,
+} from './application/commands/policy.commands';
+import { GetResolvedPoliciesQuery } from './application/queries/get-policies.query';
+import {
+  UpdateAcademicYearBoundaryCommand,
+  GetCurrentAcademicYearQuery,
+  CreateCohortCommand,
+  RenameCohortCommand,
+  ListCohortsQuery,
+} from './application/commands/academic-year.commands';
 
 import { ConfigAuthGuard } from './interfaces/nest/config-auth.guard';
 import { PublicClubProfileNestController } from './interfaces/nest/public-club-profile.nest.controller';
@@ -93,6 +127,66 @@ import { OrgClubProfileNestController } from './interfaces/nest/org-club-profile
       useFactory: (repo, membership) => new DefaultGetPublicClubProfileQuery(repo, membership),
       inject: [CONFIG_REPOSITORY, CONFIG_MEMBERSHIP_PORT],
     },
+    // ----- CFG-002 作用域策略（平台默认值/社团覆盖/活动快照）-----
+    { provide: SCOPED_POLICY_TABLE_REPOSITORY, useClass: InMemoryScopedPolicyTableRepository },
+    {
+      provide: CONFIG_POLICY_AUTHORIZATION,
+      useFactory: (permissions) => new OrgBackedPolicyAuthorization(permissions),
+      inject: [CURRENT_PERMISSIONS_PORT],
+    },
+    {
+      provide: SET_PLATFORM_POLICY_COMMAND,
+      useFactory: (repo, authz) => new SetPlatformPolicyCommand(repo, authz),
+      inject: [SCOPED_POLICY_TABLE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: SET_CLUB_POLICY_COMMAND,
+      useFactory: (repo, authz) => new SetClubPolicyCommand(repo, authz),
+      inject: [SCOPED_POLICY_TABLE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: FREEZE_ACTIVITY_POLICY_COMMAND,
+      useFactory: (repo) => new FreezeActivityPolicyCommand(repo),
+      inject: [SCOPED_POLICY_TABLE_REPOSITORY],
+    },
+    { provide: AMEND_ACTIVITY_POLICY_COMMAND, useClass: AmendActivityPolicyCommand },
+    {
+      provide: GET_RESOLVED_POLICIES_QUERY,
+      useFactory: (repo) => new GetResolvedPoliciesQuery(repo),
+      inject: [SCOPED_POLICY_TABLE_REPOSITORY],
+    },
+    // ----- CFG-003 学年与届次 -----
+    {
+      provide: ACADEMIC_YEAR_BOUNDARY_REPOSITORY,
+      useClass: InMemoryAcademicYearBoundaryRepository,
+    },
+    { provide: COHORT_REPOSITORY, useClass: InMemoryCohortRepository },
+    {
+      provide: UPDATE_ACADEMIC_YEAR_BOUNDARY_COMMAND,
+      useFactory: (repo, authz) => new UpdateAcademicYearBoundaryCommand(repo, authz),
+      inject: [ACADEMIC_YEAR_BOUNDARY_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: GET_CURRENT_ACADEMIC_YEAR_QUERY,
+      useFactory: (repo) => new GetCurrentAcademicYearQuery(repo),
+      inject: [ACADEMIC_YEAR_BOUNDARY_REPOSITORY],
+    },
+    {
+      provide: CREATE_COHORT_COMMAND,
+      useFactory: (cohorts, boundaryRepo, authz) =>
+        new CreateCohortCommand(cohorts, boundaryRepo, authz),
+      inject: [COHORT_REPOSITORY, ACADEMIC_YEAR_BOUNDARY_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: RENAME_COHORT_COMMAND,
+      useFactory: (cohorts, authz) => new RenameCohortCommand(cohorts, authz),
+      inject: [COHORT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: LIST_COHORTS_QUERY,
+      useFactory: (cohorts) => new ListCohortsQuery(cohorts),
+      inject: [COHORT_REPOSITORY],
+    },
   ],
   exports: [
     UPDATE_CLUB_PROFILE_COMMAND,
@@ -100,6 +194,13 @@ import { OrgClubProfileNestController } from './interfaces/nest/org-club-profile
     GET_PUBLIC_CLUB_PROFILE_QUERY,
     CONFIG_REPOSITORY,
     CONFIG_AUTH_SESSION_PROVIDER,
+    SET_PLATFORM_POLICY_COMMAND,
+    SET_CLUB_POLICY_COMMAND,
+    FREEZE_ACTIVITY_POLICY_COMMAND,
+    AMEND_ACTIVITY_POLICY_COMMAND,
+    GET_RESOLVED_POLICIES_QUERY,
+    GET_CURRENT_ACADEMIC_YEAR_QUERY,
+    LIST_COHORTS_QUERY,
   ],
 })
 export class ConfigModule {}

@@ -41,3 +41,48 @@ export interface ClubAccessInfoPort {
     casdoorGroupName: string;
   } | null>;
 }
+
+// --------------------------------------------------------------------------
+// CFG-002 作用域策略 / CFG-003 学年与届次 端口
+// --------------------------------------------------------------------------
+
+/**
+ * 配置授权端口（CFG-002/003；ORG-038 逐请求重算）：
+ * - canManagePlatform：平台策略/学年分界规则维护（platform:config:manage 或平台超管）；
+ * - canManageClub：社团默认值/届次维护（club:config:manage，即负责人/人事）。
+ * 实现方映射 PermissionCatalog 与超管判定；用例 fail-closed。
+ */
+export interface PolicyAuthorizationPort {
+  canManagePlatform(subjectId: string): Promise<boolean>;
+  canManageClub(clubId: string, subjectId: string): Promise<boolean>;
+}
+
+/** 作用域策略表仓储（全系统单例表；当前 InMemory，PostgreSQL 随迁移切片接入） */
+export interface ScopedPolicyTableRepositoryPort {
+  load(): Promise<import('../domain/models/scoped-policy').ScopedPolicyTableSnapshot | null>;
+  save(snapshot: import('../domain/models/scoped-policy').ScopedPolicyTableSnapshot): Promise<void>;
+}
+
+/** 学年分界规则与已生成学年注册（CFG-003；平台级单例） */
+export interface AcademicYearSettingsSnapshot {
+  readonly boundary: import('../domain/models/academic-year').AcademicYearBoundary;
+  /** 已生成并落定的学年快照（历史学年保护的对象） */
+  readonly generatedYears: readonly import('../domain/models/academic-year').AcademicYearSnapshot[];
+  /** 分界规则最近一次修改留痕（CFG-003：变更须审计） */
+  readonly lastChangedBy: string | null;
+  readonly lastChangedAt: Date | null;
+}
+
+export interface AcademicYearBoundaryRepositoryPort {
+  load(): Promise<AcademicYearSettingsSnapshot | null>;
+  save(snapshot: AcademicYearSettingsSnapshot): Promise<void>;
+}
+
+/** 社团届次仓储（CFG-003：届次由负责人/人事维护并关联系统学年） */
+export interface CohortRepositoryPort {
+  listByClub(clubId: string): Promise<import('../domain/models/club-cohort').ClubCohortSnapshot[]>;
+  findById(
+    cohortId: string,
+  ): Promise<import('../domain/models/club-cohort').ClubCohortSnapshot | null>;
+  save(snapshot: import('../domain/models/club-cohort').ClubCohortSnapshot): Promise<void>;
+}

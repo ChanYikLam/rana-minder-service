@@ -22,6 +22,7 @@ import type {
   ClubProfileAuthorizationPort,
   ClubMembershipPort,
   ClubProfileManageRole,
+  PolicyAuthorizationPort,
 } from '../application/ports';
 
 export class OrgBackedConfigAuthorization implements ClubProfileAuthorizationPort {
@@ -60,5 +61,24 @@ export class NotWiredClubAccessInfoPort implements ClubAccessInfoPort {
     casdoorGroupName: string;
   } | null> {
     return null;
+  }
+}
+
+/**
+ * 组织授权驱动的配置策略授权适配器（CFG-002/003）：
+ * - canManagePlatform：仅平台超管（ORG-029——platform:config:manage 只来自超管通道，
+ *   见 permission-calculator.platformPermissions，无独立授予路径）；
+ * - canManageClub：club:config:manage（社团默认值/届次，负责人模板已含）。
+ */
+export class OrgBackedPolicyAuthorization implements PolicyAuthorizationPort {
+  constructor(private readonly permissions: CurrentPermissionsPort) {}
+
+  async canManagePlatform(subjectId: string): Promise<boolean> {
+    return this.permissions.isPlatformSuperAdmin(subjectId);
+  }
+
+  async canManageClub(clubId: string, subjectId: string): Promise<boolean> {
+    const effective = await this.permissions.effectiveForClub(subjectId, clubId);
+    return effective.includes(PermissionCatalog.CLUB_CONFIG_MANAGE);
   }
 }

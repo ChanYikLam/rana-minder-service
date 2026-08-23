@@ -58,3 +58,64 @@ export class StubClubAccessInfoPort implements ClubAccessInfoPort {
     return this.info;
   }
 }
+
+// --------------------------------------------------------------------------
+// CFG-002/003 测试桩（作用域策略表/学年分界/届次）
+// --------------------------------------------------------------------------
+
+import type { ScopedPolicyTableSnapshot } from '../../domain/models/scoped-policy';
+import type { ScopedPolicyTableRepositoryPort, PolicyAuthorizationPort } from '../ports';
+import type {
+  AcademicYearBoundaryRepositoryPort,
+  AcademicYearSettingsSnapshot,
+  CohortRepositoryPort,
+} from '../ports';
+import type { ClubCohortSnapshot } from '../../domain/models/club-cohort';
+
+export class InMemoryScopedPolicyTableRepository implements ScopedPolicyTableRepositoryPort {
+  snapshot: ScopedPolicyTableSnapshot | null = null;
+
+  async load(): Promise<ScopedPolicyTableSnapshot | null> {
+    return this.snapshot;
+  }
+  async save(snapshot: ScopedPolicyTableSnapshot): Promise<void> {
+    this.snapshot = snapshot;
+  }
+}
+
+export class StubPolicyAuthorization implements PolicyAuthorizationPort {
+  platformAllowed = false;
+  clubAllowed = false;
+
+  async canManagePlatform(_subjectId: string): Promise<boolean> {
+    return this.platformAllowed;
+  }
+  async canManageClub(_clubId: string, _subjectId: string): Promise<boolean> {
+    return this.clubAllowed;
+  }
+}
+
+export class InMemoryAcademicYearBoundaryRepository implements AcademicYearBoundaryRepositoryPort {
+  snapshot: AcademicYearSettingsSnapshot | null = null;
+
+  async load(): Promise<AcademicYearSettingsSnapshot | null> {
+    return this.snapshot;
+  }
+  async save(snapshot: AcademicYearSettingsSnapshot): Promise<void> {
+    this.snapshot = snapshot;
+  }
+}
+
+export class InMemoryCohortRepository implements CohortRepositoryPort {
+  private readonly cohorts = new Map<string, ClubCohortSnapshot>();
+
+  async listByClub(clubId: string): Promise<ClubCohortSnapshot[]> {
+    return [...this.cohorts.values()].filter((c) => c.clubId === clubId);
+  }
+  async findById(cohortId: string): Promise<ClubCohortSnapshot | null> {
+    return this.cohorts.get(cohortId) ?? null;
+  }
+  async save(snapshot: ClubCohortSnapshot): Promise<void> {
+    this.cohorts.set(snapshot.id, snapshot);
+  }
+}
