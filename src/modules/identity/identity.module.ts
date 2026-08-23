@@ -18,7 +18,6 @@ import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { APP_LOGGER } from '../../platform/observability/logging/tokens';
 import { DB_ADAPTER, CASDOOR_ADAPTER, MAIL_CHANNEL_ADAPTER } from '../../adapters/tokens';
-import type { CasdoorAdapter } from '../../adapters/casdoor/casdoor-adapter';
 
 import {
   PROFILE_REPOSITORY,
