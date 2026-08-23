@@ -68,11 +68,14 @@ export class ExecuteDeletionChecklistCommand {
     if (checklist === null) {
       throw new DeletionPolicyError('IFC-ERR-015', '删除清单不存在');
     }
+    const replay = input.replay === true;
     // 幂等：已完成且**审计已落**且非重放 → 返回原结果；
     // 已完成但审计缺失（auditCommitted=false，审计写入曾失败）→ 继续执行补审计
-    if (checklist.completed && checklist.auditCommitted && input.replay !== true) {
+    if (checklist.completed && checklist.auditCommitted && !replay) {
       return { checklist, completed: true, minimalAudit: null };
     }
+    // 重放已完成+审计已落清单时：步骤须重执行（防复现），但审计不应重复落（去重）
+    const replayOfDoneAudited = replay && checklist.completed && checklist.auditCommitted;
 
     let failed = 0;
     let verified = 0;
@@ -80,7 +83,7 @@ export class ExecuteDeletionChecklistCommand {
     // 防止恢复的备份使已删数据复现（AUD-009）
     const steps = await Promise.all(
       checklist.steps.map(async (step) => {
-        if (step.status === DeletionStepStatus.VERIFIED_DELETED && input.replay !== true) {
+        if (step.status === DeletionStepStatus.VERIFIED_DELETED && !replay) {
           verified++;
           return step;
         }
@@ -101,10 +104,11 @@ export class ExecuteDeletionChecklistCommand {
       ...checklist,
       steps,
       completed,
-      replayCount: input.replay === true ? checklist.replayCount + 1 : checklist.replayCount,
+      replayCount: replay ? checklist.replayCount + 1 : checklist.replayCount,
       version: checklist.version + 1,
-      // 审计待提交（成功后二次 CAS 置 true；失败则保持 false，普通重试可补写）
-      auditCommitted: false,
+      // 审计待提交（成功后二次 CAS 置 true；失败则保持 false，普通重试可补写）。
+      // 重放已完成+审计已落清单：保留 auditCommitted=true，避免破坏幂等标志（去重）
+      auditCommitted: replayOfDoneAudited ? true : false,
     };
     // 乐观锁提交：并发执行（同一清单）只一个成功（W1）；**先提交成功再落审计**，
     // 失败方在 CAS 处抛 IFC-ERR-016，不遗留误导性审计（评审意见）
@@ -126,10 +130,14 @@ export class ExecuteDeletionChecklistCommand {
           note: 'minimal-audit-only',
         }
       : null;
-    // 仅对**真正提交成功的执行**落审计（CAS 已成功）：成功 → SUCCESS 最小审计；
-    // 部分失败 → FAILURE 尝试审计（AUD-009 保留尝试审计，失败详情脱敏）
+
+    // 判定本次是否需要落审计：
+    // - 重放已完成+审计已落清单：**不重复落审计**（SUCCESS 审计已在首次完成时记录，去重）
+    // - 否则：已完成 → SUCCESS 最小审计；部分失败/空清单 → FAILURE 尝试审计
+    //   （AUD-009 保留尝试审计，失败详情脱敏）
+    const needsAudit = !replayOfDoneAudited;
     let auditWritten = false;
-    if (minimalAudit !== null) {
+    if (needsAudit && minimalAudit !== null) {
       await this.auditWriter.write({
         eventType: AuditEventType.SUPER_ADMIN_OP,
         actorId: checklist.initiatedBy,
@@ -143,7 +151,7 @@ export class ExecuteDeletionChecklistCommand {
         requestId: input.audit.requestId,
       });
       auditWritten = true;
-    } else if (failed > 0 || checklist.steps.length === 0) {
+    } else if (needsAudit && (failed > 0 || checklist.steps.length === 0)) {
       // 部分失败或空清单（理论防御）：保留尝试审计（AUD-009），失败详情脱敏
       await this.auditWriter.write({
         eventType: AuditEventType.SUPER_ADMIN_OP,
@@ -160,16 +168,19 @@ export class ExecuteDeletionChecklistCommand {
       });
       auditWritten = true;
     }
-    // 审计已落 → 置 auditCommitted=true（二次 CAS；并发竞争失败忽略——审计已写，
-    // 状态由其他执行收敛，普通重试幂等返回即可）
+    // 审计已落 → 置 auditCommitted=true（二次 CAS）。**检查返回值**：
+    // - 成功 → 返回态与持久态一致（auditCommitted=true）
+    // - 失败（他方已再次提交）→ 重读最新持久态返回，杜绝返回态与持久态不一致，
+    //   也避免普通重试因持久态 auditCommitted=false 而重复执行+重复写审计
     if (auditWritten) {
       const finalized: DeletionChecklist = { ...updated, auditCommitted: true };
-      await this.repo.compareAndSwap(updated, finalized);
+      const finalizedOk = await this.repo.compareAndSwap(updated, finalized);
+      if (!finalizedOk) {
+        const latest = await this.repo.load(input.checklistId);
+        return { checklist: latest ?? finalized, completed, minimalAudit };
+      }
+      return { checklist: finalized, completed, minimalAudit };
     }
-    return {
-      checklist: auditWritten ? { ...updated, auditCommitted: true } : updated,
-      completed,
-      minimalAudit,
-    };
+    return { checklist: updated, completed, minimalAudit };
   }
 }

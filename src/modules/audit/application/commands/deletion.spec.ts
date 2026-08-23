@@ -12,6 +12,7 @@ import {
   DeletionStepStatus,
   TemporaryItemKind,
 } from '../../domain/models/deletion';
+import type { DeletionChecklist } from '../../domain/models/deletion';
 
 const makeAuditWriterStub = () => {
   const writes: unknown[] = [];
@@ -29,11 +30,23 @@ const makeRig = (executor: { ok: boolean } = { ok: true }) => {
     { deleteAndVerify: async () => executor } as never,
     audit.writer,
   );
-  const cleanup = new RetentionCleanupCommand({
-    deleteAndVerify: async () => ({ ok: true }),
-  } as never);
+  const cleanupAudit = makeAuditWriterStub();
+  const cleanup = new RetentionCleanupCommand(
+    {
+      deleteAndVerify: async () => ({ ok: true }),
+    } as never,
+    cleanupAudit.writer,
+  );
   const query = new DeletionChecklistQuery(repo, policy);
-  return { repo, formalDelete, execute, cleanup, query, writes: audit.writes };
+  return {
+    repo,
+    formalDelete,
+    execute,
+    cleanup,
+    query,
+    writes: audit.writes,
+    cleanupWrites: cleanupAudit.writes,
+  };
 };
 
 const execInput = (checklistId: string, extra: Record<string, unknown> = {}) => ({
@@ -235,6 +248,46 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(retryAudit.writes.length, 1); // 重放补写 SUCCESS 最小审计
   });
 
+  it('评审修复：审计落库后二次 CAS 失败 → 返回态与持久态一致，普通重试不重复审计', async () => {
+    // 构造一个“二次 CAS（置 auditCommitted=true）总失败”的仓储：首次 CAS 成功、
+    // 后续任何 compareAndSwap 都失败，模拟他方并发抢先提交，验证不再强制返回 true
+    const base = new InMemoryDeletionChecklistRepository();
+    const repo = {
+      save: (c: DeletionChecklist) => base.save(c),
+      load: (id: string) => base.load(id),
+      listIncomplete: () => base.listIncomplete(),
+      listAll: () => base.listAll(),
+      compareAndSwap: async (cur: DeletionChecklist, next: DeletionChecklist) => {
+        const latest = await base.load(cur.checklistId);
+        if (latest == null || latest.version !== cur.version) return false;
+        // 只允许“首次提交执行结果”成功；置 auditCommitted=true 的二次 CAS 一律失败
+        if (next.auditCommitted === true) return false;
+        await base.save(next);
+        return true;
+      },
+    } as never;
+    const policy = new DeletionPolicy();
+    const formalDelete = new FormalDeleteCommand(repo, policy);
+    const audit = makeAuditWriterStub();
+    const execute = new ExecuteDeletionChecklistCommand(
+      repo,
+      { deleteAndVerify: async () => ({ ok: true }) } as never,
+      audit.writer,
+    );
+    const checklist = await formalDelete.execute(deleteInput);
+    const result = await execute.execute(execInput(checklist.checklistId));
+    assert.equal(result.completed, true);
+    // 二次 CAS 失败 → 返回态 auditCommitted 不得强制为 true，应与持久态一致
+    assert.equal(result.checklist.auditCommitted, false);
+    const persisted = await base.load(checklist.checklistId);
+    assert.equal(persisted!.auditCommitted, false);
+    // 普通重试：持久态 auditCommitted=false 且已 completed → 继续执行补写审计（非幂等早退）
+    const retried = await execute.execute(execInput(checklist.checklistId));
+    assert.equal(retried.checklist.auditCommitted, false);
+    // 两次执行各写一次 SUCCESS 审计（每次都是真实补写尝试，不静默丢审计）
+    assert.equal(audit.writes.length, 2);
+  });
+
   it('部分失败保持未完成：不宣称完成，持续重试（AUD-009/IFC-TX-007）', async () => {
     const rig = makeRig({ ok: false });
     const checklist = await rig.formalDelete.execute(deleteInput);
@@ -253,15 +306,23 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     const rig = makeRig({ ok: true });
     const checklist = await rig.formalDelete.execute(deleteInput);
     await rig.execute.execute(execInput(checklist.checklistId));
-    // 非重放已完成 → 幂等返回（replayCount 不变）
+    // 首次完成已落 1 条 SUCCESS 最小审计
+    assert.equal(rig.writes.length, 1);
+    // 非重放已完成 → 幂等返回（replayCount 不变，不重复审计）
     const idle = await rig.execute.execute(execInput(checklist.checklistId));
     assert.equal(idle.completed, true);
     assert.equal(idle.checklist.replayCount, 0);
-    // 备份恢复后重放（replay=true）：重新执行全部步骤（即使已完成），replayCount 递增
+    assert.equal(rig.writes.length, 1);
+    // 备份恢复后重放（replay=true）：重新执行全部步骤（即使已完成），replayCount 递增；
+    // 审计去重：已完成+审计已落清单重放不重复写 SUCCESS 审计（评审意见）
     const replayed = await rig.execute.execute(execInput(checklist.checklistId, { replay: true }));
     assert.equal(replayed.completed, true);
     assert.equal(replayed.checklist.replayCount, 1);
     assert.ok(replayed.checklist.steps.every((s) => s.status === 'VERIFIED_DELETED'));
+    assert.equal(rig.writes.length, 1); // 重放不新增审计（去重）
+    // 重放后清单仍保持 auditCommitted=true（幂等标志不丢失）
+    const reloaded = await rig.repo.load(checklist.checklistId);
+    assert.equal(reloaded!.auditCommitted, true);
     // 重放失败 → 保持未完成（恢复数据未彻底清除，不宣称完成）
     const failing = makeRig({ ok: false });
     const c2 = await failing.formalDelete.execute(deleteInput);
@@ -272,7 +333,7 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(all.length, 1); // 含已完成清单
   });
 
-  it('临时清理：过期且无有效引用 → 清理；有引用/未过期 → 跳过（AUD-007/009）', async () => {
+  it('临时清理：过期且无有效引用 → 清理并落审计；有引用/未过期 → 跳过（AUD-007/009）', async () => {
     const rig = makeRig();
     const result = await rig.cleanup.execute({
       items: [
@@ -295,8 +356,14 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
           hasValidReference: false,
         },
       ],
+      audit: { actorId: 'sa1', source: { channel: 'SYSTEM_TASK' }, requestId: 'req-clean' },
     });
     assert.deepEqual(result.cleaned, ['draft-1']);
     assert.deepEqual([...result.skipped].sort(), ['export-1', 'scan-1']);
+    // 实际删除项必须落审计留痕（AUD-007/009；评审意见：命令内写审计，杜绝审计缺口）
+    assert.equal(rig.cleanupWrites.length, 1);
+    const written = rig.cleanupWrites[0] as { target: { objectId: string }; outcome: string };
+    assert.equal(written.target.objectId, 'draft-1');
+    assert.equal(written.outcome, 'SUCCESS');
   });
 });
