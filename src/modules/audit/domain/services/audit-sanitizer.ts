@@ -89,8 +89,8 @@ export class AuditSanitizer {
       return null;
     }
     const diffs: string[] = [];
-    const seen = new WeakSet<object>();
-    this.collectDiffs(input, '', diffs, seen);
+    const stack = new Set<object>();
+    this.collectDiffs(input, '', diffs, stack);
     return diffs.length > 0 ? diffs.join(';') : null;
   }
 
@@ -109,36 +109,41 @@ export class AuditSanitizer {
     value: Record<string, unknown> | unknown[],
     prefix: string,
     diffs: string[],
-    seen: WeakSet<object>,
+    stack: Set<object>,
   ): void {
-    // 防循环引用导致的无限递归：已访问对象不再下钻（不会把循环体正文落盘）
-    if (seen.has(value)) {
+    // 真正的循环引用（出现在当前祖先链上）才跳过，防止无限递归、不把循环体正文落盘；
+    // 共享引用（同一对象被多处引用但非循环）应正常下钻，避免遗漏差异。
+    if (stack.has(value)) {
       return;
     }
-    seen.add(value);
-    const entries: ReadonlyArray<readonly [string, unknown]> = Array.isArray(value)
-      ? value.map((v, i) => [`${prefix}[${i}]`, v] as const)
-      : Object.entries(value).map(([k, v]) => [`${prefix ? `${prefix}.` : ''}${k}`, v] as const);
+    stack.add(value);
+    try {
+      const entries: ReadonlyArray<readonly [string, unknown]> = Array.isArray(value)
+        ? value.map((v, i) => [`${prefix}[${i}]`, v] as const)
+        : Object.entries(value).map(([k, v]) => [`${prefix ? `${prefix}.` : ''}${k}`, v] as const);
 
-    for (const [path, child] of entries) {
-      const leafName = path.slice(path.lastIndexOf('.') + 1);
-      if (isSensitiveField(leafName)) {
-        const s = this.sanitizeField(leafName, child);
-        diffs.push(`${path}=${s.display}`);
-        continue;
+      for (const [path, child] of entries) {
+        const leafName = path.slice(path.lastIndexOf('.') + 1);
+        if (isSensitiveField(leafName)) {
+          const s = this.sanitizeField(leafName, child);
+          diffs.push(`${path}=${s.display}`);
+          continue;
+        }
+        if (Array.isArray(child)) {
+          this.collectDiffs(child, path, diffs, stack);
+          continue;
+        }
+        if (this.isPlainRecord(child)) {
+          this.collectDiffs(child, path, diffs, stack);
+          continue;
+        }
+        if (child !== undefined && child !== null) {
+          const s = this.sanitizeField(leafName, child);
+          diffs.push(`${path}=${s.display}`);
+        }
       }
-      if (Array.isArray(child)) {
-        this.collectDiffs(child, path, diffs, seen);
-        continue;
-      }
-      if (this.isPlainRecord(child)) {
-        this.collectDiffs(child, path, diffs, seen);
-        continue;
-      }
-      if (child !== undefined && child !== null) {
-        const s = this.sanitizeField(leafName, child);
-        diffs.push(`${path}=${s.display}`);
-      }
+    } finally {
+      stack.delete(value);
     }
   }
 

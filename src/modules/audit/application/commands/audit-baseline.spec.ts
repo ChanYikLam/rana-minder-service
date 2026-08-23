@@ -92,6 +92,21 @@ describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
     assert.ok(!(ev2.newValue ?? '').includes('self='), '循环引用不把循环体正文落盘');
   });
 
+  it('敏感不落盘：共享引用（非循环）对象各路径均脱敏，不遗漏差异（CAS-SEC-001~004）', async () => {
+    const rig = makeRig();
+    const shared = { token: 'SHARED-TOK-1', name: 'shared-name' };
+    // 同一对象被多处引用但并非循环：每条路径都应记录脱敏差异，不得因去重而漏掉
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { a: shared, b: shared },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('SHARED-TOK-1'), '共享引用的敏感字段不得落盘');
+    assert.ok(v.includes('a.token=<REDACTED'), '路径 a 的敏感字段应脱敏');
+    assert.ok(v.includes('b.token=<REDACTED'), '路径 b 的敏感字段应脱敏（不得被去重漏掉）');
+    assert.ok(v.includes('b.name=shared-name'), '共享引用的非敏感叶子在每条路径都应保留');
+  });
+
   it('失败原因脱敏：错误信息中的令牌/密码不落盘，超长文本截断', async () => {
     const rig = makeRig();
     const event = await rig.writer.write({
