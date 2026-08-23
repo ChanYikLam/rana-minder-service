@@ -1,0 +1,469 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { InMemoryAuditRepository } from '../../infrastructure/audit-repository';
+import { AuditWriter } from './audit-writer';
+import { AuditQuery } from '../queries/audit-query';
+import { AuditEventType, AuditOutcome } from '../../domain/models/audit-event';
+import { AuditSanitizer } from '../../domain/services/audit-sanitizer';
+
+const makeRig = () => {
+  const repo = new InMemoryAuditRepository();
+  const writer = new AuditWriter(repo, new AuditSanitizer());
+  const query = new AuditQuery(repo);
+  return { repo, writer, query };
+};
+
+const baseEvent = {
+  eventType: AuditEventType.MEMBERSHIP,
+  actorId: 'hr1',
+  actorRoles: ['HR_ADMIN'],
+  scope: { kind: 'CLUB', clubId: 'c1' },
+  source: { channel: 'WEB' as const, ip: '10.0.0.1' },
+  target: { objectType: 'MEMBERSHIP', objectId: 'm1' },
+  outcome: AuditOutcome.SUCCESS,
+  requestId: 'req-1',
+};
+
+describe('5.3.2 不可变审计基线（AUD-003/004）', () => {
+  it('审计字段完整：操作人/当时角色/作用域/时间/来源/关联对象/旧值新值/结果/请求编号', async () => {
+    const rig = makeRig();
+    const event = await rig.writer.write({
+      ...baseEvent,
+      oldValues: { role: 'MEMBER' },
+      newValues: { role: 'DEPARTMENT_LEADER' },
+    });
+    assert.equal(event.actorId, 'hr1');
+    assert.deepEqual(event.actorRoles, ['HR_ADMIN']);
+    assert.equal(event.scope?.clubId, 'c1');
+    assert.equal(event.source.ip, '10.0.0.1');
+    assert.equal(event.target?.objectId, 'm1');
+    assert.ok(event.oldValue?.includes('role=MEMBER'));
+    assert.ok(event.newValue?.includes('role=DEPARTMENT_LEADER'));
+    assert.equal(event.outcome, AuditOutcome.SUCCESS);
+    assert.equal(event.requestId, 'req-1');
+    assert.ok(event.auditId.length > 0);
+  });
+
+  it('敏感不落盘：密码/邮箱密钥/令牌/验证码/附件正文只记脱敏差异（CAS-SEC-001~004）', async () => {
+    const rig = makeRig();
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: {
+        email: 'x@example.com',
+        password: 'SuperSecret123!',
+        smtpSecret: 'mail-secret',
+        accessToken: 'tok-abc',
+        verifyCode: '123456',
+        attachmentBody: '机密附件正文内容',
+        normalField: '普通字段',
+      },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('SuperSecret123!'), '密码不得落盘');
+    assert.ok(!v.includes('mail-secret'), '邮箱密钥不得落盘');
+    assert.ok(!v.includes('tok-abc'), '令牌不得落盘');
+    assert.ok(!v.includes('123456'), '验证码不得落盘');
+    assert.ok(!v.includes('机密附件正文'), '附件正文不得落盘');
+    assert.ok(/password=<REDACTED:\d+>/.test(v), '密码仅记脱敏差异');
+    assert.ok(v.includes('normalField=普通字段'), '普通字段保留');
+  });
+
+  it('敏感不落盘：嵌套对象/数组内的敏感字段与循环引用不泄漏、不抛错（CAS-SEC-001~004）', async () => {
+    const rig = makeRig();
+    // 嵌套对象中的敏感键仍须脱敏（防整段 JSON 落盘带出密码/令牌）
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: {
+        config: { apiKey: 'SECRET-KEY-123', password: 'pwd999' },
+        items: [{ token: 't1', name: 'n1' }],
+      },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('SECRET-KEY-123'), '嵌套 apiKey 不得落盘');
+    assert.ok(!v.includes('pwd999'), '嵌套 password 不得落盘');
+    assert.ok(!v.includes('t1'), '数组内 token 不得落盘');
+    assert.ok(v.includes('config.apiKey=<REDACTED'), '嵌套敏感键仅记脱敏差异');
+    assert.ok(v.includes('items[0].name=n1'), '非敏感叶子保留');
+    // 普通字段值内嵌的敏感键值对（如错误消息）也应被抹掉，防正文带出凭证
+    const inline = await rig.writer.write({
+      ...baseEvent,
+      newValues: { note: '调用失败 password=INLINE_PWD token="INLINE_TOK" 继续' },
+    });
+    assert.ok(!inline.newValue?.includes('INLINE_PWD'), '普通字段值内嵌密码不得落盘');
+    assert.ok(!inline.newValue?.includes('INLINE_TOK'), '普通字段值内嵌令牌不得落盘');
+    assert.ok(inline.newValue?.includes('note=调用失败 password=<REDACTED>'), '内嵌凭证应被抹掉');
+    // 循环引用对象不应抛错导致审计写入失败（避免业务整体失败被恶意输入触发）
+    const circular: Record<string, unknown> = { a: {} };
+    (circular.a as Record<string, unknown>).self = circular;
+    const ev2 = await rig.writer.write({ ...baseEvent, newValues: { config: circular } });
+    assert.ok(ev2.auditId.length > 0, '循环引用对象不应导致写入失败');
+    assert.ok(!(ev2.newValue ?? '').includes('self='), '循环引用不把循环体正文落盘');
+  });
+
+  it('敏感不落盘：共享引用（非循环）对象各路径均脱敏，不遗漏差异（CAS-SEC-001~004）', async () => {
+    const rig = makeRig();
+    const shared = { token: 'SHARED-TOK-1', name: 'shared-name' };
+    // 同一对象被多处引用但并非循环：每条路径都应记录脱敏差异，不得因去重而漏掉
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { a: shared, b: shared },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('SHARED-TOK-1'), '共享引用的敏感字段不得落盘');
+    assert.ok(v.includes('a.token=<REDACTED'), '路径 a 的敏感字段应脱敏');
+    assert.ok(v.includes('b.token=<REDACTED'), '路径 b 的敏感字段应脱敏（不得被去重漏掉）');
+    assert.ok(v.includes('b.name=shared-name'), '共享引用的非敏感叶子在每条路径都应保留');
+  });
+
+  it('敏感不落盘：class 实例/DTO（非普通对象）内的敏感字段同样脱敏（CAS-SEC-001~004）', async () => {
+    const rig = makeRig();
+    // NestJS 中 DTO/领域对象常为 class 实例（原型非 Object.prototype），
+    // 若不递归展开而直接 JSON 序列化，会把其内的密码/令牌以明文带进审计。
+    class CredentialDto {
+      readonly password = 'DTO_PWD_SECRET';
+      readonly accessToken = 'DTO_TOK_SECRET';
+      readonly name = 'alice';
+    }
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { credential: new CredentialDto() },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('DTO_PWD_SECRET'), 'class 实例内密码不得落盘');
+    assert.ok(!v.includes('DTO_TOK_SECRET'), 'class 实例内令牌不得落盘');
+    assert.ok(v.includes('credential.password=<REDACTED'), 'class 实例内敏感字段应脱敏');
+    assert.ok(v.includes('credential.accessToken=<REDACTED'), 'class 实例内令牌应脱敏');
+    assert.ok(v.includes('credential.name=alice'), 'class 实例内非敏感字段保留');
+    // Date 等特殊容器仍应正常序列化，不得被误判为可递归对象
+    const withDate = await rig.writer.write({
+      ...baseEvent,
+      newValues: { createdAt: new Date('2024-01-01T00:00:00.000Z') },
+    });
+    assert.ok(withDate.newValue?.includes('createdAt="2024-01-01'), 'Date 应正常序列化');
+  });
+
+  it('敏感不落盘：数组名为敏感词时整体脱敏，数组内敏感元素不落盘', async () => {
+    const rig = makeRig();
+    // 数组字段名若为敏感词（tokens 复数），应整体脱敏，不得把数组元素明文落盘。
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { tokens: ['SECRET_ARRAY_TOKEN_1', 'SECRET_ARRAY_TOKEN_2'] },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('SECRET_ARRAY_TOKEN_1'), '数组内敏感 token 不得落盘');
+    assert.ok(!v.includes('SECRET_ARRAY_TOKEN_2'), '数组内敏感 token 不得落盘');
+    assert.ok(v.includes('tokens=<REDACTED'), '敏感数组应整体脱敏');
+  });
+
+  it('敏感不落盘：对象内数组元素为敏感字段时同样脱敏（剥离数组下标后匹配敏感词表）', async () => {
+    const rig = makeRig();
+    // 数组路径形如 items[0].token，若不剥离下标无法匹配敏感词表 token；
+    // 此处数组本身非敏感名，但元素内的敏感字段须被脱敏。
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { items: [{ token: 'ELEM_TOKEN_1', name: 'n1' }, { token: 'ELEM_TOKEN_2' }] },
+    });
+    const v = event.newValue ?? '';
+    assert.ok(!v.includes('ELEM_TOKEN_1'), '数组元素内敏感 token 不得落盘');
+    assert.ok(!v.includes('ELEM_TOKEN_2'), '数组元素内敏感 token 不得落盘');
+    assert.ok(v.includes('items[0].token=<REDACTED'), '数组元素内敏感字段应脱敏');
+    assert.ok(v.includes('items[1].token=<REDACTED'), '数组每个元素的敏感字段都应脱敏');
+    assert.ok(v.includes('items[0].name=n1'), '数组元素内非敏感字段保留');
+  });
+
+  it('敏感不落盘：深嵌套对象不因递归栈溢出抛裸异常，仍可写入审计', async () => {
+    const rig = makeRig();
+    // 攻击者可控的深嵌套输入此前会抛裸 RangeError 从 AuditWriter 冒出；
+    // 修复后应在深度上限处停止递归，审计仍可写入、不泄漏内部细节。
+    const deep: Record<string, unknown> = { root: {} };
+    let cur: Record<string, unknown> = deep.root as Record<string, unknown>;
+    for (let i = 0; i < 20000; i++) {
+      cur.next = {};
+      cur = cur.next as Record<string, unknown>;
+    }
+    const event = await rig.writer.write({
+      ...baseEvent,
+      newValues: { nested: deep },
+    });
+    assert.ok(event.auditId.length > 0, '深嵌套对象不应导致审计写入失败');
+    const v = event.newValue ?? '';
+    assert.ok(v.includes('depth-limit') || v.includes('unserializable'), '深嵌套超限应被占位标记');
+  });
+
+  it('失败原因脱敏：错误信息中的令牌/密码不落盘，超长文本截断', async () => {
+    const rig = makeRig();
+    const event = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '调用下游失败 token=abc123&secret=xyz，详见 https://x.com/a?access_token=SECRETTOK',
+    });
+    assert.ok(event.failureReason, '失败原因应保留');
+    assert.ok(!event.failureReason?.includes('abc123'), '令牌不得落盘');
+    assert.ok(!event.failureReason?.includes('xyz'), '密钥不得落盘');
+    assert.ok(!event.failureReason?.includes('SECRETTOK'), 'URL 查询串凭证不得落盘');
+    // 凭证出现在字符串起始处/无前置分隔符时也须脱敏（防起始位置泄漏）
+    const atStart = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: 'token: abc123 调用下游失败',
+    });
+    assert.ok(!atStart.failureReason?.includes('abc123'), '起始处令牌不得落盘');
+    const noSep = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: 'client_secret=xyz failed',
+    });
+    assert.ok(!noSep.failureReason?.includes('xyz'), '无分隔符密钥不得落盘');
+    // 认证头里的令牌/会话值（Authorization Bearer / Cookie）不得落盘
+    const auth = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '下游 401，Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc，set-cookie: session=abcd1234',
+    });
+    assert.ok(!auth.failureReason?.includes('eyJhbGciOiJIUzI1NiJ9.abc'), 'Bearer 令牌不得落盘');
+    assert.ok(!auth.failureReason?.includes('abcd1234'), 'Cookie 会话值不得落盘');
+    // 引号包裹的敏感值（token=".." / password: '..' / Authorization Bearer ".."）同样不得落盘
+    const quoted = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '引号包裹 token="QTOK123" password: \'QPWD456\' access_token="QACC789" client_secret=\'QSEC999\'，Authorization: Bearer "eyJhbGci.QUOTED"，set-cookie: "session=QSESS"',
+    });
+    const qf = quoted.failureReason ?? '';
+    for (const secret of ['QTOK123', 'QPWD456', 'QACC789', 'QSEC999', 'QUOTED', 'QSESS']) {
+      assert.ok(!qf.includes(secret), `引号包裹敏感值 ${secret} 不得落盘`);
+    }
+    // 超长文本截断
+    const long = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: 'e'.repeat(500),
+    });
+    assert.ok((long.failureReason?.length ?? 0) < 300, '超长失败原因应截断');
+    assert.ok(long.failureReason?.includes('truncated'), '应带截断标记');
+  });
+
+  it('失败原因脱敏不误伤普通字段：postcode/status_code/monkey 等不被过度脱敏', async () => {
+    const rig = makeRig();
+    // 通用词（code/key/token）作为任意单词子串时不得被误判为敏感字段（防过度脱敏），
+    // 否则审计失败原因里大量正常排查信息会被无谓抹掉，降低可排查性。
+    const normal = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '查询失败：postcode=1234&status_code=500&bank_code=XX&error_code=404&country_code=CN&monkey=1&barcode=123',
+    });
+    const fr = normal.failureReason ?? '';
+    assert.ok(fr.includes('postcode=1234'), 'postcode 不应被脱敏');
+    assert.ok(fr.includes('status_code=500'), 'status_code 不应被脱敏');
+    assert.ok(fr.includes('bank_code=XX'), 'bank_code 不应被脱敏');
+    assert.ok(fr.includes('error_code=404'), 'error_code 不应被脱敏');
+    assert.ok(fr.includes('country_code=CN'), 'country_code 不应被脱敏');
+    assert.ok(fr.includes('monkey=1'), 'monkey 不应被脱敏');
+    assert.ok(fr.includes('barcode=123'), 'barcode 不应被脱敏');
+    // 真敏感键（含复合键）仍须脱敏，不得因收紧匹配而漏报（用不与其他单词碰撞的唯一值做校验）
+    const sensitive = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason:
+        '认证失败 access_token=VALATOKEN client_secret=VALCSECRET password=VALPASSWORD api_key=VALAPIKEY verify_code=VALVCODE smtp_secret=VALSMTP email_secret=VALEMAIL refresh_token=VALRT session_token=VALST token=VALTOKEN',
+    });
+    const sf = sensitive.failureReason ?? '';
+    for (const secret of [
+      'VALATOKEN',
+      'VALCSECRET',
+      'VALPASSWORD',
+      'VALAPIKEY',
+      'VALVCODE',
+      'VALSMTP',
+      'VALEMAIL',
+      'VALRT',
+      'VALST',
+      'VALTOKEN',
+    ]) {
+      assert.ok(!sf.includes(secret), `敏感值 ${secret} 不得落盘`);
+    }
+    assert.ok(sf.includes('access_token=<REDACTED>'), 'access_token 应脱敏');
+    assert.ok(sf.includes('client_secret=<REDACTED>'), 'client_secret 应脱敏');
+    assert.ok(sf.includes('password=<REDACTED>'), 'password 应脱敏');
+    assert.ok(sf.includes('api_key=<REDACTED>'), 'api_key 应脱敏');
+    assert.ok(sf.includes('verify_code=<REDACTED>'), 'verify_code 应脱敏');
+    assert.ok(sf.includes('smtp_secret=<REDACTED>'), 'smtp_secret 应脱敏');
+    assert.ok(sf.includes('email_secret=<REDACTED>'), 'email_secret 应脱敏');
+    assert.ok(sf.includes('refresh_token=<REDACTED>'), 'refresh_token 应脱敏');
+    assert.ok(sf.includes('session_token=<REDACTED>'), 'session_token 应脱敏');
+    assert.ok(sf.includes('token=<REDACTED>'), '独立 token 应脱敏');
+  });
+
+  it('失败原因脱敏：连字符/点号复合键与 JSON 键值对凭证不得落盘（防绕过）', async () => {
+    const rig = makeRig();
+    // 连字符复合键（access-token）、点号复合键（api.token）此前因分隔符仅支持下划线而绕过
+    const hyphen = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: '调用失败 access-token=HYPTOK api.token=DOTTEDSECRET',
+    });
+    assert.ok(!hyphen.failureReason?.includes('HYPTOK'), '连字符复合键令牌不得落盘');
+    assert.ok(!hyphen.failureReason?.includes('DOTTEDSECRET'), '点号复合键密钥不得落盘');
+    assert.ok(hyphen.failureReason?.includes('access-token=<REDACTED>'), '连字符复合键应脱敏');
+    assert.ok(hyphen.failureReason?.includes('api.token=<REDACTED>'), '点号复合键应脱敏');
+    // JSON 键值对形态：{"password":..} / {"access_token":..} 不得落盘
+    const json = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: '响应异常 {"password":"JPWD_ABC","access_token": "JTOK_XYZ"}',
+    });
+    assert.ok(!json.failureReason?.includes('JPWD_ABC'), 'JSON 密码不得落盘');
+    assert.ok(!json.failureReason?.includes('JTOK_XYZ'), 'JSON 令牌不得落盘');
+  });
+
+  it('失败原因脱敏：独立 key/code 不脱敏（避免过度脱敏），真敏感键仍脱敏', async () => {
+    const rig = makeRig();
+    // 独立 key=1 / code=404 属正常排查信息，不得被误抹（防止过度脱敏）
+    const normal = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: '记录 id=42 key=1 code=404 status=OK',
+    });
+    assert.ok(normal.failureReason?.includes('key=1'), '独立 key 不应被脱敏');
+    assert.ok(normal.failureReason?.includes('code=404'), '独立 code 不应被脱敏');
+    // 复合前缀键仍须脱敏，不得因收紧而漏报
+    const composite = await rig.writer.write({
+      ...baseEvent,
+      outcome: AuditOutcome.FAILURE,
+      failureReason: '失败 api_key=APIKEYVAL verify_code=VERIFYCODEVAL client_secret=CSVAL',
+    });
+    for (const sec of ['APIKEYVAL', 'VERIFYCODEVAL', 'CSVAL']) {
+      assert.ok(!composite.failureReason?.includes(sec), `复合敏感键 ${sec} 不得落盘`);
+    }
+  });
+
+  it('仓储查询 limit<=0 返回空，缺省/正数返回最近 N 条', async () => {
+    const rig = makeRig();
+    await rig.writer.write({ ...baseEvent, actorId: 'u1' });
+    await rig.writer.write({ ...baseEvent, actorId: 'u2' });
+    await rig.writer.write({ ...baseEvent, actorId: 'u3' });
+    assert.equal((await rig.repo.query({ limit: 0 })).length, 0);
+    assert.equal((await rig.repo.query({ limit: -1 })).length, 0);
+    const lastTwo = await rig.repo.query({ limit: 2 });
+    assert.equal(lastTwo.length, 2);
+    // 最近 N 条按 occurredAt 倒序（最新在前），u3 应排首位
+    assert.equal(lastTwo[0]?.actorId, 'u3');
+  });
+
+  it('审计只追加不可篡改：仓储无修改/删除方法；查询按条件过滤', async () => {
+    const rig = makeRig();
+    await rig.writer.write({
+      ...baseEvent,
+      eventType: AuditEventType.AUTH_LOGIN,
+      actorId: 'u1',
+      target: null,
+    });
+    await rig.writer.write({ ...baseEvent, actorId: 'u2' });
+    await rig.writer.write({ ...baseEvent, actorId: 'u2', eventType: AuditEventType.CORRECTION });
+    // 按用户过滤
+    const byActor = await rig.repo.query({ actorId: 'u2' });
+    assert.equal(byActor.length, 2);
+    // 按事件类型
+    const byType = await rig.repo.query({ eventType: 'CORRECTION' });
+    assert.equal(byType.length, 1);
+    // 按社团
+    const byClub = await rig.repo.query({ clubId: 'c1' });
+    assert.equal(byClub.length, 3);
+    // 只追加：总记录数不减少
+    assert.equal((await rig.repo.query({})).length, 3);
+  });
+
+  it('事务同成同败：审计写入失败 → 业务操作整体失败（AUD-003/IFC-TX-006）', async () => {
+    // 注入失败仓储（append 抛错）
+    const failingRepo = {
+      append: async () => {
+        throw new Error('db down');
+      },
+      query: async () => [],
+    };
+    const failingWriter = new AuditWriter(failingRepo as never, new AuditSanitizer());
+    await assert.rejects(failingWriter.write(baseEvent), /关键审计写入失败/);
+  });
+
+  it('审计中心查询权限：超管全平台；负责人/人事仅本社团；部门负责人限业务对象；成员拒绝', async () => {
+    const rig = makeRig();
+    await rig.writer.write({ ...baseEvent, actorId: 'u1' });
+    // 超管全平台
+    const all = await rig.query.search({ principalId: 'sa', roles: ['SUPER_ADMIN'] }, {});
+    assert.equal(all.length, 1);
+    // 本社团负责人/人事
+    const c1 = await rig.query.search(
+      { principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' },
+      {},
+    );
+    assert.equal(c1.length, 1);
+    // 本社团负责人/人事未指定 clubId 也应仅限本社团（防跨社团越权）：
+    // 写入另一社团的记录，未带 clubId 过滤时也不得泄漏出来
+    await rig.writer.write({ ...baseEvent, actorId: 'u9', scope: { kind: 'CLUB', clubId: 'c9' } });
+    const c1NoFilter = await rig.query.search(
+      { principalId: 'hr1', roles: ['HR_ADMIN'], clubId: 'c1' },
+      {},
+    );
+    assert.equal(c1NoFilter.length, 1);
+    assert.equal(c1NoFilter[0]?.actorId, 'u1');
+    // 无社团作用域的负责人/人事 → 拒绝
+    await assert.rejects(
+      rig.query.search({ principalId: 'hr3', roles: ['HR_ADMIN'] }, {}),
+      /须携带社团作用域/,
+    );
+    // 跨社团查询 → 拒绝
+    await assert.rejects(
+      rig.query.search({ principalId: 'hr2', roles: ['HR_ADMIN'], clubId: 'c2' }, { clubId: 'c1' }),
+      /只能查询本社团审计/,
+    );
+    // 部门负责人未携带对象白名单 → 拒绝
+    await assert.rejects(
+      rig.query.search({ principalId: 'd1', roles: ['DEPARTMENT_LEADER'] }, {}),
+      /须携带可访问业务对象白名单/,
+    );
+    // 部门负责人查询白名单外的对象 → 拒绝（防横向越权）
+    await assert.rejects(
+      rig.query.search(
+        { principalId: 'd1', roles: ['DEPARTMENT_LEADER'], accessibleObjectIds: ['o1'] },
+        { objectId: 'o999' },
+      ),
+      /只能查询自己有权访问的业务对象审计/,
+    );
+    // 成员 → 拒绝
+    await assert.rejects(
+      rig.query.search({ principalId: 'mem1', roles: ['MEMBER'] }, {}),
+      /不看内部审计/,
+    );
+  });
+
+  it('部门负责人查询结果强制限定在对象白名单内（防结果越权）', async () => {
+    const rig = makeRig();
+    await rig.writer.write({
+      ...baseEvent,
+      target: { objectType: 'MEMBERSHIP', objectId: 'o1' },
+      actorId: 'u1',
+    });
+    await rig.writer.write({
+      ...baseEvent,
+      target: { objectType: 'MEMBERSHIP', objectId: 'o2' },
+      actorId: 'u1',
+    });
+    // 白名单仅含 o1：即使 filter.objectId 传 o1，也拿不到 o2 的记录
+    const rows = await rig.query.search(
+      { principalId: 'd1', roles: ['DEPARTMENT_LEADER'], accessibleObjectIds: ['o1'] },
+      { objectId: 'o1' },
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.target?.objectId, 'o1');
+    // 不带 objectId 过滤时同样只返回白名单内对象
+    const all = await rig.query.search(
+      { principalId: 'd1', roles: ['DEPARTMENT_LEADER'], accessibleObjectIds: ['o2'] },
+      {},
+    );
+    assert.equal(all.length, 1);
+    assert.equal(all[0]?.target?.objectId, 'o2');
+  });
+});

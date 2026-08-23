@@ -81,7 +81,7 @@ rana-minder-service/
 ### 环境
 
 - Node.js 24 LTS（`engines.node` 约束）
-- pnpm ≥ 9（`packageManager: pnpm@9.12.0`）
+- pnpm ≥ 10（`packageManager: pnpm@10.34.5`）
 - monorepo 工作区声明见 `pnpm-workspace.yaml`（当前仅启用根包）
 
 ### 安装与脚本
