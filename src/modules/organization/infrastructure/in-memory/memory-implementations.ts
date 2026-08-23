@@ -375,8 +375,12 @@ export class InMemoryCasdoorPort implements CasdoorGroupPort {
     this.failingRefs.add(`${ref.owner}/${ref.name}`);
   }
 
-  /** 测试辅助：构造后追加一个 Group（不影响已存在 Group） */
+  /** 测试辅助：构造后追加一个 Group（不影响已存在 Group）；按 ref 去重 */
   addGroup(g: MemoryCasdoorSeed['groups'][number]): void {
+    const exists = this.groups.some(
+      (x) => x.ref.owner === g.ref.owner && x.ref.name === g.ref.name,
+    );
+    if (exists) return;
     this.groups.push(this.normalize(g, this.groups.length));
   }
 }

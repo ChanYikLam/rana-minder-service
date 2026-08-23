@@ -175,7 +175,10 @@ export class RelationCommandUseCase {
     const annotated = await Promise.all(
       input.targetGroups.map(async (tg, index) => {
         const purpose = await this.lookupGroupPurpose(tg.ref);
-        const members = await this.casdoor.getGroupMembers(tg.ref);
+        // 目标 Group 缺失时优雅降级为「空成员集 + 用途 null」：与 readback
+        // 端口（缺失返回 []）容错语义一致，避免在 submit 路径抛裸 Error
+        const group = await this.casdoor.getGroupByRef(tg.ref);
+        const members = group === null ? [] : group.memberIds;
         const present = members.includes(input.subjectId);
         return {
           index,

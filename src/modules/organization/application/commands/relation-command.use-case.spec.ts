@@ -252,7 +252,7 @@ describe('RelationCommandUseCase', () => {
   // buildSteps：按 Group 用途排序 + 真实原关系回读
   // -------------------------------------------------------------------------
 
-  function setupWithMappings(
+  async function setupWithMappings(
     mappings: Array<{
       ref: { owner: string; name: string };
       purpose: 'club' | 'department' | 'position';
@@ -261,7 +261,7 @@ describe('RelationCommandUseCase', () => {
     const registry = new InMemoryGroupMappingRegistry();
     const h2 = buildHarness({ mappings: registry });
     for (const m of mappings) {
-      void registry.save({
+      await registry.save({
         ref: m.ref,
         clubId: 'club-acm-1',
         purpose: m.purpose,
@@ -271,13 +271,13 @@ describe('RelationCommandUseCase', () => {
       });
     }
     // ensure club is saved (parent beforeEach already did, but harness was rebuilt)
-    void h2.clubs.save(h2.club);
+    await h2.clubs.save(h2.club);
     return h2;
   }
 
   it('buildSteps：所有 remove 必须先于 add（先撤销后授予，ORG-027/CAS-Q-001）', async () => {
     // 部门/职位用途都已登记，社团用途也登记
-    const h2 = setupWithMappings([
+    const h2 = await setupWithMappings([
       { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
       { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
     ]);
@@ -302,7 +302,7 @@ describe('RelationCommandUseCase', () => {
   });
 
   it('buildSteps：add 步内按用途升序（club < department < position，未识别置末）', async () => {
-    const h2 = setupWithMappings([
+    const h2 = await setupWithMappings([
       { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
       { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
       { ref: { owner: 'club-acm', name: '副会长' }, purpose: 'position' },
@@ -345,7 +345,7 @@ describe('RelationCommandUseCase', () => {
   });
 
   it('buildSteps：remove 与 add 混合时 remove 全部先执行（即使 add 用 position 用途）', async () => {
-    const h2 = setupWithMappings([
+    const h2 = await setupWithMappings([
       { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
       { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
     ]);
@@ -388,7 +388,7 @@ describe('RelationCommandUseCase', () => {
 
   it('buildSteps：原关系快照回读 Casdoor 实际成员（confirmed=当前在，failed=当前不在）', async () => {
     // 初始：u_c 不在 ACM社团 也不在 宣传部（u_c 是社团成员但不在宣传部）
-    const h2 = setupWithMappings([
+    const h2 = await setupWithMappings([
       { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
       { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
     ]);
@@ -414,7 +414,7 @@ describe('RelationCommandUseCase', () => {
   });
 
   it('buildSteps：原关系快照与目标关系并行回读（共享 idempotencyKey + stepId）', async () => {
-    const h2 = setupWithMappings([
+    const h2 = await setupWithMappings([
       { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
       { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
     ]);
@@ -438,5 +438,23 @@ describe('RelationCommandUseCase', () => {
       assert.equal(originalStep.idempotencyKey, targetStep.idempotencyKey);
       assert.equal(originalStep.kind, targetStep.kind);
     }
+  });
+
+  it('buildSteps：目标 Group 缺失时优雅降级而非抛裸 Error（与 readback 容错一致）', async () => {
+    // 目标 Group「不存在」：不在 Casdoor 中（也未登记用途，属可达场景）
+    const h2 = await setupWithMappings([]);
+    const cmd = await h2.useCase.submit(
+      {
+        ...baseInput,
+        idempotencyKey: 'rel:missing-group:test',
+        targetGroups: [{ ref: { owner: 'club-acm', name: '不存在的组' }, kind: 'add' }],
+      },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    // 未抛裸 Error；缺失 Group 视为「空成员集」→ present=false → original.result='failed'
+    assert.equal(cmd.targetRelation.length, 1);
+    assert.equal(cmd.targetRelation[0].targetGroup.name, '不存在的组');
+    assert.equal(cmd.originalRelation.length, 1);
+    assert.equal(cmd.originalRelation[0].result, 'failed');
   });
 });
