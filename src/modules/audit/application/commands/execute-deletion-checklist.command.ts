@@ -55,7 +55,7 @@ export class ExecuteDeletionChecklistCommand {
   async execute(input: ExecuteDeletionInput): Promise<ExecuteDeletionResult> {
     const checklist = await this.repo.load(input.checklistId);
     if (checklist === null) {
-      throw new Error('IFC-ERR-006: 删除清单不存在');
+      throw new Error('IFC-ERR-015: 删除清单不存在');
     }
     // 幂等：非重放且已完成 → 返回原结果
     if (checklist.completed && input.replay !== true) {

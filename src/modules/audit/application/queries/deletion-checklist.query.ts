@@ -17,7 +17,7 @@ export class DeletionChecklistQuery {
     this.policy.assertSuperAdmin(roles);
     const checklist = await this.repo.load(checklistId);
     if (checklist === null) {
-      throw new Error('IFC-ERR-006: 删除清单不存在');
+      throw new Error('IFC-ERR-015: 删除清单不存在');
     }
     return checklist.affectedObjects;
   }

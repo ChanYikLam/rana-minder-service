@@ -6,7 +6,7 @@ import {
   DeletionStepStatus,
 } from '../../domain/models/deletion';
 import type { DeletionChecklist, DeletionScope, DeletionStep } from '../../domain/models/deletion';
-import { DeletionPolicy } from '../../domain/services/deletion-policy';
+import { DeletionPolicy, DeletionPolicyError } from '../../domain/services/deletion-policy';
 import { DELETION_CHECKLIST_REPOSITORY } from '../../infrastructure/deletion-checklist-repository';
 import type { DeletionChecklistRepository } from '../../infrastructure/deletion-checklist-repository';
 
@@ -51,7 +51,7 @@ export class FormalDeleteCommand {
     this.policy.assertBusinessRelationsEnded(input.activeRelations);
     this.assertScopeComplete(input.scope);
     if (input.affectedObjects.length === 0) {
-      throw new Error('IFC-ERR-005: 受影响对象清单不能为空');
+      throw new DeletionPolicyError('IFC-ERR-005', '受影响对象清单不能为空');
     }
 
     const steps: readonly DeletionStep[] = (
@@ -75,7 +75,7 @@ export class FormalDeleteCommand {
       reason: input.reason,
       initiatedBy: input.initiator.principalId,
       initiatedAt: new Date().toISOString(),
-      confirmed: true,
+      confirmed: input.confirmed,
       affectedObjects: input.affectedObjects,
       businessRelationsEnded: true,
       steps,
@@ -107,17 +107,17 @@ export class FormalDeleteCommand {
           scope.objectId === undefined ||
           scope.objectId.trim().length === 0
         ) {
-          throw new Error('IFC-ERR-005: 单条记录删除需提供 objectType 与 objectId');
+          throw new DeletionPolicyError('IFC-ERR-005', '单条记录删除需提供 objectType 与 objectId');
         }
         return;
       case DeletionScopeKind.ACTIVITY:
         if (scope.activityId === undefined || scope.activityId.trim().length === 0) {
-          throw new Error('IFC-ERR-005: 活动范围删除需提供 activityId');
+          throw new DeletionPolicyError('IFC-ERR-005', '活动范围删除需提供 activityId');
         }
         return;
       case DeletionScopeKind.USER_ALL_DATA:
         if (scope.principalId === undefined || scope.principalId.trim().length === 0) {
-          throw new Error('IFC-ERR-005: 用户全部数据删除需提供 principalId');
+          throw new DeletionPolicyError('IFC-ERR-005', '用户全部数据删除需提供 principalId');
         }
         return;
     }
