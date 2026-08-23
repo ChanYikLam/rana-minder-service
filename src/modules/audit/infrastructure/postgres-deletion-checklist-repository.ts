@@ -27,6 +27,7 @@ interface DeletionChecklistRow {
   readonly completed: boolean;
   readonly replay_count: number;
   readonly version: number;
+  readonly audit_committed: boolean;
 }
 
 function toRow(c: DeletionChecklist): DeletionChecklistRow {
@@ -44,6 +45,7 @@ function toRow(c: DeletionChecklist): DeletionChecklistRow {
     completed: c.completed,
     replay_count: c.replayCount,
     version: c.version,
+    audit_committed: c.auditCommitted,
   };
 }
 
@@ -62,6 +64,7 @@ function fromRow(r: DeletionChecklistRow): DeletionChecklist {
     completed: r.completed,
     replayCount: r.replay_count,
     version: r.version,
+    auditCommitted: r.audit_committed,
   };
 }
 
@@ -94,8 +97,8 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
         tx,
         `INSERT INTO deletion_checklist (
            checklist_id, scope, reason, purpose, initiated_by, initiated_at, confirmed,
-           affected_objects, business_relations_ended, steps, completed, replay_count, version
-         ) VALUES ($1, $2::jsonb, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13)`,
+           affected_objects, business_relations_ended, steps, completed, replay_count, version, audit_committed
+         ) VALUES ($1, $2::jsonb, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14)`,
         [
           row.checklist_id,
           row.scope,
@@ -110,6 +113,7 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
           row.completed,
           row.replay_count,
           row.version,
+          row.audit_committed,
         ],
       );
     });
@@ -120,7 +124,7 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
       const rows = await this.db.query<DeletionChecklistRow>(
         tx,
         `SELECT checklist_id, scope, reason, purpose, initiated_by, initiated_at, confirmed,
-                affected_objects, business_relations_ended, steps, completed, replay_count, version
+                affected_objects, business_relations_ended, steps, completed, replay_count, version, audit_committed
          FROM deletion_checklist WHERE checklist_id = $1`,
         [checklistId],
       );
@@ -145,7 +149,8 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
         `UPDATE deletion_checklist SET
            scope = $2::jsonb, reason = $3, purpose = $4, initiated_by = $5, initiated_at = $6,
            confirmed = $7, affected_objects = $8::jsonb, business_relations_ended = $9,
-           steps = $10::jsonb, completed = $11, replay_count = $12, version = $13
+           steps = $10::jsonb, completed = $11, replay_count = $12, version = $13,
+           audit_committed = $15
          WHERE checklist_id = $1 AND version = $14`,
         [
           row.checklist_id,
@@ -162,6 +167,7 @@ export class PostgresDeletionChecklistRepository implements DeletionChecklistRep
           row.replay_count,
           row.version,
           current.version,
+          row.audit_committed,
         ],
       );
       return true;

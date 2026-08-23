@@ -85,6 +85,7 @@ export class FormalDeleteCommand {
       completed: false,
       replayCount: 0,
       version: 1,
+      auditCommitted: false,
     };
     await this.repo.save(checklist);
     return checklist;
@@ -98,6 +99,9 @@ export class FormalDeleteCommand {
         return `activity:${scope.activityId}`;
       case DeletionScopeKind.USER_ALL_DATA:
         return `user:${scope.principalId}`;
+      default:
+        // 前置 assertScopeComplete 已拒绝未知 kind（防御）
+        throw new DeletionPolicyError('IFC-ERR-005', '未知删除范围');
     }
   }
 
@@ -106,21 +110,21 @@ export class FormalDeleteCommand {
     switch (scope.kind) {
       case DeletionScopeKind.SINGLE_RECORD:
         if (
-          scope.objectType === undefined ||
+          scope.objectType == null ||
           scope.objectType.trim().length === 0 ||
-          scope.objectId === undefined ||
+          scope.objectId == null ||
           scope.objectId.trim().length === 0
         ) {
           throw new DeletionPolicyError('IFC-ERR-005', '单条记录删除需提供 objectType 与 objectId');
         }
         return;
       case DeletionScopeKind.ACTIVITY:
-        if (scope.activityId === undefined || scope.activityId.trim().length === 0) {
+        if (scope.activityId == null || scope.activityId.trim().length === 0) {
           throw new DeletionPolicyError('IFC-ERR-005', '活动范围删除需提供 activityId');
         }
         return;
       case DeletionScopeKind.USER_ALL_DATA:
-        if (scope.principalId === undefined || scope.principalId.trim().length === 0) {
+        if (scope.principalId == null || scope.principalId.trim().length === 0) {
           throw new DeletionPolicyError('IFC-ERR-005', '用户全部数据删除需提供 principalId');
         }
         return;

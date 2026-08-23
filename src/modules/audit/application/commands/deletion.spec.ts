@@ -201,7 +201,7 @@ describe('5.3.4 正式删除与临时清理（AUD-005~010）', () => {
     assert.equal(b, false); // 第二个提交失败（版本冲突，防重复删除）
   });
 
-  it('评审修复：审计写入失败 → 命令抛错（删除已核验完成；恢复重放补写审计）', async () => {
+  it('评审修复：审计写入失败 → 普通重试补写审计（auditCommitted 标志，无需 replay 重执行）', async () => {
     const repo = new InMemoryDeletionChecklistRepository();
     const policy = new DeletionPolicy();
     const formalDelete = new FormalDeleteCommand(repo, policy);

@@ -77,6 +77,8 @@ export interface DeletionChecklist {
   readonly replayCount: number;
   /** 乐观锁版本（并发执行防护：同一清单只一个执行提交成功） */
   readonly version: number;
+  /** 删除执行结果是否已落审计（审计写入成功；false=审计缺失，普通重试可补写） */
+  readonly auditCommitted: boolean;
 }
 
 /**

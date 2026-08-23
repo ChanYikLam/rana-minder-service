@@ -68,8 +68,9 @@ export class ExecuteDeletionChecklistCommand {
     if (checklist === null) {
       throw new DeletionPolicyError('IFC-ERR-015', '删除清单不存在');
     }
-    // 幂等：非重放且已完成 → 返回原结果
-    if (checklist.completed && input.replay !== true) {
+    // 幂等：已完成且**审计已落**且非重放 → 返回原结果；
+    // 已完成但审计缺失（auditCommitted=false，审计写入曾失败）→ 继续执行补审计
+    if (checklist.completed && checklist.auditCommitted && input.replay !== true) {
       return { checklist, completed: true, minimalAudit: null };
     }
 
@@ -102,6 +103,8 @@ export class ExecuteDeletionChecklistCommand {
       completed,
       replayCount: input.replay === true ? checklist.replayCount + 1 : checklist.replayCount,
       version: checklist.version + 1,
+      // 审计待提交（成功后二次 CAS 置 true；失败则保持 false，普通重试可补写）
+      auditCommitted: false,
     };
     // 乐观锁提交：并发执行（同一清单）只一个成功（W1）；**先提交成功再落审计**，
     // 失败方在 CAS 处抛 IFC-ERR-016，不遗留误导性审计（评审意见）
@@ -125,6 +128,7 @@ export class ExecuteDeletionChecklistCommand {
       : null;
     // 仅对**真正提交成功的执行**落审计（CAS 已成功）：成功 → SUCCESS 最小审计；
     // 部分失败 → FAILURE 尝试审计（AUD-009 保留尝试审计，失败详情脱敏）
+    let auditWritten = false;
     if (minimalAudit !== null) {
       await this.auditWriter.write({
         eventType: AuditEventType.SUPER_ADMIN_OP,
@@ -138,6 +142,7 @@ export class ExecuteDeletionChecklistCommand {
         outcome: AuditOutcome.SUCCESS,
         requestId: input.audit.requestId,
       });
+      auditWritten = true;
     } else if (failed > 0 || checklist.steps.length === 0) {
       // 部分失败或空清单（理论防御）：保留尝试审计（AUD-009），失败详情脱敏
       await this.auditWriter.write({
@@ -153,7 +158,18 @@ export class ExecuteDeletionChecklistCommand {
         failureReason: 'deletion-steps-not-verified',
         requestId: input.audit.requestId,
       });
+      auditWritten = true;
     }
-    return { checklist: updated, completed, minimalAudit };
+    // 审计已落 → 置 auditCommitted=true（二次 CAS；并发竞争失败忽略——审计已写，
+    // 状态由其他执行收敛，普通重试幂等返回即可）
+    if (auditWritten) {
+      const finalized: DeletionChecklist = { ...updated, auditCommitted: true };
+      await this.repo.compareAndSwap(updated, finalized);
+    }
+    return {
+      checklist: auditWritten ? { ...updated, auditCommitted: true } : updated,
+      completed,
+      minimalAudit,
+    };
   }
 }

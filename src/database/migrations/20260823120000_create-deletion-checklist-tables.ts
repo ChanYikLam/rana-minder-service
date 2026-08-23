@@ -40,6 +40,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       completed               boolean     NOT NULL DEFAULT false,
       replay_count            bigint      NOT NULL DEFAULT 0,
       version                 bigint      NOT NULL DEFAULT 1,
+      audit_committed         boolean     NOT NULL DEFAULT false,
       CONSTRAINT ck_deletion_checklist_purpose CHECK (purpose IN
         ('USER_REQUEST', 'LEGAL_REQUIREMENT', 'DATA_QUALITY', 'RETENTION_VIOLATION'))
     )
