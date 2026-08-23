@@ -4,15 +4,25 @@ import assert from 'node:assert/strict';
 import { ControlledBatchUseCase, type BatchCompensationItem } from './controlled-batch.use-case';
 import type { ControlledBatchPort } from '../ports';
 
-function makePort(): ControlledBatchPort & { executed: string[] } {
+function makePort(): ControlledBatchPort & { executed: string[]; lastEffects?: readonly string[] } {
   const executed: string[] = [];
+  let lastEffects: readonly string[] | undefined;
   return {
-    executed,
-    async execute(batchId: string, phase: string) {
+    get executed() {
+      return executed;
+    },
+    get lastEffects() {
+      return lastEffects;
+    },
+    async execute(batchId: string, phase: string, requiredSideEffects?: readonly string[]) {
       executed.push(`${batchId}:${phase}`);
+      lastEffects = requiredSideEffects;
       return { ok: true };
     },
-  } as unknown as ControlledBatchPort & { executed: string[] };
+  } as unknown as ControlledBatchPort & {
+    executed: string[];
+    lastEffects?: readonly string[];
+  };
 }
 
 // -------------------------------------------------------------------------
@@ -46,6 +56,24 @@ describe('ControlledBatchUseCase.drive', () => {
     });
     assert.equal(next, 'previewed_pending_confirm');
     assert.deepEqual(port.executed, ['b1:generate_preview']);
+    // 状态机声明的副作用标签被平台端口消费
+    assert.deepEqual(port.lastEffects, ['save_preview_audit', 'freeze_filter_snapshot']);
+  });
+
+  it('合法事件：confirm_execute 把副作用标签交给平台端口', async () => {
+    const port = makePort();
+    const useCase = new ControlledBatchUseCase(port);
+    await useCase.drive({
+      batchId: 'b1',
+      event: 'confirm_execute',
+      status: 'previewed_pending_confirm',
+      facts: { previewFresh: true, inputsFrozen: true },
+    });
+    assert.deepEqual(port.lastEffects, [
+      'freeze_batch_inputs',
+      'spawn_item_tasks',
+      'batch_confirm_audit',
+    ]);
   });
 
   it('合法事件：all_items_finished 派生 partial_success', async () => {
@@ -104,10 +132,10 @@ describe('ControlledBatchUseCase.compensateInReverseOrder（ORG-034 逆序补偿
     assert.deepEqual(r.failed, []);
   });
 
-  it('空数组：直接返回空轨迹', async () => {
+  it('空数组：直接返回空轨迹（fullyCompensated=true）', async () => {
     const useCase = new ControlledBatchUseCase(makePort());
     const r = await useCase.compensateInReverseOrder([]);
-    assert.deepEqual(r, { compensated: [], failed: [] });
+    assert.deepEqual(r, { compensated: [], failed: [], fullyCompensated: true });
   });
 
   it('单项补偿失败不阻断后续补偿（继续回退到最早项以缩小影响面）', async () => {
@@ -159,6 +187,63 @@ describe('ControlledBatchUseCase.compensateInReverseOrder（ORG-034 逆序补偿
       items.map((i) => i.itemId),
       ['i1', 'i2', 'i3'],
     );
+  });
+
+  it('非补偿入口状态拒绝（all_succeeded / all_failed 不可补偿，ORG-034）', async () => {
+    const useCase = new ControlledBatchUseCase(makePort());
+    const items: BatchCompensationItem[] = [
+      { itemId: 'i1', stepOrder: 1, compensate: async () => undefined },
+    ];
+    await assert.rejects(
+      () => useCase.compensateInReverseOrder(items, { status: 'all_succeeded' }),
+      (e: Error) => e.message.includes('不允许逆序补偿') && e.message.includes('ORG-034'),
+    );
+    await assert.rejects(
+      () => useCase.compensateInReverseOrder(items, { status: 'all_failed' }),
+      (e: Error) => e.message.includes('不允许逆序补偿'),
+    );
+  });
+
+  it('partial_success 状态允许补偿且 fullyCompensated=true', async () => {
+    const useCase = new ControlledBatchUseCase(makePort());
+    const items: BatchCompensationItem[] = [
+      { itemId: 'i1', stepOrder: 1, compensate: async () => undefined },
+      { itemId: 'i2', stepOrder: 2, compensate: async () => undefined },
+    ];
+    const r = await useCase.compensateInReverseOrder(items, { status: 'partial_success' });
+    assert.deepEqual(r.compensated, ['i2', 'i1']);
+    assert.equal(r.fullyCompensated, true);
+  });
+
+  it('stepOrder 重复 → 拒绝逆序（ORG-034 唯一性约束）', async () => {
+    const useCase = new ControlledBatchUseCase(makePort());
+    const items: BatchCompensationItem[] = [
+      { itemId: 'i1', stepOrder: 2, compensate: async () => undefined },
+      { itemId: 'i2', stepOrder: 2, compensate: async () => undefined },
+    ];
+    await assert.rejects(
+      () => useCase.compensateInReverseOrder(items),
+      (e: Error) => e.message.includes('stepOrder=2 重复') && e.message.includes('ORG-034'),
+    );
+  });
+
+  it('单项补偿失败 → fullyCompensated=false（供幂等/重试收口决策）', async () => {
+    const useCase = new ControlledBatchUseCase(makePort());
+    const items: BatchCompensationItem[] = [
+      { itemId: 'i1', stepOrder: 1, compensate: async () => undefined },
+      {
+        itemId: 'i2',
+        stepOrder: 2,
+        compensate: async () => {
+          throw new Error('boom');
+        },
+      },
+    ];
+    const r = await useCase.compensateInReverseOrder(items);
+    assert.equal(r.fullyCompensated, false);
+    assert.deepEqual(r.compensated, ['i1']);
+    assert.equal(r.failed.length, 1);
+    assert.equal(r.failed[0].itemId, 'i2');
   });
 });
 
