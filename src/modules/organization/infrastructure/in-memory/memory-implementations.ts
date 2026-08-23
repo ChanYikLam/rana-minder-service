@@ -374,6 +374,11 @@ export class InMemoryCasdoorPort implements CasdoorGroupPort {
     else if (kind === 'no_access') g.readable = false;
     this.failingRefs.add(`${ref.owner}/${ref.name}`);
   }
+
+  /** 测试辅助：构造后追加一个 Group（不影响已存在 Group） */
+  addGroup(g: MemoryCasdoorSeed['groups'][number]): void {
+    this.groups.push(this.normalize(g, this.groups.length));
+  }
 }
 
 // --------------------------------------------------------------------------
