@@ -63,6 +63,31 @@ describe('HttpCasdoorGroupAdapter', () => {
     assert.equal(await adapter.getGroupByRef({ owner: 'x', name: 'y' }), null);
   });
 
+  it('getGroupByRef：403 → readable:false（对账 no_access 的数据源）', async () => {
+    const { adapter } = makeFetch(() => ({
+      status: 403,
+      body: { id: 'g-1', owner: 'club-acm', name: '宣传部' },
+    }));
+    const g = await adapter.getGroupByRef({ owner: 'club-acm', name: '宣传部' });
+    assert.equal(g?.readable, false);
+    assert.equal(g?.deleted, false);
+  });
+
+  it('getGroupByRef：403 且无元数据 → 仍返回 readable:false（不失失权信号）', async () => {
+    const { adapter } = makeFetch(() => ({ status: 403, body: {} }));
+    const g = await adapter.getGroupByRef({ owner: 'club-acm', name: '宣传部' });
+    assert.equal(g?.readable, false);
+    assert.equal(g?.stableId, '宣传部');
+  });
+
+  it('getGroupByRef：200 但空 body → 上抛而非误判 deleted', async () => {
+    const { adapter } = makeFetch(() => ({ status: 200, body: null }));
+    await assert.rejects(
+      () => adapter.getGroupByRef({ owner: 'x', name: 'y' }),
+      /empty body/,
+    );
+  });
+
   it('writeMembership add：2xx + 回读确认 → success', async () => {
     const { adapter } = makeFetch((url) => {
       if (isGroupUrl(url)) return { status: 200, body: GROUP_BODY };
@@ -115,6 +140,23 @@ describe('HttpCasdoorGroupAdapter', () => {
       () => adapter.getGroupByRef({ owner: 'x', name: 'y' }),
       /casdoor get-group failed/,
     );
+  });
+
+  it('getGroupMembers：回退路径不重复 fetch Group（复用已取元数据）', async () => {
+    let groupFetchCount = 0;
+    const { adapter, calls } = makeFetch((url) => {
+      if (isGroupUrl(url)) {
+        groupFetchCount += 1;
+        return { status: 200, body: GROUP_BODY };
+      }
+      if (isMembersUrl(url)) return { status: 502, body: {} }; // 成员实况读失败 → 走回退
+      return { status: 200, body: {} };
+    });
+    const members = await adapter.getGroupMembers({ owner: 'club-acm', name: '宣传部' });
+    assert.deepEqual(members, ['u_c']); // 回落元数据内嵌成员
+    assert.equal(groupFetchCount, 1); // 只 fetch 了一次 Group
+    const groupUrls = calls.filter((c) => isGroupUrl(c.url)).length;
+    assert.equal(groupUrls, 1);
   });
 
   it('writeMembership：Group 不存在 → failure；5xx → unknown 可重试', async () => {
