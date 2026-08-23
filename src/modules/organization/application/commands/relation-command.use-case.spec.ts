@@ -7,6 +7,7 @@ import { RelationCommandUseCase } from './relation-command.use-case';
 import {
   InMemoryCasdoorPort,
   InMemoryClubStore,
+  InMemoryGroupMappingRegistry,
   InMemoryJobScheduler,
   InMemoryNotificationPort,
   InMemoryRelationCommandStore,
@@ -55,6 +56,7 @@ function buildHarness() {
     relationStore,
     clubs,
     casdoor,
+    new InMemoryGroupMappingRegistry(),
     scheduler,
     notifications,
     permissions,
