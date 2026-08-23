@@ -256,6 +256,52 @@ describe('ExportSnapshot.freeze — 作用域', () => {
     assert.equal(snapshot.data.scope.jointActivityId, 'JA-1');
     assert.deepEqual(snapshot.data.scope.participantClubIds, ['C1', 'C2', 'C3']);
   });
+
+  it('platform 作用域冻结（超管平台级，范围字段全空）', () => {
+    const { snapshot } = ExportSnapshot.freeze({
+      spec: SPEC,
+      scope: makeScope({
+        kind: 'platform',
+        clubId: null,
+        departmentId: null,
+        departmentIds: [],
+        jointActivityId: null,
+        participantClubIds: [],
+      }),
+      datasets: ['club_summary'],
+    });
+    assert.equal(snapshot.data.scope.kind, 'platform');
+    assert.equal(snapshot.data.scope.clubId, null);
+    assert.equal(snapshot.data.scope.departmentId, null);
+    assert.deepEqual(snapshot.data.scope.departmentIds, []);
+    assert.equal(snapshot.data.scope.jointActivityId, null);
+    assert.deepEqual(snapshot.data.scope.participantClubIds, []);
+  });
+
+  it('personal 作用域冻结（个人副本，范围字段全空）', () => {
+    const { snapshot } = ExportSnapshot.freeze({
+      spec: SPEC,
+      scope: makeScope({
+        kind: 'personal',
+        clubId: null,
+        departmentId: null,
+        departmentIds: [],
+        jointActivityId: null,
+        participantClubIds: [],
+      }),
+      datasets: ['current_members'],
+      includesPersonalCopy: true,
+      personalTargetUserId: 'user-42',
+    });
+    assert.equal(snapshot.data.scope.kind, 'personal');
+    assert.equal(snapshot.data.scope.clubId, null);
+    assert.equal(snapshot.data.scope.departmentId, null);
+    assert.deepEqual(snapshot.data.scope.departmentIds, []);
+    assert.equal(snapshot.data.scope.jointActivityId, null);
+    assert.deepEqual(snapshot.data.scope.participantClubIds, []);
+    assert.equal(snapshot.data.includesPersonalCopy, true);
+    assert.equal(snapshot.data.personalTargetUserId, 'user-42');
+  });
 });
 
 // ===========================================================================
