@@ -360,7 +360,7 @@ describe('RelationCommandUseCase', () => {
       parentRef: { owner: 'club-acm', name: 'ACM社团' },
       memberIds: [],
     });
-    void h2.mappingRegistry.save({
+    await h2.mappingRegistry.save({
       ref: { owner: 'club-acm', name: '副会长' },
       clubId: 'club-acm-1',
       purpose: 'position',
