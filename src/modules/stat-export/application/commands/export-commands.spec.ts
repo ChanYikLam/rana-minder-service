@@ -840,6 +840,30 @@ describe('P4 提前删除与联动失效', () => {
     );
   });
 
+  it('下载自环只读：markDownload 不递增版本、不改状态（评审①并发/版本竞争——下载不触发 IFC-ERR-008）', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: { kind: 'club', clubId: 'C1' },
+    });
+    const downloadable = await makeDownloadable(h, res.task);
+    const revBefore = downloadable.revisionNumber;
+    const statusBefore = downloadable.status;
+    // 下载是只读幂等操作：连续多次 markDownload 不得产生数据/版本变更。
+    downloadable.markDownload();
+    downloadable.markDownload();
+    assert.equal(downloadable.status, statusBefore);
+    assert.equal(downloadable.revisionNumber, revBefore);
+    assert.equal(downloadable.canDownload(), true);
+    // 保存不递增：若 markDownload 误递增版本，会与并发写者触发 IFC-ERR-008；此处证明无此问题。
+    await h.repo.save(downloadable);
+    const persisted = await h.repo.load(downloadable.id);
+    assert.equal(persisted?.revisionNumber, revBefore);
+  });
+
   it('申请人本人提前删除成功', async () => {
     const h = makeHarness({
       clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
