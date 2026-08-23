@@ -4,6 +4,7 @@
  * 用受控的假 CurrentPermissionsPort 固定语义映射与 fail-closed 边界：
  * - recruitment：manage=club:recruitment:manage；submit=非现任成员
  * - form design：platform=仅超管；club=管理类权限任一；department=fail-closed
+ * - form fill：platform=已认证；club=现任成员；department=fail-closed
  * - notification kill-switch：PLATFORM=仅超管；CLUB=超管或 club:member:manage
  */
 
@@ -123,6 +124,20 @@ describe('OrgBackedFormFillPermission（FORM-002 成员资格映射）', () => {
         subjectId: 'u_out',
       }),
       { allowed: false, reason: 'FORM-FILL-NOT-CLUB-MEMBER' },
+    );
+  });
+
+  it('department 作用域：fail-closed（ORG-035 契约未落地前不放行）', async () => {
+    // 即使主体是该社团现任成员，部门级成员查询无契约支撑，也应拒绝。
+    const port = new OrgBackedFormFillPermission(member);
+    assert.deepEqual(
+      await port.canFill({
+        formId: 'f1',
+        versionNumber: 1,
+        scope: formScopeOf('department', 'club-acm'),
+        subjectId: 'u_m',
+      }),
+      { allowed: false, reason: 'FORM-FILL-DEPARTMENT-UNSUPPORTED' },
     );
   });
 });
