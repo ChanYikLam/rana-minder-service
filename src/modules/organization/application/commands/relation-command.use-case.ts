@@ -14,6 +14,17 @@
 
 import { randomUUID } from 'node:crypto';
 
+/**
+ * Group 用途 → 排序权重（CAS-Q-001 方案 A）：club（基础/低权限）→ department →
+ * position（具体/高权限）逐级收敛；未登记用途视为最高风险，置末（rank 4）。
+ * 模块级常量，避免 orderFor 每次调用重建。
+ */
+const PURPOSE_RANK: Readonly<Record<NonNullable<GroupPurpose>, number>> = {
+  club: 1,
+  department: 2,
+  position: 3,
+};
+
 import type { RelationCommand } from '../../domain/models/relation-command';
 import { createRelationCommand } from '../../domain/models/relation-command';
 import { PermissionCatalog } from '../../domain/models/permission-template';
@@ -115,10 +126,29 @@ export class RelationCommandUseCase {
     );
     if (existing !== null) return existing;
 
-    const steps = await this.buildSteps(input, now);
+    // 先做不依赖远程回读的业务校验（成员前提 / 负责人连续性），再执行 buildSteps，
+    // 避免被这些校验拒绝的请求先做无谓的远程 I/O（ORG-021/024）。
     await this.assertMemberPrerequisite(club.clubGroup, input.subjectId);
     // 最后负责人连续性（ORG-024）：撤销最后一名负责人须有继任者，严禁零负责人窗口
     await this.assertOwnerContinuity(input, club);
+
+    // buildSteps 含并发远程回读，是 submit 耗时主路径。首次判重（上方）与这里的
+    // 保存之间隔着 async I/O，窗口被拉宽：同 subject 不同幂等键的两个并发请求可能
+    // 同时通过首次判重而各建一条处理中命令（TOCTOU）。故在远程回读之后再二次判重
+    // 收窄窗口——期间若已有并发方落库，此处将其拦截（IFC-ERR-007）。
+    const steps = await this.buildSteps(input, now);
+    const inFlightAfterRead = await this.store.findByProcessingForSubject(
+      input.clubId,
+      input.subjectId,
+    );
+    if (inFlightAfterRead !== null) {
+      if (inFlightAfterRead.idempotencyKey === input.idempotencyKey) {
+        return inFlightAfterRead; // 并发方已按同一幂等键落库，客户端重试幂等
+      }
+      throw orgError.stateConflict(
+        `同一目标存在处理中关系命令 ${inFlightAfterRead.id}，禁止并发冲突操作（IFC-ERR-007）`,
+      );
+    }
 
     const command = createRelationCommand({
       id: newId(IdPrefix.RELATION_COMMAND),
@@ -198,8 +228,10 @@ export class RelationCommandUseCase {
           } as AnnotatedStep;
         }),
       );
-    } catch {
-      throw orgError.precondition('回读目标 Group 实况失败，请稍后重试（ORG-027）');
+    } catch (cause) {
+      // 端口级异常（网络/权限/故障或映射注册表查询失败）统一收敛为可重试的领域
+      // 错误，避免以裸 Error 冒出；保留原始根因便于排障定位（ORG-027）。
+      throw orgError.precondition('回读目标 Group 实况/用途失败，请稍后重试（ORG-027）', '', cause);
     }
 
     // 2) 排序：remove 优先；同 kind 内 add 按用途升序
@@ -249,11 +281,6 @@ export class RelationCommandUseCase {
    */
   private orderFor(kind: 'add' | 'remove', purpose: GroupPurpose | null): number {
     if (kind === 'remove') return 0;
-    const PURPOSE_RANK: Readonly<Record<NonNullable<GroupPurpose>, number>> = {
-      club: 1,
-      department: 2,
-      position: 3,
-    };
     return purpose === null ? 4 : PURPOSE_RANK[purpose];
   }
 

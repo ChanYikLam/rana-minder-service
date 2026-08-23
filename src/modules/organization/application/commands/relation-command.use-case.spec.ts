@@ -468,8 +468,10 @@ describe('RelationCommandUseCase', () => {
     // 应映射为可重试的领域错误，保证 submit 失败路径可控（ORG-027）
     const base = buildHarness();
     const flaky = Object.create(base.casdoor) as InMemoryCasdoorPort;
-    flaky.getGroupMembers = async () => {
-      throw new Error('simulated casdoor failure');
+    // 仅目标 Group（宣传部）读取抛错；社团 Group 读取保持正常，以通过成员前提校验
+    flaky.getGroupMembers = async (ref: { owner: string; name: string }) => {
+      if (ref.name === '宣传部') throw new Error('simulated casdoor failure');
+      return base.casdoor.getGroupMembers(ref);
     };
     const h2 = buildHarness({ casdoor: flaky });
     await h2.clubs.save(h2.club);
@@ -485,9 +487,36 @@ describe('RelationCommandUseCase', () => {
       (err: unknown) => {
         // 抛出的必须是领域错误（orgError），而非模拟的裸 Error
         assert.notEqual((err as Error).message, 'simulated casdoor failure');
-        assert.match((err as Error).message, /回读目标 Group 实况失败/);
+        assert.match((err as Error).message, /回读目标 Group 实况\/用途失败/);
         return true;
       },
     );
+  });
+
+  it('submit：buildSteps 后二次判重拦截并发冲突（TOCTOU 窗口收窄，IFC-ERR-007）', async () => {
+    const h2 = await setupWithMappings([
+      { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
+    ]);
+    // 先落库一条"处理中"命令，模拟并发方在 buildSteps 远程回读期间抢先落库
+    const existing = await h2.useCase.submit(
+      { ...baseInput, idempotencyKey: 'rel:concurrent-other' },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    // 让这条命令进入 processing（处理中）
+    await h2.relationStore.save({ ...existing, status: 'processing' as const });
+    // 再次以同一 subject、不同幂等键提交 → buildSteps 后的二次判重应拦截
+    await assert.rejects(
+      h2.useCase.submit(
+        { ...baseInput, idempotencyKey: 'rel:concurrent-this' },
+        new Date('2026-08-01T00:00:00.000Z'),
+      ),
+      (e: Error) => e.message.includes('禁止并发冲突操作'),
+    );
+    // 同一幂等键重试 → 命中已有命令并返回（幂等）
+    const retried = await h2.useCase.submit(
+      { ...baseInput, idempotencyKey: 'rel:concurrent-other' },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    assert.equal(retried.id, existing.id);
   });
 });
