@@ -34,6 +34,19 @@ export class ArchiveActivityCommand {
     if (input.participants.some((p) => p.clubId.trim().length === 0)) {
       throw new Error('IFC-ERR-005: 参与社团 ID 不能为空');
     }
+    if (input.sourceState.trim().length === 0) {
+      throw new Error('IFC-ERR-005: 归档源状态不能为空');
+    }
+    if (!Object.values(ArchiveKind).includes(input.kind)) {
+      throw new Error(`IFC-ERR-005: 非法归档类型 ${input.kind}`);
+    }
+    const clubIds = new Set<string>();
+    for (const p of input.participants) {
+      if (clubIds.has(p.clubId)) {
+        throw new Error(`IFC-ERR-005: 参与社团 ID 重复：${p.clubId}`);
+      }
+      clubIds.add(p.clubId);
+    }
     const archive: ArchiveRecord = {
       activityId: input.activityId,
       kind: input.kind,
@@ -45,6 +58,25 @@ export class ArchiveActivityCommand {
     };
     // 原子创建：已存在返回原记录（幂等且不覆盖快照）
     const existing = await this.repo.createIfAbsent(archive);
-    return existing ?? archive;
+    if (existing !== null) {
+      // 同 activityId 已存在：若参数一致则为合法幂等重放，返回原记录；
+      // 若参数不一致说明调用方快照/类型/源状态冲突，静默返回会掩盖不一致，故抛错。
+      if (
+        existing.kind !== archive.kind ||
+        existing.sourceState !== archive.sourceState ||
+        existing.participants.length !== archive.participants.length ||
+        existing.participants.some(
+          (p, i) =>
+            p.clubId !== archive.participants[i].clubId ||
+            p.enabledAtLock !== archive.participants[i].enabledAtLock,
+        )
+      ) {
+        throw new Error(
+          `IFC-ERR-005: 活动 ${input.activityId} 已归档且参数不一致，拒绝覆盖锁定快照`,
+        );
+      }
+      return existing;
+    }
+    return archive;
   }
 }

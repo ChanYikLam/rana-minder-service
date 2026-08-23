@@ -39,6 +39,8 @@ export interface ArchiveAccessContext {
   readonly isApplicant?: boolean;
   /** 请求访问的记录归属人（SELF 校验：只能访问本人记录，防调用方传错） */
   readonly requestedOwnerId?: string;
+  /** 当前社团是否处于停用状态（实时，可恢复）。用于“停用期间不得访问”，恢复后放行 */
+  readonly clubDisabled?: boolean;
 }
 
 /** 请求范围（消除 null 双语义：申请人=本人 / 超管=全平台） */
@@ -124,8 +126,11 @@ export class ArchiveAccessPolicy {
       if (participant === undefined) {
         throw new ArchiveAccessDeniedError('本社团不在该归档参与范围');
       }
-      // 联合归档：被紧急停用参与社团停用期间不能查看
-      if (!participant.enabledAtLock) {
+      // 联合归档：被紧急停用参与社团停用期间不能查看（AUD-004）。
+      // 停用社团是可恢复状态，故按**实时停用状态**判定“停用期间”；
+      // 调用方未提供实时状态时回退到首次公布快照 enabledAtLock（保守：快照为停用则拒绝）。
+      const disabled = context.clubDisabled ?? !participant.enabledAtLock;
+      if (disabled) {
         throw new ArchiveAccessDeniedError('参与社团停用期间不能查看归档');
       }
       return { allowed: true, privileged: false };
@@ -152,10 +157,12 @@ export class ArchiveAccessPolicy {
     // SELF = 本人记录（报名/附件/公开结果/邀请）：策略层校验记录归属人=本人，
     // 防止调用方传 SELF 却访问他人记录（requestedOwnerId 由调用方从对象数据填充）
     if (contentKind === ArchiveContentKind.SELF) {
-      if (
-        context.requestedOwnerId !== undefined &&
-        context.requestedOwnerId !== context.principalId
-      ) {
+      // SELF 内容必须携带记录归属人，且归属人=本人；缺失即拒绝，防止调用方遗漏填充
+      // 而将 SELF 内容放行造成越权访问他人记录。
+      if (context.requestedOwnerId === undefined) {
+        throw new ArchiveAccessDeniedError('SELF 内容必须指定记录归属人');
+      }
+      if (context.requestedOwnerId !== context.principalId) {
         throw new ArchiveAccessDeniedError('只能访问本人的归档记录');
       }
       return;

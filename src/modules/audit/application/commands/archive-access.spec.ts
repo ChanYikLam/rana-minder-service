@@ -39,11 +39,14 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
     assert.equal(rig.archive.readOnly, true);
     assert.equal(rig.archive.sourceState, 'COMPLETED');
     assert.equal(rig.archive.participants.length, 2);
-    // 原子幂等：重复归档返回原记录（不覆盖快照）
+    // 原子幂等：同参数重复归档返回原记录（不覆盖快照）
     const again = await new ArchiveActivityCommand(rig.repo).execute({
       activityId: 'act-1',
       kind: ArchiveKind.JOINT,
-      participants: [{ clubId: 'c1', enabledAtLock: true }],
+      participants: [
+        { clubId: 'c1', enabledAtLock: true },
+        { clubId: 'c2', enabledAtLock: false },
+      ],
       sourceState: 'COMPLETED',
     });
     assert.equal(again.version, 1);
@@ -73,6 +76,68 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
         sourceState: 'COMPLETED',
       }),
       /至少一个参与社团/,
+    );
+  });
+
+  it('评审修复：归档输入校验补充——空源状态/重复参与社团/非法类型拒绝（IFC-ERR-005）', async () => {
+    const rig = await makeRig();
+    // 空 sourceState → 拒绝
+    await assert.rejects(
+      new ArchiveActivityCommand(rig.repo).execute({
+        activityId: 'act-3',
+        kind: ArchiveKind.JOINT,
+        participants: [{ clubId: 'c1', enabledAtLock: true }],
+        sourceState: '   ',
+      }),
+      /源状态不能为空/,
+    );
+    // 重复参与社团 clubId → 拒绝
+    await assert.rejects(
+      new ArchiveActivityCommand(rig.repo).execute({
+        activityId: 'act-3',
+        kind: ArchiveKind.JOINT,
+        participants: [
+          { clubId: 'c1', enabledAtLock: true },
+          { clubId: 'c1', enabledAtLock: true },
+        ],
+        sourceState: 'COMPLETED',
+      }),
+      /参与社团 ID 重复/,
+    );
+    // 非法 kind → 拒绝
+    await assert.rejects(
+      new ArchiveActivityCommand(rig.repo).execute({
+        activityId: 'act-3',
+        kind: 'BOGUS' as never,
+        participants: [{ clubId: 'c1', enabledAtLock: true }],
+        sourceState: 'COMPLETED',
+      }),
+      /非法归档类型/,
+    );
+  });
+
+  it('评审修复：同 activityId 重复归档参数一致幂等返回；参数不一致拒绝覆盖（IFC-ERR-005）', async () => {
+    const rig = await makeRig();
+    // 参数一致 → 幂等返回原记录
+    const same = await new ArchiveActivityCommand(rig.repo).execute({
+      activityId: 'act-1',
+      kind: ArchiveKind.JOINT,
+      participants: [
+        { clubId: 'c1', enabledAtLock: true },
+        { clubId: 'c2', enabledAtLock: false },
+      ],
+      sourceState: 'COMPLETED',
+    });
+    assert.equal(same.version, 1);
+    // 参数不一致（kind 冲突）→ 拒绝覆盖
+    await assert.rejects(
+      new ArchiveActivityCommand(rig.repo).execute({
+        activityId: 'act-1',
+        kind: ArchiveKind.RECRUITMENT, // 与已归档 JOINT 冲突
+        participants: [{ clubId: 'c1', enabledAtLock: true }],
+        sourceState: 'COMPLETED',
+      }),
+      /参数不一致，拒绝覆盖锁定快照/,
     );
   });
 
@@ -140,6 +205,16 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
         contentKind: 'SELF' as never,
       }),
       /只能访问本人的归档记录/,
+    );
+    // 评审修复：SELF 未携带 requestedOwnerId → 拒绝（防遗漏填充越权）
+    await assert.rejects(
+      rig.query.access({
+        activityId: 'act-1',
+        context: ctx({ principalId: 'stu1', roles: ['APPLICANT'], isApplicant: true }),
+        scope: { type: 'SELF' },
+        contentKind: 'SELF' as never,
+      }),
+      /SELF 内容必须指定记录归属人/,
     );
   });
 
@@ -236,6 +311,32 @@ describe('5.3.3 归档后的访问（AUD-004）', () => {
       rig.query.access({
         activityId: 'act-1',
         context: ctx({ principalId: 'hr2', roles: ['HR_ADMIN'], clubId: 'c2' }),
+        scope: scopeClub('c2'),
+      }),
+      /停用期间不能查看/,
+    );
+    // 评审修复：社团已恢复启用（clubDisabled=false，实时）→ 可查看（停用社团可恢复，非永久拒）
+    const revived = await rig.query.access({
+      activityId: 'act-1',
+      context: ctx({
+        principalId: 'hr2',
+        roles: ['HR_ADMIN'],
+        clubId: 'c2',
+        clubDisabled: false,
+      }),
+      scope: scopeClub('c2'),
+    });
+    assert.equal(revived.decision.allowed, true);
+    // 评审修复：当前实时停用（clubDisabled=true）→ 停用期间不能查看
+    await assert.rejects(
+      rig.query.access({
+        activityId: 'act-1',
+        context: ctx({
+          principalId: 'hr2',
+          roles: ['HR_ADMIN'],
+          clubId: 'c2',
+          clubDisabled: true,
+        }),
         scope: scopeClub('c2'),
       }),
       /停用期间不能查看/,
