@@ -30,23 +30,28 @@ class MutablePermissions implements CurrentPermissionsPort {
   }
 }
 
-function buildHarness(options?: { mappings?: GroupMappingRegistry }) {
-  const casdoor = new InMemoryCasdoorPort({
-    groups: [
-      {
-        ref: { owner: 'club-acm', name: 'ACM社团' },
-        displayName: 'ACM社团',
-        parentRef: null,
-        memberIds: ['u_a', 'u_b', 'u_c'],
-      },
-      {
-        ref: { owner: 'club-acm', name: '宣传部' },
-        displayName: '宣传部',
-        parentRef: { owner: 'club-acm', name: 'ACM社团' },
-        memberIds: ['u_a', 'u_b'],
-      },
-    ],
-  });
+function buildHarness(options?: {
+  mappings?: GroupMappingRegistry;
+  casdoor?: InMemoryCasdoorPort;
+}) {
+  const casdoor =
+    options?.casdoor ??
+    new InMemoryCasdoorPort({
+      groups: [
+        {
+          ref: { owner: 'club-acm', name: 'ACM社团' },
+          displayName: 'ACM社团',
+          parentRef: null,
+          memberIds: ['u_a', 'u_b', 'u_c'],
+        },
+        {
+          ref: { owner: 'club-acm', name: '宣传部' },
+          displayName: '宣传部',
+          parentRef: { owner: 'club-acm', name: 'ACM社团' },
+          memberIds: ['u_a', 'u_b'],
+        },
+      ],
+    });
   const clubs = new InMemoryClubStore();
   const relationStore = new InMemoryRelationCommandStore();
   const mappingRegistry = options?.mappings ?? new InMemoryGroupMappingRegistry();
@@ -456,5 +461,33 @@ describe('RelationCommandUseCase', () => {
     assert.equal(cmd.targetRelation[0].targetGroup.name, '不存在的组');
     assert.equal(cmd.originalRelation.length, 1);
     assert.equal(cmd.originalRelation[0].result, 'failed');
+  });
+
+  it('buildSteps：目标 Group 远程读取抛异常时收敛为领域错误而非裸 Error', async () => {
+    // 端口级异常（模拟真实 Casdoor 网络/权限故障）不应以裸 Error 冒出，
+    // 应映射为可重试的领域错误，保证 submit 失败路径可控（ORG-027）
+    const base = buildHarness();
+    const flaky = Object.create(base.casdoor) as InMemoryCasdoorPort;
+    flaky.getGroupMembers = async () => {
+      throw new Error('simulated casdoor failure');
+    };
+    const h2 = buildHarness({ casdoor: flaky });
+    await h2.clubs.save(h2.club);
+    await assert.rejects(
+      h2.useCase.submit(
+        {
+          ...baseInput,
+          idempotencyKey: 'rel:readback-failure:test',
+          targetGroups: [{ ref: { owner: 'club-acm', name: '宣传部' }, kind: 'add' }],
+        },
+        new Date('2026-08-01T00:00:00.000Z'),
+      ),
+      (err: unknown) => {
+        // 抛出的必须是领域错误（orgError），而非模拟的裸 Error
+        assert.notEqual((err as Error).message, 'simulated casdoor failure');
+        assert.match((err as Error).message, /回读目标 Group 实况失败/);
+        return true;
+      },
+    );
   });
 });

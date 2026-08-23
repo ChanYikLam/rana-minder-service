@@ -323,9 +323,9 @@ export class InMemoryCasdoorPort implements CasdoorGroupPort {
   }
 
   async getGroupMembers(ref: GroupStableRef): Promise<readonly string[]> {
+    // 与 readback 端口容错语义一致：Group 缺失视为空成员集，返回 [] 而非抛裸 Error
     const g = await this.getGroupByRef(ref);
-    if (g === null) throw new Error(`Group 不存在: ${ref.owner}/${ref.name}`);
-    return [...g.memberIds];
+    return g === null ? [] : [...g.memberIds];
   }
 
   async writeMembership(input: {

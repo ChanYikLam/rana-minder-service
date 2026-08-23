@@ -172,23 +172,35 @@ export class RelationCommandUseCase {
     target: RelationWriteStep[];
   }> {
     // 1) 解析每步的 Group 用途与当前成员实况（并发回读）
-    const annotated = await Promise.all(
-      input.targetGroups.map(async (tg, index) => {
-        const purpose = await this.lookupGroupPurpose(tg.ref);
-        // 目标 Group 缺失时优雅降级为「空成员集 + 用途 null」：与 readback
-        // 端口（缺失返回 []）容错语义一致，避免在 submit 路径抛裸 Error
-        const group = await this.casdoor.getGroupByRef(tg.ref);
-        const members = group === null ? [] : group.memberIds;
-        const present = members.includes(input.subjectId);
-        return {
-          index,
-          ref: { owner: tg.ref.owner, name: tg.ref.name } as GroupStableRef,
-          kind: tg.kind,
-          purpose,
-          present,
-        };
-      }),
-    );
+    // 目标 Group 缺失时 `getGroupMembers` 与 readback 端口一致返回 []（空成员集 →
+    // present=false），不会抛裸 Error；端口级异常（网络/权限）统一收敛为可重试的
+    // 领域错误，保证 submit 失败路径可控，与 readback 容错语义一致。
+    interface AnnotatedStep {
+      index: number;
+      ref: GroupStableRef;
+      kind: 'add' | 'remove';
+      purpose: GroupPurpose | null;
+      present: boolean;
+    }
+    let annotated: AnnotatedStep[];
+    try {
+      annotated = await Promise.all(
+        input.targetGroups.map(async (tg, index) => {
+          const purpose = await this.lookupGroupPurpose(tg.ref);
+          const members = await this.casdoor.getGroupMembers(tg.ref);
+          const present = members.includes(input.subjectId);
+          return {
+            index,
+            ref: { owner: tg.ref.owner, name: tg.ref.name } as GroupStableRef,
+            kind: tg.kind,
+            purpose,
+            present,
+          } as AnnotatedStep;
+        }),
+      );
+    } catch {
+      throw orgError.precondition('回读目标 Group 实况失败，请稍后重试（ORG-027）');
+    }
 
     // 2) 排序：remove 优先；同 kind 内 add 按用途升序
     const ordered = annotated
