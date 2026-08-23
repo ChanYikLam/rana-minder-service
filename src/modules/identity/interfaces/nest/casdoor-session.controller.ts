@@ -11,15 +11,20 @@
  *
  * 配置驱动：casdoor.endpoint 为空时本控制器不出现在路由表中（模块不注册），
  * 会话解析退回到 RejectAllAuthSessionProvider（fail-closed）。
+ *
+ * 密钥处理（ADR-010）：clientSecretRef 先经 resolveCasdoorClientSecret 解析为
+ * 明文，再用于 OIDC client_secret 与派生会话 HMAC 密钥（单点化，见
+ * session-security.ts，避免引用串直接当密钥导致的低熵可预测）。
  */
 
 import { Controller, Delete, Get, HttpCode, Inject } from '@nestjs/common';
 import { type Request as ExpressRequest, type Response } from 'express';
-import { createHash } from 'node:crypto';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../../../config';
 import { CasdoorOidcClient } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import type { CasdoorOidcConfig } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-provider';
+import { CasdoorAvailabilityTracker } from './casdoor-availability-tracker';
+import { resolveCasdoorClientSecret, deriveSessionSecret } from './session-security';
 
 /** GET /api/auth/session 响应（API-AUTH-001） */
 export interface SessionResponse {
@@ -45,7 +50,10 @@ export class CasdoorSessionController {
   private oidcClient?: CasdoorOidcClient;
   private sessionSecret?: Uint8Array;
 
-  constructor(@Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig) {}
+  constructor(
+    @Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig,
+    private readonly availabilityTracker: CasdoorAvailabilityTracker,
+  ) {}
 
   /** GET /api/auth/casdoor/login-url */
   @Get('casdoor/login-url')
@@ -82,6 +90,8 @@ export class CasdoorSessionController {
     if (!tokens.idToken) {
       throw new SessionError('Token exchange failed', 401);
     }
+    // token 交换成功 → Casdoor 可达
+    this.availabilityTracker.setAvailable(true);
 
     // 验证 id_token（CAS-CAP-004：签发方/受众/有效期/主体绑定）
     const claims = await client.verifyIdToken(tokens.idToken, nonce);
@@ -90,10 +100,23 @@ export class CasdoorSessionController {
       throw new SessionError('Invalid id_token: missing sub', 401);
     }
 
-    // 检查账号状态（CAS-REC-002 实时读回）
-    const accountState = await client.fetchAccountState(tokens.accessToken);
-    if (accountState === 'DISABLED' || accountState === 'DELETED') {
-      throw new SessionError('账号已被禁用或删除', 403, 'IFC-ERR-011');
+    // 检查账号状态（CAS-REC-002 实时读回）；Casdoor 不可达时降级签发。
+    let degraded = false;
+    let degradedSince: string | null = null;
+    try {
+      const accountState = await client.fetchAccountState(tokens.accessToken);
+      if (accountState === 'DISABLED' || accountState === 'DELETED') {
+        throw new SessionError('账号已被禁用或删除', 403, 'IFC-ERR-011');
+      }
+    } catch (err) {
+      // 账号确认为禁用/删除 → 403（rethrow 保持语义）
+      if (err instanceof SessionError) {
+        throw err;
+      }
+      // 其余异常视为 Casdoor 不可达：降级签发（CAS-FAIL-001），并标记不可用。
+      this.availabilityTracker.setAvailable(false);
+      degraded = true;
+      degradedSince = new Date().toISOString();
     }
 
     // 签发本地会话 JWT
@@ -103,7 +126,7 @@ export class CasdoorSessionController {
       name: typeof claims['name'] === 'string' ? claims['name'] : undefined,
       email: typeof claims['email'] === 'string' ? claims['email'] : undefined,
       iat: now,
-      degraded: false,
+      degraded,
     };
     const sessionToken = await OidcAuthSessionProvider.signSession(
       sessionClaims,
@@ -120,8 +143,8 @@ export class CasdoorSessionController {
         email: claims['email'] as string | undefined,
       },
       profileGate: { profileComplete: true, emailVerified: false },
-      degraded: false,
-      degradedSince: null,
+      degraded,
+      degradedSince,
       permissions: [],
       workspace: null,
     };
@@ -147,16 +170,16 @@ export class CasdoorSessionController {
         'CAS-ERR-NOT_CONFIGURED',
       );
     }
+    // ADR-010：先解析引用为明文，再用于 OIDC client_secret 与密钥派生（单点化）。
+    const clientSecret = resolveCasdoorClientSecret(c.clientSecretRef);
     const oidcConfig: CasdoorOidcConfig = {
       endpoint: c.endpoint,
       clientId: c.clientId,
-      clientSecret: c.clientSecretRef,
+      clientSecret,
       redirectUri: c.redirectUri,
     };
     this.oidcClient = new CasdoorOidcClient(oidcConfig);
-    this.sessionSecret = new TextEncoder().encode(
-      createHash('sha256').update(`ranaminder-session:${c.clientSecretRef}`).digest('hex'),
-    );
+    this.sessionSecret = deriveSessionSecret(clientSecret);
     return this.oidcClient;
   }
 }

@@ -17,6 +17,7 @@ import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { APP_LOGGER } from '../../platform/observability/logging/tokens';
 import { DB_ADAPTER, CASDOOR_ADAPTER, MAIL_CHANNEL_ADAPTER } from '../../adapters/tokens';
+import type { CasdoorAdapter } from '../../adapters/casdoor/casdoor-adapter';
 
 import {
   PROFILE_REPOSITORY,
@@ -96,9 +97,16 @@ import { AccountAccessController } from './interfaces/controllers/account-access
 import { NameCorrectionController } from './interfaces/controllers/name-correction.controller';
 
 import { RejectAllAuthSessionProvider } from './interfaces/nest/auth-session';
-import { OidcAuthSessionProvider } from './interfaces/nest/oidc-session-provider';
+import {
+  OidcAuthSessionProvider,
+  type AccountStateObservation,
+} from './interfaces/nest/oidc-session-provider';
 import { CasdoorSessionController } from './interfaces/nest/casdoor-session.controller';
-import { createHash } from 'node:crypto';
+import { CasdoorAvailabilityTracker } from './interfaces/nest/casdoor-availability-tracker';
+import {
+  resolveCasdoorClientSecret,
+  deriveSessionSecret,
+} from './interfaces/nest/session-security';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from '../../config';
 import { AuthGuard } from './interfaces/nest/auth.guard';
 import { ProfilesNestController } from './interfaces/nest/profiles.nest.controller';
@@ -114,24 +122,40 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     CasdoorSessionController,
   ],
   providers: [
+    // ----- Casdoor 运行时可用性跟踪（供 controller 观测 + provider 降级判定共享）-----
+    CasdoorAvailabilityTracker,
     // ----- 会话（条件装配：Casdoor endpoint 配置时启用 OIDC；否则 fail-closed）-----
     {
       provide: AUTH_SESSION_PROVIDER,
-      useFactory: (config: RanaMinderConfig) => {
+      useFactory: (
+        config: RanaMinderConfig,
+        casdoor: CasdoorAdapter,
+        tracker: CasdoorAvailabilityTracker,
+      ) => {
         if (config.casdoor.endpoint && config.casdoor.clientId && config.casdoor.clientSecretRef) {
-          const secret = new TextEncoder().encode(
-            createHash('sha256')
-              .update(`ranaminder-session:${config.casdoor.clientSecretRef}`)
-              .digest('hex'),
-          );
+          // ADR-010：先解析引用为明文，再派生会话 HMAC 密钥（单点化，session-security.ts）。
+          const clientSecret = resolveCasdoorClientSecret(config.casdoor.clientSecretRef);
+          const sessionSecret = deriveSessionSecret(clientSecret);
           return new OidcAuthSessionProvider({
-            sessionSecret: secret,
-            casdoorAvailable: true,
+            sessionSecret,
+            // CAS-REC-002 实时读回：每次请求复查账号状态（禁用/删除即时拒绝）。
+            checkAccountState: async (subjectId): Promise<AccountStateObservation> => {
+              const user = await casdoor.getUser(subjectId);
+              if (user.status !== 'SUCCESS' || user.data === null) {
+                return null; // 无法确定（未接线/不可达）
+              }
+              const state = user.data.state;
+              if (state === 'ACTIVE' || state === 'DISABLED' || state === 'DELETED') {
+                return state;
+              }
+              return null;
+            },
+            isCasdoorAvailable: () => tracker.isAvailable(),
           });
         }
         return new RejectAllAuthSessionProvider();
       },
-      inject: [RANA_MINDER_CONFIG],
+      inject: [RANA_MINDER_CONFIG, CASDOOR_ADAPTER, CasdoorAvailabilityTracker],
     },
     AuthGuard,
     // ----- 工作单元（ambient 事务 + RLS 单目标上下文）-----

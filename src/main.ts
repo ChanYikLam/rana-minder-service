@@ -28,6 +28,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 
 import { AppModule } from './app.module';
+import { SessionErrorFilter } from './modules/identity/interfaces/nest/session-error.filter';
 import { RANA_MINDER_CONFIG, type RanaMinderConfig } from './config';
 import { NEST_LOGGER_SERVICE } from './platform/observability/logging/tokens';
 import { type NestLoggerServiceAdapter } from './platform/observability/infrastructure/nest-logger.adapter';
@@ -45,6 +46,7 @@ async function bootstrap(): Promise<void> {
   app.useLogger(logger);
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalFilters(new SessionErrorFilter());
   app.enableShutdownHooks();
 
   const config = app.get<RanaMinderConfig>(RANA_MINDER_CONFIG);
