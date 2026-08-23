@@ -80,17 +80,15 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
-        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
-        - name: 4b-DI引导测试
-          if: "[ -f package.json ]"
-          script: npm run test:di
-        # 阶段 4c：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
-        - name: 4c-覆盖率门禁
+        # 阶段 4b：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
+        # 统计范围：L1 单元测试 + DI 引导测试（src/**/*.spec.ts + test/*.spec.ts，即 coverage:all）；
+        # L2 集成/L3 契约需真实依赖环境，覆盖率另行统计。DI spec 已含于 test:unit，不再单独跑 test:di。
+        - name: 4b-覆盖率门禁
           if: "[ -f package.json ]"
           script: |
             set -e
             npm run test:cov:gate
-            bash scripts/ci/check-spec-coverage.sh
+            bash scripts/ci/check-spec-coverage.sh "$CNB_COMPARE_TO"
         # 阶段 5：集成测试 L2（真实 PG18：pg_trgm/btree_gist 扩展；dind 已声明）
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
@@ -226,17 +224,15 @@
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
           script: npm run test:unit
-        # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
-        - name: 4b-DI引导测试
-          if: "[ -f package.json ]"
-          script: npm run test:di
-        # 阶段 4c：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
-        - name: 4c-覆盖率门禁
+        # 阶段 4b：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
+        # 统计范围：L1 单元测试 + DI 引导测试（src/**/*.spec.ts + test/*.spec.ts，即 coverage:all）；
+        # L2 集成/L3 契约需真实依赖环境，覆盖率另行统计。DI spec 已含于 test:unit，不再单独跑 test:di。
+        - name: 4b-覆盖率门禁
           if: "[ -f package.json ]"
           script: |
             set -e
             npm run test:cov:gate
-            bash scripts/ci/check-spec-coverage.sh
+            bash scripts/ci/check-spec-coverage.sh "$CNB_COMPARE_TO"
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
           script: |
@@ -358,15 +354,12 @@
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run test:unit
         # 阶段 4b：DI 引导测试（test/notification-module-di.spec.ts，防止接口注入回归）
-        - name: 4b-DI引导测试
-          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
-          script: npm run test:di
-        - name: 4c-覆盖率门禁
+        - name: 4b-覆盖率门禁
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |
             set -e
             npm run test:cov:gate
-            bash scripts/ci/check-spec-coverage.sh
+            bash scripts/ci/check-spec-coverage.sh "$CNB_COMPARE_TO"
         - name: 5-集成测试L2
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |

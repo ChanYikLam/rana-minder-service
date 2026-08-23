@@ -29,10 +29,19 @@ if [ -z "$base" ]; then
   fi
 fi
 
+# base 必须可解析为提交；否则门禁 fail-closed（防止 changed 为空、checked=0 静默通过）
+if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
+  echo "ERROR check-spec-coverage: base-ref '$base' 无法解析为提交，门禁 fail-closed（exit 1）。请显式传 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
+  exit 1
+fi
+
 # pathspec 显式覆盖 src/ 顶层（src/*.ts）与嵌套目录（src/**/*.ts）：
 # git 的 '**' 在 pathspec 中要求至少一层目录，仅写 src/**/*.ts 会漏检 src/main.ts 等顶层文件。
-changed="$(git diff --name-only --diff-filter=d "$base"...HEAD -- 'src/*.ts' 'src/**/*.ts' 2>/dev/null \
-  || git diff --name-only --diff-filter=d "$base" -- 'src/*.ts' 'src/**/*.ts')"
+# 三点 diff（base..HEAD）；失败即报错退出，不使用语义不一致的两点 diff 兜底
+if ! changed="$(git diff --name-only --diff-filter=d "$base"...HEAD -- 'src/*.ts' 'src/**/*.ts' 2>&1)"; then
+  echo "ERROR check-spec-coverage: 三点 diff 失败（base=$base）" >&2
+  exit 1
+fi
 # 只看生产代码；测试文件自身不要求配对
 changed="$(printf '%s\n' "$changed" | grep -v '\.spec\.ts$' || true)"
 
