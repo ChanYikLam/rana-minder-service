@@ -130,12 +130,14 @@ export type ControlledBatchStatus =
 export class OrgDomainError extends Error {
   readonly code: ErrorCode;
   readonly detail: string;
+  override readonly cause?: unknown;
 
-  constructor(code: ErrorCode, message: string, detail = '') {
+  constructor(code: ErrorCode, message: string, detail = '', cause?: unknown) {
     super(message);
     this.name = 'OrgDomainError';
     this.code = code;
     this.detail = detail;
+    this.cause = cause;
   }
 }
 
@@ -150,8 +152,8 @@ export const orgError = {
   notVisible(message: string): OrgDomainError {
     return new OrgDomainError(ErrorCode.NOT_VISIBLE, message);
   },
-  precondition(message: string, detail = ''): OrgDomainError {
-    return new OrgDomainError(ErrorCode.PRECONDITION_FAILED, message, detail);
+  precondition(message: string, detail = '', cause?: unknown): OrgDomainError {
+    return new OrgDomainError(ErrorCode.PRECONDITION_FAILED, message, detail, cause);
   },
   stateConflict(message: string): OrgDomainError {
     return new OrgDomainError(ErrorCode.STATE_CONFLICT, message);
