@@ -20,6 +20,7 @@
 #       P1-2 祖先安全（评审 #145）：并发合并/非快进 push 下 $CNB_BEFORE_SHA 未必是
 #       HEAD 祖先，三点 diff 边界可能纳入无关文件（误报 MISS）——解析后校验 base
 #       必须是 HEAD 祖先，否则回退 merge-base(origin/dev, HEAD)（与 release 同级防护）。
+#       边缘双失败（非祖先 + origin/dev 不可用）：fail-closed（exit 1），不静默降级。
 #       对"推送到 dev"的常规 push：origin/dev..HEAD 为空差异 → checked=0 通过，
 #       非漏检。
 # 退出码：0 = 全部通过；1 = 存在缺失用例 / base 最终不可解析（fail-closed）
@@ -82,6 +83,12 @@ if ! git merge-base --is-ancestor "$base" HEAD 2>/dev/null; then
   if [ -n "$fallback_ancestor" ]; then
     base="$fallback_ancestor"
     echo "WARN 已改用 merge-base(origin/dev, HEAD) = $base" >&2
+  else
+    # 边缘双失败场景：祖先校验失败且 origin/dev 不可用（fetch/merge-base 均失败）。
+    # 此时 base 仍非 HEAD 祖先，三点 diff 边界可能纳入无关文件（误报 MISS）或漏检——
+    # 与脚本顶部 fail-closed 哲学一致，宁可显式失败也不静默降级（避免门禁失真）。
+    echo "ERROR check-spec-coverage: base=$base 非 HEAD 祖先且无法取得 origin/dev 兜底（fallback_ancestor 为空），门禁 fail-closed（exit 1）。请显式传祖先 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
+    exit 1
   fi
 fi
 
