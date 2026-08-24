@@ -19,7 +19,9 @@ import {
   BATCH_STORE,
   BatchOrchestrator,
   DevelopmentBatchItemAuthorization,
+  DenyAllBatchItemAuthorization,
   DevelopmentBatchItemExecutor,
+  DenyAllBatchItemExecutor,
   InMemoryBatchStore,
 } from './batch';
 import {
@@ -29,6 +31,7 @@ import {
   DeadlineTaskHandler,
   DerivedRebuildTaskHandler,
   DevelopmentTaskPrecondition,
+  DenyAllTaskPrecondition,
   ExportGenerationHandler,
   FileCheckHandler,
   FormalDeleteHandler,
@@ -42,6 +45,9 @@ import {
 import { ManualInterventionService, TaskScheduler } from './scheduler';
 import { TasksWorker } from './worker-entry';
 
+/** 生产环境禁用 Development 桩，改用 fail-closed 实现，直到真实授权/执行接入。 */
+const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
+
 @Module({
   imports: [ReadModelModule, CasdoorModule, AdaptersModule, NotificationModule],
   providers: [
@@ -54,9 +60,20 @@ import { TasksWorker } from './worker-entry';
     { provide: IDEMPOTENCY_STORE, useExisting: InMemoryIdempotencyStore },
     { provide: BATCH_STORE, useExisting: InMemoryBatchStore },
     { provide: TASK_OPS_TELEMETRY_PORT, useExisting: LogOnlyTaskOpsTelemetry },
-    { provide: TASK_PRECONDITION_PORT, useExisting: DevelopmentTaskPrecondition },
-    { provide: BATCH_ITEM_AUTHORIZATION_PORT, useExisting: DevelopmentBatchItemAuthorization },
-    { provide: BATCH_ITEM_EXECUTOR_PORT, useExisting: DevelopmentBatchItemExecutor },
+    {
+      provide: TASK_PRECONDITION_PORT,
+      useClass: isProduction ? DenyAllTaskPrecondition : DevelopmentTaskPrecondition,
+    },
+    {
+      provide: BATCH_ITEM_AUTHORIZATION_PORT,
+      useClass: isProduction
+        ? DenyAllBatchItemAuthorization
+        : DevelopmentBatchItemAuthorization,
+    },
+    {
+      provide: BATCH_ITEM_EXECUTOR_PORT,
+      useClass: isProduction ? DenyAllBatchItemExecutor : DevelopmentBatchItemExecutor,
+    },
     TaskIntentOutbox,
     LeaseManager,
     RecoveryReplayConvergence,
@@ -76,9 +93,6 @@ import { TasksWorker } from './worker-entry';
     ReconciliationHandler,
     BatchExecutionHandler,
     LogOnlyTaskOpsTelemetry,
-    DevelopmentTaskPrecondition,
-    DevelopmentBatchItemAuthorization,
-    DevelopmentBatchItemExecutor,
     {
       provide: TASK_PROCESSOR_REGISTRY,
       useFactory: (

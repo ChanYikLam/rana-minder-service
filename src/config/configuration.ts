@@ -23,6 +23,8 @@ export interface DatabaseConfig {
   readonly user: string;
   readonly schema: string;
   readonly ssl: boolean;
+  /** SSL 证书校验开关（默认校验）；自签/内网测试可关闭，生产应保持 true。 */
+  readonly sslRejectUnauthorized?: boolean;
   // 密码以引用形式提供，不进入配置文件正文（ADR-010 §1.2）。
   readonly passwordRef: string;
 }
