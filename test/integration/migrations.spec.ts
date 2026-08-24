@@ -2,7 +2,7 @@
  * 集成测试 L2：数据库迁移全量校验（P2 零覆盖补测：src/database/migrations）。
  *
  * 覆盖：
- * - 全部 15 个迁移按序 up 成功（建表/加列 SQL 在真实 PG18 上可执行）
+ * - 全部 18 个迁移按序 up 成功（建表/加列 SQL 在真实 PG18 上可执行）
  * - 幂等可重入：全量 up 重跑一遍不抛错（IF NOT EXISTS 语义）
  * - 建表类迁移的表真实存在（to_regclass 核对）
  * - down 可执行且核心新建表被移除；随后恢复全量 up（不影响其他集成套件）
@@ -54,6 +54,7 @@ import * as mInvitation from '../../src/database/migrations/20260822100000_creat
 import * as mAudit from '../../src/database/migrations/20260823000000_create-audit-event-tables';
 import * as mDeletionChecklist from '../../src/database/migrations/20260823120000_create-deletion-checklist-tables';
 import * as mJoint from '../../src/database/migrations/20260823130000_create-joint-tables';
+import * as mOrg from '../../src/database/migrations/20260824000000_create-organization-tables';
 
 const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260820100000', m: mIdentity },
@@ -73,6 +74,7 @@ const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260823000000-audit', m: mAudit },
   { name: '20260823120000-deletion-checklist', m: mDeletionChecklist },
   { name: '20260823130000-joint', m: mJoint },
+  { name: '20260824000000-org', m: mOrg },
 ];
 
 /**
@@ -154,6 +156,17 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
       'joint_channels',
     ],
   },
+  {
+    file: '20260824000000-org',
+    tables: [
+      'org_club_space',
+      'org_relation_command',
+      'org_appointment_command',
+      'org_permission_template',
+      'org_position_template_binding',
+      'org_group_mapping',
+    ],
+  },
 ];
 
 /** down 后必须消失的核心新建表（每条建表链取代表，避免双 job_tasks 历史纠缠） */
@@ -168,6 +181,7 @@ const MUST_DROP_AFTER_DOWN: readonly string[] = [
   // job_tasks：本次幂等化改造影响最大的表（20130000 无操作、22120000 接管），
   // down/恢复行为必须显式断言（评审 info）
   'job_tasks',
+  'org_group_mapping',
 ];
 
 let pool: pg.Pool | null = null;

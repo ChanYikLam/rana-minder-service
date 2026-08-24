@@ -27,6 +27,21 @@ const TASK_STATUSES = `('PENDING','LEASED','RETRYABLE_FAILED','UNCERTAIN','MANUA
 const TASK_TYPES = `('CASDOOR_SYNC','CASDOOR_GROUP_WRITE','NOTIFICATION_DELIVERY','FILE_CHECK','EXPORT_GENERATION','DEADLINE','FORMAL_DELETE','DERIVED_REBUILD','RECONCILIATION','BATCH_EXECUTION')`;
 
 export async function up(runner: MigrationQueryRunner): Promise<void> {
+  // 幂等/竞态防线：若并发或中断导致 public.job_tasks 表已消失、但同名复合类型
+  // 残留于 pg_type（CREATE TABLE IF NOT EXISTS 会因 pg_type_typname_nsp_index
+  // 冲突而失败），先清理孤儿类型再建表。表存在时该类型为其行类型、有依赖，
+  // 本 DO 块条件不成立，不会误删（集成测试 L2 全量 up 重跑幂等断言）。
+  await runner.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_class WHERE relname = 'job_tasks' AND relnamespace = 'public'::regnamespace AND relkind = 'r'
+      ) THEN
+        DROP TYPE IF EXISTS public.job_tasks;
+      END IF;
+    END
+    $$;
+  `);
   await runner.query(`
     CREATE TABLE IF NOT EXISTS public.job_tasks (
       task_id           text        PRIMARY KEY,
@@ -85,4 +100,6 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
 
 export async function down(runner: MigrationQueryRunner): Promise<void> {
   await runner.query(`DROP TABLE IF EXISTS public.job_tasks`);
+  // 顺带清理可能残留的孤儿复合类型，保证后续 up 可干净重建（幂等可重入）。
+  await runner.query(`DROP TYPE IF EXISTS public.job_tasks`);
 }
