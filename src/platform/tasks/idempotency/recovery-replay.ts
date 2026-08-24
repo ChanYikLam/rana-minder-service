@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { TaskRecord, TaskRepository } from '../contracts';
-import { TASK_REPOSITORY } from '../contracts';
+import type { TaskRecord } from '../contracts';
 import { IdempotencyRecordStatus } from './idempotency-record';
 import { IDEMPOTENCY_STORE, type IdempotencyStore } from './idempotency-store';
 
@@ -8,10 +7,7 @@ import { IDEMPOTENCY_STORE, type IdempotencyStore } from './idempotency-store';
 export class RecoveryReplayConvergence {
   private readonly logger = new Logger(RecoveryReplayConvergence.name);
 
-  constructor(
-    @Inject(TASK_REPOSITORY) private readonly repository: TaskRepository,
-    @Inject(IDEMPOTENCY_STORE) private readonly idempotency: IdempotencyStore,
-  ) {}
+  constructor(@Inject(IDEMPOTENCY_STORE) private readonly idempotency: IdempotencyStore) {}
 
   async convergeBeforeExecution(
     task: TaskRecord,
@@ -19,23 +15,31 @@ export class RecoveryReplayConvergence {
   ): Promise<{ allowed: boolean; resultRef?: string }> {
     const record = await this.idempotency.find(task.idempotencyKey);
     if (record === null) {
-      const begun = await this.idempotency.begin(task.idempotencyKey, task.intentId);
+      // 首次执行：以本次领取租约的到期时刻作为执行任期，供崩溃恢复判定超时。
+      const begun = await this.idempotency.begin(
+        task.idempotencyKey,
+        task.intentId,
+        task.lease?.leaseUntil ?? now.toISOString(),
+      );
       return { allowed: begun };
     }
     if (record.status === IdempotencyRecordStatus.COMPLETED) {
       return { allowed: false, resultRef: record.resultRef ?? undefined };
     }
     if (record.status === IdempotencyRecordStatus.EXECUTING) {
-      const fresh = await this.repository.findByIntentId(task.intentId);
-      const leaseExpired =
-        fresh === null ||
-        fresh.lease === null ||
-        new Date(fresh.lease.leaseUntil).getTime() <= now.getTime();
-      if (leaseExpired === false) return { allowed: false };
-      this.logger.warn(
-        `恢复重放：执行中幂等记录对应任务租约已过期：idempotencyKey=${task.idempotencyKey}`,
-      );
-      return { allowed: true };
+      // BUG-004 修复：恢复判定基于幂等记录自身声明的执行任期（executingUntil），
+      // 而非任务表"当前行"租约。崩溃后任务被重新领取会得到全新租约，若取当前行
+      // 租约会永远未过期，导致 EXECUTING 任务在 LEASED↔PENDING 间死循环、恢复不可达。
+      const until = record.executingUntil;
+      const stale =
+        until === null || until === undefined || new Date(until).getTime() <= now.getTime();
+      if (stale) {
+        this.logger.warn(
+          `恢复重放：执行中幂等记录对应任期已超时，允许重放：idempotencyKey=${task.idempotencyKey}`,
+        );
+        return { allowed: true };
+      }
+      return { allowed: false };
     }
     return { allowed: true };
   }

@@ -1,7 +1,7 @@
-/**
+﻿/**
  * 迁移：后台任务基础设施表（outbox / idempotency / batch）
  *
- * 版本：20260824000000
+ * 版本：20260824120000
  * 归属模块：platform/tasks（DATA-JOB-001 持久化补齐；BUG-001 修复）
  * 权威来源：src/platform/tasks 三个内存存储的领域结构，与 Postgres 实现逐列对齐。
  *
@@ -43,6 +43,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       intent_id       text NOT NULL,
       status          text NOT NULL,
       result_ref      text NULL,
+      executing_until timestamptz NULL,
       updated_at      timestamptz NOT NULL DEFAULT now(),
       CONSTRAINT ck_idempotency_records_status
         CHECK (status IN ('EXECUTING','COMPLETED','FAILED'))

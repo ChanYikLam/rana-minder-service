@@ -49,14 +49,25 @@ import {
 import { ManualInterventionService, TaskScheduler } from './scheduler';
 import { TasksWorker } from './worker-entry';
 
-/** 生产环境禁用 Development 桩，改用 fail-closed 实现，直到真实授权/执行接入。 */
-const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
+/** 测试环境使用内存实现（无需数据库与 `pg` 依赖）。 */
+const isTest = (process.env.NODE_ENV ?? 'development') === 'test';
+const useInMemoryStores = isTest;
 
 /**
- * 存储后端选择：测试环境使用内存实现（无需数据库与 `pg` 依赖）；
- * 其余环境（dev/staging/prod）接入 PostgreSQL，满足重启持久化与跨 worker 一致性（BUG-001）。
+ * 存储后端选择（BUG-001）：测试用内存；其余环境接入 PostgreSQL，满足重启持久化
+ * 与跨 worker 一致性。按门控单侧注册 store 实现，避免测试环境仍实例化 Postgres
+ * store 并注入 DB_ADAPTER（与"测试免 pg 依赖"一致，消除冗余注册）。
  */
-const useInMemoryStores = (process.env.NODE_ENV ?? 'development') === 'test';
+const storeProviders = useInMemoryStores
+  ? [InMemoryTransactionOutboxStore, InMemoryIdempotencyStore, InMemoryBatchStore]
+  : [PostgresTransactionOutboxStore, PostgresIdempotencyStore, PostgresBatchStore];
+
+/**
+ * 任务鉴权/执行门控（BUG-005 修复）：非 test 环境默认 fail-closed（DenyAll），
+ * 仅当显式 `TASKS_DEV_STUB=1` 时才放行 Development 桩。staging/dev 复用生产数据
+ * 源时不再形同虚设。
+ */
+const allowDevStubs = isTest || (process.env.TASKS_DEV_STUB ?? '0') === '1';
 
 @Module({
   // forwardRef：NotificationModule↔OrganizationModule↔TasksModule 存在装配环（#68），惰性解析
@@ -69,12 +80,7 @@ const useInMemoryStores = (process.env.NODE_ENV ?? 'development') === 'test';
   ],
   providers: [
     PostgresTaskRepository,
-    InMemoryTransactionOutboxStore,
-    PostgresTransactionOutboxStore,
-    InMemoryIdempotencyStore,
-    PostgresIdempotencyStore,
-    InMemoryBatchStore,
-    PostgresBatchStore,
+    ...storeProviders,
     { provide: TASK_REPOSITORY, useExisting: PostgresTaskRepository },
     { provide: TASK_OUTBOX_STORE, useClass: useInMemoryStores ? InMemoryTransactionOutboxStore : PostgresTransactionOutboxStore },
     { provide: IDEMPOTENCY_STORE, useClass: useInMemoryStores ? InMemoryIdempotencyStore : PostgresIdempotencyStore },
@@ -82,17 +88,15 @@ const useInMemoryStores = (process.env.NODE_ENV ?? 'development') === 'test';
     { provide: TASK_OPS_TELEMETRY_PORT, useExisting: LogOnlyTaskOpsTelemetry },
     {
       provide: TASK_PRECONDITION_PORT,
-      useClass: isProduction ? DenyAllTaskPrecondition : DevelopmentTaskPrecondition,
+      useClass: allowDevStubs ? DevelopmentTaskPrecondition : DenyAllTaskPrecondition,
     },
     {
       provide: BATCH_ITEM_AUTHORIZATION_PORT,
-      useClass: isProduction
-        ? DenyAllBatchItemAuthorization
-        : DevelopmentBatchItemAuthorization,
+      useClass: allowDevStubs ? DevelopmentBatchItemAuthorization : DenyAllBatchItemAuthorization,
     },
     {
       provide: BATCH_ITEM_EXECUTOR_PORT,
-      useClass: isProduction ? DenyAllBatchItemExecutor : DevelopmentBatchItemExecutor,
+      useClass: allowDevStubs ? DevelopmentBatchItemExecutor : DenyAllBatchItemExecutor,
     },
     TaskIntentOutbox,
     LeaseManager,

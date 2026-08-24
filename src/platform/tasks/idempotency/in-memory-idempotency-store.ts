@@ -10,7 +10,7 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
     return this.records.get(key) ?? null;
   }
 
-  async begin(key: string, intentId: string): Promise<boolean> {
+  async begin(key: string, intentId: string, executingUntil: string): Promise<boolean> {
     if (this.records.has(key)) return false;
     this.records.set(key, {
       idempotencyKey: key,
@@ -18,6 +18,7 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
       status: 'EXECUTING',
       resultRef: null,
       updatedAt: new Date().toISOString(),
+      executingUntil,
     });
     return true;
   }
@@ -29,6 +30,7 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
       status: 'COMPLETED',
       resultRef,
       updatedAt: new Date().toISOString(),
+      executingUntil: null,
     });
   }
 
@@ -39,6 +41,7 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
       status: 'FAILED',
       resultRef: null,
       updatedAt: new Date().toISOString(),
+      executingUntil: null,
     });
   }
 }

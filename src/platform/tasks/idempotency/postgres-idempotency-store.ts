@@ -17,6 +17,7 @@ interface IdempotencyRow {
   status: string;
   result_ref: string | null;
   updated_at: Date;
+  executing_until: string | null;
 }
 
 @Injectable()
@@ -42,7 +43,7 @@ export class PostgresIdempotencyStore implements IdempotencyStore {
     return this.withTx(async (tx) => {
       const rows = await this.db.query<IdempotencyRow>(
         tx,
-        `SELECT idempotency_key, intent_id, status, result_ref, updated_at
+        `SELECT idempotency_key, intent_id, status, result_ref, updated_at, executing_until
            FROM public.idempotency_records WHERE idempotency_key = $1`,
         [key],
       );
@@ -51,15 +52,15 @@ export class PostgresIdempotencyStore implements IdempotencyStore {
     });
   }
 
-  async begin(key: string, intentId: string): Promise<boolean> {
+  async begin(key: string, intentId: string, executingUntil: string): Promise<boolean> {
     return this.withTx(async (tx) => {
       const rows = await this.db.query<{ idempotency_key: string }>(
         tx,
-        `INSERT INTO public.idempotency_records (idempotency_key, intent_id, status, updated_at)
-           VALUES ($1, $2, $3, now())
+        `INSERT INTO public.idempotency_records (idempotency_key, intent_id, status, executing_until, updated_at)
+           VALUES ($1, $2, $3, $4, now())
            ON CONFLICT (idempotency_key) DO NOTHING
            RETURNING idempotency_key`,
-        [key, intentId, IdempotencyRecordStatus.EXECUTING],
+        [key, intentId, IdempotencyRecordStatus.EXECUTING, executingUntil],
       );
       return rows.length > 0;
     });
@@ -69,11 +70,12 @@ export class PostgresIdempotencyStore implements IdempotencyStore {
     await this.withTx(async (tx) => {
       await this.db.query(
         tx,
-        `INSERT INTO public.idempotency_records (idempotency_key, intent_id, status, result_ref, updated_at)
-           VALUES ($1, $2, $3, $4, now())
+        `INSERT INTO public.idempotency_records (idempotency_key, intent_id, status, result_ref, executing_until, updated_at)
+           VALUES ($1, $2, $3, $4, NULL, now())
            ON CONFLICT (idempotency_key) DO UPDATE
              SET status = EXCLUDED.status,
                  result_ref = EXCLUDED.result_ref,
+                 executing_until = NULL,
                  intent_id = EXCLUDED.intent_id,
                  updated_at = now()`,
         [key, intentId, IdempotencyRecordStatus.COMPLETED, resultRef],
@@ -85,11 +87,12 @@ export class PostgresIdempotencyStore implements IdempotencyStore {
     await this.withTx(async (tx) => {
       await this.db.query(
         tx,
-        `INSERT INTO public.idempotency_records (idempotency_key, intent_id, status, result_ref, updated_at)
-           VALUES ($1, $2, $3, NULL, now())
+        `INSERT INTO public.idempotency_records (idempotency_key, intent_id, status, result_ref, executing_until, updated_at)
+           VALUES ($1, $2, $3, NULL, NULL, now())
            ON CONFLICT (idempotency_key) DO UPDATE
              SET status = EXCLUDED.status,
                  result_ref = NULL,
+                 executing_until = NULL,
                  intent_id = EXCLUDED.intent_id,
                  updated_at = now()`,
         [key, intentId, IdempotencyRecordStatus.FAILED],
@@ -105,5 +108,6 @@ function rowToRecord(row: IdempotencyRow): IdempotencyRecord {
     status: row.status as IdempotencyRecord['status'],
     resultRef: row.result_ref,
     updatedAt: row.updated_at.toISOString(),
+    executingUntil: row.executing_until,
   };
 }
