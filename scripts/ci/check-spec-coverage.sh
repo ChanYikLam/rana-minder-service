@@ -10,11 +10,13 @@
 #       base-ref 缺省依次尝试 origin/dev；无显式 base 且无 origin/dev 时
 #       fail-closed（exit 1），不静默降级，避免门禁失效。
 #       多 commit PR 请显式传 merge-base（CI 已传内置变量），避免漏检中间 commit。
-# 边界说明（评审 info）：push 流水线以 $CNB_BEFORE_SHA 作 base；新建分支首次 push
-#       该变量可能为空 → 参数落空 → 脚本回退 origin/dev（设计内保守行为）。
+# 边界说明（评审 info/warning）：push 流水线以 $CNB_BEFORE_SHA、PR 流水线以
+#       $CNB_PULL_REQUEST_TARGET_SHA 作 base。新建分支首次 push 或浅克隆中目标
+#       SHA 不在本地时参数可能为空/不可解析：空 → 回退 origin/dev；不可解析 →
+#       尝试 merge-base(origin/dev, HEAD) 兜底；两者都失败才 fail-closed（exit 1）。
 #       对"推送到 dev"的常规 push：origin/dev..HEAD 为空差异 → checked=0 通过，
-#       非漏检。仅"显式传入但不可解析"的 base 才 fail-closed（exit 1）。
-# 退出码：0 = 全部通过；1 = 存在缺失用例 / base 不可解析（fail-closed）
+#       非漏检。
+# 退出码：0 = 全部通过；1 = 存在缺失用例 / base 最终不可解析（fail-closed）
 # ============================================================
 set -u
 
@@ -33,7 +35,19 @@ if [ -z "$base" ]; then
   fi
 fi
 
-# base 必须可解析为提交；否则门禁 fail-closed（防止 changed 为空、checked=0 静默通过）
+# base 必须可解析为提交；不可解析时先尝试 git merge-base origin/dev HEAD 兜底
+# （浅克隆/目标 SHA 不在本地 clone 的常见场景，评审：#126 target-SHA 可用性），
+# 仍失败才 fail-closed（防止 changed 为空、checked=0 静默通过）。
+if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
+  echo "WARN check-spec-coverage: base-ref '$base' 无法在本地解析为提交，尝试 merge-base(origin/dev, HEAD) 兜底。" >&2
+  if git rev-parse --verify --quiet origin/dev >/dev/null 2>&1; then
+    fallback="$(git merge-base origin/dev HEAD 2>/dev/null || true)"
+    if [ -n "$fallback" ] && git rev-parse --verify --quiet "${fallback}^{commit}" >/dev/null 2>&1; then
+      base="$fallback"
+      echo "WARN 已改用 merge-base(origin/dev, HEAD) = $base" >&2
+    fi
+  fi
+fi
 if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
   echo "ERROR check-spec-coverage: base-ref '$base' 无法解析为提交，门禁 fail-closed（exit 1）。请显式传 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
   exit 1

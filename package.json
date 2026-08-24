@@ -25,7 +25,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
     "test:unit": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
-    "test:di": "node --env-file=.env.test --test -r ts-node/register \"test/notification-module-di.spec.ts\"",
     "test:integration": "node --env-file=.env.test --test -r ts-node/register \"test/integration/**/*.spec.ts\"",
     "test:contract": "node --env-file=.env.test --test -r ts-node/register \"test/contract/**/*.spec.ts\"",
     "coverage:all": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
