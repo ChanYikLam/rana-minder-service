@@ -11,6 +11,9 @@
  * canManage=club:recruitment:manage，canSubmit=非现任成员）。
  * 表单集成（4.4b 已收口）：RECRUITMENT_FORM_PORT 委托 form 模块提交仓储
  * （FormBackedRecruitmentForm），报名表走 4.1 真实表单提交链路。
+ * 授权数据源（4.4 注记）：OrgBackedRecruitmentAuthorization 依赖 organization 的
+ * CURRENT_PERMISSIONS_PORT——组织模块若仍为内存桩则授权随之失效；org 基础设施
+ * 切换 PostgreSQL 时本适配器自动跟随变真，无需改动本模块。
  */
 
 import { Module } from '@nestjs/common';
@@ -39,6 +42,16 @@ import {
   COMPLETE_RECRUITMENT_ACTIVITY_USE_CASE,
   CANCEL_RECRUITMENT_ACTIVITY_USE_CASE,
   FORCE_COMPLETE_RECRUITMENT_ACTIVITY_USE_CASE,
+  PAUSE_APPLICATION_CHANNEL_USE_CASE,
+  RESUME_APPLICATION_CHANNEL_USE_CASE,
+  CLOSE_APPLICATION_CHANNEL_USE_CASE,
+  REOPEN_APPLICATION_CHANNEL_USE_CASE,
+  CREATE_REMEDY_WINDOW_USE_CASE,
+  RECORD_TRANSFER_AUTHORIZATION_USE_CASE,
+  PROMOTE_WAITLIST_TO_ADMIT_USE_CASE,
+  PUBLISH_PATH_RESULT_USE_CASE,
+  CHOOSE_INTERVIEW_SLOT_USE_CASE,
+  RESCHEDULE_INTERVIEW_USE_CASE,
   OPEN_APPLICATION_CHANNEL_USE_CASE,
   SUBMIT_APPLICATION_USE_CASE,
   RECORD_DEPARTMENT_DECISION_USE_CASE,
@@ -64,6 +77,22 @@ import {
   DefaultCancelRecruitmentActivityUseCase,
   DefaultForceCompleteRecruitmentActivityUseCase,
 } from './application/commands/activity-lifecycle.use-case';
+import {
+  DefaultPauseApplicationChannelUseCase,
+  DefaultResumeApplicationChannelUseCase,
+  DefaultCloseApplicationChannelUseCase,
+  DefaultReopenApplicationChannelUseCase,
+} from './application/commands/channel-lifecycle.use-case';
+import { DefaultCreateRemedyWindowUseCase } from './application/commands/remedy-window.use-case';
+import {
+  DefaultRecordTransferAuthorizationUseCase,
+  DefaultPromoteWaitlistToAdmitUseCase,
+  DefaultPublishPathResultUseCase,
+} from './application/commands/path-result.use-case';
+import {
+  DefaultChooseInterviewSlotUseCase,
+  DefaultRescheduleInterviewUseCase,
+} from './application/commands/interview-slot.use-case';
 import { DefaultOpenApplicationChannelUseCase } from './application/commands/open-application-channel.use-case';
 import { DefaultSubmitApplicationUseCase } from './application/commands/submit-application.use-case';
 import { DefaultRecordDepartmentDecisionUseCase } from './application/commands/record-department-decision.use-case';
@@ -155,6 +184,56 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
     {
       provide: FORCE_COMPLETE_RECRUITMENT_ACTIVITY_USE_CASE,
       useFactory: (repo, auth) => new DefaultForceCompleteRecruitmentActivityUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: PAUSE_APPLICATION_CHANNEL_USE_CASE,
+      useFactory: (repo, auth) => new DefaultPauseApplicationChannelUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: RESUME_APPLICATION_CHANNEL_USE_CASE,
+      useFactory: (repo, auth) => new DefaultResumeApplicationChannelUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: CLOSE_APPLICATION_CHANNEL_USE_CASE,
+      useFactory: (repo, auth) => new DefaultCloseApplicationChannelUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: REOPEN_APPLICATION_CHANNEL_USE_CASE,
+      useFactory: (repo, auth) => new DefaultReopenApplicationChannelUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: CREATE_REMEDY_WINDOW_USE_CASE,
+      useFactory: (repo, auth) => new DefaultCreateRemedyWindowUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: RECORD_TRANSFER_AUTHORIZATION_USE_CASE,
+      useFactory: (repo, auth) => new DefaultRecordTransferAuthorizationUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: PROMOTE_WAITLIST_TO_ADMIT_USE_CASE,
+      useFactory: (repo, auth) => new DefaultPromoteWaitlistToAdmitUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: PUBLISH_PATH_RESULT_USE_CASE,
+      useFactory: (repo, auth) => new DefaultPublishPathResultUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: CHOOSE_INTERVIEW_SLOT_USE_CASE,
+      useFactory: (repo, auth) => new DefaultChooseInterviewSlotUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: RESCHEDULE_INTERVIEW_USE_CASE,
+      useFactory: (repo, auth) => new DefaultRescheduleInterviewUseCase(repo, auth),
       inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
     },
     {

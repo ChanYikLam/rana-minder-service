@@ -106,6 +106,23 @@ export class DepartmentPath {
     return true;
   }
 
+  /** 调剂授权（REC-004）：置 allowTransfer；仅非终态路径可授权（终态只读） */
+  grantTransfer(now: Date): void {
+    if (
+      this.snapshot.status === DepartmentPathStatus.ADMITTED ||
+      this.snapshot.status === DepartmentPathStatus.REJECTED ||
+      this.snapshot.status === DepartmentPathStatus.ENDED
+    ) {
+      throw new Error('部门路径已处于终态，不可授权调剂');
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      allowTransfer: true,
+      updatedAt: now,
+      revisionNumber: this.snapshot.revisionNumber + 1,
+    };
+  }
+
   /** 部门 Group 异常：暂停该路径（记录恢复态） */
   suspend(machine: DepartmentPathStateMachine, now: Date): boolean {
     const result = machine.transitionOnSuspend({ currentState: this.snapshot.status });
