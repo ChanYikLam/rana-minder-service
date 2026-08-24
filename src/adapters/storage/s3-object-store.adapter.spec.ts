@@ -65,6 +65,17 @@ describe('S3ObjectStoreAdapter（4.2 收口）', () => {
     );
   });
 
+  it('构造：缺少 bucket 名 → 抛错 fail-closed（评审 info 加固）', () => {
+    assert.throws(
+      () =>
+        new S3ObjectStoreAdapter({
+          ...CONFIG,
+          buckets: { ...CONFIG.buckets, OBJECT: '' },
+        }),
+      /bucket 配置.*OBJECT.*fail-closed/,
+    );
+  });
+
   it('putQuarantine：PUT 到隔离区 bucket，请求含 SigV4 签名头', async () => {
     const { adapter, calls } = makeAdapter(async () => new Response(null, { status: 200 }));
     const result = await adapter.putQuarantine(LOCATION, new Uint8Array([1, 2, 3]));

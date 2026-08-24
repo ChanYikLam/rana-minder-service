@@ -131,6 +131,16 @@ export class S3ObjectStoreAdapter {
     ) {
       throw new Error('S3ObjectStoreAdapter: 缺少端点或凭据配置（fail-closed，禁止静默假删除）');
     }
+    // 评审修复（info）：三区 bucket 名必须非空——否则请求会打到空 bucket 路径
+    // `/{key}` 而非 `/{bucket}/{key}`，失败原因不明确。与端点/凭据同档 fail-closed。
+    const emptyBucket = (Object.keys(config.buckets) as BucketRole[]).find(
+      (role) => config.buckets[role].length === 0,
+    );
+    if (emptyBucket !== undefined) {
+      throw new Error(
+        `S3ObjectStoreAdapter: 缺少 bucket 配置（${emptyBucket} 为空；fail-closed，禁止静默假删除）`,
+      );
+    }
     this.timeoutMs = config.timeoutMs ?? 10_000;
     this.fetchFn = config.fetchFn ?? fetch;
   }
