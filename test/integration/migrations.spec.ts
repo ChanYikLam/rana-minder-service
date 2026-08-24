@@ -133,7 +133,7 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
     ],
   },
   {
-    file: '20260824000000-org',
+    file: '20260824000001-org',
     tables: [
       'org_club_space',
       'org_relation_command',
