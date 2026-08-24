@@ -9,6 +9,7 @@ import type { ApplicationChannelSnapshot } from '../../domain/models/application
 import type { ApplicationSnapshot } from '../../domain/models/application';
 import type { DepartmentPathSnapshot } from '../../domain/models/department-path';
 import type { InterviewRecordSnapshot } from '../../domain/models/interview-record';
+import type { RemedyWindowSnapshot } from '../../domain/models/remedy-window';
 
 export interface RecruitmentRepository {
   loadActivity(id: string): Promise<RecruitmentActivitySnapshot | null>;
@@ -33,4 +34,7 @@ export interface RecruitmentRepository {
   loadInterview(id: string): Promise<InterviewRecordSnapshot | null>;
   saveInterview(snapshot: InterviewRecordSnapshot, expectedRevision: number): Promise<void>;
   loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]>;
+
+  saveRemedyWindow(snapshot: RemedyWindowSnapshot): Promise<void>;
+  loadRemedyWindow(windowId: string): Promise<RemedyWindowSnapshot | null>;
 }

@@ -13,6 +13,7 @@ import type { ApplicationChannelSnapshot } from '../../domain/models/application
 import type { ApplicationSnapshot } from '../../domain/models/application';
 import type { DepartmentPathSnapshot } from '../../domain/models/department-path';
 import type { InterviewRecordSnapshot } from '../../domain/models/interview-record';
+import type { RemedyWindowSnapshot } from '../../domain/models/remedy-window';
 import type { RecruitmentAuthorizationPort } from '../ports/recruitment-authorization.port';
 import { StubRecruitmentForm } from '../ports/recruitment-form.port';
 import { RecruitmentDomainError } from '../../domain/errors';
@@ -23,6 +24,7 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
   private readonly applications = new Map<string, ApplicationSnapshot>();
   private readonly paths = new Map<string, DepartmentPathSnapshot>();
   private readonly interviews = new Map<string, InterviewRecordSnapshot>();
+  private readonly remedyWindows = new Map<string, RemedyWindowSnapshot>();
 
   async loadActivity(id: string): Promise<RecruitmentActivitySnapshot | null> {
     return this.activities.get(id) ?? null;
@@ -124,6 +126,13 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
   }
   async loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]> {
     return [...this.interviews.values()].filter((i) => i.roundId === roundId);
+  }
+
+  async saveRemedyWindow(snapshot: RemedyWindowSnapshot): Promise<void> {
+    this.remedyWindows.set(snapshot.windowId, snapshot);
+  }
+  async loadRemedyWindow(windowId: string): Promise<RemedyWindowSnapshot | null> {
+    return this.remedyWindows.get(windowId) ?? null;
   }
 }
 

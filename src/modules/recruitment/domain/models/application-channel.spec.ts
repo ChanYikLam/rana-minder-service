@@ -57,4 +57,17 @@ describe('ApplicationChannel (REC-002)', () => {
     assert.equal(channel.open(MACHINE, NOW, { newDeadlineStrictlyAfterNow: true }), true);
     assert.equal(channel.status, 'OPEN');
   });
+
+  it('reopen：聚合内直接拒绝不晚于重开时刻的截止，并持久化合法新截止（防御纵深）', () => {
+    const channel = notStarted();
+    channel.open(MACHINE, NOW);
+    channel.close(MACHINE, NOW);
+    // 新截止 <= now → 聚合内拒绝（收口，不依赖命令层校验）
+    assert.equal(channel.reopen(MACHINE, NOW, NOW), false);
+    assert.equal(channel.status, 'CLOSED');
+    const later = new Date(NOW.getTime() + 3600000);
+    assert.equal(channel.reopen(MACHINE, later, NOW), true);
+    assert.equal(channel.status, 'OPEN');
+    assert.equal(channel.toSnapshot().deadline!.getTime(), later.getTime());
+  });
 });

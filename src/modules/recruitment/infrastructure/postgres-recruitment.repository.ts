@@ -17,6 +17,7 @@ import type { ApplicationChannelSnapshot } from '../domain/models/application-ch
 import type { ApplicationSnapshot } from '../domain/models/application';
 import type { DepartmentPathSnapshot } from '../domain/models/department-path';
 import type { InterviewRecordSnapshot } from '../domain/models/interview-record';
+import type { RemedyWindowSnapshot } from '../domain/models/remedy-window';
 
 interface ActivityRow {
   id: string;
@@ -37,6 +38,7 @@ interface ChannelRow {
   status: string;
   open_at: Date | null;
   close_at: Date | null;
+  deadline: Date | null;
   min_choices: number;
   max_choices: number;
   created_at: Date;
@@ -67,6 +69,7 @@ interface PathRow {
   status: string;
   revision_number: number;
   allow_transfer: boolean;
+  published: boolean;
   decisions: unknown;
   previous_status_before_suspend: string | null;
   created_at: Date;
@@ -89,6 +92,16 @@ interface InterviewRow {
   evaluations: unknown;
   created_at: Date;
   updated_at: Date;
+}
+interface RemedyWindowRow {
+  window_id: string;
+  activity_id: string;
+  kind: string;
+  target_application_ids: unknown;
+  deadline: Date;
+  reason: string;
+  created_by: string;
+  created_at: Date;
 }
 
 function parseJsonb<T>(value: unknown): T {
@@ -120,6 +133,7 @@ export function channelRowToSnapshot(row: ChannelRow): ApplicationChannelSnapsho
     status: row.status as ApplicationChannelSnapshot['status'],
     openAt: row.open_at,
     closeAt: row.close_at,
+    deadline: row.deadline,
     minChoices: row.min_choices,
     maxChoices: row.max_choices,
     createdAt: row.created_at,
@@ -154,6 +168,7 @@ export function departmentPathRowToSnapshot(row: PathRow): DepartmentPathSnapsho
     status: row.status as DepartmentPathSnapshot['status'],
     revisionNumber: Number(row.revision_number),
     allowTransfer: row.allow_transfer,
+    published: row.published,
     decisions: parseJsonb(row.decisions),
     previousStatusBeforeSuspend:
       row.previous_status_before_suspend === null
@@ -181,6 +196,19 @@ export function interviewRowToSnapshot(row: InterviewRow): InterviewRecordSnapsh
     evaluations: parseJsonb(row.evaluations),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+export function remedyWindowRowToSnapshot(row: RemedyWindowRow): RemedyWindowSnapshot {
+  return {
+    windowId: row.window_id,
+    activityId: row.activity_id,
+    kind: row.kind as RemedyWindowSnapshot['kind'],
+    targetApplicationIds: parseJsonb<string[]>(row.target_application_ids),
+    deadline: row.deadline,
+    reason: row.reason,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
   };
 }
 
@@ -238,7 +266,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadChannel(id: string): Promise<ApplicationChannelSnapshot | null> {
     const rows = await this.db.query<ChannelRow>(
       this.uow.active,
-      `SELECT id, activity_id, club_id, status, open_at, close_at, min_choices, max_choices, created_at, updated_at
+      `SELECT id, activity_id, club_id, status, open_at, close_at, deadline, min_choices, max_choices, created_at, updated_at
           FROM application_channels WHERE id = $1`,
       [id],
     );
@@ -248,11 +276,11 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     await this.db.query(
       this.uow.active,
       `INSERT INTO application_channels
-          (id, activity_id, club_id, status, open_at, close_at, min_choices, max_choices, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          (id, activity_id, club_id, status, open_at, close_at, deadline, min_choices, max_choices, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         ON CONFLICT (id) DO UPDATE SET
           activity_id = EXCLUDED.activity_id, club_id = EXCLUDED.club_id, status = EXCLUDED.status,
-          open_at = EXCLUDED.open_at, close_at = EXCLUDED.close_at, min_choices = EXCLUDED.min_choices,
+          open_at = EXCLUDED.open_at, close_at = EXCLUDED.close_at, deadline = EXCLUDED.deadline, min_choices = EXCLUDED.min_choices,
           max_choices = EXCLUDED.max_choices, updated_at = EXCLUDED.updated_at`,
       [
         s.id,
@@ -261,6 +289,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.status,
         s.openAt,
         s.closeAt,
+        s.deadline,
         s.minChoices,
         s.maxChoices,
         s.createdAt,
@@ -375,7 +404,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     const rows = await this.db.query<PathRow>(
       this.uow.active,
       `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
-               decisions, previous_status_before_suspend, created_at, updated_at
+               published, decisions, previous_status_before_suspend, created_at, updated_at
           FROM department_paths WHERE id = $1`,
       [id],
     );
@@ -387,8 +416,8 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         this.uow.active,
         `INSERT INTO department_paths
           (id, application_id, activity_id, club_id, department_id, status, revision_number,
-           allow_transfer, decisions, previous_status_before_suspend, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           allow_transfer, published, decisions, previous_status_before_suspend, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT DO NOTHING RETURNING id`,
         [
           s.id,
@@ -399,6 +428,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
           s.status,
           s.revisionNumber,
           s.allowTransfer,
+          s.published,
           JSON.stringify(s.decisions),
           s.previousStatusBeforeSuspend,
           s.createdAt,
@@ -414,9 +444,9 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
       this.uow.active,
       `UPDATE department_paths SET
         application_id = $2, activity_id = $3, club_id = $4, department_id = $5, status = $6,
-        allow_transfer = $7, decisions = $8, previous_status_before_suspend = $9,
-        revision_number = $10, updated_at = $11
-      WHERE id = $1 AND revision_number = $12
+        allow_transfer = $7, published = $8, decisions = $9, previous_status_before_suspend = $10,
+        revision_number = $11, updated_at = $12
+      WHERE id = $1 AND revision_number = $13
       RETURNING id`,
       [
         s.id,
@@ -426,6 +456,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.departmentId,
         s.status,
         s.allowTransfer,
+        s.published,
         JSON.stringify(s.decisions),
         s.previousStatusBeforeSuspend,
         s.revisionNumber,
@@ -444,7 +475,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     const rows = await this.db.query<PathRow>(
       this.uow.active,
       `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
-               decisions, previous_status_before_suspend, created_at, updated_at
+               published, decisions, previous_status_before_suspend, created_at, updated_at
           FROM department_paths WHERE application_id = $1 ORDER BY updated_at DESC`,
       [applicationId],
     );
@@ -541,5 +572,38 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
       [roundId],
     );
     return rows.map(interviewRowToSnapshot);
+  }
+
+  // ----- 补救窗口 -----
+  async saveRemedyWindow(s: RemedyWindowSnapshot): Promise<void> {
+    await this.db.query(
+      this.uow.active,
+      `INSERT INTO remedy_windows
+          (window_id, activity_id, kind, target_application_ids, deadline, reason, created_by, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        ON CONFLICT (window_id) DO UPDATE SET
+          activity_id = EXCLUDED.activity_id, kind = EXCLUDED.kind,
+          target_application_ids = EXCLUDED.target_application_ids, deadline = EXCLUDED.deadline,
+          reason = EXCLUDED.reason, created_by = EXCLUDED.created_by, created_at = EXCLUDED.created_at`,
+      [
+        s.windowId,
+        s.activityId,
+        s.kind,
+        JSON.stringify(s.targetApplicationIds),
+        s.deadline,
+        s.reason,
+        s.createdBy,
+        s.createdAt,
+      ],
+    );
+  }
+  async loadRemedyWindow(windowId: string): Promise<RemedyWindowSnapshot | null> {
+    const rows = await this.db.query<RemedyWindowRow>(
+      this.uow.active,
+      `SELECT window_id, activity_id, kind, target_application_ids, deadline, reason, created_by, created_at
+          FROM remedy_windows WHERE window_id = $1`,
+      [windowId],
+    );
+    return rows[0] ? remedyWindowRowToSnapshot(rows[0]) : null;
   }
 }

@@ -27,6 +27,8 @@ export interface DepartmentPathSnapshot {
   readonly departmentId: string;
   readonly status: DepartmentPathStatus;
   readonly allowTransfer: boolean;
+  /** 结果是否已发布（REC-024：发布动作落库，可修改重发布） */
+  readonly published: boolean;
   readonly decisions: readonly DepartmentDecisionRecord[];
   readonly previousStatusBeforeSuspend: DepartmentPathStatus | null;
   readonly createdAt: Date;
@@ -58,6 +60,7 @@ export class DepartmentPath {
       departmentId: input.departmentId,
       status: DepartmentPathStatus.PENDING,
       allowTransfer: input.allowTransfer,
+      published: false,
       decisions: [],
       previousStatusBeforeSuspend: null,
       createdAt: input.now,
@@ -74,6 +77,9 @@ export class DepartmentPath {
   }
   get allowTransfer(): boolean {
     return this.snapshot.allowTransfer;
+  }
+  get published(): boolean {
+    return this.snapshot.published;
   }
   get groupException(): boolean {
     return this.snapshot.status === DepartmentPathStatus.SUSPENDED;
@@ -104,6 +110,47 @@ export class DepartmentPath {
       revisionNumber: this.snapshot.revisionNumber + 1,
     };
     return true;
+  }
+
+  /** 调剂授权（REC-004）：置 allowTransfer；仅非终态路径可授权（终态只读） */
+  grantTransfer(now: Date): void {
+    if (
+      this.snapshot.status === DepartmentPathStatus.ADMITTED ||
+      this.snapshot.status === DepartmentPathStatus.REJECTED ||
+      this.snapshot.status === DepartmentPathStatus.ENDED
+    ) {
+      throw new Error('部门路径已处于终态，不可授权调剂');
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      allowTransfer: true,
+      updatedAt: now,
+      revisionNumber: this.snapshot.revisionNumber + 1,
+    };
+  }
+
+  /**
+   * 结果发布（REC-024）：内部决定终态（ADMITTED/REJECTED/WAITLISTED）发布后置 published；
+   * 幂等（可修改重发布）；终态之外的路径不允许发布。
+   */
+  publish(now: Date): void {
+    if (
+      this.snapshot.status !== DepartmentPathStatus.ADMITTED &&
+      this.snapshot.status !== DepartmentPathStatus.REJECTED &&
+      this.snapshot.status !== DepartmentPathStatus.WAITLISTED
+    ) {
+      throw new Error('仅内部决定终态（录取/淘汰/候补）可发布结果');
+    }
+    if (this.snapshot.published) {
+      // 幂等：重复发布不叠加 revision
+      return;
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      published: true,
+      updatedAt: now,
+      revisionNumber: this.snapshot.revisionNumber + 1,
+    };
   }
 
   /** 部门 Group 异常：暂停该路径（记录恢复态） */

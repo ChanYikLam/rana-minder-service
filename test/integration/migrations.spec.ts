@@ -143,6 +143,21 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
       'org_group_mapping',
     ],
   },
+  { file: '20260824000001', tables: [] },
+  { file: '20260824000002', tables: ['remedy_windows'] },
+  { file: '20260824000003', tables: [] },
+  {
+    file: '20260824100000',
+    tables: [
+      'config_club_profiles',
+      'config_scoped_policy_table',
+      'config_academic_year_settings',
+      'config_club_cohorts',
+      'config_roots',
+      'config_versions',
+      'config_field_mapping_state',
+    ],
+  },
 ];
 
 /** down 后必须消失的核心新建表（每条建表链取代表，避免双 job_tasks 历史纠缠） */
@@ -157,6 +172,9 @@ const MUST_DROP_AFTER_DOWN: readonly string[] = [
   // job_tasks：本次幂等化改造影响最大的表（20130000 无操作、22120000 接管），
   // down/恢复行为必须显式断言（评审 info）
   'job_tasks',
+  // remedy_windows：本 PR 新增补救窗口表（20260824000002），down 后须移除
+  'remedy_windows',
+  // org_group_mapping：dev 组织迁移（20260824000000-org）代表表
   'org_group_mapping',
 ];
 
