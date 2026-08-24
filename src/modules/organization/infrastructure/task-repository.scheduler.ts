@@ -31,8 +31,14 @@ export class TaskRepositoryJobScheduler implements JobSchedulerPort {
   constructor(private readonly tasks: TaskRepository) {}
 
   async enqueue(task: ScheduledTask): Promise<void> {
+    // 快速路径：同 intentId 已登记时跳过（省一次写放大）。此预查**不承担幂等
+    // 正确性**——"先查后插"非原子，并发同 taskId 双方都可能查空；
+    // 幂等收口以平台 insert 的唯一约束原子性为准：
+    // - PG：intent_id / idempotency_key 唯一约束 + ON CONFLICT DO NOTHING，
+    //   冲突时读回既有任务（PostgresTaskRepository.insert），并发双写收敛为单条；
+    // - 内存桩：同一派生 taskId 收敛为 Map 单条（dev/test 快速路径语义一致）。
     const existing = await this.tasks.findByIntentId(task.taskId);
-    if (existing !== null) return; // 调度幂等（与内存桩一致）
+    if (existing !== null) return; // 调度幂等快速路径（与内存桩一致）
     const scope = this.scopeOf(task);
     const intent: TaskIntent = {
       intentId: task.taskId,
@@ -64,27 +70,51 @@ export class TaskRepositoryJobScheduler implements JobSchedulerPort {
 
   async complete(taskId: string): Promise<void> {
     const record = await this.requireRecord(taskId);
-    await this.tasks.updateAfterExecution(record.taskId, record.lease?.leaseVersion ?? 0, {
-      status: TaskStatus.COMPLETED,
-      resultRef: taskId,
-      updatedAt: new Date().toISOString(),
-    });
+    const updated = await this.tasks.updateAfterExecution(
+      record.taskId,
+      record.lease?.leaseVersion ?? 0,
+      {
+        status: TaskStatus.COMPLETED,
+        resultRef: taskId,
+        updatedAt: new Date().toISOString(),
+      },
+    );
+    // 收口未生效（租约被抢占/续约推进版本，或任务已终态）→ 上抛告警，
+    // 严禁静默吞掉：否则任务可能被重复执行或永久悬挂且无任何痕迹（CAS-WR-011）。
+    if (updated === null) {
+      throw new Error(
+        `任务收口未生效，租约可能已被抢占或任务已终态：taskId=${taskId}, ` +
+          `expectedLeaseVersion=${record.lease?.leaseVersion ?? 0}, op=complete`,
+      );
+    }
   }
 
   async fail(taskId: string, error: string): Promise<void> {
     const record = await this.requireRecord(taskId);
     // 释放租约并置可重试失败：与内存桩"fail 仅释放持有人"语义对齐，
     // 平台侧退避/重试上限由 retry-policy 与 pipeline 承接
-    await this.tasks.updateAfterExecution(record.taskId, record.lease?.leaseVersion ?? 0, {
-      status: TaskStatus.RETRYABLE_FAILED,
-      lease: null,
-      failure: {
-        kind: 'EXTERNAL_FAILED',
-        reason: error,
-        occurredAt: new Date().toISOString(),
+    const updated = await this.tasks.updateAfterExecution(
+      record.taskId,
+      record.lease?.leaseVersion ?? 0,
+      {
+        status: TaskStatus.RETRYABLE_FAILED,
+        lease: null,
+        failure: {
+          kind: 'EXTERNAL_FAILED',
+          reason: error,
+          occurredAt: new Date().toISOString(),
+        },
+        updatedAt: new Date().toISOString(),
       },
-      updatedAt: new Date().toISOString(),
-    });
+    );
+    // 同 complete：null 说明乐观锁未命中（旧租约令牌/终态写保护），必须上抛
+    // 暴露竞争，而非静默丢失本次失败结论（否则退避重试不会被调度）。
+    if (updated === null) {
+      throw new Error(
+        `任务失败收口未生效，租约可能已被抢占或任务已终态：taskId=${taskId}, ` +
+          `expectedLeaseVersion=${record.lease?.leaseVersion ?? 0}, op=fail, cause=${error}`,
+      );
+    }
   }
 
   async listDue(now: Date): Promise<ScheduledTask[]> {

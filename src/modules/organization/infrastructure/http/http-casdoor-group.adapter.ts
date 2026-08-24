@@ -205,7 +205,14 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
     if (typeof data !== 'object' || data === null) {
       throw new Error(`casdoor get-group returned empty body (status=${status})`);
     }
-    return this.mapGroup(data as RawGroup);
+    // 200 但 body 缺少可用元数据（id/name 非字符串）：mapGroup 返 null 会被
+    // 调用方当作"Group 不存在"（fail-closed 语义要求畸形响应不得固化为
+    // deleted），与空 body 同口径上抛为瞬时故障，交由上层重试。
+    const mapped = this.mapGroup(data as RawGroup);
+    if (mapped === null) {
+      throw new Error(`casdoor get-group returned malformed body (status=${status})`);
+    }
+    return mapped;
   }
 
   async getGroupMembers(ref: GroupStableRef): Promise<readonly string[]> {

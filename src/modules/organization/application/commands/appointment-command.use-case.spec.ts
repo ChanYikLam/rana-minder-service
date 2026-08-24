@@ -12,6 +12,7 @@ import {
   InMemoryGroupMappingRegistry,
   InMemoryJobScheduler,
   InMemoryNotificationPort,
+  InMemoryRelationCommandAuditStore,
   InMemoryRelationCommandStore,
 } from '../../infrastructure/in-memory/memory-implementations';
 import type { CurrentPermissionsPort } from '../ports';
@@ -67,6 +68,7 @@ function buildHarness() {
     scheduler,
     notifications,
     permissions,
+    new InMemoryRelationCommandAuditStore(),
   );
   const useCase = new AppointmentCommandUseCase(
     apptStore,

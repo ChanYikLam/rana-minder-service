@@ -85,6 +85,15 @@ describe('HttpCasdoorGroupAdapter', () => {
     await assert.rejects(() => adapter.getGroupByRef({ owner: 'x', name: 'y' }), /empty body/);
   });
 
+  it('getGroupByRef：200 但缺 id/name 元数据 → 上抛而非误判 deleted（fail-closed）', async () => {
+    // 畸形响应若映射为 null，会被对账固化为 deleted 异常（竞争/容错误判）
+    const { adapter } = makeFetch(() => ({ status: 200, body: { owner: 'club-acm' } }));
+    await assert.rejects(
+      () => adapter.getGroupByRef({ owner: 'club-acm', name: '宣传部' }),
+      /malformed body/,
+    );
+  });
+
   it('writeMembership add：2xx + 回读确认 → success', async () => {
     const { adapter } = makeFetch((url) => {
       if (isGroupUrl(url)) return { status: 200, body: GROUP_BODY };

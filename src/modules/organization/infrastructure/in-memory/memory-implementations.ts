@@ -25,6 +25,8 @@ import type {
   CasdoorWriteResult,
   ClubStore,
   RelationCommandStore,
+  RelationCommandAuditEntry,
+  RelationCommandAuditPort,
   AppointmentCommandStore,
   PermissionTemplateStore,
   GroupMappingRegistry,
@@ -542,6 +544,27 @@ export class InMemoryNotificationPort implements NotificationPort {
 
   async has(title: string): Promise<boolean> {
     return this.facts.some((f) => f.title === title);
+  }
+}
+
+// --------------------------------------------------------------------------
+// 关系命令审计留痕（内存：append-only 追加，供单测断言副作用落点）
+// --------------------------------------------------------------------------
+
+export class InMemoryRelationCommandAuditStore implements RelationCommandAuditPort {
+  constructor() {
+    assertMemoryStubAllowed('InMemoryRelationCommandAuditStore');
+  }
+
+  readonly entries: RelationCommandAuditEntry[] = [];
+
+  async record(entry: RelationCommandAuditEntry): Promise<void> {
+    this.entries.push({ ...entry, detail: entry.detail === null ? null : { ...entry.detail } });
+  }
+
+  /** 按命令 id 过滤留痕（测试辅助） */
+  listByCommand(commandId: string): RelationCommandAuditEntry[] {
+    return this.entries.filter((e) => e.commandId === commandId);
   }
 }
 

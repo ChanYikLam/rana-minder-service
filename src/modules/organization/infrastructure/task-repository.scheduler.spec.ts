@@ -8,7 +8,34 @@ import assert from 'node:assert/strict';
 
 import { InMemoryTaskRepository } from '../../../platform/tasks/in-memory-task-repository';
 import { TaskStatus } from '../../../platform/tasks/contracts';
+import type { TaskRecord } from '../../../platform/tasks/contracts';
 import { TaskRepositoryJobScheduler } from './task-repository.scheduler';
+
+/**
+ * 竞态注入桩：armed 时，findByIntentId 先把平台侧真实租约版本推进一任
+ * （模拟收口窗口内被其他执行器过期重领），再向调用方返回推进前的旧快照——
+ * 桥接据此以旧令牌收口，updateAfterExecution 必须返 null。
+ */
+class StaleReadRepo extends InMemoryTaskRepository {
+  armed = false;
+
+  override async findByIntentId(intentId: string): Promise<TaskRecord | null> {
+    const record = await super.findByIntentId(intentId);
+    if (record !== null && this.armed && record.lease !== null) {
+      this.armed = false;
+      const expiredAt = Date.parse(record.lease.leaseUntil);
+      await super.tryClaim(
+        record.taskId,
+        'w2',
+        new Date(expiredAt + 60_000).toISOString(),
+        record.lease.leaseVersion + 1,
+        new Date(expiredAt + 1_000),
+      );
+      return record; // 旧版本快照（抢占前读取）
+    }
+    return record;
+  }
+}
 
 function makeScheduler(): {
   scheduler: TaskRepositoryJobScheduler;
@@ -71,6 +98,33 @@ describe('TaskRepositoryJobScheduler（ADR-004 持久任务桥接）', () => {
     const record = (await repo.findByIntentId(TASK.taskId))!;
     assert.equal(record.status, TaskStatus.RETRYABLE_FAILED);
     assert.equal(record.lease, null);
+  });
+
+  it('complete：租约版本在收口窗口内被抢占 → 上抛而非静默吞掉', async () => {
+    const repo = new StaleReadRepo();
+    const scheduler = new TaskRepositoryJobScheduler(repo);
+    await scheduler.enqueue(TASK);
+    assert.equal(await scheduler.acquireLease(TASK.taskId, 'w1', NOW), true);
+    repo.armed = true; // 读取后、收口前：版本被 w2 推进
+    await assert.rejects(() => scheduler.complete(TASK.taskId), /收口未生效/);
+  });
+
+  it('complete：任务已终态 → 上抛（终态写保护不被静默绕过）', async () => {
+    const { scheduler } = makeScheduler();
+    await scheduler.enqueue(TASK);
+    await scheduler.acquireLease(TASK.taskId, 'w1', NOW);
+    await scheduler.complete(TASK.taskId);
+    // 二次 complete：任务已 COMPLETED，updateAfterExecution 返 null
+    await assert.rejects(() => scheduler.complete(TASK.taskId), /收口未生效/);
+  });
+
+  it('fail：租约版本被抢占 → 上抛暴露竞争，失败结论不静默丢失', async () => {
+    const repo = new StaleReadRepo();
+    const scheduler = new TaskRepositoryJobScheduler(repo);
+    await scheduler.enqueue(TASK);
+    assert.equal(await scheduler.acquireLease(TASK.taskId, 'w1', NOW), true);
+    repo.armed = true;
+    await assert.rejects(() => scheduler.fail(TASK.taskId, 'casdoor 502'), /失败收口未生效/);
   });
 
   it('listDue 映射回 ScheduledTask（refId/kind/at）', async () => {

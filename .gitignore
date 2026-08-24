@@ -50,3 +50,4 @@ coverage/
 docs/_local/
 scripts/_local/
 .opencode/
+.corepack-home/
