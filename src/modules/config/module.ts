@@ -62,20 +62,23 @@ import {
   GET_PLATFORM_POLICIES_QUERY,
 } from './tokens';
 
-import { InMemoryClubProfileRepository } from './application/testing/config-test-support';
-import {
-  InMemoryScopedPolicyTableRepository,
-  InMemoryAcademicYearBoundaryRepository,
-  InMemoryCohortRepository,
-  InMemoryConfigRootRepository,
-  InMemoryFieldMappingStateRepository,
-} from './application/testing/config-test-support';
+// InMemory 仓储保留在 testing/ 供单元测试直用；模块装配绑定 PostgreSQL 权威实现
 import {
   OrgBackedConfigAuthorization,
   OrgBackedPolicyAuthorization,
   OrgBackedClubMembership,
   NotWiredClubAccessInfoPort,
 } from './infrastructure/org-config-adapters';
+import { ConfigUnitOfWork } from './infrastructure/unit-of-work';
+import {
+  PostgresClubProfileRepository,
+  PostgresScopedPolicyTableRepository,
+  PostgresAcademicYearBoundaryRepository,
+  PostgresCohortRepository,
+  PostgresConfigRootRepository,
+  PostgresFieldMappingStateRepository,
+} from './infrastructure/postgres.repositories';
+import { DB_ADAPTER } from '../../adapters/tokens';
 
 import { DefaultUpdateClubProfileCommand } from './application/commands/update-club-profile.command';
 import { DefaultGetClubProfileQuery } from './application/queries/get-club-profile.query';
@@ -131,8 +134,43 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
       inject: [AUTH_SESSION_PROVIDER],
     },
     ConfigAuthGuard,
-    // ----- 仓储（InMemory；PostgreSQL 实现随 CFG-002~005 切片接入）-----
-    { provide: CONFIG_REPOSITORY, useClass: InMemoryClubProfileRepository },
+    // ----- 工作单元（事务边界）-----
+    {
+      provide: ConfigUnitOfWork,
+      useFactory: (db) => new ConfigUnitOfWork(db),
+      inject: [DB_ADAPTER],
+    },
+    // ----- PostgreSQL 权威仓储（迁移 20260824000000；单源一致）-----
+    {
+      provide: CONFIG_REPOSITORY,
+      useFactory: (db, uow) => new PostgresClubProfileRepository(db, uow),
+      inject: [DB_ADAPTER, ConfigUnitOfWork],
+    },
+    {
+      provide: SCOPED_POLICY_TABLE_REPOSITORY,
+      useFactory: (db, uow) => new PostgresScopedPolicyTableRepository(db, uow),
+      inject: [DB_ADAPTER, ConfigUnitOfWork],
+    },
+    {
+      provide: ACADEMIC_YEAR_BOUNDARY_REPOSITORY,
+      useFactory: (db, uow) => new PostgresAcademicYearBoundaryRepository(db, uow),
+      inject: [DB_ADAPTER, ConfigUnitOfWork],
+    },
+    {
+      provide: COHORT_REPOSITORY,
+      useFactory: (db, uow) => new PostgresCohortRepository(db, uow),
+      inject: [DB_ADAPTER, ConfigUnitOfWork],
+    },
+    {
+      provide: CONFIG_ROOT_REPOSITORY,
+      useFactory: (db, uow) => new PostgresConfigRootRepository(db, uow),
+      inject: [DB_ADAPTER, ConfigUnitOfWork],
+    },
+    {
+      provide: FIELD_MAPPING_STATE_REPOSITORY,
+      useFactory: (db, uow) => new PostgresFieldMappingStateRepository(db, uow),
+      inject: [DB_ADAPTER, ConfigUnitOfWork],
+    },
     // ----- 授权/成员资格（组织授权逐请求重算）/接入信息回显 -----
     {
       provide: CONFIG_AUTHORIZATION,
