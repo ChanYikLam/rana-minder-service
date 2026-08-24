@@ -220,7 +220,8 @@ export class ExportApplyCommand {
       throw exportErrors.validation('仅平台超管特权导出需要该用途字段');
     }
 
-    // 快照冻结（字段 clamp 由 STATISTICS_SPECIFICATION 完成，越权/秘密字段剔除）
+    // 快照冻结（字段 clamp 由 STATISTICS_SPECIFICATION 完成，越权/秘密字段剔除；
+    // rejectedFields 一并固化进快照，供幂等回放时原样返回，与实时基线解耦）
     const { snapshot, rejectedFields } = ExportSnapshot.freeze({
       spec: this.spec,
       scope: resolution.snapshotScope,
@@ -290,10 +291,15 @@ export class ExportApplyCommand {
           purpose: request.purpose ?? null,
           outcome: 'allowed',
         });
+        // 回放展示的 rejectedFields 读取首次冻结时固化进快照的历史值（评审②幂等回放纵深：
+        // 与实时 STATISTICS_SPECIFICATION 基线彻底解耦，保证回放展示与首次创建永远一致，
+        // 即便基线在 hashVersion 递增滞后/被意外修改时也不漂移）。
+        // 兼容历史/反序列化的旧快照（#138 固化前创建、可能不含 rejectedFields 字段）：
+        // 用 ?? [] 兜底，避免回放返回 undefined 破坏 ExportApplyResult.rejectedFields 数组契约。
         return {
           task: existing,
           replayed: true,
-          rejectedFields: this.computeRejectedFields(request),
+          rejectedFields: existing.snapshot.data.rejectedFields ?? [],
           request,
         };
       }
@@ -484,26 +490,6 @@ export class ExportApplyCommand {
   }
 
   /** 重新认证新鲜度校验（IFC-ERR-002）已抽为公共函数 assertFreshReauth，与 retry 共用。 */
-
-  /**
-   * 幂等回放时恢复被剔除的越权字段清单（IFC-ERR-009）。
-   *
-   * `ExportSnapshot.freeze` 对字段的 clamp（越权/秘密字段剔除）是确定性计算，仅依赖
-   * 请求的 datasets/fields 与 STATISTICS_SPECIFICATION 字段基线，与作用域/时间无关。
-   * 故回放命中时可重新计算，得到与首次创建一致的 `rejectedFields`，避免前端展示误导。
-   */
-  private computeRejectedFields(request: ExportApplyRequest): readonly string[] {
-    const datasets = this.normalizeDatasets(request.datasets);
-    const normalized = datasets.length > 0 ? datasets : [...EXPORT_DATASET_TYPES];
-    const fields = this.normalizeFields(request.fields);
-    const rejected: string[] = [];
-    for (const type of normalized) {
-      const requested = fields?.[type];
-      const clamped = this.spec.clampExportFields(type, requested);
-      rejected.push(...clamped.rejected);
-    }
-    return [...new Set(rejected)];
-  }
 
   private normalizeDatasets(datasets?: readonly string[]): ExportSnapshot['data']['datasets'] {
     const normalized = datasets ?? [];

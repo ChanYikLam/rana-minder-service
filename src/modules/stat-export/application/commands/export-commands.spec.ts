@@ -13,9 +13,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { StatisticsSpecification } from '../../domain/models/statistics-specification';
+import {
+  StatisticsSpecification,
+  type ExportDatasetType,
+} from '../../domain/models/statistics-specification';
 import { ExportTaskAggregate } from '../../domain/models/export-task';
-import { ExportTaskStatus } from '../../domain/state-machines/export-task.state-machine';
+import type { ExportSnapshot } from '../../domain/models/export-snapshot';
+import {
+  ExportTaskStatus,
+  ExportTaskStateMachine,
+} from '../../domain/state-machines/export-task.state-machine';
 import { ExportError } from '../errors';
 import { platformSuperAdminPrincipal, clubLeaderPrincipal } from '../export-authorization.policy';
 import type { ExportPrincipal } from '../ports/export-authorization.port';
@@ -302,6 +309,107 @@ describe('P2 导出申请（幂等/快照/越权/停用/联合失效）', () => 
     // 回放应恢复与首次创建一致的越权字段剔除清单
     assert.deepEqual(b.rejectedFields, a.rejectedFields);
     assert.ok(b.rejectedFields.includes('phone'));
+  });
+
+  it('申请幂等：历史/反序列化旧快照缺 rejectedFields 字段时，回放兜底为空数组（兼容评审②三方反馈）', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const input = {
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      idempotencyKey: 'k-legacy-snapshot',
+      request: {
+        kind: 'club' as const,
+        clubId: 'C1',
+        datasets: ['club_summary'] as const,
+        // phone 属 NEVER_EXPORT（EXP-002），首次创建即被剔除
+        fields: { club_summary: ['memberCount', 'phone'] },
+      },
+    };
+    const first = await h.apply.execute(input);
+    assert.equal(first.replayed, false);
+
+    // 模拟历史/反序列化的旧快照（#138 固化 rejectedFields 之前创建）：
+    // 把仓库中该任务快照的 rejectedFields 字段剥离，重现旧快照的运行时形状。
+    const loaded = await h.repo.load(first.task.id);
+    assert.ok(loaded);
+    const legacyData = loaded.toData();
+    const legacySnapshotData = { ...legacyData.snapshot.data };
+    delete (legacySnapshotData as { rejectedFields?: unknown }).rejectedFields;
+    const legacyTask = ExportTaskAggregate.fromSnapshot(new ExportTaskStateMachine(), {
+      ...legacyData,
+      snapshot: { data: legacySnapshotData } as unknown as ExportSnapshot,
+    });
+    await h.repo.save(legacyTask, { expectedRevision: loaded.revisionNumber });
+
+    // 同 key 回放 → 旧快照缺 rejectedFields，应兜底为空数组而非 undefined，
+    // 保证 ExportApplyResult.rejectedFields 始终满足 readonly string[] 契约。
+    const replay = await h.apply.execute(input);
+    assert.equal(replay.replayed, true);
+    assert.deepEqual(replay.rejectedFields, []);
+  });
+
+  it('申请幂等：回放 rejectedFields 读取快照固化值，与实时基线漂移解耦（评审②纵深）', async () => {
+    // 模拟 STATISTICS_SPECIFICATION 字段基线漂移：自定义 spec 将 phone 从「永不导出」
+    // 放行为可导出（如同某版本把联系方式纳入导出范围），其余规则沿用默认基线。
+    // 若回放仍用实时基线重算 rejectedFields，则 phone 会从历史拒绝清单中「消失」，
+    // 造成回放展示与首次创建失配——这正是评审⑤ hashVersion 想显式化的同根因另一面。
+    class DriftedSpec extends StatisticsSpecification {
+      override clampExportFields(
+        type: ExportDatasetType,
+        requested?: readonly string[],
+      ): { fields: readonly string[]; rejected: readonly string[] } {
+        const base = super.clampExportFields(type, requested);
+        // 基线漂移：phone 不再被拒绝（联系方式从秘密/永不导出放开为可导出）
+        if (requested !== undefined && requested.includes('phone')) {
+          return {
+            fields: [...base.fields, 'phone'],
+            rejected: base.rejected.filter((f) => f !== 'phone'),
+          };
+        }
+        return base;
+      }
+    }
+
+    const authz = new MemoryExportAuthorizationPort({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    const facts = new InMemoryExportFactSource();
+    facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    // 首次与回放共用同一份仓储与幂等槽位，仅 spec 不同（模拟基线在两次调用间漂移）
+    const repo = new InMemoryExportTaskRepository();
+    const idem = new InMemoryExportIdempotency();
+    const safety = new MemoryExportSafetySwitchPort();
+    const reauth = new MemoryExportReauthPort();
+    const audit = new InMemoryExportAuditPort();
+
+    const makeApply = (spec: StatisticsSpecification) =>
+      new ExportApplyCommand(spec, authz, audit, safety, reauth, facts, repo, idem);
+
+    const input = {
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      idempotencyKey: 'k-drift',
+      request: {
+        kind: 'club' as const,
+        clubId: 'C1',
+        datasets: ['club_summary'] as const,
+        // phone 在默认基线属于 NEVER_EXPORT，首次创建即被剔除
+        fields: { club_summary: ['memberCount', 'phone'] },
+      },
+    };
+
+    // 首次用默认基线申请 → rejectedFields 含 phone，且固化进快照
+    const first = await makeApply(SPEC).execute(input);
+    assert.equal(first.replayed, false);
+    assert.ok(first.rejectedFields.includes('phone'));
+
+    // 同 key 用漂移后的基线回放 → 应返回首次固化的 rejectedFields（仍含 phone），
+    // 而非按新基线实时重算出的空清单（否则回放展示与历史失配）。
+    const replay = await makeApply(new DriftedSpec()).execute(input);
+    assert.equal(replay.replayed, true);
+    assert.deepEqual(replay.rejectedFields, first.rejectedFields);
+    assert.ok(replay.rejectedFields.includes('phone'));
   });
 
   it('申请幂等：落库失败时回滚幂等槽位，避免槽位毒化', async () => {
