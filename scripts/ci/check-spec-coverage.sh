@@ -26,7 +26,9 @@
 # ============================================================
 set -u
 
-root="$(cd "$(dirname "$0")/../.." && pwd)"
+# pwd -P 解析物理路径，避免 $root 残留 symlink/./ 未规范化，导致下方与 c8
+# coverage-summary.json 中规范化绝对路径 key 拼接/相对化时错位（评审 warning）。
+root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 cd "$root"
 
 base="${1:-}"
@@ -109,37 +111,48 @@ MIN_COVERED_LINES="${MIN_COVERED_LINES:-5}"
 #   any —— lines.covered>0（用于陈旧 spec 判定：同名 spec 却未覆盖本次改动）；
 #   sub —— lines.covered>=MIN_COVERED_LINES（用于无同名 spec 但被其他测试
 #         实际覆盖的豁免，如 test/notification-module-di.spec.ts 引导的 src 模块）。
-# coverage-summary.json 的 key 为绝对路径，与 $root/<相对路径> 精确一致。
+# coverage-summary.json 的 key 为 c8 输出的绝对路径；这里在 node 内统一用
+# path.relative(root,key) 转成相对路径并统一为 '/' 分隔后入集合（评审 warning：
+# 不再以字符串拼接 $root/$f 去对 key，规避 symlink/./ 规范化错位；同时兼容
+# Windows 下 c8 用反斜杠分隔的 key，统一 '/' 后与 git 相对路径一致，本地测量场景
+# 下 DI 豁免同样生效）。
 cov_tmp=""
 if [ "$have_coverage" = "1" ]; then
   cov_tmp="$(mktemp -d)"
-  if ! node -e "
+  if node -e "
     const fs=require('fs');
+    const path=require('path');
     const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
-    const min=Number(process.argv[3]||0);
+    const root=process.argv[3];
+    const min=Number(process.argv[4]||0);
+    // key 相对 root 化并统一分隔符为 '/'，兼容 Windows 反斜杠与 Linux 正斜杠。
+    const rel=k=>path.relative(root,k).split(path.sep).join('/');
     let a='',b='';
     for (const k of Object.keys(s)) {
       if (k==='total') continue;
       const d=s[k];
       const c=(d&&d.lines&&d.lines.covered)||0;
-      if (c>0) { a+=k+'\n'; if (c>=min) b+=k+'\n'; }
+      if (c>0) { a+=rel(k)+'\n'; if (c>=min) b+=rel(k)+'\n'; }
     }
     fs.writeFileSync(process.argv[2]+'/any',a);
     fs.writeFileSync(process.argv[2]+'/sub',b);
-  " "$COVERAGE_SUMMARY" "$cov_tmp" "$MIN_COVERED_LINES"; then
+  " "$COVERAGE_SUMMARY" "$cov_tmp" "$root" "$MIN_COVERED_LINES"; then
+    # 仅在成功解析后注册清理 trap，避免失败分支 exit 时执行 rm -rf ""（评审 info）。
+    trap 'rm -rf "$cov_tmp"' EXIT
+  else
     echo "WARN check-spec-coverage: 解析 coverage-summary.json 失败，退化为仅查 spec 存在" >&2
     have_coverage=0
     rm -rf "$cov_tmp"
     cov_tmp=""
   fi
-  trap 'rm -rf "$cov_tmp"' EXIT
 fi
 
-# 查询辅助：$1=集合名(any|sub) $2=文件相对路径 → 0 表示该文件在集合内（已覆盖）。
-# 无覆盖率产物时恒返回 1（退化为仅查 spec 存在）。
+# 查询辅助：$1=集合名(any|sub) $2=文件相对路径（git 输出，'/' 分隔）→ 0 表示该文件
+# 在集合内（已覆盖）。集合内为相对化且统一 '/' 的路径，直接与 $2 匹配（评审 warning：
+# 不再拼接 $root 以免规范化错位）。无覆盖率产物时恒返回 1（退化为仅查 spec 存在）。
 covered_in() {
   [ "$have_coverage" = "1" ] || return 1
-  grep -Fqx "$root/$2" "$cov_tmp/$1"
+  grep -Fqx "$2" "$cov_tmp/$1"
 }
 while IFS= read -r f; do
   [ -z "$f" ] && continue
