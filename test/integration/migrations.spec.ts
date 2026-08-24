@@ -54,6 +54,8 @@ import * as mInvitation from '../../src/database/migrations/20260822100000_creat
 import * as mAudit from '../../src/database/migrations/20260823000000_create-audit-event-tables';
 import * as mDeletionChecklist from '../../src/database/migrations/20260823120000_create-deletion-checklist-tables';
 import * as mJoint from '../../src/database/migrations/20260823130000_create-joint-tables';
+import * as mChannelDeadline from '../../src/database/migrations/20260824000000_add-channel-deadline';
+import * as mRemedyWindow from '../../src/database/migrations/20260824000001_add-remedy-window';
 
 const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260820100000', m: mIdentity },
@@ -73,6 +75,8 @@ const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260823000000-audit', m: mAudit },
   { name: '20260823120000-deletion-checklist', m: mDeletionChecklist },
   { name: '20260823130000-joint', m: mJoint },
+  { name: '20260824000000-channel-deadline', m: mChannelDeadline },
+  { name: '20260824000001-remedy-window', m: mRemedyWindow },
 ];
 
 /**
@@ -154,6 +158,8 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
       'joint_channels',
     ],
   },
+  { file: '20260824000000', tables: [] },
+  { file: '20260824000001', tables: ['remedy_windows'] },
 ];
 
 /** down 后必须消失的核心新建表（每条建表链取代表，避免双 job_tasks 历史纠缠） */
