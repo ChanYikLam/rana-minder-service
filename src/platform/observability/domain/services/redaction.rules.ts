@@ -52,8 +52,9 @@ export const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
   /^dsn$/i,
 ];
 
-// 路径/URL 段脱敏命中：连接信息按"段名→首字母+***"处理（最小披露原则）。
-// 例：/var/lib/postgres/data → /v***/l***/d***
+// 路径/URL 段脱敏命中：连接信息按"段名→首字母+***"处理（最小披露原则），
+// 但末段（实体文件名/资源标识）完全遮蔽，避免文件名泄露（BUG-018 修复）。
+// 例：/var/lib/postgres/data → /v***/l***/p***/***
 export const PATH_KEY_PATTERNS: readonly RegExp[] = [/^path$/i, /^filePath$/i];
 
 // 允许原样保留的字段白名单。命中 → 'allow'；未命中且不在敏感列表 → 走默认
@@ -153,12 +154,19 @@ function maskPrimitive(value: unknown, hint?: 'path'): string {
 }
 
 function maskPath(path: string): string {
-  return path.replace(/\/([^/]+)/g, (_match, segment: string) => {
-    if (segment.length === 0) {
-      return '/';
-    }
-    return `/${segment.slice(0, PATH_SEGMENT_KEEP_FIRST)}***`;
-  });
+  const segments = path.split('/');
+  return segments
+    .map((segment, index) => {
+      if (segment.length === 0) {
+        return '';
+      }
+      // 末段（文件名/资源标识）完全遮蔽（最小披露，BUG-018）。
+      if (index === segments.length - 1) {
+        return '***';
+      }
+      return `${segment.slice(0, PATH_SEGMENT_KEEP_FIRST)}***`;
+    })
+    .join('/');
 }
 
 function truncatePrimitive(value: unknown, max: number): string {

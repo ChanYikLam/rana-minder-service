@@ -26,4 +26,46 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
       [subjectId, revokeVersion],
     );
   }
+
+  async getRevocation(subjectId: string): Promise<{ revokeVersion: number; revokedAt: string | null } | null> {
+    const tx = await this.db.beginTransaction();
+    try {
+      await this.db.setRlsContext(tx, { kind: 'unprotected' });
+      const rows = await this.db.query<{ revoke_version: string | null; revoked_at: Date | null }>(
+        tx,
+        `SELECT MAX(revoke_version) AS revoke_version, MAX(revoked_at) AS revoked_at
+           FROM auth_sessions WHERE subject_id = $1`,
+        [subjectId],
+      );
+      await this.db.commit(tx);
+      const row = rows[0];
+      if (!row || row.revoke_version === null) {
+        return null;
+      }
+      return {
+        revokeVersion: Number(row.revoke_version),
+        revokedAt: row.revoked_at ? row.revoked_at.toISOString() : null,
+      };
+    } catch (error) {
+      await this.db.rollback(tx).catch(() => undefined);
+      throw error;
+    } finally {
+      await this.db.clearRlsContext(tx).catch(() => undefined);
+    }
+  }
+
+  async invalidateAllSessions(subjectId: string): Promise<number> {
+    const rows = await this.db.query<{ revoke_version: string }>(
+      this.uow.active,
+      `UPDATE auth_sessions
+          SET revoke_version = COALESCE(
+                (SELECT MAX(revoke_version) FROM auth_sessions WHERE subject_id = $1), 0
+              ) + 1,
+              revoked_at = NOW()
+        WHERE subject_id = $1 AND revoked_at IS NULL
+        RETURNING revoke_version`,
+      [subjectId],
+    );
+    return rows.length > 0 ? Number(rows[0].revoke_version) : 0;
+  }
 }

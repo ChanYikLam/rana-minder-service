@@ -30,7 +30,8 @@ export class TaskIntentOutbox {
         // 单个意图落库/转发失败：累加失败计数，达到上限由存储置死信；
         // 未达上限保留为待转发状态待下轮重试，不中断整轮调度。
         const reason = err instanceof Error ? err.message : String(err);
-        this.logger.warn(
+        // 可重试故障按 error 级别记录，确保可观测与告警（BUG-014 修复）
+        this.logger.error(
           `outbox 意图转发失败，保留待下轮重试：intentId=${intent.intentId}, reason=${reason}`,
         );
         await this.store.markFailed(intent.intentId, this.config.job.maxAttempts);

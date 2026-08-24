@@ -16,6 +16,7 @@
     "build:worker": "nest build ranaminder-worker",
     "start": "node dist/main.js",
     "start:worker": "node dist/main.worker.js",
+    "migrate": "node -r ts-node/register src/database/migrate.ts",
     "start:dev": "nest start --watch",
     "start:dev:worker": "nest start --watch --entryFile main.worker",
     "lint": "eslint \"{src,test,apps,packages}/**/*.ts\"",
