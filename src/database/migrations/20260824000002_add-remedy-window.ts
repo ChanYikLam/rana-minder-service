@@ -1,7 +1,7 @@
 /**
  * 迁移：补救窗口记录表（recruitment；REC-003/REC-006/009/038/REC-044）。
  *
- * 版本：20260824000001
+ * 版本：20260824000002
  * 归属模块：recruitment
  * 说明：CreateRemedyWindowUseCase 此前为「瞬时副作用」（windowId/deadline 未落库，
  * 无法审计与追踪）。新增 remedy_windows 表持久化每次开窗记录（不可变事件）。

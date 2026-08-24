@@ -1,7 +1,7 @@
 /**
  * 迁移：部门考察路径结果发布标记（recruitment；REC-004/REC-024 结果发布持久化）。
  *
- * 版本：20260824000002
+ * 版本：20260824000003
  * 归属模块：recruitment
  * 说明：PublishPathResultUseCase 此前仅校验并返回 published:true，未落库「已发布」态，
  * 调用方无法区分已发布/未发布、无法审计。新增 department_paths.published 标记，

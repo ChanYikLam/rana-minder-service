@@ -1,7 +1,7 @@
 /**
  * 迁移：报名通道新窗口截止列（recruitment；SRS-SM-REC-002 重开新窗口截止持久化）。
  *
- * 版本：20260824000000
+ * 版本：20260824000001
  * 归属模块：recruitment
  * 说明：重开新窗口（CLOSED → OPEN）须携新截止且严格晚于重开时刻；
  * 新截止持久化到 application_channels.deadline（报名用例按窗口截止校验）。
