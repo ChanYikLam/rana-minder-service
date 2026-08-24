@@ -123,6 +123,39 @@ const USE_HTTP_CASDOOR = orgCasdoorRealEnabled();
 const USE_PLATFORM_JOBS = orgJobsPlatformEnabled();
 const USE_NOTIFY_CHANNEL = orgNotifyChannelEnabled();
 
+/**
+ * fail-fast 启动校验（评审 info 建议）：ORG_*_REAL 真实适配器分支依赖底层
+ * adapters 模块 ADAPTERS_*_REAL 的对应真实实现。两者不同步会在首次 DB 访问
+ * /通知投递时才暴露（延迟到运行期、且行为难定位）；此处启动期即抛错，把误配
+ * 收敛在装配阶段。
+ *
+ * 依赖映射：
+ * - ORG_DB_REAL=1 ⟹ ADAPTERS_DB_REAL=1（DB_ADAPTER 须为 PostgresDbAdapter，
+ *   否则 OrgUnitOfWork/Postgres*Store 拿到 NotWired 桩）；
+ * - ORG_NOTIFY_CHANNEL=1 ⟹ ADAPTERS_NOTIFY_REAL=1（ADAPTERS_NOTIFY 须为真实
+ *   渠道，否则 NotifyChannelNotificationPort 拿到不可用桩，投递必然失败）。
+ * - ORG_CASDOOR_REAL / ORG_JOBS_PLATFORM 不经 adapters 模块（前者走独立 HTTP
+ *   适配器 + RANA_MINDER_CONFIG，后者走 platform/tasks TaskRepository），不设耦合。
+ */
+export function assertOrgRealWiring(env: NodeJS.ProcessEnv = process.env): void {
+  if (orgDbRealEnabled(env) && env['ADAPTERS_DB_REAL'] !== '1') {
+    throw new Error(
+      'ORG_DB_REAL=1 但 ADAPTERS_DB_REAL 未开启：PostgreSQL 聚合仓储需要真实 ' +
+        'DB_ADAPTER（PostgresDbAdapter），否则拿到 NotWired 桩。请同时设置 ' +
+        'ADAPTERS_DB_REAL=1（或关闭 ORG_DB_REAL 保持 fail-closed 内存桩）。',
+    );
+  }
+  if (orgNotifyChannelEnabled(env) && env['ADAPTERS_NOTIFY_REAL'] !== '1') {
+    throw new Error(
+      'ORG_NOTIFY_CHANNEL=1 但 ADAPTERS_NOTIFY_REAL 未开启：外部通知渠道需要真实 ' +
+        'ADAPTERS_NOTIFY，否则 NotifyChannelNotificationPort 拿到不可用桩。请同时 ' +
+        '设置 ADAPTERS_NOTIFY_REAL=1（或关闭 ORG_NOTIFY_CHANNEL）。',
+    );
+  }
+}
+
+assertOrgRealWiring();
+
 /** PG 聚合仓储共享的工作单元（仅 ORG_DB_REAL=1 时装配） */
 export const ORG_UNIT_OF_WORK = Symbol('ORG_UNIT_OF_WORK');
 
