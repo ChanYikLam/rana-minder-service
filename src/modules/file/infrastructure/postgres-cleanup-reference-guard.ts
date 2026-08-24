@@ -22,11 +22,14 @@ export class PostgresCleanupReferenceGuard implements CleanupReferenceGuardPort 
     const tx = await this.db.beginTransaction();
     try {
       await this.db.setRlsContext(tx, FILE_RLS_SCOPE);
-      // 引用核对：versions jsonb 中任一版本对象定位完全匹配，且文件非清理/删除终态
+      // 引用核对：versions jsonb 中任一版本对象定位完全匹配，且文件仍持有有效
+      // 访问路径。**必须排除 PENDING_CLEANUP**（评审 warning 修复）：RemoveDraftFile
+      // 将文件置待清理但 versions 原样保留（对象同时登记 cleanupQueue）——不排除会
+      // 命中自身 versions 判"仍被引用"，孤儿对象永不物理删除，违反 FORM-009 收敛。
       const rows = await this.db.query<{ n: number }>(
         tx,
         `SELECT count(*)::int AS n FROM file_records
-          WHERE state NOT IN ('CLEANED', 'DELETED')
+          WHERE state NOT IN ('CLEANED', 'DELETED', 'PENDING_CLEANUP')
             AND EXISTS (
               SELECT 1 FROM jsonb_array_elements(versions) v
               WHERE v->'objectLocation'->>'bucketRole' = $1

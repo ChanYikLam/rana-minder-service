@@ -133,4 +133,22 @@ describe('PostgresCleanupReferenceGuard（4.2 收口）', () => {
       false,
     );
   });
+
+  it('死锁回归防护：SQL 排除 PENDING_CLEANUP（RemoveDraft 保留 versions，不排除则清理永不物理删除，FORM-009）', async () => {
+    const { db, calls } = makeFakeDb();
+    const guard = new PostgresCleanupReferenceGuard(db as never);
+    await guard.hasActiveReference({
+      bucketRole: 'OBJECT',
+      keyVersion: 'v1',
+      randomKey: 'r1',
+      objectKind: 'OBJECT',
+      actualSize: 1,
+      sha256: 'x',
+      storageToken: 't',
+    });
+    const count = calls.find((c) => c.sql.includes('jsonb_array_elements(versions)'));
+    assert.ok(count, '必须发出引用核对查询');
+    // 排除列表必须含 PENDING_CLEANUP（评审 warning 修复）
+    assert.match(count!.sql, /NOT IN \('CLEANED', 'DELETED', 'PENDING_CLEANUP'\)/);
+  });
 });

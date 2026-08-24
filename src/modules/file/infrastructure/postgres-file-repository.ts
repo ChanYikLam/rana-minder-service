@@ -181,10 +181,15 @@ export class PostgresFileRepository {
     file: FileRecord,
   ): Promise<boolean> {
     return this.inTx(async (tx) => {
+      // TOCTOU 加固（评审 warning）：对目标已存在的行加 FOR UPDATE 行锁，使同一
+      // 目标（objectType,objectId,fieldKey）的并发追加串行化——后到事务等锁后
+      // 重读 count 看到新值，突破上限被拒绝。首次并发创建（目标尚无行，无法锁）
+      // 由上层乐观锁/幂等兜底，注释见 createWithinTargetLimit 头。
       const counted = await this.db.query<{ n: number }>(
         tx,
         `SELECT count(*)::int AS n FROM file_records
-          WHERE ${TARGET_WHERE} AND state NOT IN ('CLEANED', 'PENDING_CLEANUP', 'DELETED')`,
+          WHERE ${TARGET_WHERE} AND state NOT IN ('CLEANED', 'PENDING_CLEANUP', 'DELETED')
+          FOR UPDATE`,
         [target.objectType, target.objectId, target.fieldKey],
       );
       if (counted.length === 0 || counted[0].n >= configuredPerField) {

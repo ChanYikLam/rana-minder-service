@@ -80,7 +80,7 @@ import { ExternalFileCheckAdapter } from '../../adapters/file-check/external-fil
       useFactory: (db) => new PostgresCleanupReferenceGuard(db),
       inject: [DB_ADAPTER],
     },
-    // ----- 4.2 收口：S3 兼容对象存储（配置 S3_ENDPOINT 启用；未配置保留开发占位）-----
+    // ----- 4.2 收口：S3 兼容对象存储（配置 S3_ENDPOINT 启用）-----
     {
       provide: OBJECT_STORE_PORT,
       useFactory: () => {
@@ -97,6 +97,16 @@ import { ExternalFileCheckAdapter } from '../../adapters/file-check/external-fil
               DERIVED: process.env.S3_BUCKET_DERIVED ?? '',
             },
           });
+        }
+        // 评审修复（部署风险）：**生产/非开发环境未配置 S3_ENDPOINT 时 fail-closed**——
+        // 静默降级内存对象存储会导致"元数据在 PostgreSQL、字节在内存（重启即失）"，
+        // 且 InMemory deleteAndVerify 恒成功制造假删除（违反 FORM-009/NFR-003 不变量）；
+        // 仅在 test/development 保留内存占位（单测/本地开发）。
+        const env = process.env.NODE_ENV ?? 'development';
+        if (env !== 'test' && env !== 'development') {
+          throw new Error(
+            'OBJECT_STORE_PORT: 生产环境必须配置 S3_ENDPOINT/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY（fail-closed，禁止内存对象存储假持久化）',
+          );
         }
         return new InMemoryObjectStore();
       },
