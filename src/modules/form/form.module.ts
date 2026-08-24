@@ -395,6 +395,6 @@ import { FormSubmissionNestController } from './interfaces/nest/form-submission.
       ],
     },
   ],
-  exports: [FormUnitOfWork, FORM_AUTH_SESSION_PROVIDER, FormAuthGuard],
+  exports: [FormUnitOfWork, FORM_AUTH_SESSION_PROVIDER, FormAuthGuard, FORM_SUBMISSION_REPOSITORY],
 })
 export class FormModule {}

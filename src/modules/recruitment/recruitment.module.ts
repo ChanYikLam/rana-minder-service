@@ -9,7 +9,8 @@
  * （fail-closed，受保护端点 401）；授权：已接线组织授权（OrgBackedRecruitment-
  * Authorization，ORG-038 经 CURRENT_PERMISSIONS_PORT 逐请求重算；
  * canManage=club:recruitment:manage，canSubmit=非现任成员）。
- * 表单集成仍为 StubRecruitmentForm（4.4b 与 FormModule 真集成时收口）。
+ * 表单集成（4.4b 已收口）：RECRUITMENT_FORM_PORT 委托 form 模块提交仓储
+ * （FormBackedRecruitmentForm），报名表走 4.1 真实表单提交链路。
  */
 
 import { Module } from '@nestjs/common';
@@ -17,10 +18,12 @@ import { Module } from '@nestjs/common';
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { OrganizationModule } from '../organization/module';
+import { FormModule } from '../form/form.module';
 import { IdentityModule } from '../identity/identity.module';
 import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
 import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
+import { FORM_SUBMISSION_REPOSITORY } from '../form/tokens';
 import { DB_ADAPTER } from '../../adapters/tokens';
 
 import {
@@ -45,7 +48,7 @@ import {
 import { RecruitmentUnitOfWork } from './infrastructure/unit-of-work';
 import { PostgresRecruitmentRepository } from './infrastructure/postgres-recruitment.repository';
 import { OrgBackedRecruitmentAuthorization } from './infrastructure/org-recruitment-authorization';
-import { StubRecruitmentForm } from './application/ports/recruitment-form.port';
+import { FormBackedRecruitmentForm } from './infrastructure/form-backed-recruitment-form';
 
 import { DefaultCreateRecruitmentActivityUseCase } from './application/commands/create-recruitment-activity.use-case';
 import { DefaultPublishRecruitmentActivityUseCase } from './application/commands/publish-recruitment-activity.use-case';
@@ -67,7 +70,7 @@ import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.
 import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-recruitment.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule],
+  imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule, FormModule],
   controllers: [OrgRecruitmentNestController, ApplicantRecruitmentNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
@@ -95,7 +98,12 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
       useFactory: (permissions) => new OrgBackedRecruitmentAuthorization(permissions),
       inject: [CURRENT_PERMISSIONS_PORT],
     },
-    { provide: RECRUITMENT_FORM_PORT, useClass: StubRecruitmentForm },
+    // ----- 4.4b 真集成收口：招新表单委托 form 模块提交仓储（报名表走真实表单链路）-----
+    {
+      provide: RECRUITMENT_FORM_PORT,
+      useFactory: (submissions) => new FormBackedRecruitmentForm(submissions),
+      inject: [FORM_SUBMISSION_REPOSITORY],
+    },
     // ----- 应用命令 -----
     {
       provide: CREATE_RECRUITMENT_ACTIVITY_USE_CASE,
