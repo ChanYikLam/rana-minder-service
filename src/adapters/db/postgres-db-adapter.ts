@@ -107,7 +107,8 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
     // 归还钩子兜底回滚：若连接上仍有未收口事务即被释放（如调用方遗漏
     // commit/rollback），归还池前强制 ROLLBACK，避免悬挂事务占用连接或
     // 污染后续借用的请求（DATA-CON-006 污染防护）。
-    this.pool.on('release', (client: PoolClient) => {
+    // 注意 pg 的 'release' 事件签名是 (err, client)，err 表示归还前发生的错误。
+    this.pool.on('release', (_err: Error | undefined, client: PoolClient) => {
       void client.query('ROLLBACK').catch(() => {
         /* 连接即将回收，回滚失败无可挽回，忽略 */
       });
