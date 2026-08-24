@@ -13,6 +13,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { before, after, test } from 'node:test';
+import fs from 'node:fs';
+import path from 'node:path';
 import pg from 'pg';
 
 const CI = process.env.CI === 'true';
@@ -48,8 +50,10 @@ import * as mInterviewHold from '../../src/database/migrations/20260822000004_fi
 import * as mPathUnique from '../../src/database/migrations/20260822000005_add-department-path-unique';
 import * as mFormUnique from '../../src/database/migrations/20260822000006_add-form-submission-unique';
 import * as mJobTasksNew from '../../src/database/migrations/20260822120000_create-job-task-tables';
+import * as mInvitation from '../../src/database/migrations/20260822100000_create-invitation-tables';
 import * as mAudit from '../../src/database/migrations/20260823000000_create-audit-event-tables';
-import * as mJoint from '../../src/database/migrations/20260823120000_create-joint-tables';
+import * as mDeletionChecklist from '../../src/database/migrations/20260823120000_create-deletion-checklist-tables';
+import * as mJoint from '../../src/database/migrations/20260823130000_create-joint-tables';
 
 const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260820100000', m: mIdentity },
@@ -64,15 +68,30 @@ const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260822000004', m: mInterviewHold },
   { name: '20260822000005', m: mPathUnique },
   { name: '20260822000006', m: mFormUnique },
+  { name: '20260822100000', m: mInvitation },
   { name: '20260822120000', m: mJobTasksNew },
   { name: '20260823000000-audit', m: mAudit },
-  { name: '20260823120000-joint', m: mJoint },
+  { name: '20260823120000-deletion-checklist', m: mDeletionChecklist },
+  { name: '20260823130000-joint', m: mJoint },
 ];
 
-/** 迁移时间戳前缀唯一（未来版本登记工具按前缀编号，冲突会失败；评审 info） */
-const MIGRATION_VERSION_UNIQUE = new Set(
-  migrations.map(({ name }) => name.replace(/[-_].*$/, '')),
-).size === migrations.length;
+/**
+ * 迁移时间戳前缀唯一（未来版本登记工具按前缀编号，冲突会失败；评审 info）。
+ * 直接从文件系统扫描全部迁移文件断言唯一性——不依赖上方列表是否完整，
+ * 避免"列表内唯一但文件系统前缀已重复"漏检。
+ */
+const MIG_DIR = path.resolve(__dirname, '../../src/database/migrations');
+const ALL_MIGRATION_PREFIXES = fs
+  .readdirSync(MIG_DIR)
+  .filter((f) => /^20\d{12}_[\w-]+\.ts$/.test(f))
+  .map((f) => f.slice(0, 14))
+  .sort();
+const MIGRATION_VERSION_UNIQUE =
+  new Set(ALL_MIGRATION_PREFIXES).size === ALL_MIGRATION_PREFIXES.length;
+/** 测试列表必须与文件系统迁移一一对应（缺登即失败，评审 info） */
+const MISSING_FROM_TEST = ALL_MIGRATION_PREFIXES.filter(
+  (p) => !migrations.some((m) => m.name.startsWith(p)),
+);
 
 /** 建表类迁移 → 声明的表；加列/约束类为空 */
 const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }> = [
@@ -120,10 +139,12 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
   { file: '20260822000004', tables: [] },
   { file: '20260822000005', tables: [] },
   { file: '20260822000006', tables: [] },
+  { file: '20260822100000', tables: ['invitations', 'routine_invitations'] },
   { file: '20260822120000', tables: ['job_tasks'] },
   { file: '20260823000000-audit', tables: ['audit_event'] },
+  { file: '20260823120000-deletion-checklist', tables: ['deletion_checklist'] },
   {
-    file: '20260823120000-joint',
+    file: '20260823130000-joint',
     tables: [
       'joint_activities',
       'joint_participants',
@@ -142,6 +163,8 @@ const MUST_DROP_AFTER_DOWN: readonly string[] = [
   'form_definitions',
   'recruitment_activities',
   'form_submissions',
+  'invitations',
+  'deletion_checklist',
   // job_tasks：本次幂等化改造影响最大的表（20130000 无操作、22120000 接管），
   // down/恢复行为必须显式断言（评审 info）
   'job_tasks',
@@ -186,8 +209,17 @@ after(async () => {
   await pool?.end();
 });
 
-test('迁移版本时间戳前缀唯一（版本登记工具可安全编号）', () => {
-  assert.equal(MIGRATION_VERSION_UNIQUE, true, '存在时间戳前缀相同的迁移，需错开版本号');
+test('迁移版本时间戳前缀唯一（文件系统级扫描，不依赖列表完整性）', () => {
+  assert.equal(MIGRATION_VERSION_UNIQUE, true, '文件系统存在时间戳前缀相同的迁移，需错开版本号');
+});
+
+test('测试列表覆盖全部迁移文件（缺登即失败，防"全量"名不副实）', () => {
+  assert.deepEqual(MISSING_FROM_TEST, [], '以下迁移前缀未登记进测试列表，需补登');
+  // 反向：测试列表不得登记文件系统不存在的迁移
+  const registered = migrations.map((m) => m.name.split('-')[0]);
+  const onDisk = new Set(ALL_MIGRATION_PREFIXES);
+  const ghost = registered.filter((p) => !onDisk.has(p));
+  assert.deepEqual(ghost, [], '测试列表登记了文件系统不存在的迁移前缀');
 });
 
 test('全部迁移按序 up 成功且建表齐全；重复 up 幂等可重入', { skip: skipReason }, async () => {

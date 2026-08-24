@@ -2,7 +2,7 @@
  * PostgreSQL 联合仓储（infrastructure；5.1 JNT-001~006 持久化）。
  *
  * 表：joint_activities / joint_participants / joint_applications / joint_interviews /
- * joint_conclusions / joint_channels（列与迁移 20260823120000 逐列对齐）。
+ * joint_conclusions / joint_channels（列与迁移 20260823130000 逐列对齐）。
  * 读路径以 uow.active 事务上下文执行（脱离事务失败关闭）；写以 id 主键
  * upsert（乐观守卫由应用层保证版本/修订号）。JSONB 字段读写兼容 PG（对象）
  * 与内存测试替身（字符串）两种载荷。
