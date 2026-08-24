@@ -1,0 +1,505 @@
+# ============================================================
+# RanaMinder Service · CI 流水线配置（cnb.cool 云原生构建）
+#
+# 权威依据：docs/engineering/CI与质量门定义-v1.0.md（CI-001~CI-006）
+# 阶段 -> 实现 -> 门禁的完整映射与维护说明见：
+#   docs/engineering/CI流水线落地指南-v1.0.md
+# 语法参考：https://docs.cnb.cool/zh/build/grammar.md
+#
+# 结构概览：
+#   (main|dev).pull_request / push：
+#     - docs-check：任何变更都执行（秘密扫描 + 文档链接一致性）
+#     - code-check：仅代码相关变更执行（CI-001 阶段 1~8、10；代码未开工时自动跳过）
+#   "$".tag_push（tag_push 为仓库级事件置于兜底分支，经 v* 守卫仅对版本标签生效）：
+#     - release-check：全量阶段 + 发布门证据摘要（CI-002 规则 3、CI-004）
+#
+# 代码阶段保护：代码阶段以 package.json 存在为前提（阶段 8 另需 Dockerfile），
+# 仓库无 package.json 时全部自动跳过；阶段 1 在 package.json 出现后执行
+# corepack pnpm install --frozen-lockfile，锁文件缺失/漂移即失败。
+# 包管理器为 pnpm（package.json 声明 packageManager: pnpm，锁文件为 pnpm-lock.yaml）。
+# ============================================================
+
+# ------------------------------------------------------------
+# main / dev 分支：MR 与推送
+# ------------------------------------------------------------
+"(main|dev)":
+  # ---- MR（含推送更新）：全量门禁（CI-001、CI-002 规则 1）----
+  pull_request:
+    # 文档检查：任何变更都执行；纯文档变更（docs/**、*.md）时，
+    # 本流水线是唯一执行者（CI-002 规则 2：保留阶段 9 与 11）
+    - name: docs-check
+      docker:
+        image: node:24
+      stages:
+        # 阶段 9：秘密扫描（gitleaks，0 命中）
+        - name: 9-秘密扫描
+          script: |
+            set -e
+            if ! command -v gitleaks >/dev/null 2>&1; then
+              curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+              tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+            fi
+            gitleaks detect --source . --no-banner --redact --config .gitleaks.toml
+        # 阶段 11：文档一致性（相对链接检查）
+        - name: 11-文档链接一致性
+          script: |
+            bash scripts/ci/check-docs-links.sh
+
+    # 代码质量门：仅代码相关变更执行（src/、test/、构建配置、.cnb.yml 等）
+    - name: code-check
+      docker:
+        image: node:24
+      services:
+        - docker
+      ifModify:
+        - "**"
+        - "!(docs/**)"
+        - "!(**/*.md)"
+        - "!*.md"
+        # scripts/ci/** 不再排除：门禁脚本（coverage-gate / check-spec-coverage /
+        # coverage-baseline）自身变更须触发 CI，防止改了门禁却未验证（评审 info）
+      stages:
+        # 防线三 · 模拟合并（simulate-merge）：显式把 PR 源分支合入目标分支（默认取目标分支），
+        # 精确检测合并冲突（add/add、rename/delete 等 CNB 隐式合并无法提前暴露的场景），
+        # 冲突即 exit 1 标红，禁止异常合入（等价 GitHub merge-group）。
+        # 目标分支默认取 CNB_BRANCH（PR 事件下即目标分支），可经 TARGET_BRANCH 覆盖；
+        # 本阶段在依赖安装前执行，尽早失败以节省资源。
+        - name: 0-模拟合并冲突检测
+          script: |
+            set -e
+            echo "== PR 源分支: ${CNB_PULL_REQUEST_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
+            echo "== 模拟合并目标分支: ${TARGET_BRANCH:-$CNB_BRANCH}"
+            git fetch origin "${TARGET_BRANCH:-$CNB_BRANCH}"
+            # 切到目标分支（detached），再把 PR 源分支合进来，
+            # 精确模拟“把本 PR 合入目标分支之后”的代码状态。
+            git checkout --detach "origin/${TARGET_BRANCH:-$CNB_BRANCH}"
+            # --no-commit --no-ff：只做合并动作、不生成提交，便于检测冲突
+            if git merge --no-commit --no-ff "${CNB_PULL_REQUEST_SHA:-HEAD}"; then
+              echo "== 模拟合并成功：无冲突 ✅"
+            else
+              echo "== 模拟合并失败：存在冲突 ❌，请在本地先 rebase/merge 解决后再推送"
+              git status
+              exit 1
+            fi
+        # 阶段 1：安装（pnpm 锁文件驱动；package.json 出现后 pnpm-lock.yaml 缺失/漂移即失败）
+        - name: 1-安装
+          if: "[ -f package.json ]"
+          script: |
+            # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本
+            corepack pnpm install --frozen-lockfile
+        # 阶段 2：类型检查
+        - name: 2-类型检查
+          if: "[ -f package.json ]"
+          script: npm run typecheck
+        # 阶段 3：Lint（独立阶段，便于 CI 日志定位 lint 问题）
+        - name: 3-Lint
+          if: "[ -f package.json ]"
+          script: npm run lint
+        # 阶段 3b：格式检查（独立阶段，prettier 失败信息不再被 eslint 输出淹没）
+        - name: 3-格式
+          if: "[ -f package.json ]"
+          script: npm run format:check
+        # 阶段 4：单元测试 L1（一次性运行并产出 coverage/ 产物；glob=src/**/*.spec.ts + test/*.spec.ts，含 DI 引导测试）
+        - name: 4-单元测试L1
+          if: "[ -f package.json ]"
+          script: npm run test:cov
+        # 阶段 4b：覆盖率门禁（P1-A/CI-001）——复用阶段 4 的 coverage/ 产物，不重跑单测（评审：#126 重复执行优化）
+        # 1) coverage-gate.js --check-only 对照 coverage-baseline.json 棘轮（只升不降）
+        # 2) check-spec-coverage.sh 校验改动文件↔同名 spec
+        # 统计口径（评审对齐）：coverage:all = 仅 L1 单元 + DI 引导
+        #   （src/**/*.spec.ts + test/*.spec.ts）；L2 集成需真实 PG 依赖、L3 契约
+        #   为独立套件，二者均**不纳入覆盖率 % 门禁**，各自阶段单独运行——
+        #   "四套件聚合"指 CI 四阶段覆盖，非覆盖率统计范围。
+        # 合并说明：与 PR #130 的 4b-DI引导测试 同处 .cnb.yml；DI spec 已纳入阶段 4 glob，
+        # 故 DI 引导不再单独成阶段，保留唯一 L1 阶段防重复执行（先合本 PR，再合 #130 按此收敛）。
+        - name: 4b-覆盖率门禁
+          if: "[ -f package.json ]"
+          script: |
+            set -e
+            node scripts/ci/coverage-gate.js --check-only
+            bash scripts/ci/check-spec-coverage.sh "$CNB_PULL_REQUEST_TARGET_SHA"
+        # 阶段 5：集成测试 L2（真实 PG18：pg_trgm/btree_gist 扩展；dind 已声明）
+        - name: 5-集成测试L2
+          if: "[ -f package.json ]"
+          script: |
+            set -e
+            # 启动真实 PG18 测试容器（应用连接信息由 package.json 的 test:integration 脚本传入）
+            docker run -d --name pg18-ci \
+              -e POSTGRES_PASSWORD=ci \
+              -e POSTGRES_DB=ranaminder_test \
+              -p 5432:5432 \
+              postgres:18-alpine
+            trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
+            # 等待 PG18 就绪（最长约 60 秒）
+            for i in $(seq 1 30); do
+              if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+              if [ "$i" = 30 ]; then
+                echo "PG18 未在预期时间内就绪，容器日志："
+                docker logs pg18-ci
+                exit 1
+              fi
+            done
+            # 与开发环境 scripts/dev/postgres-init.sql 保持一致的扩展初始化
+            docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
+              -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
+            # 应用经 TCP 连接 DB：pg 容器以 -p 5432:5432 发布端口，dind 下
+            # job 容器共享 daemon 网络命名空间，经 127.0.0.1 即可访问（CNB 官方
+            # docker 服务连接数据库推荐口径；容器桥接 IP 在 dind 下并不可达）。
+            export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
+              DATABASE_USER=postgres DATABASE_PASSWORD=ci DATABASE_SSL=false
+            export CI=true
+            npm run test:integration
+        # 阶段 6：契约测试 L3（HTTP 级：信封/错误码/分页/幂等/脱敏）
+        - name: 6-契约测试L3
+          if: "[ -f package.json ]"
+          script: npm run test:contract
+        # 阶段 7：构建（HTTP 应用 + Worker 双入口，ADR-001/ADR-013）
+        - name: 7-构建
+          if: "[ -f package.json ]"
+          script: |
+            npm run build
+            npm run build:worker
+        # 阶段 8：镜像构建（tag 非 latest）
+        - name: 8-镜像构建
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
+        # 阶段 8b：镜像安全扫描（trivy；HIGH/CRITICAL 为失败门，DEP-003 / SRS-NFR-022/023）
+        # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
+        # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
+        - name: 8b-镜像安全扫描
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! (command -v trivy >/dev/null 2>&1 && trivy --version 2>&1 | grep -q '0.69.3'); then
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              rm -f /tmp/trivy.tar.gz
+            fi
+            # 扫描已构建镜像；HIGH/CRITICAL 漏洞使扫描失败（镜像层、OS 包、应用依赖）
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
+              ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT}
+        # 阶段 8c：镜像 SBOM 生成与复核（DEP-003 第三方依赖清单，供发布归档）
+        - name: 8c-镜像SBOM与许可证复核
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! (command -v syft >/dev/null 2>&1 && syft --version 2>&1 | grep -q '1.51.0'); then
+              curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
+              echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+              rm -f /tmp/syft.tar.gz
+            fi
+            # 生成镜像 SBOM 并输出（发布门证据归档用，不推送产物）
+            syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
+            echo "镜像 SBOM 已生成（spdx-json），作为第三方依赖/许可证清单证据归档，供发布门复核。"
+            wc -c /tmp/ranaminder-sbom.spdx.json
+        # 阶段 10：依赖审计与许可证登记（DEP-003）
+        - name: 10-依赖审计与许可证登记
+          if: "[ -f pnpm-lock.yaml ]"
+          script: |
+            # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本（同阶段 1）
+            corepack pnpm audit --audit-level=high
+            bash scripts/ci/check-license-registry.sh
+
+  # ---- push（合并后回归验证；策略与 MR 相同）----
+  push:
+    - name: docs-check
+      docker:
+        image: node:24
+      stages:
+        - name: 9-秘密扫描
+          script: |
+            set -e
+            if ! command -v gitleaks >/dev/null 2>&1; then
+              curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+              tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+            fi
+            gitleaks detect --source . --no-banner --redact --config .gitleaks.toml
+        - name: 11-文档链接一致性
+          script: |
+            bash scripts/ci/check-docs-links.sh
+    - name: code-check
+      docker:
+        image: node:24
+      services:
+        - docker
+      ifModify:
+        - "**"
+        - "!(docs/**)"
+        - "!(**/*.md)"
+        - "!*.md"
+        # scripts/ci/** 不再排除：门禁脚本（coverage-gate / check-spec-coverage /
+        # coverage-baseline）自身变更须触发 CI，防止改了门禁却未验证（评审 info）
+      stages:
+        - name: 1-安装
+          if: "[ -f package.json ]"
+          script: |
+            # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本
+            corepack pnpm install --frozen-lockfile
+        - name: 2-类型检查
+          if: "[ -f package.json ]"
+          script: npm run typecheck
+        - name: 3-Lint
+          if: "[ -f package.json ]"
+          script: npm run lint
+        - name: 3-格式
+          if: "[ -f package.json ]"
+          script: npm run format:check
+        - name: 4-单元测试L1
+          if: "[ -f package.json ]"
+          script: npm run test:cov
+        # 阶段 4b：覆盖率门禁（复用阶段 4 产物，不重跑单测；合并说明见 PR 流水线 4b 注释）
+        - name: 4b-覆盖率门禁
+          if: "[ -f package.json ]"
+          script: |
+            set -e
+            node scripts/ci/coverage-gate.js --check-only
+            bash scripts/ci/check-spec-coverage.sh "$CNB_BEFORE_SHA"
+        - name: 5-集成测试L2
+          if: "[ -f package.json ]"
+          script: |
+            set -e
+            docker run -d --name pg18-ci \
+              -e POSTGRES_PASSWORD=ci \
+              -e POSTGRES_DB=ranaminder_test \
+              -p 5432:5432 \
+              postgres:18-alpine
+            trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
+            for i in $(seq 1 30); do
+              if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+              if [ "$i" = 30 ]; then
+                echo "PG18 未在预期时间内就绪，容器日志："
+                docker logs pg18-ci
+                exit 1
+              fi
+            done
+            docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
+              -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
+            # 应用经 TCP 连接 DB：pg 容器以 -p 5432:5432 发布端口，dind 下
+            # job 容器共享 daemon 网络命名空间，经 127.0.0.1 即可访问（CNB 官方
+            # docker 服务连接数据库推荐口径；容器桥接 IP 在 dind 下并不可达）。
+            export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
+              DATABASE_USER=postgres DATABASE_PASSWORD=ci DATABASE_SSL=false
+            export CI=true
+            npm run test:integration
+        - name: 6-契约测试L3
+          if: "[ -f package.json ]"
+          script: npm run test:contract
+        - name: 7-构建
+          if: "[ -f package.json ]"
+          script: |
+            npm run build
+            npm run build:worker
+        - name: 8-镜像构建
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} .
+        # 阶段 8b：镜像安全扫描（trivy；HIGH/CRITICAL 为失败门，DEP-003 / SRS-NFR-022/023）
+        # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
+        # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
+        - name: 8b-镜像安全扫描
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! (command -v trivy >/dev/null 2>&1 && trivy --version 2>&1 | grep -q '0.69.3'); then
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              rm -f /tmp/trivy.tar.gz
+            fi
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
+              ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT}
+        # 阶段 8c：镜像 SBOM 生成与复核（DEP-003 第三方依赖清单，供发布归档）
+        - name: 8c-镜像SBOM与许可证复核
+          if: "[ -f package.json ] && [ -f Dockerfile ]"
+          script: |
+            set -e
+            if ! (command -v syft >/dev/null 2>&1 && syft --version 2>&1 | grep -q '1.51.0'); then
+              curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
+              echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+              rm -f /tmp/syft.tar.gz
+            fi
+            syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_COMMIT_SHORT} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
+            echo "镜像 SBOM 已生成（spdx-json），作为第三方依赖/许可证清单证据归档，供发布门复核。"
+            wc -c /tmp/ranaminder-sbom.spdx.json
+        - name: 10-依赖审计与许可证登记
+          if: "[ -f pnpm-lock.yaml ]"
+          script: |
+            # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本（同阶段 1）
+            corepack pnpm audit --audit-level=high
+            bash scripts/ci/check-license-registry.sh
+
+# ------------------------------------------------------------
+# 发布 Tag（v*）：tag_push 为仓库级事件置于兜底分支，经 v* 守卫仅对版本标签生效
+# ------------------------------------------------------------
+"$":
+  tag_push:
+    - name: release-check
+      docker:
+        image: node:24
+      services:
+        - docker
+      stages:
+        - name: 9-秘密扫描
+          if: '[[ "$CNB_BRANCH" == v* ]]'
+          script: |
+            set -e
+            if ! command -v gitleaks >/dev/null 2>&1; then
+              curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+              tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+            fi
+            gitleaks detect --source . --no-banner --redact --config .gitleaks.toml
+        - name: 11-文档链接一致性
+          if: '[[ "$CNB_BRANCH" == v* ]]'
+          script: |
+            bash scripts/ci/check-docs-links.sh
+        - name: 1-安装
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: |
+            # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本
+            corepack pnpm install --frozen-lockfile
+        - name: 2-类型检查
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run typecheck
+        - name: 3-Lint
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run lint
+        - name: 3-格式
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run format:check
+        - name: 4-单元测试L1
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run test:cov
+        # 阶段 4b：覆盖率门禁（复用阶段 4 产物，不重跑单测；合并说明见 PR 流水线 4b 注释）
+        - name: 4b-覆盖率门禁
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: |
+            set -e
+            node scripts/ci/coverage-gate.js --check-only
+            # 发布流水线用"上一个发布 tag"作基线（评审：dev 领先时 origin/dev 三点
+            # diff 会覆盖大范围历史变更致误报 MISS）；无前 tag 时回退 origin/dev。
+            prev_tag="$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || true)"
+            bash scripts/ci/check-spec-coverage.sh "${prev_tag:-origin/dev}"
+        - name: 5-集成测试L2
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: |
+            set -e
+            docker run -d --name pg18-ci \
+              -e POSTGRES_PASSWORD=ci \
+              -e POSTGRES_DB=ranaminder_test \
+              -p 5432:5432 \
+              postgres:18-alpine
+            trap 'docker rm -f pg18-ci >/dev/null 2>&1 || true' EXIT
+            for i in $(seq 1 30); do
+              if docker exec pg18-ci pg_isready -U postgres -d ranaminder_test >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+              if [ "$i" = 30 ]; then
+                echo "PG18 未在预期时间内就绪，容器日志："
+                docker logs pg18-ci
+                exit 1
+              fi
+            done
+            docker exec pg18-ci psql -U postgres -d ranaminder_test -v ON_ERROR_STOP=1 \
+              -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;'
+            # 应用经 TCP 连接 DB：pg 容器以 -p 5432:5432 发布端口，dind 下
+            # job 容器共享 daemon 网络命名空间，经 127.0.0.1 即可访问（CNB 官方
+            # docker 服务连接数据库推荐口径；容器桥接 IP 在 dind 下并不可达）。
+            export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432 DATABASE_NAME=ranaminder_test \
+              DATABASE_USER=postgres DATABASE_PASSWORD=ci DATABASE_SSL=false
+            export CI=true
+            npm run test:integration
+        - name: 6-契约测试L3
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run test:contract
+        - name: 7-构建
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: |
+            npm run build
+            npm run build:worker
+        # 阶段 8：镜像构建（Tag 即版本号，非 latest）；推送移至阶段 8e（扫描/SBOM 通过后才 push，
+        # 确保发布门在危险镜像进入制品库前拦截，避免“先 push 后扫描”使门禁落空）
+        - name: 8-镜像构建
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
+            docker build -t ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} .
+        # 阶段 8b：发布镜像安全扫描（trivy；HIGH/CRITICAL 失败即阻断发布，DEP-003 / SRS-NFR-022/023 / OPS-REL）
+        # 运行镜像已移除基础镜像自带 npm 与 corepack（及 pnpm 缓存，见 DOCK-021 注 5）；
+        # 此处 --skip-dirs 仅作双重保险（DEP-Q-003：基础镜像工具链 CVE 由镜像维护，不进入应用依赖门禁）
+        - name: 8b-镜像安全扫描
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
+            set -e
+            if ! (command -v trivy >/dev/null 2>&1 && trivy --version 2>&1 | grep -q '0.69.3'); then
+              curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz
+              echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  /tmp/trivy.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+              rm -f /tmp/trivy.tar.gz
+            fi
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              --skip-dirs /usr/local/lib/node_modules/npm,/usr/local/lib/node_modules/corepack,/root/.cache/node/corepack \
+              ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
+        # 阶段 8c：发布镜像 SBOM 生成（DEP-003 第三方依赖/许可证清单，发布门证据归档）
+        - name: 8c-镜像SBOM生成
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
+            set -e
+            if ! (command -v syft >/dev/null 2>&1 && syft --version 2>&1 | grep -q '1.51.0'); then
+              curl -sSfL https://github.com/anchore/syft/releases/download/v1.51.0/syft_1.51.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz
+              echo "2a2e837a2c8d59ec9af5472ee22d3b04ee463c4e44476ecf993fd1e5ab6ebc7f  /tmp/syft.tar.gz" | sha256sum -c -
+              tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+              rm -f /tmp/syft.tar.gz
+            fi
+            syft ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH} -o spdx-json > /tmp/ranaminder-sbom.spdx.json
+            echo "发布镜像 SBOM 已生成（spdx-json），作为第三方依赖/许可证清单证据归档，供发布门复核。"
+            wc -c /tmp/ranaminder-sbom.spdx.json
+            # 复制到工作目录，供阶段 8d 归档到附件（发布门证据可追溯）
+            mkdir -p artifacts && cp /tmp/ranaminder-sbom.spdx.json artifacts/ranaminder-sbom.spdx.json
+        # 阶段 8d：归档 SBOM 到 commit 附件（DEP-003 发布门证据持久化，供人工门复核）
+        # 上传到当前 commit 附件，不依赖 release 是否存在；文件在构建容器销毁后仍可追溯
+        # 8d 使用固定版本 attachments 插件镜像 v1.1.4，避免 :latest 不可复现的供应链风险（同 trivy/syft 固定版本；v1.1.4 与 latest 为不同 digest，按固定版本拉取）
+        - name: 8d-归档SBOM证据
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          image: cnbcool/attachments:v1.1.4
+          settings:
+            commit: $CNB_COMMIT
+            attachments:
+              - "./artifacts/ranaminder-sbom.spdx.json"
+        # 阶段 8e：推送发布镜像（仅在前序 8b 扫描、8c SBOM、8d 归档均成功后执行）
+        # 危险镜像不会进入制品库；扫描失败时流水线在此前中断，实现真正的“扫描失败阻断发布”
+        - name: 8e-镜像推送
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ] && [ -f Dockerfile ]'
+          script: |
+            docker push ${CNB_DOCKER_REGISTRY}/ranaminder-service:${CNB_BRANCH}
+        - name: 10-依赖审计与许可证登记
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f pnpm-lock.yaml ]'
+          script: |
+            # 通过 corepack 使用与 package.json packageManager 匹配的 pnpm 版本（同阶段 1）
+            corepack pnpm audit --audit-level=high
+            bash scripts/ci/check-license-registry.sh
+      endStages:
+        # 发布门证据摘要（CI-004）：人工门由治理流程控制，CI 只输出证据供归档
+        - name: 发布门证据摘要
+          if: '[[ "$CNB_BRANCH" == v* ]]'
+          script: |
+            echo "=== 发布门证据（CI-004）==="
+            echo "1) 首批技术验证清单 38 项（TVER-*）：人工门，见 docs/engineering/首批技术验证清单-v1.0.md"
+            echo "2) 测试规格执行（306 转换底线、TST-FAIL/NFR/SEC）：人工门，见 docs/specification/测试规格与验收追踪-v1.0.md"
+            echo "3) OPS-VER-001~024 部署/升级/恢复演练：人工门，见 docs/operations/部署运维与恢复手册-v1.0.md"
+            echo "4) 生产 DDL 与迁移评审：人工门"
+            echo "5) 秘密扫描/依赖审计/许可证：本流水线已执行（上方阶段日志即证据）"
+            echo "6) 镜像与版本锁定（非 latest）：本流水线已执行（阶段 8 构建、阶段 8e 推送日志即证据）"
+            echo "7) 镜像安全扫描（trivy HIGH/CRITICAL 失败门）：本流水线已执行且先于推送（阶段 8b 日志即证据）"
+            echo "8) 镜像 SBOM（第三方依赖/许可证清单，DEP-003）：本流水线已生成并归档（阶段 8c 日志与 8d 附件即证据）"

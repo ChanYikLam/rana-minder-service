@@ -1,0 +1,66 @@
+/**
+ * 站内信投递命令（NTF-001、NTF-003、SRS-SM-NTF-001 转换 4）。
+ *
+ * 由后台任务调度器调用。同一逻辑事件＋收件人只对应一条站内信；
+ * 按收件人快照创建唯一呈现记录。投递失败不回滚已生效业务
+ * （NTF-001、IFC-TX-005），但失败必须向上抛出，由任务管道
+ * 进入失败重试，不得静默吞掉（含乐观锁版本冲突、适配器错误）。
+ */
+
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { InboxAdapter, NotificationRepository } from '../../infrastructure';
+import { NotificationStateMachine } from '../../domain';
+import { INBOX_ADAPTER, NOTIFICATION_REPOSITORY } from '../../tokens';
+
+@Injectable()
+export class DeliverInboxCommand {
+  private readonly logger = new Logger(DeliverInboxCommand.name);
+  private readonly stateMachine = new NotificationStateMachine();
+
+  constructor(
+    @Inject(NOTIFICATION_REPOSITORY)
+    private readonly repository: NotificationRepository,
+    @Inject(INBOX_ADAPTER)
+    private readonly inboxAdapter: InboxAdapter,
+  ) {}
+
+  /**
+   * 投递站内信到指定收件人。
+   * 渠道投递失败不回滚已生效业务（NTF-001、IFC-TX-005）。
+   *
+   * @param factId 通知事实标识
+   * @param expectedVersion 乐观锁版本
+   * @returns 投递结果（呈现条数）
+   * @throws 投递失败（含版本冲突、适配器错误）时抛出，由任务管道重试
+   */
+  async execute(factId: string, expectedVersion: number): Promise<{ presentationCount: number }> {
+    const fact = await this.repository.findFactById(factId);
+    if (!fact) {
+      this.logger.warn(`通知事实不存在: ${factId}`);
+      return { presentationCount: 0 };
+    }
+
+    // 状态机校验：已创建＋待投递 → 已投递
+    const transition = this.stateMachine.evaluate({
+      type: 'DELIVER_INBOX',
+      currentStatus: fact.status,
+    });
+
+    if (!transition.allowed) {
+      this.logger.warn(`站内信投递拒绝: factId=${factId}, reason=${transition.reason}`);
+      return { presentationCount: 0 };
+    }
+
+    // 按收件人快照创建/确认唯一站内信呈现（逻辑事件＋收件人唯一，NTF-003）
+    const snapshots = await this.repository.findSnapshotsByFactId(factId);
+    for (const snapshot of snapshots) {
+      await this.inboxAdapter.createOrConfirmPresentation(fact, snapshot);
+    }
+
+    // 呈现创建成功后推进事实状态；版本冲突或适配器错误向上抛出，
+    // 由任务管道进入失败重试，不静默吞掉（IFC-TX-005、IFC-ERR-008）
+    await this.repository.updateFactStatus(factId, 'DELIVERED', expectedVersion);
+    this.logger.log(`站内信投递成功: factId=${factId}, 呈现=${snapshots.length} 条`);
+    return { presentationCount: snapshots.length };
+  }
+}

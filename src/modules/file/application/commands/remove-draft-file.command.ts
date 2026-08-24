@@ -1,0 +1,87 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { FileState, FileStateMachine } from '../../domain/state-machines/file-state-machine';
+import type { CleanupQueueItem, FileRecord } from '../../domain/models/file-model';
+import { locationKeyOf } from '../../domain/services/object-location';
+import { FILE_REPOSITORY } from '../../infrastructure/file-repository';
+import type { FileRepository } from '../../infrastructure/file-repository';
+
+/** 移除草稿文件输入（FORM-009/AUD-008） */
+export interface RemoveDraftFileInput {
+  readonly fileId: string;
+  /** 草稿可移除（草稿阶段） */
+  readonly removable: boolean;
+}
+
+/** 移除前置失败 */
+export class RemoveDraftFileError extends Error {
+  constructor(code: 'IFC-ERR-003' | 'IFC-ERR-006', message: string) {
+    super(`${code}: ${message}`);
+    this.name = 'RemoveDraftFileError';
+  }
+}
+
+/**
+ * 移除草稿文件（IFC-FIL-006/007、FORM-009、AUD-008）。
+ *
+ * - 草稿中删除：对用户**立即不可见**（状态 → 待清理），系统稍后安全物理清理
+ *   （cleanupQueue 登记；清理由后台任务执行）；
+ * - **正式提交过的附件不允许普通用户物理删除**（仅超管正式删除流程接管：由
+ *   QueueFormalDeleteCommand 独立完成撤权与清单生成，本命令不提供绕过旁路）；
+ * - 存在任一有效引用时拒绝清理（本命令只处理草稿/失去引用的文件）。
+ */
+@Injectable()
+export class RemoveDraftFileCommand {
+  constructor(
+    @Inject(FILE_REPOSITORY) private readonly repo: FileRepository,
+    private readonly stateMachine: FileStateMachine = new FileStateMachine(),
+  ) {}
+
+  async execute(input: RemoveDraftFileInput): Promise<FileRecord> {
+    const file = await this.repo.load(input.fileId);
+    if (file === null) {
+      throw new RemoveDraftFileError('IFC-ERR-006', '文件不存在');
+    }
+    if (file.state === FileState.BOUND_TO_SUBMISSION) {
+      throw new RemoveDraftFileError('IFC-ERR-006', '已正式提交的附件不允许普通用户物理删除');
+    }
+    // 终态检查前置：对已清理/已正式删除的文件，无论 removable 取值如何，
+    // 都应返回"文件已是终态"而非误导性的"当前草稿不可移除"，便于调用方准确识别终态。
+    if (file.state === FileState.CLEANED || file.state === FileState.FORMALLY_DELETED) {
+      throw new RemoveDraftFileError('IFC-ERR-006', '文件已是终态');
+    }
+    // 草稿不可移除（业务未开放该草稿移除）时拒绝
+    if (!input.removable) {
+      throw new RemoveDraftFileError('IFC-ERR-006', '当前草稿不可移除');
+    }
+    if (file.state === FileState.PENDING_CLEANUP) {
+      return file; // 幂等：已在待清理
+    }
+
+    const now = new Date().toISOString();
+    // 立即不可见：可用/隔离/临时上传 → 待清理（状态机校验）
+    const state = this.stateMachine.transition(file.state, FileState.PENDING_CLEANUP);
+
+    // 全部版本对象进入受控清理（对用户不可见后由系统稍后物理清理）；
+    // 含隔离区版本：替换后新版本尚未晋升即被移除时，其隔离字节同样失去引用，
+    // 若排除将造成隔离区对象泄漏（不得跳过，FORM-009）。
+    // 按 location 去重：同一对象（如替换后已入队旧版本）不得重复登记，避免清理队列
+    // 出现重复项导致同一对象被删除两次/元数据冗余。
+    const alreadyQueued = new Set(file.cleanupQueue.map((i) => locationKeyOf(i.location)));
+    const newQueue: readonly CleanupQueueItem[] = file.versions
+      .filter((v) => !alreadyQueued.has(locationKeyOf(v.objectLocation)))
+      .map((v) => ({
+        location: v.objectLocation,
+        reason: 'REMOVED' as const,
+        queuedAt: now,
+        status: 'PENDING' as const,
+      }));
+
+    const updated: FileRecord = {
+      ...file,
+      state,
+      cleanupQueue: [...file.cleanupQueue, ...newQueue],
+    };
+    await this.repo.save(updated);
+    return updated;
+  }
+}

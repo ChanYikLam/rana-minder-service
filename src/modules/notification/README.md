@@ -1,0 +1,85 @@
+# 领域模块 · 通知
+
+> 更新日期：2026-08-14
+> 状态机：`SRS-SM-NTF-001`（通知事实/渠道，10 条转换；IFC-SM-027）
+
+## 事务边界对照（IFC-TX-001~008）
+
+对照[接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)事务边界定义，标注本模块参与情况（✓=参与，--=不参与）。
+
+| 边界         | 名称               | 本模块参与                                 |
+| ------------ | ------------------ | ------------------------------------------ |
+| `IFC-TX-001` | 本地业务状态转换   | --                                         |
+| `IFC-TX-002` | 直接权益与通知     | ✓ 通知事实＋收件人快照在领域命令事务内保存 |
+| `IFC-TX-003` | Casdoor 外部写入   | --                                         |
+| `IFC-TX-004` | 文件上传/检查/绑定 | --                                         |
+| `IFC-TX-005` | 通知渠道投递       | ✓ 站内信/邮件渠道投递、失败重试与恢复补投  |
+| `IFC-TX-006` | 受控批量           | --                                         |
+| `IFC-TX-007` | 正式删除           | --                                         |
+| `IFC-TX-008` | 派生刷新与重建     | --                                         |
+
+## 核心职责
+
+通知事实、收件人快照、站内信与渠道投递；通知事实＋逻辑事件 ID＋收件人快照与权益业务结果在同一本地事务原子保存（ADR-003 第 2 类）。关键不变量：影响学生权益的变化必须形成通知事实，不能静默发生（NTF-001）；通知与已读状态不得成为业务状态权威，业务链接每次打开重新鉴权（ADR-002 §2.1、NTF-003）。
+
+## 关键组件
+
+| 组件                                                                                                                                                                                                                                          | 类型                             | 职责                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------- |
+| `NotificationController`                                                                                                                                                                                                                      | Controller（interfaces）         | 本人通知列表/类型筛选、已读、全部已读、已处理、隐藏的 HTTP 路由与请求适配 |
+| `CreateNotificationFactCommand`（供各领域命令同事务调用）、`DeliverInboxCommand`、`CreateEmailAttemptCommand`、`RetryChannelDeliveryCommand`、`PauseInboxCommand`、`ResumeInboxCommand`、`MarkPermanentFailureCommand`、`ManualResendCommand` | 应用命令（application/commands） | SRS-SM-NTF-001 各转换与渠道投递用例                                       |
+| `NotificationQueryService`                                                                                                                                                                                                                    | 查询用例（application/queries）  | 呈现列表、未读数、有期限通知状态与安全摘要查询（IFC-QRY-005 类）          |
+| `NotificationFactModel`、`InboxPresentationModel`、`ChannelDeliveryAttemptModel`、`RecipientSnapshot`                                                                                                                                         | 领域模型（domain/models）        | 通知事实、呈现子状态、渠道尝试、收件人快照                                |
+| `RecipientSnapshotResolver`                                                                                                                                                                                                                   | 领域服务（domain/services）      | 收件人快照计算                                                            |
+| `NotificationStateMachine`                                                                                                                                                                                                                    | 状态机（domain/state-machines）  | 转换规则                                                                  |
+| `NotificationRepository`、`InboxAdapter`、`EmailAdapter`、`TemplateSnapshotService`                                                                                                                                                           | 基础设施适配（infrastructure）   | 事实与渠道意图持久化、站内信呈现、邮件发送与结果查询、模板版本快照        |
+
+## 对外接口
+
+- HTTP 路由命名空间（具体 URL 未冻结，由[接口实现规格 v1.0 §6](../../../docs/specification/接口实现规格-v1.0.md) 落地后冻结；以[接口清单-HTTP端点-v1.0](../../../docs/specification/接口清单-HTTP端点-v1.0.md) 为传输层事实基线）：本人通知列表/类型筛选、已读、全部已读、已处理、隐藏、通知偏好；平台侧：紧急关闭站内信、人工重发、邮件外发箱只读查询。
+- 依赖的外部适配：邮件适配器（可选渠道，发信身份与模板版本快照）、PostgreSQL（通知事实、收件人快照、渠道意图）、job 模块（站内信投递、邮件重试、恢复补投编排）。
+- 关键外部调用：接收各领域权益命令的事务内通知事实创建（IFC-TX-002）；投递结果不确定时必须回读或查询提供商结果后再收口（IFC-TX-005）。
+
+## 核心逻辑摘要
+
+- SRS-SM-NTF-001：`新建（NEW） -> 已创建＋待投递（CREATED_PENDING_DELIVERY）/ 已创建＋暂停投递（CREATED_PAUSED_DELIVERY） -> 已投递（DELIVERED）`；已投递下分呈现子状态：已读（READ）/已处理（PROCESSED）/隐藏（HIDDEN）；邮件为可选渠道子状态：待投递/已投递/失败重试/永久失败。权益通知不可物理删除，有期限通知显示可处理/已处理/已撤回/已过期，过期保留历史（NTF-003）。
+
+## 4.3.2 站内信收件箱与紧急关闭
+
+> 更新日期：2026-08-21
+
+- **收件箱能力（NTF-003）**：已读/未读/全部标记已读（`MarkPresentationStatusCommand`、`MarkAllReadCommand`）、类型筛选与隐藏列表（`NotificationQueryService` + `InboxListFilter`）、跳转业务页（`link` 每次打开重新鉴权）；权益通知不可物理删除，可归入已处理/隐藏；有期限通知在查询时按 `resolveEffectiveDeadlineStatus` 展示当前可处理/已处理/已撤回/已过期（已处理/已撤回为终态不被时间覆盖）。
+- **紧急关闭（NTF-001、SRS-FAIL-009、IFC-NTF-001、XCC-FAIL-009）**：超管按全平台或指定社团关闭（`ApplyKillSwitchCommand`），必须填原因、二次确认、设预计恢复时间并写入特权审计（`PrivilegedAuditWriter`）；关闭期间通知事实与收件人快照仍保存、新事实标记暂停投递（`CreateNotificationFactCommand` 感知关闭范围）；恢复（`ResumeKillSwitchCommand`）按原事件时间升序补投、逻辑事件＋收件人去重、只补投渠道不重放业务、范围隔离；平台级端点 `/api/admin/notifications/kill-switch`，社团级 `/api/org/:clubId/notifications/kill-switch`（接口清单 §15.9/§14.4）。
+- 收件人在业务事件发生时形成快照，后续换届不改变历史收件人；通知只关联逻辑事件与最少摘要，业务对象状态只在打开时实时读取（NTF-001 至 003）。
+- 事务边界归属：通知事实保存为第 2 类（IFC-TX-002 边界 2）--通知事实、逻辑事件 ID、收件人快照与最少摘要同事务原子保存，保存失败则权益命令整体回滚（IFC-ERR-016 内部提交失败）；通知投递（含投递失败）为第 5 类（IFC-TX-005 边界 5：通知渠道投递）--渠道意图、任务与模板/发件身份快照可靠保存，投递失败不回滚已提交业务、恢复只补投渠道、不得重执行业务或冒充已读，永久失败保留投递证据，结果不确定先回读再收口（NTF-001 至 003、NTF-007、IFC-ERR-013 外部结果不确定）。
+- 紧急关闭站内信：超管填写原因、预计恢复时间、影响预览并二次确认后按范围暂停投递并写特权审计；通知事实仍保存、权益业务可继续、默认邮件仍按配置尝试；恢复后按原事件时间升序补投，不同范围/收件人按分区、租约与逻辑事件幂等并行，不得重复执行业务（NTF-001、IFC-NTF-001、NFR-006）。
+- 邮件资格与失败：事件允许邮件、本次/活动配置未关闭、用户未退订、邮箱已验证、发信账号有效才创建邮件任务（NTF-004 至 007）；明确退信或连续失败 24 小时进入永久失败并保留投递证据；人工重发创建新尝试且只重发通知、不重执行原业务（NTF-007）。投递结果不确定时必须先回读再收口（IFC-ERR-013 外部结果不确定）；依赖不可用时按故障规则降级而非伪成功（IFC-ERR-012 依赖不可用）。
+- 幂等：逻辑事件＋收件人唯一去重，同一逻辑事件重复投递只对应一条站内信；渠道消息 ID 幂等，结果不确定先查询再收口；呈现子状态只改变本人偏好，不改变通知事实与业务历史。
+- 内容约束：正文只携带理解事件所需的最少信息，不得复制完整报名表、内部评价、联系方式或附件；邮件不含免登录令牌，链接打开重新鉴权（IFC-ERR-003 当前无权 时拒绝直接访问）（NTF-003、需求发现 08）。
+- 模板与身份：发送时冻结模板版本与发件身份；自定义 HTML 只允许受限标签与行内样式，未通过安全校验自动回退平台默认模板（IFC-ERR-005 输入无效 / IFC-ERR-011 安全限制）；回复地址固定为实际发信账号，历史投递保留原身份（需求发现 08）。
+- 定位说明：`CreateNotificationFactCommand` 是被各领域命令在本事务内调用的事务能力，不是独立公开命令；站内信/邮件/恢复补投由 job 模块编排调用本模块渠道命令，任务执行前仍复核事实状态与渠道资格（IFC-CMD-005）。
+- 审计与脱敏：业务审计引用通知事实，渠道尝试独立审计；失败信息、正文与发信密钥不得写入运行日志或普通审计（AUD-003、需求发现 08）。
+
+## 4.3.3 可选邮件渠道
+
+> 更新日期：2026-08-21
+
+- **邮件为附加渠道（NTF-004）**：`DispatchOptionalEmailCommand` 编排"先站内信、后可选邮件"——无论邮件是否发送，站内信呈现必须创建（权威记录，邮件不能替代站内信）；录取结果等 8 类学生权益事件允许邮件且默认开启；人工发布可传 `skipEmailThisTime` 取消本次邮件，自动通知使用活动配置。
+- **资格链（NTF-004/006/007）**：事件目录 → 本次取消 → 平台统一停用（`PlatformEmailSuspensionStore`，超管按类停用）→ 社团策略（`ClubEmailPolicyStore`，负责人/人事按活动或类型关闭，活动粒度覆盖类型粒度）→ 用户偏好（学生可关普通业务邮件；邮箱验证/变更/安全通知为受保护类别 `PROTECTED_EMAIL_CATEGORIES`，不在偏好模型、不可关闭）→ 邮箱已验证 → 发信账号有效。任一层关闭即只发站内信并记录跳过原因。
+- **社团发信密钥（NTF-006）**：`SaveEmailConfigCommand`/`TestEmailConfigCommand`/`RotateEmailKeyCommand`——每个社团独立配置（平台配置用保留键 `__platform__`），不能借用（发送前按作用域解析本社团/平台账号）；密钥 AES-256-GCM 加密落库（`AesGcmEmailSecretCipher`，主密钥取 `EMAIL_SECRET_CIPHER_KEY`），视图只回显 `secretConfigured`＋12 位指纹，永不回显明文；只能重填或轮换（轮换清除旧密文并置 `verified=false`）；关键信息（主机/账号/端口/密钥）任何变更都重置验证状态，必须测试邮件通过后才启用；全部配置变化写特权审计（不含密钥）。权限：社团侧 `club:email:config` 或超管（人事/部门负责人无权查看或修改），平台侧仅超管。
+- **邮件内容与失败（NTF-007）**：内容经模板管道渲染，只携带收件学生本人必要信息（白名单变量自动转义，不读取报名表/评语/他生数据）；无附件、无免登录令牌。临时失败指数退避重试（2^N 分钟封顶 6 小时）；明确退信立即永久失败；连续失败自首次失败起 24 小时停止重试。`MarkPermanentFailureCommand` 在永久失败后以站内信提示用户（去重键幂等）并写特权审计通知管理员；邮件失败不回滚业务与站内信。
+- **模板与安全（NTF-005）**：平台默认模板由超管维护（内置 8 类安全种子）；社团各级管理员基于默认模板改文字（保存前强制 `sanitizeEmailHtml` 白名单净化＋`validateTemplateSafety` 校验，禁止脚本/表单/iframe/自动跳转/外链 JS/CSS/危险协议与头注入，未通过拒绝保存 IFC-ERR-011）；`EmailTemplateResolver` 解析顺序：社团自定义（安全）→ 平台默认 → 内置最小兜底，社团模板失效自动回退平台安全默认模板；支持预览（草稿同样过安全校验）、测试邮件、版本保存与回滚（`rollbackToVersion` 生成新版本保持版本链完整）。
+- **发信署名与回复地址（NTF-008/009）**：`resolveSenderIdentity` 按作用域解析——平台/联合事件用平台展示名＋平台账号，社团独立事件用该社团展示名＋该社团账号；模板出现 From/Sender/Reply-To/Bcc/Cc 声明即判定越权（`findIdentityOverrideAttempts`），HTML 模板不能覆盖发件人身份；回复地址固定等于实际发信账号（`EmailSendInput.replyTo === fromAddress`，适配器不得接受其他值）；历史投递保留发送时身份快照（渠道尝试 `senderIdentity`）。
+- **HTTP 面（接口清单 §14.4/§15.9）**：org 域 email-config GET/POST/test/rotate-key（脱敏＋权限）、org preferences GET/POST（社团级按类型开关）、email-templates save/preview/test/rollback；admin 域 email-config GET/POST/test/rotate-key、templates 目录、email-outbox 最近 50 条只读（`findRecentEmailAttempts`）。会话新增服务端解析的 `permissions`/`isPlatformAdmin`（fail-closed：未提供视为空集）。
+
+## 典型调用链
+
+权益领域命令（如录取结论发布）-> 同一本地事务原子保存业务结果＋通知事实＋收件人快照＋去重键（第 2 类边界，任一失败整体回滚）-> 站内信任务投递并创建唯一呈现记录 -> 邮件资格判定通过时创建渠道任务与模板快照 -> 发送后回读查询结果：临时失败转失败重试，明确退信或连续失败 24 小时转永久失败并站内信提示用户、通知管理员；恢复补投按原事件时间排队投递（IFC-NTF-001）。
+
+## 相关文档
+
+- [ADR-003 八类事务边界基线](../../../docs/architecture/ADR-003-八类事务边界基线.md)
+- [SRS 状态机转换明细（SRS-SM-NTF-001）](../../../docs/specification/SRS-状态机转换明细-v1.0.md)
+- [接口契约 v1.0](../../../docs/specification/接口契约-v1.0.md)
+- [数据模型与约束 v1.0](../../../docs/specification/数据模型与约束-v1.0.md)
+- [SRS v1.0（需求发现 08 站内信与权益通知）](../../../docs/specification/SRS-v1.0.md)
