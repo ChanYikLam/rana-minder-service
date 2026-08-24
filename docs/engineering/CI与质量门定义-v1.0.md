@@ -23,6 +23,14 @@
 | 10. 依赖审计   | 后端 `pnpm audit`、前端 `npm audit` 关键/高危漏洞门禁；许可证登记表更新检查                        | 无关键/高危未处置项                            |
 | 11. 文档一致性 | 文档链接检查（新增/修改文档的相对链接有效）                                                        | 通过                                           |
 
+覆盖率门禁（阶段 4b）基线测量环境说明（评审 P2-3）：
+
+- **基线来源**：`coverage-baseline.json` 为棘轮只升不降的对照基线（lines/branches/functions）。
+- **测量命令**：`npm run test:cov:baseline`（内部执行 `c8 -o coverage -- npm run coverage:all`，coverage:all = `src/**/*.spec.ts` + `test/*.spec.ts`，即 L1 单元+DI 引导）。
+- **测量环境**：基线在本机 Windows + Node v24.11.1 + c8 ^12.0.0（npm 安装）下测得；CI 为 Linux node:24 + pnpm + c8（同版本族）。环境差异（平台/包管理器/CPU 并发）可能引起 ±1pp 级覆盖波动——`coverage-gate.js` 已设 1.0pp 容差（RATCHET_TOLERANCE_PP）吸收该抖动，且基线与 CI 实测差异超过容差即门禁红、需重跑基线校准。
+- **校准**：覆盖率口径变更（如预编译产物、include 范围调整）后必须先重跑 `npm run test:cov:baseline` 更新基线再合入门禁，避免棘轮误红。
+- **真实 src 变更验证**：首个含 `src/**` 变更的 PR 应在合入前本地跑通 `npm run test:cov:gate`（完整模式）确认门禁对真实变更生效（非 checked=0 直通）。
+
 `CI-002`：触发策略：
 
 1. MR 到 `main`/`dev`：全量 11 阶段；

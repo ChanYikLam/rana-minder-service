@@ -5,6 +5,8 @@
 # 职责（P1-A 可选项落地）：本次变更新增/修改的 src/**/*.ts 生产代码文件，
 # 必须存在同名 *.spec.ts（同目录）或在文件内标注豁免标记：
 #   // no-spec-required <原因>
+# 或该文件已被其他测试实际覆盖（coverage-summary.json 中 lines.covered>0，
+# 如 test/notification-module-di.spec.ts 引导的 src 模块，评审 P2-4）。
 # 且同名 spec 不得是"陈旧 spec"——若 CI 阶段 4 已产出 coverage/coverage-summary.json，
 # 还须校验该文件在覆盖率报告中 lines.covered>0（即对应用例实际执行到了本次改动，
 # 否则存在同名 spec 却从未覆盖到该文件，判定陈旧 → MISS，评审 warning）。
@@ -92,6 +94,19 @@ checked=0
 COVERAGE_SUMMARY="$root/coverage/coverage-summary.json"
 have_coverage=0
 [ -f "$COVERAGE_SUMMARY" ] && have_coverage=1
+
+# P2-4 辅助：文件是否在覆盖率报告中被实际执行（lines.covered>0）。
+# 复用于：1) 陈旧 spec 判定（同名 spec 却未覆盖本次改动）；2) 无同名 spec 但被
+# 其他测试覆盖的豁免（如 test/notification-module-di.spec.ts 引导的 src 模块）。
+file_covered() {
+  node -e "
+    const fs=require('fs');
+    const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
+    const key=require('path').resolve(process.argv[2]);
+    const d=s[key];
+    if (!d || !d.lines || (d.lines.covered||0)===0) process.exit(1);
+  " "$COVERAGE_SUMMARY" "$1" >/dev/null 2>&1
+}
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   checked=$((checked + 1))
@@ -100,19 +115,18 @@ while IFS= read -r f; do
     # 同名 spec 存在：进一步防"陈旧 spec"——该文件须在覆盖率报告中被实际执行（lines.covered>0）。
     # 若 coverage-summary.json 无该文件记录或其 lines.covered==0，说明 spec 从未覆盖到本次改动
     #（陈旧/空壳 spec 蒙混），判定 MISS（评审 warning）。无覆盖率产物时退化为仅查存在性。
-    if [ "$have_coverage" = "1" ]; then
-      if ! node -e "
-        const fs=require('fs');
-        const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
-        const key=require('path').resolve(process.argv[2]);
-        const d=s[key];
-        if (!d || !d.lines || (d.lines.covered||0)===0) process.exit(1);
-      " "$COVERAGE_SUMMARY" "$f"; then
-        echo "MISS  $f -> $spec 存在但未覆盖该文件（陈旧 spec），请更新用例以覆盖本次改动"
-        fail=1
-        continue
-      fi
+    if [ "$have_coverage" = "1" ] && ! file_covered "$f"; then
+      echo "MISS  $f -> $spec 存在但未覆盖该文件（陈旧 spec），请更新用例以覆盖本次改动"
+      fail=1
+      continue
     fi
+    continue
+  fi
+  # P2-4：无同名 spec 但已被其他测试实际覆盖（如 test/notification-module-di.spec.ts
+  # 引导的 src 模块：notification.module / config / tasks.module 等）→ 豁免，不判 MISS，
+  # 避免未来改动这些文件误报（评审 P2-4）。
+  if [ "$have_coverage" = "1" ] && file_covered "$f"; then
+    echo "COVERED  $f (由其他测试覆盖，如 DI 引导测试；评审 P2-4)"
     continue
   fi
   # 同目录无同名 spec：全文件查豁免标记（评审 info：仅前 40 行会超行误报）
