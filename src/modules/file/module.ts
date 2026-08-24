@@ -102,7 +102,8 @@ export function createObjectStorePort(
   const endpoint = env.S3_ENDPOINT ?? env.STORAGE_ENDPOINT;
   if (endpoint !== undefined && endpoint.trim().length > 0) {
     const accessKeyId =
-      env.S3_ACCESS_KEY_ID ?? resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY');
+      env.S3_ACCESS_KEY_ID ??
+      resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY');
     const secretAccessKey =
       env.S3_SECRET_ACCESS_KEY ??
       resolveStorageSecret(env, 'STORAGE_SECRET_KEY_REF', 'STORAGE_SECRET_KEY');

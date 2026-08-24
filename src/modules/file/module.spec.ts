@@ -75,12 +75,18 @@ describe('resolveStorageSecret（评审 warning 修复：_REF 凭据解引用口
 
   it('_REF 为普通明文时原样返回（不重复解引用）', () => {
     const env: NodeJS.ProcessEnv = { STORAGE_ACCESS_KEY_REF: 'plain-key' };
-    assert.equal(resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY'), 'plain-key');
+    assert.equal(
+      resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY'),
+      'plain-key',
+    );
   });
 
   it('未配置 _REF 时回退到直接键', () => {
     const env: NodeJS.ProcessEnv = { STORAGE_ACCESS_KEY: 'direct' };
-    assert.equal(resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY'), 'direct');
+    assert.equal(
+      resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY'),
+      'direct',
+    );
   });
 
   it('_REF 解引用缺失的 env 目标 → 抛错（fail-closed，不静默降级）', () => {
