@@ -19,7 +19,9 @@ import { FakeDbAdapter } from '../../src/shared/testing/fake-db-adapter';
 import { FormUnitOfWork } from '../../src/modules/form/infrastructure/unit-of-work';
 import { InMemoryCasdoorPort } from '../../src/modules/organization/infrastructure/in-memory/memory-implementations';
 import { resolveActorFromHeaders } from '../../src/modules/organization/interfaces/actor';
-import { OrgDomainError, orgError } from '../../src/modules/organization/domain/types';
+import { OrgDomainError } from '../../src/modules/organization/domain/types';
+import { createRelationCommand } from '../../src/modules/organization/domain/models/relation-command';
+import { RelationCommandStateMachine } from '../../src/modules/organization/domain/state-machines/relation-command.state-machine';
 
 const ROOT = path.resolve(__dirname, '../..');
 const exists = (rel: string): boolean => fs.existsSync(path.join(ROOT, rel));
@@ -162,15 +164,21 @@ describe('TST-FAIL 001~013 故障关闭语义', () => {
     }
   });
 
-  it('FAIL-002 探针：身份门 fail-closed——生产环境拒绝信任 x-actor-id（IFC-ERR-001）', () => {
-    // 账号状态不可信时请求主体解析直接拒绝（不产生半可信身份）
+  it('FAIL-002 探针：身份门 fail-closed——生产环境拒绝信任 x-actor-id（IFC-ERR-FORBIDDEN）', () => {
+    // 账号状态不可信时请求主体解析直接拒绝（不产生半可信身份）。
+    // 与既有证据 actor.spec.ts 对齐：断言具体错误码 IFC-ERR-FORBIDDEN，
+    // 而非仅 instanceof OrgDomainError 的弱断言（IFC-ERR-001 为文档层编号，
+    // 实现层实际抛出的是 ErrorCode.FORBIDDEN）。
     assert.throws(
       () => resolveActorFromHeaders({ 'x-actor-id': 'u_root' }, { NODE_ENV: 'production' }),
-      (e: unknown) => e instanceof OrgDomainError,
+      (e: unknown) => e instanceof OrgDomainError && e.code === 'IFC-ERR-FORBIDDEN',
     );
   });
 
   it('FAIL-004 探针：Casdoor 异常 Group 写成员返回 failure 不假成功；不确定语义 = IFC-ERR-013', async () => {
+    // 场景：Casdoor Group 关系写入结果不确定/失败。
+    // 注：simulateAnomaly('no_access') 会把该 Group 加入 failingRefs，
+    // 写成员时由 failingRefs 机制返回 failure（readable=false 本身不驱动写失败）。
     const casdoor = new InMemoryCasdoorPort({
       groups: [
         {
@@ -190,15 +198,49 @@ describe('TST-FAIL 001~013 故障关闭语义', () => {
     });
     // 关键断言：外部写失败绝不允许返回 success（假成功即越权来源）
     assert.equal(result.outcome, 'failure');
-    // 外部结果不确定的领域语义由 EXTERNAL_UNKNOWN 承载（先回读再收口）。
-    // 生产映射路径：回读未确认 → 状态机抛出 orgError.externalUnknown（同文件
-    // relation-command.state-machine.ts 的 readback_confirmed 分支），此处调用同一
-    // 领域工厂验证「外部不确定→EXTERNAL_UNKNOWN」确实落到契约错误码 IFC-ERR-013，
-    // 而非仅做常量等值检查。
-    const uncertain = orgError.externalUnknown('模拟：回读未确认（外部结果不确定）');
-    assert.ok(uncertain instanceof OrgDomainError);
-    assert.equal(uncertain.code, ErrorCode.EXTERNAL_UNKNOWN);
-    assert.equal(uncertain.code, 'IFC-ERR-013');
+
+    // 外部结果不确定的领域语义由 EXTERNAL_UNKNOWN（IFC-ERR-013）承载，且必须真实走通
+    // 状态机 readback_confirmed 分支（回读未确认全部目标 → 拒绝转成功），而非仅调用工厂
+    // 做错误码等值检查。此处驱动与 production 同源的 RelationCommandStateMachine：
+    const command = createRelationCommand({
+      id: 'relcmd-fail-004',
+      clubId: 'club-acm-1',
+      type: 'join_department',
+      subjectId: 'u_x',
+      originalRelation: [],
+      targetRelation: [
+        {
+          stepId: 's1',
+          kind: 'add_member',
+          targetGroup: { owner: 'club-acm', name: '宣传部' },
+          subjectId: 'u_x',
+          idempotencyKey: 'k1',
+          order: 0,
+          attemptCount: 0,
+        },
+      ],
+      objectVersion: 3,
+      idempotencyKey: 'rel:fail-004:u_x',
+      submittedBy: 'u_admin',
+      now: new Date('2026-08-01T00:00:00.000Z'),
+    });
+    const machine = new RelationCommandStateMachine();
+    assert.throws(
+      () =>
+        machine.transition({
+          command: { ...command, status: 'processing' },
+          event: 'readback_confirmed',
+          now: new Date('2026-08-01T00:05:00.000Z'),
+          facts: {
+            // 回读未确认全部目标（confirmedSteps 不全）→ 状态机拒绝转成功并抛 externalUnknown
+            readback: { confirmedSteps: [] },
+          },
+        }),
+      (e: unknown) =>
+        e instanceof OrgDomainError &&
+        e.code === ErrorCode.EXTERNAL_UNKNOWN &&
+        e.code === 'IFC-ERR-013',
+    );
   });
 
   it('FAIL-005 探针：数据库故障——事务内抛错走 rollback 收口，不产生 commit 假成功', async () => {
