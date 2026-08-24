@@ -93,10 +93,17 @@ describe('recruitment 4.4 剩余能力（通道/补救/路径/面试选时）', 
       /新窗口截止须严格晚于/,
     );
     const later = new Date(NOW.getTime() + 86400000);
-    assert.equal(
-      (await reopen.execute({ channelId, newDeadline: later, actor: ACTOR, now: NOW })).status,
-      'OPEN',
-    );
+    const reopened = await reopen.execute({
+      channelId,
+      newDeadline: later,
+      actor: ACTOR,
+      now: NOW,
+    });
+    assert.equal(reopened.status, 'OPEN');
+    // Critical 修复断言：重开新窗口截止必须持久化（channel.reopen 写入 deadline；
+    // 曾因 use case 误调 channel.open 导致 deadline 恒 null）
+    const persisted = await repo.loadChannel(channelId);
+    assert.equal(persisted!.deadline!.getTime(), later.getTime());
   });
 
   it('通道暂停前置：未开放通道不可暂停', async () => {

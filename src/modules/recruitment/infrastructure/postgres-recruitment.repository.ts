@@ -240,7 +240,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
   async loadChannel(id: string): Promise<ApplicationChannelSnapshot | null> {
     const rows = await this.db.query<ChannelRow>(
       this.uow.active,
-      `SELECT id, activity_id, club_id, status, open_at, close_at, min_choices, max_choices, created_at, updated_at
+      `SELECT id, activity_id, club_id, status, open_at, close_at, deadline, min_choices, max_choices, created_at, updated_at
           FROM application_channels WHERE id = $1`,
       [id],
     );
@@ -250,8 +250,8 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     await this.db.query(
       this.uow.active,
       `INSERT INTO application_channels
-          (id, activity_id, club_id, status, open_at, close_at, min_choices, max_choices, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          (id, activity_id, club_id, status, open_at, close_at, deadline, min_choices, max_choices, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         ON CONFLICT (id) DO UPDATE SET
           activity_id = EXCLUDED.activity_id, club_id = EXCLUDED.club_id, status = EXCLUDED.status,
           open_at = EXCLUDED.open_at, close_at = EXCLUDED.close_at, deadline = EXCLUDED.deadline, min_choices = EXCLUDED.min_choices,
@@ -263,6 +263,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.status,
         s.openAt,
         s.closeAt,
+        s.deadline,
         s.minChoices,
         s.maxChoices,
         s.createdAt,

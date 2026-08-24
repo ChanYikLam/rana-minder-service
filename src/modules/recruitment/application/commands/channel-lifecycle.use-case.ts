@@ -203,10 +203,10 @@ export class DefaultReopenApplicationChannelUseCase implements ReopenApplication
     if (input.newDeadline.getTime() <= input.now.getTime()) {
       throw recruitmentErrors.validation('新窗口截止须严格晚于当前时刻');
     }
+    // Critical 修复：必须调用 reopen()（CLOSED → OPEN 原子转换 + 新截止持久化到
+    // deadline）；open() 仅在首次开放设置 openAt、从不写 deadline
     if (
-      !channel.open(new DefaultApplicationChannelStateMachine(), input.now, {
-        newDeadlineStrictlyAfterNow: true,
-      })
+      !channel.reopen(new DefaultApplicationChannelStateMachine(), input.newDeadline, input.now)
     ) {
       throw recruitmentErrors.preconditionFailed('重开报名通道失败（新截止守卫不满足）');
     }
