@@ -49,8 +49,13 @@ const savedEnv: NodeJS.ProcessEnv = { ...process.env };
 
 before(async () => {
   // ---- 设置装配开关（必须在动态 import('./module') 之前，否则顶层常量已固定）----
+  // 自包含兜底：不依赖外部 .env.test——通知模块密钥加密在非开发环境要求主密钥，
+  // 缺失时 NotificationModule 装配即抛错；此处注入仅测试进程内有效的测试键。
+  if (!process.env['EMAIL_SECRET_CIPHER_KEY']) {
+    process.env['EMAIL_SECRET_CIPHER_KEY'] = 'test-only-cipher-key';
+  }
   process.env = {
-    ...savedEnv,
+    ...process.env,
     NODE_ENV: 'test',
     ORG_DB_REAL: '1',
     ORG_CASDOOR_REAL: '1',
@@ -94,13 +99,27 @@ before(async () => {
   GroupReconcileService = (await import('./application/group-reconcile.service'))
     .GroupReconcileService;
 
-  // 恢复 shell 环境（避免影响后续逻辑对 process.env 的读取）
-  process.env = savedEnv;
+  // ---- 防御性断言（评审 info③）：模块缓存分支必须与开关一致，否则大声失败 ----
+  // 若日后换用共享进程的 runner（vitest/ts-mocha），./module 可能已被其他 spec
+  // 以默认分支先加载并缓存——此时快照为全 false，本套件的"真实分支"断言会静默
+  // 假绿。此处显式拒绝该状态。
+  const snapshot = mod.ORG_WIRING_SNAPSHOT;
+  if (!snapshot?.pg || !snapshot.httpCasdoor || !snapshot.platformJobs || !snapshot.notifyChannel) {
+    throw new Error(
+      `module.real-wiring.spec 需要独立进程运行：当前进程内 './module' 缓存的装配分支为 ` +
+        `${JSON.stringify(snapshot)}（期望全 true）。共享 runner 会命中默认分支缓存，` +
+        '导致真实分支断言假绿——请在 node --test 独立进程下运行本文件。',
+    );
+  }
+
+  // 注意：不在此处恢复 process.env——buildModuleRef 的 DI 编译发生在测试期，
+  // 需要保持 NODE_ENV=test（通知模块密钥加密在非开发环境强制要求主密钥）与
+  // 各开关；统一在 after() 中还原整个进程环境。
 });
 
 after(() => {
-  // 恢复 NODE_ENV，避免影响其它测试文件在同一 runner 下的行为（防御性）
-  process.env = { ...savedEnv, NODE_ENV: 'test' };
+  // 统一还原进程环境（含 NODE_ENV 与注入的测试主密钥），避免影响同 runner 其它文件
+  process.env = { ...savedEnv };
 });
 
 // ---- 测试用 mock 依赖 ----
@@ -142,13 +161,13 @@ const mockConfig: import('../../config').RanaMinderConfig = {
   job: { defaultLeaseMs: 60_000, schedulerIntervalMs: 1_000, maxAttempts: 5 },
 };
 
-/** 复用统一的编译配置：org 真实分支 + mock 全部外部依赖 */
-function buildModuleRef() {
+/** 复用统一的编译配置：org 真实分支 + mock 全部外部依赖（可注入劣化 config 验证 fail-fast） */
+function buildModuleRef(configOverride?: import('../../config').RanaMinderConfig) {
   return Test.createTestingModule({
     imports: [ConfigurationModule.forRoot(), OrganizationModule],
   })
     .overrideProvider(RANA_MINDER_CONFIG)
-    .useValue(mockConfig)
+    .useValue(configOverride ?? mockConfig)
     .overrideProvider(DB_ADAPTER)
     .useValue(mockDb)
     .overrideProvider(ADAPTERS_NOTIFY)
@@ -215,5 +234,21 @@ describe('#68 真实适配器分支装配冒烟（开关全开，forwardRef 循�
     const moduleRef = await buildModuleRef();
     assert.ok(moduleRef.get(orgPorts.RECONCILE_PORT) instanceof GroupReconcileService);
     await moduleRef.close();
+  });
+
+  it('ORG_CASDOOR_REAL=1：casdoor 必填字段缺失 → 启动期 fail-fast（评审 info②）', async () => {
+    const badConfig: import('../../config').RanaMinderConfig = {
+      ...mockConfig,
+      casdoor: { ...mockConfig.casdoor, endpoint: '' },
+    };
+    // 空 endpoint 不允许静默构造空 base 的 HttpCasdoorGroupAdapter（与 DB/Notify 同口径）
+    await assert.rejects(
+      async () => {
+        const moduleRef = await buildModuleRef(badConfig);
+        moduleRef.get(orgPorts.CASDOOR_GROUP_PORT);
+        await moduleRef.close();
+      },
+      (err: unknown) => err instanceof Error && /缺少必填字段.*endpoint/.test(err.message),
+    );
   });
 });

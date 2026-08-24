@@ -15,6 +15,15 @@
  * - ReconcilePort 一律使用真实对账服务（GroupReconcileService）：检测绑定
  *   Group 的删除/失权/移动，开发态跑在内存 Casdoor 桩上同样生效。
  *
+ * 已知取舍（评审④声明）：RELATION_COMMAND_AUDIT_PORT 的 PG 审计仓储尚未实现——
+ * 真实 DB 分支下非生产以内存审计降级（重启即丢），生产 fail-fast 禁止启动；
+ * PG 审计仓储落地后移除该缺口。
+ *
+ * 装配校验时机（评审⑤/info①）：ORG_*_REAL 分支在模块加载期按当时进程环境
+ * 一次性冻结；assertOrgRealWiring 不再于 import 期抛错，延迟到 DI 编译/启动
+ * （providers 首位 ORG_WIRING_VALIDATION）以加载期快照求值——静态 import 本
+ * 模块不会因 shell 误导出而崩溃，误配在装配入口干净失败。
+ *
  * CurrentPermissionsPort：身份鉴权（identity）接线为后续任务；在此之前生产
  * 构造 MemoryCurrentPermissionsPort 会被守卫拒绝（fail-closed），不会静默放行。
  */
@@ -118,10 +127,29 @@ export function orgNotifyChannelEnabled(env: NodeJS.ProcessEnv = process.env): b
   return env['ORG_NOTIFY_CHANNEL'] === '1';
 }
 
-const USE_PG = orgDbRealEnabled();
-const USE_HTTP_CASDOOR = orgCasdoorRealEnabled();
-const USE_PLATFORM_JOBS = orgJobsPlatformEnabled();
-const USE_NOTIFY_CHANNEL = orgNotifyChannelEnabled();
+/**
+ * 分支在模块加载期按当时的进程环境一次性冻结（静态 @Module 装配的固有限制）；
+ * 对应的耦合校验（assertOrgRealWiring）**不再于加载期抛错**，而是延迟到 DI
+ * 装配入口求值（见 providers 首位的 ORG_WIRING_VALIDATION，评审⑤/info①）：
+ * 静态 import 本模块不会因 shell 误导出而崩溃，误配在应用/测试编译装配时干净失败。
+ */
+const LOAD_TIME_ENV: NodeJS.ProcessEnv = { ...process.env };
+const USE_PG = orgDbRealEnabled(LOAD_TIME_ENV);
+const USE_HTTP_CASDOOR = orgCasdoorRealEnabled(LOAD_TIME_ENV);
+const USE_PLATFORM_JOBS = orgJobsPlatformEnabled(LOAD_TIME_ENV);
+const USE_NOTIFY_CHANNEL = orgNotifyChannelEnabled(LOAD_TIME_ENV);
+
+/**
+ * 加载期分支快照（评审 info③）：供测试/诊断断言"当前进程内缓存的模块实际走在
+ * 哪个分支"——若 runner 共享模块缓存导致本模块以默认分支先行加载，真实分支
+ * 套件可据此在 before() 阶段大声失败，避免静默"假绿"。
+ */
+export const ORG_WIRING_SNAPSHOT = {
+  pg: USE_PG,
+  httpCasdoor: USE_HTTP_CASDOOR,
+  platformJobs: USE_PLATFORM_JOBS,
+  notifyChannel: USE_NOTIFY_CHANNEL,
+} as const;
 
 /**
  * fail-fast 启动校验（评审 info 建议）：ORG_*_REAL 真实适配器分支依赖底层
@@ -142,19 +170,34 @@ export function assertOrgRealWiring(env: NodeJS.ProcessEnv = process.env): void 
     throw new Error(
       'ORG_DB_REAL=1 但 ADAPTERS_DB_REAL 未开启：PostgreSQL 聚合仓储需要真实 ' +
         'DB_ADAPTER（PostgresDbAdapter），否则拿到 NotWired 桩。请同时设置 ' +
-        'ADAPTERS_DB_REAL=1（或关闭 ORG_DB_REAL 保持 fail-closed 内存桩）。',
+        'ADAPTERS_DB_REAL=1（或关闭 ORG_DB_REAL 保持 fail-closed 内存桩）。' +
+        '（来源：当前进程环境变量；如为 shell 误导出请检查本进程 env）',
     );
   }
   if (orgNotifyChannelEnabled(env) && env['ADAPTERS_NOTIFY_REAL'] !== '1') {
     throw new Error(
       'ORG_NOTIFY_CHANNEL=1 但 ADAPTERS_NOTIFY_REAL 未开启：外部通知渠道需要真实 ' +
         'ADAPTERS_NOTIFY，否则 NotifyChannelNotificationPort 拿到不可用桩。请同时 ' +
-        '设置 ADAPTERS_NOTIFY_REAL=1（或关闭 ORG_NOTIFY_CHANNEL）。',
+        '设置 ADAPTERS_NOTIFY_REAL=1（或关闭 ORG_NOTIFY_CHANNEL）。' +
+        '（来源：当前进程环境变量）',
     );
   }
 }
 
-assertOrgRealWiring();
+/**
+ * DI 装配期校验 provider（评审⑤/info①）：assertOrgRealWiring 不再于模块加载期
+ * 作为顶层副作用执行——静态 import 本模块不会因 shell 误导出而崩溃；校验延迟到
+ * Nest 容器编译/应用启动（DI 装配入口）时以加载期环境快照求值，误配仍 fail-fast，
+ * 但表现为装配阶段干净失败而非 import 连锁崩溃。
+ */
+export const ORG_WIRING_VALIDATION = Symbol('ORG_WIRING_VALIDATION');
+const OrgWiringValidationProvider = {
+  provide: ORG_WIRING_VALIDATION,
+  useFactory: () => {
+    assertOrgRealWiring(LOAD_TIME_ENV);
+    return true;
+  },
+};
 
 /** PG 聚合仓储共享的工作单元（仅 ORG_DB_REAL=1 时装配） */
 export const ORG_UNIT_OF_WORK = Symbol('ORG_UNIT_OF_WORK');
@@ -171,6 +214,8 @@ const OrgUnitOfWorkProvider = {
   imports: [...(USE_PLATFORM_JOBS ? [forwardRef(() => TasksModule)] : [])],
   controllers: [AdminClubsController, AdminPermissionTemplatesController, OrgWorkspaceController],
   providers: [
+    // ---- 装配校验（评审⑤/info①）：DI 编译/启动期执行，import 期不再抛错 ----
+    OrgWiringValidationProvider,
     { provide: CLOCK, useFactory: () => new SystemClock() },
     // ---- CasdoorGroupPort ----
     ...(USE_HTTP_CASDOOR
@@ -179,6 +224,24 @@ const OrgUnitOfWorkProvider = {
             provide: CASDOOR_GROUP_PORT,
             useFactory: (config: RanaMinderConfig) => {
               const casdoor = config.casdoor;
+              // 必填字段启动校验（评审 info②）：误配时拒绝以空 base 静默构造，
+              // 与 DB/Notify 的 fail-fast 口径一致。
+              const missing = (
+                [
+                  ['endpoint', casdoor.endpoint],
+                  ['clientId', casdoor.clientId],
+                  ['organization', casdoor.organization],
+                ] as const
+              )
+                .filter(([, v]) => typeof v !== 'string' || v.trim() === '')
+                .map(([k]) => k);
+              if (missing.length > 0) {
+                throw new Error(
+                  `ORG_CASDOOR_REAL=1 但 config.casdoor 缺少必填字段：${missing.join('、')}。` +
+                    'HttpCasdoorGroupAdapter 将以空 base 静默构造，故启动期即拒绝' +
+                    '（与 DB/Notify fail-fast 同口径）。',
+                );
+              }
               const clientSecret = isSecretRef(casdoor.clientSecretRef)
                 ? resolveSecret(casdoor.clientSecretRef)
                 : casdoor.clientSecretRef;
@@ -231,10 +294,32 @@ const OrgUnitOfWorkProvider = {
               new PostgresGroupMappingRegistry(db, uow),
             inject: [DB_ADAPTER, ORG_UNIT_OF_WORK],
           },
+          {
+            // ORG-M6 已知缺口（评审④）：RELATION_COMMAND_AUDIT_PORT 的 PG 审计仓储
+            // 尚未实现。真实 DB 分支下：非生产以内存审计降级（重启即丢，仅开发联调）；
+            // 生产 fail-fast 显式报错——禁止以进程内存审计对外服务（审计持久化要求）。
+            provide: RELATION_COMMAND_AUDIT_PORT,
+            useFactory: () => {
+              if (process.env['NODE_ENV'] === 'production') {
+                throw new Error(
+                  '生产环境 ORG_DB_REAL=1 要求关系命令审计持久化（ORG-M6 已知缺口）：' +
+                    'RELATION_COMMAND_AUDIT_PORT 的 PG 审计仓储尚未实现；' +
+                    '落地前禁止启用真实 DB 分支（审计留痕不得仅存进程内存）。',
+                );
+              }
+              return new InMemoryRelationCommandAuditStore();
+            },
+          },
         ]
       : [
           { provide: CLUB_STORE, useFactory: () => new InMemoryClubStore() },
           { provide: RELATION_COMMAND_STORE, useFactory: () => new InMemoryRelationCommandStore() },
+          {
+            // 非真实 DB 分支（纯内存桩模式）：audit 同为内存态；该分支本身仅限
+            // 开发/测试（生产构造任一内存桩都会被 GOV-007 守卫拒绝）。
+            provide: RELATION_COMMAND_AUDIT_PORT,
+            useFactory: () => new InMemoryRelationCommandAuditStore(),
+          },
           {
             provide: APPOINTMENT_COMMAND_STORE,
             useFactory: () => new InMemoryAppointmentCommandStore(),
