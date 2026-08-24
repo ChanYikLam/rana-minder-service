@@ -6,14 +6,24 @@
  * RecruitmentController → Nest HTTP 适配控制器与守卫。
  *
  * 会话：Casdoor OIDC 会话链路接入前绑定 RejectAllRecruitmentAuthSessionProvider
- * （fail-closed，受保护端点 401）；授权：3.x 组织/身份授权落地前绑定
- * NotWiredRecruitmentAuthorization（全部管理/提交操作拒绝）。
+ * （fail-closed，受保护端点 401）；授权：已接线组织授权（OrgBackedRecruitment-
+ * Authorization，ORG-038 经 CURRENT_PERMISSIONS_PORT 逐请求重算；
+ * canManage=club:recruitment:manage，canSubmit=非现任成员）。
+ * 表单集成（4.4b 已收口）：RECRUITMENT_FORM_PORT 委托 form 模块提交仓储
+ * （FormBackedRecruitmentForm），报名表走 4.1 真实表单提交链路。
  */
 
 import { Module } from '@nestjs/common';
 
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
+import { OrganizationModule } from '../organization/module';
+import { FormModule } from '../form/form.module';
+import { IdentityModule } from '../identity/identity.module';
+import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
+import { adaptSessionProvider } from '../../shared/adapt-session-provider';
+import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
+import { FORM_SUBMISSION_REPOSITORY } from '../form/tokens';
 import { DB_ADAPTER } from '../../adapters/tokens';
 
 import {
@@ -37,8 +47,8 @@ import {
 
 import { RecruitmentUnitOfWork } from './infrastructure/unit-of-work';
 import { PostgresRecruitmentRepository } from './infrastructure/postgres-recruitment.repository';
-import { NotWiredRecruitmentAuthorization } from './application/ports/recruitment-authorization.port';
-import { StubRecruitmentForm } from './application/ports/recruitment-form.port';
+import { OrgBackedRecruitmentAuthorization } from './infrastructure/org-recruitment-authorization';
+import { FormBackedRecruitmentForm } from './infrastructure/form-backed-recruitment-form';
 
 import { DefaultCreateRecruitmentActivityUseCase } from './application/commands/create-recruitment-activity.use-case';
 import { DefaultPublishRecruitmentActivityUseCase } from './application/commands/publish-recruitment-activity.use-case';
@@ -55,19 +65,19 @@ import { DefaultListApplicationsQuery } from './application/queries/list-applica
 import { DefaultListInterviewsQuery } from './application/queries/list-interviews.query';
 
 import { RecruitmentController } from './interfaces/controllers/recruitment.controller';
-import { RejectAllRecruitmentAuthSessionProvider } from './interfaces/nest/recruitment-auth-session';
 import { RecruitmentAuthGuard } from './interfaces/nest/recruitment-auth.guard';
 import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.nest.controller';
 import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-recruitment.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule],
+  imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule, FormModule],
   controllers: [OrgRecruitmentNestController, ApplicantRecruitmentNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
     {
       provide: RECRUITMENT_AUTH_SESSION_PROVIDER,
-      useClass: RejectAllRecruitmentAuthSessionProvider,
+      useFactory: (identitySession) => adaptSessionProvider(identitySession),
+      inject: [AUTH_SESSION_PROVIDER],
     },
     RecruitmentAuthGuard,
     // ----- 工作单元（事务边界）-----
@@ -82,9 +92,18 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
       useFactory: (db, uow) => new PostgresRecruitmentRepository(db, uow),
       inject: [DB_ADAPTER, RecruitmentUnitOfWork],
     },
-    // ----- 端口（3.x 接入前失败关闭桩）-----
-    { provide: RECRUITMENT_AUTHORIZATION, useClass: NotWiredRecruitmentAuthorization },
-    { provide: RECRUITMENT_FORM_PORT, useClass: StubRecruitmentForm },
+    // ----- 端口（授权已接线组织授权；表单集成已收口 FormBackedRecruitmentForm）-----
+    {
+      provide: RECRUITMENT_AUTHORIZATION,
+      useFactory: (permissions) => new OrgBackedRecruitmentAuthorization(permissions),
+      inject: [CURRENT_PERMISSIONS_PORT],
+    },
+    // ----- 4.4b 真集成收口：招新表单委托 form 模块提交仓储（报名表走真实表单链路）-----
+    {
+      provide: RECRUITMENT_FORM_PORT,
+      useFactory: (submissions) => new FormBackedRecruitmentForm(submissions),
+      inject: [FORM_SUBMISSION_REPOSITORY],
+    },
     // ----- 应用命令 -----
     {
       provide: CREATE_RECRUITMENT_ACTIVITY_USE_CASE,

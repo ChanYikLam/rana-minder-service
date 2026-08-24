@@ -9,8 +9,10 @@ import {
   InMemoryAppointmentCommandStore,
   InMemoryCasdoorPort,
   InMemoryClubStore,
+  InMemoryGroupMappingRegistry,
   InMemoryJobScheduler,
   InMemoryNotificationPort,
+  InMemoryRelationCommandAuditStore,
   InMemoryRelationCommandStore,
 } from '../../infrastructure/in-memory/memory-implementations';
 import type { CurrentPermissionsPort } from '../ports';
@@ -62,9 +64,11 @@ function buildHarness() {
     relationStore,
     clubs,
     casdoor,
+    new InMemoryGroupMappingRegistry(),
     scheduler,
     notifications,
     permissions,
+    new InMemoryRelationCommandAuditStore(),
   );
   const useCase = new AppointmentCommandUseCase(
     apptStore,

@@ -143,6 +143,33 @@ export interface ReconcilePort {
 }
 
 // --------------------------------------------------------------------------
+// 关系命令审计留痕端口（SRS-SM-ORG-002 状态机 requiredSideEffects 落点；
+// ORG-027 审计事实基线：原关系快照 + 每次状态迁移的副作用留痕）
+// --------------------------------------------------------------------------
+
+export interface RelationCommandAuditEntry {
+  readonly commandId: string;
+  readonly clubId: string;
+  /** 触发迁移的状态机事件（submit/write_started/readback_confirmed/…） */
+  readonly eventType: string;
+  readonly fromStatus: string;
+  readonly toStatus: string;
+  /** 状态机声明的副作用标签（requiredSideEffects 原样逐条落痕） */
+  readonly sideEffect: string;
+  /** 补偿顺序等结构化补充信息（如 compensate_in_order 的 stepId 序列） */
+  readonly detail: Readonly<Record<string, unknown>> | null;
+  readonly occurredAt: string;
+}
+
+export interface RelationCommandAuditPort {
+  /**
+   * 同事务语义追加一条审计留痕（append-only；失败须上抛，不得静默丢弃——
+   * 审计缺失等同于该状态迁移未留痕，验收口径不通过）。
+   */
+  record(entry: RelationCommandAuditEntry): Promise<void>;
+}
+
+// --------------------------------------------------------------------------
 // job 调度端口（ADR-004：持久任务与租约；单执行租约、调度幂等）
 // --------------------------------------------------------------------------
 
@@ -204,8 +231,12 @@ export interface CurrentPermissionsPort {
 // --------------------------------------------------------------------------
 
 export interface ControlledBatchPort {
-  /** 平台侧批量执行器接入点：执行一个批次阶段（骨架） */
-  execute(batchId: string, phase: string): Promise<{ ok: boolean; error?: string }>;
+  /** 平台侧批量执行器接入点：执行一个批次阶段，并消费该阶段声明的副作用标签 */
+  execute(
+    batchId: string,
+    phase: string,
+    requiredSideEffects?: readonly string[],
+  ): Promise<{ ok: boolean; error?: string }>;
 }
 
 // --------------------------------------------------------------------------
@@ -216,6 +247,7 @@ export const CLOCK = Symbol('ORG_CLOCK');
 export const CASDOOR_GROUP_PORT = Symbol('ORG_CASDOOR_GROUP_PORT');
 export const CLUB_STORE = Symbol('ORG_CLUB_STORE');
 export const RELATION_COMMAND_STORE = Symbol('ORG_RELATION_COMMAND_STORE');
+export const RELATION_COMMAND_AUDIT_PORT = Symbol('ORG_RELATION_COMMAND_AUDIT_PORT');
 export const APPOINTMENT_COMMAND_STORE = Symbol('ORG_APPOINTMENT_COMMAND_STORE');
 export const PERMISSION_TEMPLATE_STORE = Symbol('ORG_PERMISSION_TEMPLATE_STORE');
 export const GROUP_MAPPING_REGISTRY = Symbol('ORG_GROUP_MAPPING_REGISTRY');

@@ -504,4 +504,69 @@ describe('4.5.2 常规入社邀请（MEM-004、SRS-SM-MEM-004）', () => {
     assert.equal(second.invitation.status, 'HIGH_PRIORITY_SYNC_ANOMALY');
     assert.equal(second.invitation.version, first.invitation.version); // 不产生多余写入
   });
+
+  it('状态查询访问控制：本人/负责人/人事可查看；部门负责人与成员无权（IFC-ERR-003）', async () => {
+    const rig = makeRig();
+    const inv = await rig.create.execute(createInput);
+    // 本人可查看
+    const bySelf = await rig.status.getStatus(inv.routineInvitationId, {
+      principalId: 'stu1',
+      roles: ['MEMBER'],
+      clubId: 'c1',
+    });
+    assert.equal(bySelf.routineInvitationId, inv.routineInvitationId);
+    // 负责人/人事可查看（同社团）
+    await rig.status.getStatus(inv.routineInvitationId, {
+      principalId: 'hr1',
+      roles: ['HR_ADMIN'],
+      clubId: 'c1',
+    });
+    await rig.status.getStatus(inv.routineInvitationId, {
+      principalId: 'leader1',
+      roles: ['CLUB_LEADER'],
+      clubId: 'c1',
+    });
+    // 部门负责人/成员（非本人）无权
+    await assert.rejects(
+      rig.status.getStatus(inv.routineInvitationId, {
+        principalId: 'dep1',
+        roles: ['DEPARTMENT_LEADER'],
+        clubId: 'c1',
+      }),
+      /IFC-ERR-003/,
+    );
+    await assert.rejects(
+      rig.status.getStatus(inv.routineInvitationId, {
+        principalId: 'other',
+        roles: ['MEMBER'],
+        clubId: 'c1',
+      }),
+      /IFC-ERR-003/,
+    );
+    // 跨社团越权：他社团负责人/人事不得查看本社团邀请
+    await assert.rejects(
+      rig.status.getStatus(inv.routineInvitationId, {
+        principalId: 'leaderB',
+        roles: ['CLUB_LEADER'],
+        clubId: 'c2',
+      }),
+      /IFC-ERR-003/,
+    );
+    await assert.rejects(
+      rig.status.getStatus(inv.routineInvitationId, {
+        principalId: 'hrB',
+        roles: ['HR_ADMIN'],
+        clubId: 'c2',
+      }),
+      /IFC-ERR-003/,
+    );
+  });
+
+  it('状态查询：不存在的邀请抛 IFC-ERR-006（而非普通 Error，供 404 映射）', async () => {
+    const rig = makeRig();
+    await assert.rejects(
+      rig.status.getStatus('no-such-id'),
+      (error: unknown) => error instanceof Error && error.message.startsWith('IFC-ERR-006'),
+    );
+  });
 });

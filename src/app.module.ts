@@ -28,7 +28,8 @@
  * 4. 适配：adapters（casdoor / db / mail / storage）受 DEP-Q-001/002 锁定后接入
  *
  * 当前已接入：OrganizationModule、TasksModule、FileModule、AdaptersModule、FormModule、
- * NotificationModule、InvitationModule、MembershipModule（5.2.1 成员经历）。
+ * NotificationModule、InvitationModule、MembershipModule（5.2.1 成员经历）、
+ * RecruitmentModule（4.4 普通招新主链路装配）、ConfigModule（5.5.1 社团展示资料）。
  * 任何在此处接人的 module 不得越过 ADR-002 的状态机唯一责任与 ADR-003 的本地原子
  * 提交边界。
  */
@@ -52,6 +53,9 @@ import { JointModule } from './modules/joint/joint.module';
 import { InvitationModule } from './modules/invitation/module';
 import { MembershipModule } from './modules/membership/module';
 import { AuditModule } from './modules/audit/module';
+import { StatExportModule } from './modules/stat-export/module';
+import { RecruitmentModule } from './modules/recruitment/recruitment.module';
+import { ConfigModule } from './modules/config/module';
 import { DB_STATUS_PORT, TASK_SUMMARY_PORT } from './platform/observability/status-page/tokens';
 import {
   NestOpsTelemetry,
@@ -81,6 +85,9 @@ import type { TaskRepository } from './platform/tasks/contracts';
     InvitationModule,
     MembershipModule,
     AuditModule,
+    StatExportModule,
+    RecruitmentModule,
+    ConfigModule,
   ],
   controllers: [],
   providers: [

@@ -44,7 +44,8 @@ ENV NODE_ENV=production TZ=UTC RANAMINDER_CONFIG=/etc/ranaminder/config.yaml
 WORKDIR /app
 RUN groupadd --gid 10001 ranaminder && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin ranaminder && mkdir -p /etc/ranaminder
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-RUN corepack enable && pnpm install --prod --frozen-lockfile && pnpm store prune
+RUN corepack enable && pnpm install --prod --frozen-lockfile && pnpm store prune && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /root/.cache/node/corepack   # 运行阶段无需 npm/corepack，移除基础镜像内置 npm 与 corepack（及其 pnpm 缓存）消除其依赖层漏洞（DOCK-021 注 5）
 COPY --from=build /app/dist ./dist
 USER ranaminder
 EXPOSE 3000
@@ -57,6 +58,7 @@ CMD ["node", "dist/main.js"]
 2. **运行期依赖独立安装**：运行阶段 `pnpm install --prod --frozen-lockfile`（锁文件驱动），不复制构建期 `node_modules`，避免 dev 依赖与构建平台差异进入镜像；
 3. **源码不进入运行阶段**：仅复制 `dist/` 产物；`docs`、`test`、`scripts` 等由 `.dockerignore` 排除（§6）；
 4. 构建命令与 CI 阶段 7 一致（`pnpm run build`）；若后续引入独立 worker 构建脚本（`build:worker`），在构建阶段同步执行。
+5. **运行阶段不保留 npm/corepack**：生产镜像无需 npm 命令；`pnpm install --prod` 完成后 `rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /root/.cache/node/corepack`，消除 node:24-slim 基础镜像内置 npm 与 corepack（及其 pnpm 缓存）及其依赖（`tar`、`minimatch`、`glob`、`cross-spawn`、`ip-address`、`brace-expansion` 等）的 HIGH/CRITICAL 漏洞，保证阶段 8b 镜像安全扫描（trivy `--exit-code 1`）与发布门通过。
 
 ## 4. 双入口镜像
 
@@ -77,7 +79,9 @@ CMD ["node", "dist/main.js"]
 
 `DOCK-042`：**根文件系统只读**：容器以 `--read-only` 运行（`--tmpfs /tmp` 提供临时写入），由编排层配置；镜像本身按只读根设计（无运行时写路径）。
 
-`DOCK-043`：**健康检查**：`Dockerfile` 不内置 `HEALTHCHECK`（worker 无监听端口，内置会误判）；HTTP 容器的健康检查由编排层定义——首版用 TCP 探针（`:3000`）或进程探针；HTTP 健康端点与 ops 模块内置状态页/启动判定（部署运维手册 §8）落地时对齐，不臆造端点。
+`DOCK-043`：**健康检查**：`Dockerfile` 不内置 `HEALTHCHECK`（worker 无监听端口，内置会误判）；HTTP 容器的健康检查由编排层定义——首版用进程探针（见下）；HTTP 健康端点与 ops 模块内置状态页/启动判定（部署运维手册 §8）落地时对齐，不臆造端点。
+
+`DOCK-043a`：**进程探针（首版落地，编排层 `docker-compose.yml`）**：因基础镜像为 Debian slim（默认无 procps/`pgrep`），HTTP 与 Worker 容器统一使用 `/proc/1/cmdline` 的 `grep -q` 进程存活探针，避免因探针工具缺失导致健康检查误判，也避免臆造 HTTP 健康端点。探针只证明**进程存活**；真实**业务健康**由应用启动判定（配置校验/依赖就绪，部署运维手册 §8）与 ops 模块内置状态页承担，二者不一致时以应用启动逻辑为准，编排探针不得替代产品健康语义。
 
 `DOCK-044`：**秘密防护**：`.dockerignore` 排除 `config*.yaml`、`*.key`、`*.pem`、`.env*` 等（§6），确保构建上下文与镜像层无真实秘密（ADR-010 §3）；CI 阶段 9（gitleaks）对仓库与构建产物扫描是**第一道防线**，`.dockerignore` 是第二道。
 
@@ -146,3 +150,4 @@ docker compose -f docker-compose.dev.yml up -d
 | CI 阶段 8 门禁 | 已同步（Dockerfile＋package.json 双条件，三处配置） |
 | DEP-Q-003 | **已冻结**：运行阶段 node:24-slim ＋ 构建阶段 node:24（§2 DOCK-011），Dockerfile 已同步 |
 | 生产部署编排 | 已落地仓库根 `docker-compose.yml`（官方单机：app＋worker＋PostgreSQL＋MinIO＋Casdoor；只读挂载、--read-only、进程探针）；详参该文件头注释与部署运维手册 §13 |
+| 健康检查对齐（DOCK-043/043a） | 编排层进程探针（/proc/1/cmdline），业务健康由启动判定+状态页承担 |

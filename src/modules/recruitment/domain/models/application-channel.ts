@@ -31,7 +31,7 @@ export class ApplicationChannel {
     return new ApplicationChannel(snapshot);
   }
 
-  static createClosed(input: {
+  static createNotStarted(input: {
     id: string;
     activityId: string;
     clubId: string;
@@ -43,7 +43,7 @@ export class ApplicationChannel {
       id: input.id,
       activityId: input.activityId,
       clubId: input.clubId,
-      status: ApplicationChannelStatus.CLOSED,
+      status: ApplicationChannelStatus.NOT_STARTED,
       openAt: null,
       closeAt: null,
       minChoices: input.minChoices ?? 1,
@@ -84,8 +84,12 @@ export class ApplicationChannel {
     return this.snapshot.status === ApplicationChannelStatus.OPEN;
   }
 
-  open(machine: ApplicationChannelStateMachine, now: Date): boolean {
-    const ok = this.transition(machine, ApplicationChannelEvent.OPEN, now);
+  open(
+    machine: ApplicationChannelStateMachine,
+    now: Date,
+    guard?: { readonly newDeadlineStrictlyAfterNow?: boolean },
+  ): boolean {
+    const ok = this.transition(machine, ApplicationChannelEvent.OPEN, now, guard);
     if (ok && this.snapshot.openAt === null) {
       this.snapshot = { ...this.snapshot, openAt: now };
     }
@@ -118,8 +122,13 @@ export class ApplicationChannel {
     machine: ApplicationChannelStateMachine,
     event: ApplicationChannelEvent,
     now: Date,
+    guard?: { readonly newDeadlineStrictlyAfterNow?: boolean },
   ): boolean {
-    const result = machine.transition({ event, currentState: this.snapshot.status });
+    const result = machine.transition({
+      event,
+      currentState: this.snapshot.status,
+      ...guard,
+    });
     if (!result.allowed) {
       return false;
     }

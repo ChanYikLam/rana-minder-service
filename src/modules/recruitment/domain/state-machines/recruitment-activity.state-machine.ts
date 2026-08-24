@@ -1,7 +1,8 @@
 /**
  * 招新活动状态机（recruitment 域；REC-001、SRS-SM-REC-001）。
  *
- * 生命周期：DRAFT → OPEN → COMPLETED / CANCELLED。
+ * 生命周期：DRAFT → OPEN → COMPLETED / CANCELLED；DRAFT → CANCELLED
+ * （SRS-SM-REC-001：草稿或进行中均可取消活动）。
  * 暂停（paused）是与主阶段正交的标志：冻结全部业务操作与截止，恢复按暂停
  * 时长顺延（REC-001/003、ORG-028）。COMPLETED/CANCELLED 为终态，长期只读。
  */
@@ -44,7 +45,10 @@ export class DefaultRecruitmentActivityStateMachine implements RecruitmentActivi
       >
     >
   > = {
-    DRAFT: { PUBLISH: RecruitmentActivityStatus.OPEN },
+    DRAFT: {
+      PUBLISH: RecruitmentActivityStatus.OPEN,
+      CANCEL: RecruitmentActivityStatus.CANCELLED,
+    },
     OPEN: {
       COMPLETE: RecruitmentActivityStatus.COMPLETED,
       CANCEL: RecruitmentActivityStatus.CANCELLED,

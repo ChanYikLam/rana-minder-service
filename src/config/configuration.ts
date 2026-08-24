@@ -35,6 +35,12 @@ export interface CasdoorConfig {
   readonly organization: string;
   readonly redirectUri: string;
   readonly clientSecretRef: string;
+  /**
+   * 本地会话 JWT 的独立签名密钥引用（CAS-AUTH-001）。
+   * 为空时回退到解析后的 Casdoor clientSecret（高熵派生）；
+   * 生产建议显式配置独立随机高熵密钥，避免与 Casdoor clientSecret 耦合。
+   */
+  readonly sessionSecretRef?: string;
 }
 
 export interface StorageConfig {

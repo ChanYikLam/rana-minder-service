@@ -160,6 +160,12 @@ function buildCasdoor(
       'casdoor.clientSecretRef',
       env.CASDOOR_CLIENT_SECRET,
     ),
+    // 可选：独立会话签名密钥；未配置时为 undefined（运行期回退到 clientSecret 派生）。
+    sessionSecretRef: optionalString(
+      raw?.sessionSecretRef,
+      env.CASDOOR_SESSION_SECRET_REF,
+      undefined,
+    ),
   };
 }
 

@@ -23,7 +23,6 @@
 import { Module } from '@nestjs/common';
 import { NotificationController } from './interfaces';
 import { NotificationAuthGuard } from './interfaces/notification-auth.guard';
-import { RejectAllNotificationAuthSessionProvider } from './interfaces/notification-auth-session';
 import {
   CreateNotificationFactCommand,
   DeliverInboxCommand,
@@ -62,8 +61,13 @@ import {
   InMemoryClubEmailPolicyStore,
   InMemoryPlatformEmailSuspensionStore,
   InMemoryEmailTemplateStore,
-  FailClosedNotificationPrivilegeVerifier,
 } from './infrastructure';
+import { OrgBackedNotificationPrivilegeVerifier } from './infrastructure/org-notification-privilege-verifier';
+import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
+import { OrganizationModule } from '../organization/module';
+import { IdentityModule } from '../identity/identity.module';
+import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
+import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import {
   CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
   CLUB_EMAIL_POLICY_STORE,
@@ -84,6 +88,7 @@ import {
 } from './tokens';
 
 @Module({
+  imports: [OrganizationModule, IdentityModule],
   controllers: [NotificationController],
   providers: [
     // 应用命令
@@ -167,10 +172,11 @@ import {
       provide: EMAIL_TEMPLATE_STORE,
       useClass: InMemoryEmailTemplateStore,
     },
-    // 站内信紧急关闭特权核验（fail-closed：权限端口接入前一律拒绝）
+    // 站内信紧急关闭特权核验（组织授权接线：PLATFORM 仅超管；CLUB 超管或社团管理员）
     {
       provide: NOTIFICATION_PRIVILEGE_VERIFIER,
-      useClass: FailClosedNotificationPrivilegeVerifier,
+      useFactory: (permissions) => new OrgBackedNotificationPrivilegeVerifier(permissions),
+      inject: [CURRENT_PERMISSIONS_PORT],
     },
     // 领域服务（端口以字符串 Token 注册，接口在运行时被擦除不能作 DI Token）
     {
@@ -181,7 +187,8 @@ import {
     // 开发联调可在测试/独立配置中绑定可信边界的会话实现）
     {
       provide: NOTIFICATION_AUTH_SESSION_PROVIDER,
-      useClass: RejectAllNotificationAuthSessionProvider,
+      useFactory: (identitySession) => adaptSessionProvider(identitySession),
+      inject: [AUTH_SESSION_PROVIDER],
     },
   ],
   exports: [

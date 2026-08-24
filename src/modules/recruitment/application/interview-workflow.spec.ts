@@ -59,7 +59,7 @@ describe('recruitment interview workflow (REC-005)', () => {
       now: NOW,
       id: channelId,
     });
-    form.seed({ id: 'sub-1', status: 'SUBMITTED', submittedBy: APPLICANT });
+    form.seed({ id: 'sub-1', status: 'SUBMITTED', submittedBy: APPLICANT, versionNumber: 1 });
     const result = await new DefaultSubmitApplicationUseCase(repo, auth, form).execute({
       activityId,
       channelId,
