@@ -43,7 +43,8 @@ export interface RecruitmentFormLoadInput {
  * 共享校验（生产/测试桩单源）：
  * - 视图缺失 → not-found(submission-missing)；
  * - 视图归属 formId 与请求不符 → forbidden（跨表单读取）；
- * - 视图版本与请求不符 → not-found(version-stale)（引用已修订/作废版本）。
+ * - 视图版本与请求不符（含视图缺版本）→ not-found(version-stale)
+ *   （引用已修订/作废版本；入参指定版本而视图缺失版本视为版本不符，防御性严格）。
  */
 export function resolveRecruitmentFormSubmission(
   view: RecruitmentFormSubmissionView | null,
@@ -55,11 +56,7 @@ export function resolveRecruitmentFormSubmission(
   if (view.formId !== undefined && view.formId !== input.formId) {
     return { outcome: 'forbidden' };
   }
-  if (
-    input.versionNumber !== undefined &&
-    view.versionNumber !== undefined &&
-    view.versionNumber !== input.versionNumber
-  ) {
+  if (input.versionNumber !== undefined && view.versionNumber !== input.versionNumber) {
     return { outcome: 'not-found', reason: 'version-stale' };
   }
   return { outcome: 'found', submission: view };
@@ -69,6 +66,7 @@ export interface RecruitmentFormPort {
   loadSubmission(input: RecruitmentFormLoadInput): Promise<RecruitmentFormLoadResult>;
 }
 
+/** 测试专用桩（评审意见：生产已由 FormBackedRecruitmentForm 替代，勿误作生产实现） */
 export class StubRecruitmentForm implements RecruitmentFormPort {
   private readonly submissions = new Map<string, RecruitmentFormSubmissionView>();
 

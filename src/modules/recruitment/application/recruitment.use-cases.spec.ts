@@ -84,7 +84,7 @@ describe('recruitment application layer (REC-001~004)', () => {
     });
     assert.strictEqual(opened.channelId, channelId);
 
-    form.seed({ id: 'sub-1', status: 'SUBMITTED', submittedBy: APPLICANT });
+    form.seed({ id: 'sub-1', status: 'SUBMITTED', submittedBy: APPLICANT, versionNumber: 1 });
 
     const submit = new DefaultSubmitApplicationUseCase(repo, auth, form);
     const result = await submit.execute({
@@ -153,7 +153,7 @@ describe('recruitment application layer (REC-001~004)', () => {
     await openChannel.execute({ activityId, actor: ACTOR, now: NOW, id: channelId });
 
     auth.submitAllowed = true;
-    form.seed({ id: 'sub-2', status: 'SUBMITTED', submittedBy: APPLICANT });
+    form.seed({ id: 'sub-2', status: 'SUBMITTED', submittedBy: APPLICANT, versionNumber: 1 });
     const submit = new DefaultSubmitApplicationUseCase(repo, auth, form);
     const { applicationId } = await submit.execute({
       activityId,
@@ -281,7 +281,7 @@ describe('recruitment application layer (REC-001~004)', () => {
     activity.pause(NOW);
     await repo.saveActivity(activity.toSnapshot());
 
-    form.seed({ id: 'sub-p', status: 'SUBMITTED', submittedBy: APPLICANT });
+    form.seed({ id: 'sub-p', status: 'SUBMITTED', submittedBy: APPLICANT, versionNumber: 1 });
     await assert.rejects(
       () =>
         new DefaultSubmitApplicationUseCase(repo, auth, form).execute({
@@ -330,7 +330,7 @@ describe('recruitment application layer (REC-001~004)', () => {
       id: 'ch-deadline',
     });
 
-    form.seed({ id: 'sub-d', status: 'SUBMITTED', submittedBy: APPLICANT });
+    form.seed({ id: 'sub-d', status: 'SUBMITTED', submittedBy: APPLICANT, versionNumber: 1 });
     // NOW = 2026-01-01，活动 endDate = 2026-01-15，尚未截止，可提交
     await new DefaultSubmitApplicationUseCase(repo, auth, form).execute({
       activityId,
