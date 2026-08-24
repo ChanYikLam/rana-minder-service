@@ -378,7 +378,12 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
       provide: ACCOUNT_ACCESS_CONTROLLER,
       useFactory: (getMyProfile, getAccountAccess, uow, sessionRevocation) =>
         new AccountAccessController(getMyProfile, getAccountAccess, uow, sessionRevocation),
-      inject: [GET_MY_PROFILE_QUERY, GET_ACCOUNT_ACCESS_QUERY, IdentityUnitOfWork, SESSION_REVOCATION_PORT],
+      inject: [
+        GET_MY_PROFILE_QUERY,
+        GET_ACCOUNT_ACCESS_QUERY,
+        IdentityUnitOfWork,
+        SESSION_REVOCATION_PORT,
+      ],
     },
     {
       provide: NAME_CORRECTION_CONTROLLER,

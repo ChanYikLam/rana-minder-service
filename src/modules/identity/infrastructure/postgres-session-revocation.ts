@@ -27,7 +27,9 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
     );
   }
 
-  async getRevocation(subjectId: string): Promise<{ revokeVersion: number; revokedAt: string | null } | null> {
+  async getRevocation(
+    subjectId: string,
+  ): Promise<{ revokeVersion: number; revokedAt: string | null } | null> {
     const tx = await this.db.beginTransaction();
     try {
       await this.db.setRlsContext(tx, { kind: 'unprotected' });

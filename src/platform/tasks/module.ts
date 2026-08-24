@@ -13,7 +13,12 @@ import {
   RecoveryReplayConvergence,
 } from './idempotency';
 import { LeaseManager } from './lease';
-import { InMemoryTransactionOutboxStore, TASK_OUTBOX_STORE, TaskIntentOutbox, PostgresTransactionOutboxStore } from './outbox';
+import {
+  InMemoryTransactionOutboxStore,
+  TASK_OUTBOX_STORE,
+  TaskIntentOutbox,
+  PostgresTransactionOutboxStore,
+} from './outbox';
 import {
   BATCH_ITEM_AUTHORIZATION_PORT,
   BATCH_ITEM_EXECUTOR_PORT,
@@ -73,8 +78,14 @@ const allowDevStubs = isTest || (process.env.TASKS_DEV_STUB ?? '0') === '1';
     PostgresTaskRepository,
     ...storeProviders,
     { provide: TASK_REPOSITORY, useExisting: PostgresTaskRepository },
-    { provide: TASK_OUTBOX_STORE, useClass: useInMemoryStores ? InMemoryTransactionOutboxStore : PostgresTransactionOutboxStore },
-    { provide: IDEMPOTENCY_STORE, useClass: useInMemoryStores ? InMemoryIdempotencyStore : PostgresIdempotencyStore },
+    {
+      provide: TASK_OUTBOX_STORE,
+      useClass: useInMemoryStores ? InMemoryTransactionOutboxStore : PostgresTransactionOutboxStore,
+    },
+    {
+      provide: IDEMPOTENCY_STORE,
+      useClass: useInMemoryStores ? InMemoryIdempotencyStore : PostgresIdempotencyStore,
+    },
     { provide: BATCH_STORE, useClass: useInMemoryStores ? InMemoryBatchStore : PostgresBatchStore },
     { provide: TASK_OPS_TELEMETRY_PORT, useExisting: LogOnlyTaskOpsTelemetry },
     {
