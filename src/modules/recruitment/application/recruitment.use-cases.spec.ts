@@ -10,6 +10,7 @@ import {
   StubRecruitmentAuthorization,
   StubRecruitmentForm,
 } from './testing/recruitment-test-support';
+import type { RecruitmentFormPort } from './ports/recruitment-form.port';
 import { DefaultCreateRecruitmentActivityUseCase } from './commands/create-recruitment-activity.use-case';
 import { DefaultPublishRecruitmentActivityUseCase } from './commands/publish-recruitment-activity.use-case';
 import { DefaultOpenApplicationChannelUseCase } from './commands/open-application-channel.use-case';
@@ -365,8 +366,9 @@ describe('submit-application 表单端口 forbidden 分支（评审补测）', (
     const auth = new StubRecruitmentAuthorization();
     auth.manageAllowed = true;
     auth.submitAllowed = true;
-    const forbiddenForm = {
-      loadSubmission: async () => ({ outcome: 'forbidden' as const }),
+    // 完整实现 RecruitmentFormPort（去 as never 强转；评审意见：类型安全、意图清晰）
+    const forbiddenForm: RecruitmentFormPort = {
+      loadSubmission: async () => ({ outcome: 'forbidden' }),
     };
     const activityId = 'act-f';
     const create = new DefaultCreateRecruitmentActivityUseCase(repo, auth);
@@ -392,7 +394,7 @@ describe('submit-application 表单端口 forbidden 分支（评审补测）', (
       now: NOW,
       id: channelId,
     });
-    const submit = new DefaultSubmitApplicationUseCase(repo, auth, forbiddenForm as never);
+    const submit = new DefaultSubmitApplicationUseCase(repo, auth, forbiddenForm);
     await assert.rejects(
       submit.execute({
         activityId,
