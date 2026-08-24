@@ -34,6 +34,11 @@ import {
   RECRUITMENT_CONTROLLER,
   CREATE_RECRUITMENT_ACTIVITY_USE_CASE,
   PUBLISH_RECRUITMENT_ACTIVITY_USE_CASE,
+  PAUSE_RECRUITMENT_ACTIVITY_USE_CASE,
+  RESUME_RECRUITMENT_ACTIVITY_USE_CASE,
+  COMPLETE_RECRUITMENT_ACTIVITY_USE_CASE,
+  CANCEL_RECRUITMENT_ACTIVITY_USE_CASE,
+  FORCE_COMPLETE_RECRUITMENT_ACTIVITY_USE_CASE,
   OPEN_APPLICATION_CHANNEL_USE_CASE,
   SUBMIT_APPLICATION_USE_CASE,
   RECORD_DEPARTMENT_DECISION_USE_CASE,
@@ -52,6 +57,13 @@ import { FormBackedRecruitmentForm } from './infrastructure/form-backed-recruitm
 
 import { DefaultCreateRecruitmentActivityUseCase } from './application/commands/create-recruitment-activity.use-case';
 import { DefaultPublishRecruitmentActivityUseCase } from './application/commands/publish-recruitment-activity.use-case';
+import {
+  DefaultPauseRecruitmentActivityUseCase,
+  DefaultResumeRecruitmentActivityUseCase,
+  DefaultCompleteRecruitmentActivityUseCase,
+  DefaultCancelRecruitmentActivityUseCase,
+  DefaultForceCompleteRecruitmentActivityUseCase,
+} from './application/commands/activity-lifecycle.use-case';
 import { DefaultOpenApplicationChannelUseCase } from './application/commands/open-application-channel.use-case';
 import { DefaultSubmitApplicationUseCase } from './application/commands/submit-application.use-case';
 import { DefaultRecordDepartmentDecisionUseCase } from './application/commands/record-department-decision.use-case';
@@ -118,6 +130,31 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
     {
       provide: PUBLISH_RECRUITMENT_ACTIVITY_USE_CASE,
       useFactory: (repo, auth) => new DefaultPublishRecruitmentActivityUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: PAUSE_RECRUITMENT_ACTIVITY_USE_CASE,
+      useFactory: (repo, auth) => new DefaultPauseRecruitmentActivityUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: RESUME_RECRUITMENT_ACTIVITY_USE_CASE,
+      useFactory: (repo, auth) => new DefaultResumeRecruitmentActivityUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: COMPLETE_RECRUITMENT_ACTIVITY_USE_CASE,
+      useFactory: (repo, auth) => new DefaultCompleteRecruitmentActivityUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: CANCEL_RECRUITMENT_ACTIVITY_USE_CASE,
+      useFactory: (repo, auth) => new DefaultCancelRecruitmentActivityUseCase(repo, auth),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+    },
+    {
+      provide: FORCE_COMPLETE_RECRUITMENT_ACTIVITY_USE_CASE,
+      useFactory: (repo, auth) => new DefaultForceCompleteRecruitmentActivityUseCase(repo, auth),
       inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
     },
     {
