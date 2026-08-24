@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import { Test } from '@nestjs/testing';
 
 import { OrganizationModule } from './module';
+import {
+  orgCasdoorRealEnabled,
+  orgDbRealEnabled,
+  orgJobsPlatformEnabled,
+  orgNotifyChannelEnabled,
+} from './module';
 import { AdminClubsController } from './interfaces/controllers/admin-clubs.controller';
 import { AdminPermissionTemplatesController } from './interfaces/controllers/admin-permission-templates.controller';
 import { OrgWorkspaceController } from './interfaces/controllers/org-workspace.controller';
@@ -64,5 +70,21 @@ describe('OrganizationModule', () => {
     assert.ok(adminPerm instanceof AdminPermissionTemplatesController);
     assert.ok(orgWorkspace instanceof OrgWorkspaceController);
     await moduleRef.close();
+  });
+
+  it('#68 装配开关：fail-closed 默认全关（测试环境走内存桩路径）', () => {
+    // 测试环境（.env.test）未设置任何 ORG_*_REAL/PLATFORM/CHANNEL 开关
+    assert.equal(orgDbRealEnabled(), false);
+    assert.equal(orgCasdoorRealEnabled(), false);
+    assert.equal(orgJobsPlatformEnabled(), false);
+    assert.equal(orgNotifyChannelEnabled(), false);
+  });
+
+  it('#68 装配开关：显式 =1 才开启真实适配器（与 ADAPTERS_*_REAL 同口径）', () => {
+    const env = { ORG_DB_REAL: '1', ORG_CASDOOR_REAL: '1' } as NodeJS.ProcessEnv;
+    assert.equal(orgDbRealEnabled(env), true);
+    assert.equal(orgCasdoorRealEnabled(env), true);
+    assert.equal(orgJobsPlatformEnabled({} as NodeJS.ProcessEnv), false);
+    assert.equal(orgNotifyChannelEnabled({ ORG_NOTIFY_CHANNEL: '1' } as NodeJS.ProcessEnv), true);
   });
 });

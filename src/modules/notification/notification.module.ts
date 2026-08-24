@@ -20,7 +20,7 @@
  * - IFC-TX-005：站内信/邮件渠道投递、失败重试与恢复补投
  */
 
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { NotificationController } from './interfaces';
 import { NotificationAuthGuard } from './interfaces/notification-auth.guard';
 import {
@@ -88,7 +88,8 @@ import {
 } from './tokens';
 
 @Module({
-  imports: [OrganizationModule, IdentityModule],
+  // forwardRef：组织模块在 ORG_JOBS_PLATFORM=1 时经 TasksModule 反向引用本模块（#68）
+  imports: [forwardRef(() => OrganizationModule), IdentityModule],
   controllers: [NotificationController],
   providers: [
     // 应用命令
