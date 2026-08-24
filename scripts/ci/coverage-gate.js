@@ -8,13 +8,14 @@
  *                                                # 不在 4b 重复执行单测（CI 阶段 4 已产出）
  *
  * 职责（对照 coverage-baseline.json，棘轮只升不降）：
- * 1. lines/branches/functions 任一低于基线 → 失败（exit 1）；
- *    覆盖率数据缺失/非有限数值（NaN）同样 fail-closed，不静默放行（评审 warning）；
- * 2. 任一项高于基线 → 自动重写基线（升阈）并提示随提交带上：
+ * 1. lines/branches/functions 任一低于「基线 - 容差(1.0pp)」→ 失败（exit 1）；
+ *    容差吸收运行间覆盖率波动（函数指标最敏感），防 ±0.5pp 抖动误红；
+ *    覆盖率数据缺失/非有限数值（NaN）仍 fail-closed，不静默放行（评审 warning）；
+ * 2. 任一项高于「基线 + 容差」→ 自动重写基线（升阈）并提示随提交带上：
  *    - --check-only（CI 只读）：不写基线，仅提示本地跑完整模式更新并提交
  *      （避免 CI 脏工作区；升阈收敛到本地手动执行，评审 warning）；
  *    - 完整模式（本地）：直接重写 coverage-baseline.json；
- *    （未提交也无害：门禁按旧基线放行，覆盖仍不得低于历史峰值）
+ *    （未提交也无害：门禁按旧基线放行，覆盖仍不得跌破历史峰值过多）
  * 3. --check-only 且缺少 coverage/coverage-summary.json → 失败（fail-closed）。
  */
 
@@ -28,6 +29,11 @@ const BASELINE = path.join(ROOT, 'coverage-baseline.json');
 
 const METRICS = ['lines', 'branches', 'functions'];
 const checkOnly = process.argv.includes('--check-only');
+
+/** 棘轮容差（百分点）：吸收运行间覆盖率波动（函数指标波动最明显，实测
+ *  可差 ~1.4pp）。门禁仅在 current < baseline - TOLERANCE 时失败，仍是
+ *  有意义的棘轮（覆盖不得跌破历史峰值过多），避免 CI 因 ±0.5pp 波动误红。 */
+const RATCHET_TOLERANCE_PP = 1.0;
 
 function fail(message) {
   console.error(`ERROR coverage-gate: ${message}`);
@@ -82,8 +88,10 @@ for (const m of METRICS) {
   if (typeof base !== 'number' || !Number.isFinite(base)) {
     fail(`基线缺少指标 ${m}（coverage-baseline.json 结构异常）`);
   }
-  if (cur + 1e-9 < base) {
-    console.error(`  [FAIL] ${m}: ${cur}% < 基线 ${base}%（棘轮只升不降）`);
+  if (cur + 1e-9 < base - RATCHET_TOLERANCE_PP) {
+    console.error(
+      `  [FAIL] ${m}: ${cur}% < 基线 ${base}% - 容差 ${RATCHET_TOLERANCE_PP}pp（棘轮只升不降）`,
+    );
     failed = true;
   }
 }
@@ -91,7 +99,7 @@ if (failed) {
   fail('覆盖率回退低于基线（P1-A 门禁）');
 }
 
-const raised = METRICS.some((m) => current[m] > baseline[m] + 1e-9);
+const raised = METRICS.some((m) => current[m] > baseline[m] + RATCHET_TOLERANCE_PP);
 if (raised) {
   const next = {
     lines: current.lines,

@@ -24,34 +24,46 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 
 base="${1:-}"
-if [ -z "$base" ]; then
-  if git rev-parse --verify --quiet origin/dev >/dev/null 2>&1; then
-    base=origin/dev
-  else
-    # 无显式 base 且无 origin/dev：fail-closed，绝不静默降级导致门禁失效。
-    echo "ERROR check-spec-coverage: 未提供 base-ref 且无 origin/dev，无法确定变更基线。" >&2
-    echo "ERROR 门禁 fail-closed（exit 1）。请显式传 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
-    exit 1
-  fi
-fi
 
-# base 必须可解析为提交；不可解析时先尝试 git merge-base origin/dev HEAD 兜底
-# （浅克隆/目标 SHA 不在本地 clone 的常见场景，评审：#126 target-SHA 可用性），
-# 仍失败才 fail-closed（防止 changed 为空、checked=0 静默通过）。
-if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
-  echo "WARN check-spec-coverage: base-ref '$base' 无法在本地解析为提交，尝试 merge-base(origin/dev, HEAD) 兜底。" >&2
+# 解析 base 为本地可用的提交引用：
+# 1) 本地已存在 → 直接用；
+# 2) 提供但本地缺失（浅克隆目标 SHA 不在本地）→ git fetch origin <base> 后取 FETCH_HEAD；
+# 3) 空或仍失败 → 回退 origin/dev（缺失则 fetch origin dev）→ merge-base(origin/dev, HEAD)。
+# 全失败才 fail-closed（防止 changed 为空、checked=0 静默通过）。
+resolve_base() {
+  local ref="$1"
+  if git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null 2>&1; then
+    echo "$ref"
+    return 0
+  fi
+  if [ -n "$ref" ] && [ "$ref" != "origin/dev" ]; then
+    if git fetch origin "$ref" --quiet 2>/dev/null; then
+      if git rev-parse --verify --quiet "FETCH_HEAD^{commit}" >/dev/null 2>&1; then
+        echo "FETCH_HEAD"
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
+
+resolved="$(resolve_base "$base" || true)"
+if [ -z "$resolved" ]; then
+  echo "WARN check-spec-coverage: base='${base:-<空>}' 本地不可解析，回退 origin/dev。" >&2
+  git rev-parse --verify --quiet origin/dev >/dev/null 2>&1 || git fetch origin dev --quiet 2>/dev/null || true
   if git rev-parse --verify --quiet origin/dev >/dev/null 2>&1; then
-    fallback="$(git merge-base origin/dev HEAD 2>/dev/null || true)"
-    if [ -n "$fallback" ] && git rev-parse --verify --quiet "${fallback}^{commit}" >/dev/null 2>&1; then
-      base="$fallback"
-      echo "WARN 已改用 merge-base(origin/dev, HEAD) = $base" >&2
+    resolved="$(git merge-base origin/dev HEAD 2>/dev/null || true)"
+    if [ -n "$resolved" ]; then
+      echo "WARN 已改用 merge-base(origin/dev, HEAD) = $resolved" >&2
     fi
   fi
 fi
-if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
-  echo "ERROR check-spec-coverage: base-ref '$base' 无法解析为提交，门禁 fail-closed（exit 1）。请显式传 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
+
+if [ -z "$resolved" ] || ! git rev-parse --verify --quiet "${resolved}^{commit}" >/dev/null 2>&1; then
+  echo "ERROR check-spec-coverage: 无法解析变更基线（base='${base:-<空>}'），门禁 fail-closed（exit 1）。请显式传 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
   exit 1
 fi
+base="$resolved"
 
 # pathspec 显式覆盖 src/ 顶层（src/*.ts）与嵌套目录（src/**/*.ts）：
 # git 的 '**' 在 pathspec 中要求至少一层目录，仅写 src/**/*.ts 会漏检 src/main.ts 等顶层文件。
