@@ -167,7 +167,11 @@ export class S3ObjectStoreAdapter {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      return await this.fetchFn(path, {
+      // 评审修复（critical）：fetch 必须使用绝对 URL——相对路径 `/${bucket}/${key}`
+      // 在 Node 下会抛 `TypeError: Failed to parse URL`，导致所有 S3 操作被 catch
+      // 吞掉返回 {ok:false}，生产配置 S3_ENDPOINT 后上传/晋升/删除将静默全部失败。
+      const url = `${this.config.endpoint}${path}`;
+      return await this.fetchFn(url, {
         method,
         headers,
         body: payload === null ? undefined : payload,

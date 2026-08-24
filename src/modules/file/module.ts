@@ -80,32 +80,38 @@ import { ExternalFileCheckAdapter } from '../../adapters/file-check/external-fil
       useFactory: (db) => new PostgresCleanupReferenceGuard(db),
       inject: [DB_ADAPTER],
     },
-    // ----- 4.2 收口：S3 兼容对象存储（配置 S3_ENDPOINT 启用）-----
+    // ----- 4.2 收口：S3 兼容对象存储（配置 STORAGE_ENDPOINT 启用）-----
     {
       provide: OBJECT_STORE_PORT,
       useFactory: () => {
-        const endpoint = process.env.S3_ENDPOINT;
+        // 评审修复（warning）：配置键名与 .env.example/config.example.yaml 文档对齐。
+        // 文档键为 STORAGE_ENDPOINT/STORAGE_REGION/STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY/
+        // STORAGE_BUCKET_*；为兼容旧 S3_* 键保留别名回退（S3_* 优先，文档键次之）。
+        // 注：BucketRole 的 OBJECT 角色对应文档"权威原件区" primary bucket（ADR-008 三区）。
+        const endpoint = process.env.S3_ENDPOINT ?? process.env.STORAGE_ENDPOINT;
         if (endpoint !== undefined && endpoint.trim().length > 0) {
           return new S3ObjectStoreAdapter({
             endpoint,
-            region: process.env.S3_REGION ?? 'cn-north-1',
-            accessKeyId: process.env.S3_ACCESS_KEY_ID ?? '',
-            secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
+            region: process.env.S3_REGION ?? process.env.STORAGE_REGION ?? 'cn-north-1',
+            accessKeyId: process.env.S3_ACCESS_KEY_ID ?? process.env.STORAGE_ACCESS_KEY ?? '',
+            secretAccessKey:
+              process.env.S3_SECRET_ACCESS_KEY ?? process.env.STORAGE_SECRET_KEY ?? '',
             buckets: {
-              QUARANTINE: process.env.S3_BUCKET_QUARANTINE ?? '',
-              OBJECT: process.env.S3_BUCKET_OBJECT ?? '',
-              DERIVED: process.env.S3_BUCKET_DERIVED ?? '',
+              QUARANTINE:
+                process.env.S3_BUCKET_QUARANTINE ?? process.env.STORAGE_BUCKET_QUARANTINE ?? '',
+              OBJECT: process.env.S3_BUCKET_OBJECT ?? process.env.STORAGE_BUCKET_PRIMARY ?? '',
+              DERIVED: process.env.S3_BUCKET_DERIVED ?? process.env.STORAGE_BUCKET_DERIVED ?? '',
             },
           });
         }
-        // 评审修复（部署风险）：**生产/非开发环境未配置 S3_ENDPOINT 时 fail-closed**——
+        // 评审修复（部署风险）：**生产/非开发环境未配置 STORAGE_ENDPOINT 时 fail-closed**——
         // 静默降级内存对象存储会导致"元数据在 PostgreSQL、字节在内存（重启即失）"，
         // 且 InMemory deleteAndVerify 恒成功制造假删除（违反 FORM-009/NFR-003 不变量）；
         // 仅在 test/development 保留内存占位（单测/本地开发）。
         const env = process.env.NODE_ENV ?? 'development';
         if (env !== 'test' && env !== 'development') {
           throw new Error(
-            'OBJECT_STORE_PORT: 生产环境必须配置 S3_ENDPOINT/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY（fail-closed，禁止内存对象存储假持久化）',
+            'OBJECT_STORE_PORT: 生产环境必须配置 STORAGE_ENDPOINT/STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY（fail-closed，禁止内存对象存储假持久化）',
           );
         }
         return new InMemoryObjectStore();

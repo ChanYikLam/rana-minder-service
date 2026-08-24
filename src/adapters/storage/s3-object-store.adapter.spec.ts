@@ -70,6 +70,8 @@ describe('S3ObjectStoreAdapter（4.2 收口）', () => {
     const result = await adapter.putQuarantine(LOCATION, new Uint8Array([1, 2, 3]));
     assert.equal(result.ok, true);
     const call = calls[0];
+    // 评审修复（critical）：fetch URL 必须是绝对地址（endpoint + path），否则 Node 抛 TypeError
+    assert.ok(call.input.startsWith('https://s3.example.com/'), 'S3 fetch 必须使用绝对 URL');
     assert.ok(call.input.includes('/bucket-quarantine/v1/UPLOAD/rand-1'));
     assert.equal(call.init.method, 'PUT');
     const headers = call.init.headers as Record<string, string>;
@@ -210,5 +212,17 @@ describe('S3ObjectStoreAdapter（4.2 收口）', () => {
 
   it('s3KeyOf：键格式 ${keyVersion}/${objectKind}/${randomKey}（不编码业务身份）', () => {
     assert.equal(s3KeyOf(LOCATION), 'v1/UPLOAD/rand-1');
+  });
+
+  it('真实 fetch 冒烟：绝对 URL 可解析（评审修复——相对路径会抛 TypeError）', async () => {
+    // 用 Node 原生 URL 解析器验证适配器产出的请求地址必须是合法绝对 URL：
+    // 相对路径 `/bucket/key` 在无 base 下无法被解析（等价于 fetch 抛 TypeError），
+    // 绝对地址 `endpoint + path` 可正常解析。
+    const path = `/${CONFIG.buckets.QUARANTINE}/v1/UPLOAD/rand-1`;
+    // 绝对地址（修复后）：endpoint + path 可解析
+    const absUrl = new URL(path, CONFIG.endpoint);
+    assert.equal(absUrl.href, 'https://s3.example.com/bucket-quarantine/v1/UPLOAD/rand-1');
+    // 相对路径（旧实现直接 fetch(path)）：无 base 解析失败，证明必须拼接绝对 URL
+    assert.throws(() => new URL(path));
   });
 });

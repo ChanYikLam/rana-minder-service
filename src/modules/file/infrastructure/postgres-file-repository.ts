@@ -7,6 +7,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { DbAdapter, RlsScope, TransactionContext } from '../../../shared/db-adapter';
 import type { FileRecord } from '../domain/models/file-model';
 
@@ -83,6 +84,30 @@ export function fileRecordToRow(
 
 /** 目标对象过滤的 SQL 片段（listByTarget/createWithinTargetLimit 共用） */
 const TARGET_WHERE = `target->>'objectType' = $1 AND target->>'objectId' = $2 AND target->>'fieldKey' = $3`;
+
+/**
+ * 目标三元组 → 稳定 64 位有符号 bigint 咨询锁键（pg_advisory_xact_lock 参数）。
+ * 规范化（小写+分隔符）保证跨请求一致；取 SHA-256 前 8 字节解释为 bigint，
+ * 不暴露原始对象身份（GOV-008 脱敏）。不同目标碰撞概率极低，偶发碰撞仅导致
+ * 轻微锁竞争（不影响正确性）。
+ */
+export function advisoryLockKeyFor(target: {
+  objectType: string;
+  objectId: string;
+  fieldKey: string;
+}): bigint {
+  const canonical =
+    `${target.objectType}\u0000${target.objectId}\u0000${target.fieldKey}`.toLowerCase();
+  const digest = createHash('sha256').update(canonical, 'utf8').digest();
+  // 取前 8 字节，最高位置 0 以落入正 bigint 范围（pg_advisory_xact_lock 接受有符号 bigint）
+  const buf = digest.subarray(0, 8);
+  buf[0] &= 0x7f;
+  let value = 0n;
+  for (let i = 0; i < 8; i += 1) {
+    value = (value << 8n) | BigInt(buf[i]);
+  }
+  return value;
+}
 
 @Injectable()
 export class PostgresFileRepository {
@@ -172,8 +197,13 @@ export class PostgresFileRepository {
   /**
    * 原子创建：目标字段附件数量上限内保存并返回 true；已满返回 false（IFC-FIL-001）。
    * 计数与保存在同一事务内完成，杜绝"先查后改"TOCTOU 竞态（并发 InitiateUpload
-   * 不得突破 configuredPerField）。生产可配合目标行锁/唯一索引进一步串行化；
-   * 表达式索引 idx_file_records_target 支撑计数查询。
+   * 不得突破 configuredPerField）。
+   *
+   * 并发串行化（评审修复）：对目标 (objectType,objectId,fieldKey) 先取
+   * `pg_advisory_xact_lock`（事务级咨询锁）再计数+写入——同一目标的所有并发创建
+   * （含**首次并发创建**，此时目标尚无行、FOR UPDATE 无行可锁）都被串行化，
+   * 后到事务等锁后重读 count 看到新值，突破上限被拒绝。
+   * 咨询锁键用目标三元组的稳定哈希（bigint），跨请求一致。
    */
   async createWithinTargetLimit(
     target: { objectType: string; objectId: string; fieldKey: string },
@@ -181,15 +211,15 @@ export class PostgresFileRepository {
     file: FileRecord,
   ): Promise<boolean> {
     return this.inTx(async (tx) => {
-      // TOCTOU 加固（评审 warning）：对目标已存在的行加 FOR UPDATE 行锁，使同一
-      // 目标（objectType,objectId,fieldKey）的并发追加串行化——后到事务等锁后
-      // 重读 count 看到新值，突破上限被拒绝。首次并发创建（目标尚无行，无法锁）
-      // 由上层乐观锁/幂等兜底，注释见 createWithinTargetLimit 头。
+      // 评审修复（warning）：同一目标并发创建（含首次无行可锁）用事务级咨询锁串行化。
+      // 目标三元组 → 稳定 64 位整数键：crc32c 语义由 DB 侧 pg_advisory_xact_lock(bigint)
+      // 承担，此处用目标串的小写规范化哈希保证跨请求一致（不暴露原始值）。
+      const lockKey = advisoryLockKeyFor(target);
+      await this.db.query(tx, `SELECT pg_advisory_xact_lock($1)`, [lockKey]);
       const counted = await this.db.query<{ n: number }>(
         tx,
         `SELECT count(*)::int AS n FROM file_records
-          WHERE ${TARGET_WHERE} AND state NOT IN ('CLEANED', 'PENDING_CLEANUP', 'DELETED')
-          FOR UPDATE`,
+          WHERE ${TARGET_WHERE} AND state NOT IN ('CLEANED', 'PENDING_CLEANUP', 'DELETED')`,
         [target.objectType, target.objectId, target.fieldKey],
       );
       if (counted.length === 0 || counted[0].n >= configuredPerField) {

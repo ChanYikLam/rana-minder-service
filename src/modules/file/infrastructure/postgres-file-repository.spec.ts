@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 
 import {
   PostgresFileRepository,
+  advisoryLockKeyFor,
   fileRecordToRow,
   fileRecordRowToSnapshot,
 } from './postgres-file-repository';
@@ -180,6 +181,28 @@ describe('PostgresFileRepository（4.2 收口）', () => {
     assert.equal(loaded!.fileId, 'f1');
     assert.equal(loaded!.state, 'AVAILABLE');
     assert.equal(loaded!.cleanupQueue.length, 0);
+  });
+
+  it('createWithinTargetLimit：先取咨询锁再计数（评审修复——首次并发亦串行化）', async () => {
+    const { db, calls } = makeFakeDb();
+    const repo = new PostgresFileRepository(db as never);
+    await repo.createWithinTargetLimit(
+      { objectType: 'DRAFT', objectId: 'd1', fieldKey: 'photos' },
+      2,
+      makeFile(),
+    );
+    // 第一条 SQL 必须是 pg_advisory_xact_lock（串行化发生于计数之前，含首次无行可锁场景）
+    assert.ok(calls[0].sql.includes('pg_advisory_xact_lock'));
+    assert.ok(calls[1].sql.includes('SELECT count(*)'));
+    // 咨询锁键为稳定 bigint（同一目标两次调用一致）
+    const k1 = advisoryLockKeyFor({ objectType: 'DRAFT', objectId: 'd1', fieldKey: 'photos' });
+    const k2 = advisoryLockKeyFor({ objectType: 'DRAFT', objectId: 'd1', fieldKey: 'photos' });
+    assert.equal(k1, k2);
+    assert.equal(typeof k1, 'bigint');
+    assert.ok(k1 > 0n, '咨询锁键应为正整数');
+    // 不同目标键不同（降低无谓竞争）
+    const k3 = advisoryLockKeyFor({ objectType: 'DRAFT', objectId: 'd2', fieldKey: 'photos' });
+    assert.notEqual(k1, k3);
   });
 
   it('createWithinTargetLimit：未超限保存 true；达到上限返回 false 且不写入', async () => {
