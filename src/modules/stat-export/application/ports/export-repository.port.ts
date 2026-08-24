@@ -38,6 +38,12 @@ export interface ExportTaskRepository {
     match: ExportScopeSnapshotMatch,
     opts?: ListExportMatchOptions,
   ): Promise<readonly ExportTaskAggregate[]>;
+  /**
+   * 到期扫描（5.4.4，EXP-003 有效期收敛）：status = DOWNLOADABLE 且
+   * expiresAt !== null 且 expiresAt <= nowIso 的任务（供过期清理命令使用）。
+   * 仅扫可下载任务：待生成/生成中的任务无文件可清理，其失权由失效联动负责。
+   */
+  listDueForExpiry(nowIso: string): Promise<readonly ExportTaskAggregate[]>;
 }
 
 export const EXPORT_TASK_REPOSITORY = Symbol('EXPORT_TASK_REPOSITORY');
