@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { FormBackedRecruitmentForm } from './form-backed-recruitment-form';
+import { StubRecruitmentForm } from '../application/ports/recruitment-form.port';
 import type { FormSubmissionSnapshot } from '../../form/domain/models/form-submission';
 import type { FormSubmissionRepository } from '../../form/application/ports/form-submission-repository.port';
 
@@ -34,11 +35,11 @@ describe('FormBackedRecruitmentForm（4.4b 表单真集成收口）', () => {
     const result = await form.loadSubmission({ formId: 'form-1', submissionId: 'sub-1' });
     assert.equal(result.outcome, 'found');
     if (result.outcome === 'found') {
-      assert.deepEqual(result.submission, {
-        id: 'sub-1',
-        status: 'SUBMITTED',
-        submittedBy: 'applicant-1',
-      });
+      assert.equal(result.submission.id, 'sub-1');
+      assert.equal(result.submission.status, 'SUBMITTED');
+      assert.equal(result.submission.submittedBy, 'applicant-1');
+      // 视图不含答案明细（values 不透出）
+      assert.ok(!('values' in result.submission));
     }
   });
 
@@ -68,5 +69,44 @@ describe('FormBackedRecruitmentForm（4.4b 表单真集成收口）', () => {
       versionNumber: 3,
     });
     assert.equal(matched.outcome, 'found');
+  });
+});
+
+describe('StubRecruitmentForm 与生产共享校验逻辑（评审意见）', () => {
+  it('seed 提供 formId → 跨表单读取返回 forbidden（与 FormBacked 语义一致）', async () => {
+    const stub = new StubRecruitmentForm();
+    stub.seed({
+      id: 'sub-1',
+      status: 'SUBMITTED',
+      submittedBy: 'a1',
+      formId: 'form-1',
+      versionNumber: 1,
+    });
+    const result = await stub.loadSubmission({
+      formId: 'form-other',
+      submissionId: 'sub-1',
+      versionNumber: 1,
+    });
+    assert.equal(result.outcome, 'forbidden');
+  });
+
+  it('seed 提供 versionNumber → 版本不符返回 not-found/version-stale（与生产一致）', async () => {
+    const stub = new StubRecruitmentForm();
+    stub.seed({
+      id: 'sub-1',
+      status: 'SUBMITTED',
+      submittedBy: 'a1',
+      formId: 'form-1',
+      versionNumber: 2,
+    });
+    const result = await stub.loadSubmission({
+      formId: 'form-1',
+      submissionId: 'sub-1',
+      versionNumber: 1,
+    });
+    assert.equal(result.outcome, 'not-found');
+    if (result.outcome === 'not-found') {
+      assert.equal(result.reason, 'version-stale');
+    }
   });
 });

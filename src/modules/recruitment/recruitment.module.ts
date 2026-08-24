@@ -92,7 +92,7 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
       useFactory: (db, uow) => new PostgresRecruitmentRepository(db, uow),
       inject: [DB_ADAPTER, RecruitmentUnitOfWork],
     },
-    // ----- 端口（授权已接线组织授权；表单集成仍为桩，4.4b 收口）-----
+    // ----- 端口（授权已接线组织授权；表单集成已收口 FormBackedRecruitmentForm）-----
     {
       provide: RECRUITMENT_AUTHORIZATION,
       useFactory: (permissions) => new OrgBackedRecruitmentAuthorization(permissions),

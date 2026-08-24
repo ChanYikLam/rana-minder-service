@@ -84,7 +84,12 @@ export class DefaultSubmitApplicationUseCase implements SubmitApplicationUseCase
         throw recruitmentErrors.forbidden('关联表单提交归属不符');
       }
       if (result.outcome === 'not-found') {
-        throw recruitmentErrors.validation('关联的表单提交不存在', input.formRef);
+        // 区分"提交缺失"与"版本已作废"（评审意见：表单修订后旧版本引用应明确提示）
+        const message =
+          result.reason === 'version-stale'
+            ? '关联表单提交版本已作废，请使用最新版本'
+            : '关联的表单提交不存在';
+        throw recruitmentErrors.validation(message, input.formRef);
       }
       const submission = result.submission;
       if (submission.submittedBy !== input.actor) {
