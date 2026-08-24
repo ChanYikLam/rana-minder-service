@@ -119,3 +119,33 @@ export class InMemoryCohortRepository implements CohortRepositoryPort {
     this.cohorts.set(snapshot.id, snapshot);
   }
 }
+
+// --------------------------------------------------------------------------
+// CFG-004/005 测试桩（配置根版本线/字段映射草稿）
+// --------------------------------------------------------------------------
+
+import type { ConfigRootRepositoryPort, FieldMappingStateRepositoryPort } from '../ports';
+import type { ConfigRootSnapshot } from '../../domain/models/config-version';
+import type { FieldMappingDraftState } from '../../domain/models/field-mapping';
+
+export class InMemoryConfigRootRepository implements ConfigRootRepositoryPort {
+  private readonly roots = new Map<string, ConfigRootSnapshot>();
+
+  async find(rootId: string): Promise<ConfigRootSnapshot | null> {
+    return this.roots.get(rootId) ?? null;
+  }
+  async save(snapshot: ConfigRootSnapshot): Promise<void> {
+    this.roots.set(snapshot.rootId, snapshot);
+  }
+}
+
+export class InMemoryFieldMappingStateRepository implements FieldMappingStateRepositoryPort {
+  state: FieldMappingDraftState | null = null;
+
+  async load(): Promise<FieldMappingDraftState | null> {
+    return this.state;
+  }
+  async save(state: FieldMappingDraftState): Promise<void> {
+    this.state = state;
+  }
+}

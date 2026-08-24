@@ -86,3 +86,21 @@ export interface CohortRepositoryPort {
   ): Promise<import('../domain/models/club-cohort').ClubCohortSnapshot | null>;
   save(snapshot: import('../domain/models/club-cohort').ClubCohortSnapshot): Promise<void>;
 }
+
+// --------------------------------------------------------------------------
+// CFG-005 配置版本线 / CFG-004 字段映射草稿 端口
+// --------------------------------------------------------------------------
+
+/** 配置根仓储（一个 rootId 一条版本线；当前 InMemory，PostgreSQL 随迁移切片接入） */
+export interface ConfigRootRepositoryPort {
+  find(
+    rootId: string,
+  ): Promise<import('../domain/models/config-version').ConfigRootSnapshot | null>;
+  save(snapshot: import('../domain/models/config-version').ConfigRootSnapshot): Promise<void>;
+}
+
+/** Casdoor 字段映射编辑态仓储（平台级单例草稿；CFG-004） */
+export interface FieldMappingStateRepositoryPort {
+  load(): Promise<import('../domain/models/field-mapping').FieldMappingDraftState | null>;
+  save(state: import('../domain/models/field-mapping').FieldMappingDraftState): Promise<void>;
+}

@@ -48,6 +48,18 @@ import {
   CREATE_COHORT_COMMAND,
   RENAME_COHORT_COMMAND,
   LIST_COHORTS_QUERY,
+  CONFIG_ROOT_REPOSITORY,
+  FIELD_MAPPING_STATE_REPOSITORY,
+  CREATE_CONFIG_DRAFT_COMMAND,
+  EDIT_CONFIG_DRAFT_COMMAND,
+  PUBLISH_CONFIG_VERSION_COMMAND,
+  ROLLBACK_CONFIG_VERSION_COMMAND,
+  GET_CONFIG_ROOT_QUERY,
+  SAVE_FIELD_MAPPING_DRAFT_COMMAND,
+  ACTIVATE_FIELD_MAPPING_REAL_DATA_COMMAND,
+  PUBLISH_FIELD_MAPPING_COMMAND,
+  GET_FIELD_MAPPING_QUERY,
+  GET_PLATFORM_POLICIES_QUERY,
 } from './tokens';
 
 import { InMemoryClubProfileRepository } from './application/testing/config-test-support';
@@ -55,6 +67,8 @@ import {
   InMemoryScopedPolicyTableRepository,
   InMemoryAcademicYearBoundaryRepository,
   InMemoryCohortRepository,
+  InMemoryConfigRootRepository,
+  InMemoryFieldMappingStateRepository,
 } from './application/testing/config-test-support';
 import {
   OrgBackedConfigAuthorization,
@@ -80,14 +94,35 @@ import {
   RenameCohortCommand,
   ListCohortsQuery,
 } from './application/commands/academic-year.commands';
+import {
+  CreateConfigDraftCommand,
+  EditConfigDraftCommand,
+  PublishConfigVersionCommand,
+  RollbackConfigVersionCommand,
+  GetConfigRootQuery,
+} from './application/commands/config-version.commands';
+import {
+  SaveFieldMappingDraftCommand,
+  ActivateFieldMappingRealDataCommand,
+  PublishFieldMappingCommand,
+  GetFieldMappingQuery,
+} from './application/commands/field-mapping.commands';
+import { GetPlatformPoliciesQuery } from './application/queries/get-policies.query';
 
 import { ConfigAuthGuard } from './interfaces/nest/config-auth.guard';
 import { PublicClubProfileNestController } from './interfaces/nest/public-club-profile.nest.controller';
 import { OrgClubProfileNestController } from './interfaces/nest/org-club-profile.nest.controller';
+import { AdminConfigNestController } from './interfaces/nest/admin-config.nest.controller';
+import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.controller';
 
 @Module({
   imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule],
-  controllers: [PublicClubProfileNestController, OrgClubProfileNestController],
+  controllers: [
+    PublicClubProfileNestController,
+    OrgClubProfileNestController,
+    AdminConfigNestController,
+    OrgPolicyNestController,
+  ],
   providers: [
     // ----- 会话（identity 链路适配；未认证 fail-closed 401）-----
     {
@@ -186,6 +221,61 @@ import { OrgClubProfileNestController } from './interfaces/nest/org-club-profile
       provide: LIST_COHORTS_QUERY,
       useFactory: (cohorts) => new ListCohortsQuery(cohorts),
       inject: [COHORT_REPOSITORY],
+    },
+    // ----- CFG-002 平台策略查询 -----
+    {
+      provide: GET_PLATFORM_POLICIES_QUERY,
+      useFactory: (repo) => new GetPlatformPoliciesQuery(repo),
+      inject: [SCOPED_POLICY_TABLE_REPOSITORY],
+    },
+    // ----- CFG-004 Casdoor 字段映射 -----
+    { provide: FIELD_MAPPING_STATE_REPOSITORY, useClass: InMemoryFieldMappingStateRepository },
+    {
+      provide: SAVE_FIELD_MAPPING_DRAFT_COMMAND,
+      useFactory: (states, authz) => new SaveFieldMappingDraftCommand(states, authz),
+      inject: [FIELD_MAPPING_STATE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: ACTIVATE_FIELD_MAPPING_REAL_DATA_COMMAND,
+      useFactory: (states, authz) => new ActivateFieldMappingRealDataCommand(states, authz),
+      inject: [FIELD_MAPPING_STATE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: PUBLISH_FIELD_MAPPING_COMMAND,
+      useFactory: (states, roots, authz) => new PublishFieldMappingCommand(states, roots, authz),
+      inject: [FIELD_MAPPING_STATE_REPOSITORY, CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: GET_FIELD_MAPPING_QUERY,
+      useFactory: (states, authz) => new GetFieldMappingQuery(states, authz),
+      inject: [FIELD_MAPPING_STATE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    // ----- CFG-005 配置版本线 -----
+    { provide: CONFIG_ROOT_REPOSITORY, useClass: InMemoryConfigRootRepository },
+    {
+      provide: CREATE_CONFIG_DRAFT_COMMAND,
+      useFactory: (roots, authz) => new CreateConfigDraftCommand(roots, authz),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: EDIT_CONFIG_DRAFT_COMMAND,
+      useFactory: (roots, authz) => new EditConfigDraftCommand(roots, authz),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: PUBLISH_CONFIG_VERSION_COMMAND,
+      useFactory: (roots, authz) => new PublishConfigVersionCommand(roots, authz),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: ROLLBACK_CONFIG_VERSION_COMMAND,
+      useFactory: (roots, authz) => new RollbackConfigVersionCommand(roots, authz),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+    },
+    {
+      provide: GET_CONFIG_ROOT_QUERY,
+      useFactory: (roots, authz) => new GetConfigRootQuery(roots, authz),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
     },
   ],
   exports: [
