@@ -12,10 +12,13 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { before, after, test } from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
+
+const req = createRequire(__filename);
 
 const CI = process.env.CI === 'true';
 const DB_NAME = process.env.PGTEST_DB ?? 'ranaminder_test';
@@ -37,61 +40,30 @@ type Migration = {
   down: (runner: { query: (sql: string) => Promise<unknown> }) => Promise<void>;
 };
 
-import * as mIdentity from '../../src/database/migrations/20260820100000_create-identity-tables';
-import * as mNameCorr from '../../src/database/migrations/20260820120000_create-name-correction-and-auth-tables';
-import * as mJobTasksOld from '../../src/database/migrations/20260820130000_create-job-tasks-table';
-import * as mFormDef from '../../src/database/migrations/20260820140000_create-form-definition-tables';
-import * as mFormSub from '../../src/database/migrations/20260821100000_create-form-submission-tables';
-import * as mRecruit from '../../src/database/migrations/20260822000000_create-recruitment-tables';
-import * as mAdmitted from '../../src/database/migrations/20260822000001_add-admitted-accepted-status';
-import * as mRevision from '../../src/database/migrations/20260822000002_add-revision-numbers';
-import * as mChannelLimits from '../../src/database/migrations/20260822000003_add-channel-choice-limits';
-import * as mInterviewHold from '../../src/database/migrations/20260822000004_fix-interview-status-hold';
-import * as mPathUnique from '../../src/database/migrations/20260822000005_add-department-path-unique';
-import * as mFormUnique from '../../src/database/migrations/20260822000006_add-form-submission-unique';
-import * as mJobTasksNew from '../../src/database/migrations/20260822120000_create-job-task-tables';
-import * as mInvitation from '../../src/database/migrations/20260822100000_create-invitation-tables';
-import * as mAudit from '../../src/database/migrations/20260823000000_create-audit-event-tables';
-import * as mDeletionChecklist from '../../src/database/migrations/20260823120000_create-deletion-checklist-tables';
-import * as mJoint from '../../src/database/migrations/20260823130000_create-joint-tables';
-import * as mChannelDeadline from '../../src/database/migrations/20260824000000_add-channel-deadline';
-import * as mRemedyWindow from '../../src/database/migrations/20260824000001_add-remedy-window';
-import * as mPathPublished from '../../src/database/migrations/20260824000002_add-path-published';
+/**
+ * 迁移清单由文件系统自动扫描生成（不再手写登记）：
+ * 按文件名排序扫描 src/database/migrations/ 下全部 `20...` 迁移文件，
+ * 经 createRequire 动态加载其 up/down。新增迁移文件即自动进入测试列表，
+ * 从根上消除"新增迁移后漏登记进测试列表导致 CI 红"的摩擦（评审：#148）。
+ * 时间戳前缀唯一性仍单独断言（见下方"前缀唯一"测试）。
+ */
+const MIG_DIR = path.resolve(__dirname, '../../src/database/migrations');
+const MIGRATION_FILES = fs
+  .readdirSync(MIG_DIR)
+  .filter((f) => /^20\d{12}_[\w-]+\.ts$/.test(f))
+  .sort();
 
-const migrations: Array<{ name: string; m: Migration }> = [
-  { name: '20260820100000', m: mIdentity },
-  { name: '20260820120000', m: mNameCorr },
-  { name: '20260820130000', m: mJobTasksOld },
-  { name: '20260820140000', m: mFormDef },
-  { name: '20260821100000', m: mFormSub },
-  { name: '20260822000000', m: mRecruit },
-  { name: '20260822000001', m: mAdmitted },
-  { name: '20260822000002', m: mRevision },
-  { name: '20260822000003', m: mChannelLimits },
-  { name: '20260822000004', m: mInterviewHold },
-  { name: '20260822000005', m: mPathUnique },
-  { name: '20260822000006', m: mFormUnique },
-  { name: '20260822100000', m: mInvitation },
-  { name: '20260822120000', m: mJobTasksNew },
-  { name: '20260823000000-audit', m: mAudit },
-  { name: '20260823120000-deletion-checklist', m: mDeletionChecklist },
-  { name: '20260823130000-joint', m: mJoint },
-  { name: '20260824000000-channel-deadline', m: mChannelDeadline },
-  { name: '20260824000001-remedy-window', m: mRemedyWindow },
-  { name: '20260824000002-path-published', m: mPathPublished },
-];
+const migrations: Array<{ name: string; m: Migration }> = MIGRATION_FILES.map((file) => ({
+  name: file.slice(0, 14),
+  m: req(path.join(MIG_DIR, file)) as Migration,
+}));
 
 /**
  * 迁移时间戳前缀唯一（未来版本登记工具按前缀编号，冲突会失败；评审 info）。
  * 直接从文件系统扫描全部迁移文件断言唯一性——不依赖上方列表是否完整，
  * 避免"列表内唯一但文件系统前缀已重复"漏检。
  */
-const MIG_DIR = path.resolve(__dirname, '../../src/database/migrations');
-const ALL_MIGRATION_PREFIXES = fs
-  .readdirSync(MIG_DIR)
-  .filter((f) => /^20\d{12}_[\w-]+\.ts$/.test(f))
-  .map((f) => f.slice(0, 14))
-  .sort();
+const ALL_MIGRATION_PREFIXES = MIGRATION_FILES.map((f) => f.slice(0, 14)).sort();
 const MIGRATION_VERSION_UNIQUE =
   new Set(ALL_MIGRATION_PREFIXES).size === ALL_MIGRATION_PREFIXES.length;
 /** 测试列表必须与文件系统迁移一一对应（缺登即失败，评审 info） */
