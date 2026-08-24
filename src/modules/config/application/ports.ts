@@ -19,7 +19,16 @@ import type { ClubProfileSnapshot } from '../domain/models/club-profile';
 /** 展示资料仓储端口：按社团 ID 存取聚合快照 */
 export interface ClubProfileRepositoryPort {
   load(clubId: string): Promise<ClubProfileSnapshot | null>;
-  save(snapshot: ClubProfileSnapshot): Promise<void>;
+  /**
+   * 保存聚合快照。guard.expectedPreviousRevision 提供时为条件更新（持久层
+   * 乐观锁：库中当前修订号必须等于期望前值，否则拒绝写入并抛
+   * CFG_VERSION_CONFLICT），防止「读-改-写」窗口内的并发丢失更新；
+   * 缺省（首次初始化）为无条件 upsert。
+   */
+  save(
+    snapshot: ClubProfileSnapshot,
+    guard?: { readonly expectedPreviousRevision: number },
+  ): Promise<void>;
 }
 
 /** 管理身份：OWNER=负责人/人事本人修改；PLATFORM=平台超管代改 */

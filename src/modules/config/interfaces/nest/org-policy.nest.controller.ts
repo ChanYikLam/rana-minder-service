@@ -22,6 +22,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
+import { randomUUID } from 'node:crypto';
+
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 import type { PolicyKey } from '../../domain/models/scoped-policy';
 import {
@@ -68,9 +70,9 @@ export class OrgPolicyNestController {
     }
   }
 
-  /** 创建届次的稳定标识由服务端生成（UUIDv7 由基础设施提供；此处用时间基占位并交由仓储唯一化） */
+  /** 创建届次的稳定标识：服务端生成 UUID（对象标识用稳定 UUID 约定，api-paths） */
   private newId(): string {
-    return `cohort-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    return randomUUID();
   }
 
   @Get('policies')

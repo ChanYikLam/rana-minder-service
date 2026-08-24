@@ -13,12 +13,13 @@
 import {
   academicYearNameForDate,
   assertNoOverlap,
-  findRewrittenHistoricalYears,
   generateAcademicYears,
   resolveCurrentAcademicYear,
   validateBoundary,
   type AcademicYearSnapshot,
 } from '../../domain/models/academic-year';
+import { randomUUID } from 'node:crypto';
+
 import { ClubCohort } from '../../domain/models/club-cohort';
 import type { ClubCohortSnapshot } from '../../domain/models/club-cohort';
 import type {
@@ -83,21 +84,43 @@ export class UpdateAcademicYearBoundaryCommand {
       count: input.generateCount ?? DEFAULT_GENERATE_COUNT,
     });
 
-    // 历史学年保护：已开始（startDate ≤ now）的存量学年不得被改写
-    const startedExisting = settings.generatedYears.filter(
-      (y) => y.startDate.getTime() <= input.now.getTime(),
-    );
-    const rewritten = findRewrittenHistoricalYears(startedExisting, regenerated);
-    if (rewritten.length > 0) {
-      throw cfgErrors.conflict(
-        `分界规则变更将改写已开始的历史学年:${rewritten.join('、')}（CFG-003 历史保护）`,
+    // 历史学年保护（区间交叠口径，CFG-003）：
+    // 任何与新窗口区间交叠的存量学年，凡非「同名且起止完全一致」——
+    // 已开始 → CFG_CONFLICT 拒绝；未开始 → 由重新生成结果取代。
+    // 仅按名比对不足以防数据丢失：改名规则下旧名年份与新区间交叠但名字不同，
+    // 会被静默丢弃（P1 教训），故必须以区间交叠审视。
+    const intersects = (a: AcademicYearSnapshot, b: AcademicYearSnapshot): boolean =>
+      a.startDate.getTime() <= b.endDate.getTime() && b.startDate.getTime() <= a.endDate.getTime();
+    for (const existing of settings.generatedYears) {
+      if (!regenerated.some((r) => intersects(r, existing))) {
+        continue;
+      }
+      const identical = regenerated.some(
+        (r) =>
+          r.name === existing.name &&
+          r.startDate.getTime() === existing.startDate.getTime() &&
+          r.endDate.getTime() === existing.endDate.getTime(),
       );
+      if (identical) {
+        continue;
+      }
+      if (existing.startDate.getTime() <= input.now.getTime()) {
+        throw cfgErrors.conflict(
+          `分界规则变更将改写已开始的历史学年:${existing.name}（CFG-003 历史保护）`,
+        );
+      }
     }
 
-    // 合并：保留完全早于新窗口的存量学年 + 新窗口；整体不得重叠
-    const windowStart = regenerated[0].startDate.getTime();
-    const keptPast = settings.generatedYears.filter((y) => y.endDate.getTime() < windowStart);
-    const merged = [...keptPast, ...regenerated].sort(
+    // 合并：被新窗口覆盖（含同名复刻）的存量让位于重新生成结果；
+    // 与新窗口不交叠的存量（含全部已结束历史）原样保留；整体不得重叠。
+    const replacedNames = new Set(regenerated.map((r) => r.name));
+    const kept = settings.generatedYears.filter((existing) => {
+      if (replacedNames.has(existing.name)) {
+        return false;
+      }
+      return !regenerated.some((r) => intersects(r, existing));
+    });
+    const merged = [...kept, ...regenerated].sort(
       (a, b) => a.startDate.getTime() - b.startDate.getTime(),
     );
     assertNoOverlap(merged);
@@ -175,7 +198,7 @@ export class CreateCohortCommand {
     }
 
     const cohort = ClubCohort.create({
-      id: input.cohortId ?? `cohort-${input.clubId}-${targetYear}-${Date.now()}`,
+      id: input.cohortId ?? randomUUID(),
       clubId: input.clubId,
       name: input.name,
       academicYearName: targetYear,

@@ -52,6 +52,8 @@ export class DefaultUpdateClubProfileCommand implements UpdateClubProfileCommand
     const profile = existing
       ? ClubProfile.fromSnapshot(existing)
       : ClubProfile.createDefault({ clubId: input.clubId, clubName: input.clubId, now: input.now });
+    // 持久层乐观锁守卫：仅对已存在资料的更新启用（首次初始化为无条件 upsert）
+    const guard = existing ? { expectedPreviousRevision: existing.revisionNumber } : undefined;
 
     if (input.expectedVersion !== undefined && profile.revisionNumber !== input.expectedVersion) {
       throw cfgErrors.versionConflict();
@@ -63,7 +65,7 @@ export class DefaultUpdateClubProfileCommand implements UpdateClubProfileCommand
       return { profile: profile.toSnapshot(), savedAt: input.now };
     }
 
-    await this.repository.save(profile.toSnapshot());
+    await this.repository.save(profile.toSnapshot(), guard);
     return { profile: profile.toSnapshot(), savedAt: input.now };
   }
 }

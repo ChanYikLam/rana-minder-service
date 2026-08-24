@@ -11,8 +11,8 @@
  *   'OWNER'，平台超管 → 'PLATFORM'（代改），否则拒绝（fail-closed）。
  *
  * 会话：identity AUTH_SESSION_PROVIDER 经 adaptSessionProvider 适配（未认证 401，
- * fail-closed）。仓储：InMemoryClubProfileRepository（PostgreSQL 仓储随后续切片接
- * 入）。后续 CFG-002~005（默认值/学年届次/字段映射/版本发布）应用层在本模块追加。
+ * fail-closed）。仓储：PostgreSQL 权威实现（迁移 20260824000000，与仓储单源一致；
+ * DB 适配未接线时 fail-closed）。InMemory 实现保留于 testing/ 供单元测试直用。
  */
 
 import { Module } from '@nestjs/common';
@@ -201,7 +201,6 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
       inject: [CONFIG_REPOSITORY, CONFIG_MEMBERSHIP_PORT],
     },
     // ----- CFG-002 作用域策略（平台默认值/社团覆盖/活动快照）-----
-    { provide: SCOPED_POLICY_TABLE_REPOSITORY, useClass: InMemoryScopedPolicyTableRepository },
     {
       provide: CONFIG_POLICY_AUTHORIZATION,
       useFactory: (permissions) => new OrgBackedPolicyAuthorization(permissions),
@@ -229,11 +228,6 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
       inject: [SCOPED_POLICY_TABLE_REPOSITORY],
     },
     // ----- CFG-003 学年与届次 -----
-    {
-      provide: ACADEMIC_YEAR_BOUNDARY_REPOSITORY,
-      useClass: InMemoryAcademicYearBoundaryRepository,
-    },
-    { provide: COHORT_REPOSITORY, useClass: InMemoryCohortRepository },
     {
       provide: UPDATE_ACADEMIC_YEAR_BOUNDARY_COMMAND,
       useFactory: (repo, authz) => new UpdateAcademicYearBoundaryCommand(repo, authz),
@@ -267,7 +261,6 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
       inject: [SCOPED_POLICY_TABLE_REPOSITORY],
     },
     // ----- CFG-004 Casdoor 字段映射 -----
-    { provide: FIELD_MAPPING_STATE_REPOSITORY, useClass: InMemoryFieldMappingStateRepository },
     {
       provide: SAVE_FIELD_MAPPING_DRAFT_COMMAND,
       useFactory: (states, authz) => new SaveFieldMappingDraftCommand(states, authz),
@@ -289,7 +282,6 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
       inject: [FIELD_MAPPING_STATE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
     },
     // ----- CFG-005 配置版本线 -----
-    { provide: CONFIG_ROOT_REPOSITORY, useClass: InMemoryConfigRootRepository },
     {
       provide: CREATE_CONFIG_DRAFT_COMMAND,
       useFactory: (roots, authz) => new CreateConfigDraftCommand(roots, authz),

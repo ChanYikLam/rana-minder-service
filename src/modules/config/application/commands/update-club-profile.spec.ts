@@ -116,6 +116,37 @@ describe('更新社团展示资料命令（CFG-001）', () => {
     assert.ok(await repo.load(CLUB_ID));
   });
 
+  it('持久层乐观锁守卫：guard 前值不匹配拒绝写入（并发丢失更新防线）', async () => {
+    // 预置 rev=2 的存量
+    auth.manageRole = 'OWNER';
+    await command.execute({
+      clubId: CLUB_ID,
+      actor: ACTOR,
+      now: NOW,
+      patch: { displayName: 'v2' },
+    });
+    const stored = await repo.load(CLUB_ID);
+    assert.equal(stored?.revisionNumber, 2);
+
+    // 以错误前值 99 条件写入 → CFG_VERSION_CONFLICT 且数据未被改动
+    await assert.rejects(
+      () =>
+        repo.save(
+          { ...(stored as NonNullable<typeof stored>), displayName: '越权覆盖', revisionNumber: 3 },
+          { expectedPreviousRevision: 99 },
+        ),
+      { code: 'CFG_VERSION_CONFLICT' },
+    );
+    assert.equal((await repo.load(CLUB_ID))?.displayName, 'v2');
+
+    // 正确前值写入成功
+    await repo.save(
+      { ...(stored as NonNullable<typeof stored>), displayName: 'v3', revisionNumber: 3 },
+      { expectedPreviousRevision: 2 },
+    );
+    assert.equal((await repo.load(CLUB_ID))?.displayName, 'v3');
+  });
+
   it('空 patch：不开新版本、不落库', async () => {
     auth.manageRole = 'OWNER';
     const before = await repo.load(CLUB_ID);

@@ -14,6 +14,7 @@
 import type { DbAdapter, RlsScope } from '../../../shared/db-adapter';
 import type { ConfigUnitOfWork } from './unit-of-work';
 
+import { ConfigDomainError } from '../domain/errors';
 import type {
   ClubProfileSnapshot,
   ClubProfileFieldChange,
@@ -103,8 +104,44 @@ export class PostgresClubProfileRepository implements ClubProfileRepositoryPort 
     });
   }
 
-  async save(snapshot: ClubProfileSnapshot): Promise<void> {
+  async save(
+    snapshot: ClubProfileSnapshot,
+    guard?: { readonly expectedPreviousRevision: number },
+  ): Promise<void> {
     await this.uow.runShared({ kind: 'unprotected' }, async () => {
+      if (guard) {
+        // 持久层乐观锁：库中修订号必须等于期望前值；零行返回即并发冲突
+        const updated = await this.db.query<Row>(
+          this.uow.active,
+          `UPDATE public.config_club_profiles SET
+             display_name = $2, logo_file_ref = $3, intro = $4, recruitment_note = $5,
+             internal_note = $6, contacts = $7::jsonb, history = $8::jsonb,
+             revision_number = $9, updated_by = $10, updated_at = $11
+           WHERE club_id = $1 AND revision_number = $12
+           RETURNING club_id`,
+          [
+            snapshot.clubId,
+            snapshot.displayName,
+            snapshot.logoFileRef,
+            snapshot.intro,
+            snapshot.recruitmentNote,
+            snapshot.internalNote,
+            JSON.stringify(snapshot.contacts),
+            JSON.stringify(snapshot.history),
+            snapshot.revisionNumber,
+            snapshot.updatedBy,
+            snapshot.updatedAt,
+            guard.expectedPreviousRevision,
+          ],
+        );
+        if (updated.length === 0) {
+          throw new ConfigDomainError(
+            'CFG_VERSION_CONFLICT',
+            '展示资料已被他人修改（持久层乐观锁拒绝写入）',
+          );
+        }
+        return;
+      }
       await this.db.query(
         this.uow.active,
         `INSERT INTO public.config_club_profiles

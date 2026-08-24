@@ -8,6 +8,7 @@
  * - StubClubAccessInfoPort：可编程 Casdoor Group 对应关系（默认 null）。
  */
 
+import { ConfigDomainError } from '../../domain/errors';
 import type { ClubProfileSnapshot } from '../../domain/models/club-profile';
 import type {
   ClubProfileRepositoryPort,
@@ -23,7 +24,18 @@ export class InMemoryClubProfileRepository implements ClubProfileRepositoryPort 
   async load(clubId: string): Promise<ClubProfileSnapshot | null> {
     return this.profiles.get(clubId) ?? null;
   }
-  async save(snapshot: ClubProfileSnapshot): Promise<void> {
+  async save(
+    snapshot: ClubProfileSnapshot,
+    guard?: { readonly expectedPreviousRevision: number },
+  ): Promise<void> {
+    const stored = this.profiles.get(snapshot.clubId);
+    if (guard && (stored?.revisionNumber ?? null) !== guard.expectedPreviousRevision) {
+      // 与 PostgreSQL 实现同语义：条件更新零行即版本冲突
+      throw new ConfigDomainError(
+        'CFG_VERSION_CONFLICT',
+        '展示资料已被他人修改（持久层乐观锁拒绝写入）',
+      );
+    }
     this.profiles.set(snapshot.clubId, snapshot);
   }
 }

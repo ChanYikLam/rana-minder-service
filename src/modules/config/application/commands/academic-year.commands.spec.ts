@@ -114,6 +114,38 @@ describe('学年自动生成与当前学年解析（CFG-003 自动学年）', ()
     assert.equal((await repo.load())!.boundary.month, 8);
   });
 
+  it('P1 回归：改名规则致已开始学年与新窗口交叠即拒绝（不得静默丢弃）', async () => {
+    const command = new UpdateAcademicYearBoundaryCommand(repo, auth);
+    // 2026-05-01：'2025-2026' 已开始（08-01 规则）
+    await command.execute({
+      subjectId: SA,
+      now: NOW,
+      month: 8,
+      day: 1,
+      timeZone: 'Asia/Shanghai',
+      generateCount: 3,
+    });
+    const before = (await repo.load())!.generatedYears.map((y) => y.name);
+    assert.ok(before.includes('2025-2026'));
+
+    // 改为 01-01：'2025-2026' 与新窗口 '2026-2027'（2026-01-01 起）区间交叠、
+    // 名字不同且已开始——必须拒绝而非静默丢弃
+    await assert.rejects(
+      () =>
+        command.execute({
+          subjectId: SA,
+          now: NOW,
+          month: 1,
+          day: 1,
+          timeZone: 'Asia/Shanghai',
+        }),
+      { code: 'CFG_CONFLICT' },
+    );
+    // 存量完好
+    const after = (await repo.load())!.generatedYears.map((y) => y.name);
+    assert.deepEqual(after, before);
+  });
+
   it('非法分界日（02-29）拒绝', async () => {
     const command = new UpdateAcademicYearBoundaryCommand(repo, auth);
     await assert.rejects(
