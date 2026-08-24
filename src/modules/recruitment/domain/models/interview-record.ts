@@ -154,6 +154,21 @@ export class InterviewRecord {
     return true;
   }
 
+  /** 标记请假（SRS-SM-REC-005；申请人本人可发起，应用层鉴权） */
+  markOnLeave(machine: InterviewRecordStateMachine, now: Date): boolean {
+    return this.transition(machine, InterviewRecordEvent.MARK_ON_LEAVE, now);
+  }
+
+  /** 标记迟到（迟到后仍可开始面试 → 进行中） */
+  markLate(machine: InterviewRecordStateMachine, now: Date): boolean {
+    return this.transition(machine, InterviewRecordEvent.MARK_LATE, now);
+  }
+
+  /** 标记缺席（可重新安排） */
+  markAbsent(machine: InterviewRecordStateMachine, now: Date): boolean {
+    return this.transition(machine, InterviewRecordEvent.MARK_ABSENT, now);
+  }
+
   /** 暂缓：须设处理期限（不晚于活动结束，REC-041） */
   hold(machine: InterviewRecordStateMachine, until: Date, now: Date): boolean {
     if (!this.transition(machine, InterviewRecordEvent.HOLD, now)) {

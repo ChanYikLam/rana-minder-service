@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+
+import { DB_ADAPTER } from '../../adapters/tokens';
 import { CreateInvitationCommand } from './application/commands/create-invitation.command';
 import { AcceptInvitationCommand } from './application/commands/accept-invitation.command';
 import { RejectInvitationCommand } from './application/commands/reject-invitation.command';
@@ -20,11 +22,21 @@ import { InvitationStateMachine } from './domain/state-machines/invitation-state
 import { RoutineInvitationStateMachine } from './domain/state-machines/routine-invitation-state-machine';
 import { InvitationPolicy } from './domain/services/invitation-policy';
 import { INVITATION_REPOSITORY } from './infrastructure/invitation-repository';
-import { InMemoryInvitationRepository } from './infrastructure/invitation-repository';
 import { ROUTINE_INVITATION_REPOSITORY } from './infrastructure/routine-invitation-repository';
-import { InMemoryRoutineInvitationRepository } from './infrastructure/routine-invitation-repository';
+import { PostgresInvitationRepository } from './infrastructure/postgres-invitation.repository';
+import { PostgresRoutineInvitationRepository } from './infrastructure/postgres-invitation.repository';
 import { CASDOOR_RELATION_PORT } from './infrastructure/casdoor-relation-port';
-import { DefaultCasdoorRelationPort } from './infrastructure/casdoor-relation-port';
+import { OrgBackedCasdoorRelationPort } from './infrastructure/org-backed-casdoor-relation';
+import { OrganizationModule } from '../organization/module';
+import { GROUP_MAPPING_REGISTRY } from '../organization/application/ports';
+import { CasdoorModule } from '../../platform/casdoor/module';
+import { IdentityModule } from '../identity/identity.module';
+import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
+import { adaptSessionProvider } from '../../shared/adapt-session-provider';
+import { INVITATION_AUTH_SESSION_PROVIDER } from './interfaces/nest/invitation-auth-session';
+import { InvitationAuthGuard } from './interfaces/nest/invitation-auth.guard';
+import { InvitationNestController } from './interfaces/nest/invitation.nest.controller';
+import { CASDOOR_WRITE_PORT } from '../../platform/casdoor/contracts/ports';
 
 /**
  * 领域模块：邀请与成员激活（4.5，SRS-SM-INV-001、SRS-SM-MEM-004）。
@@ -40,15 +52,37 @@ import { DefaultCasdoorRelationPort } from './infrastructure/casdoor-relation-po
  * - 重发 = 全新邀请对象，旧邀请不修改保留；接受和退出历史不得删除。
  */
 @Module({
+  imports: [OrganizationModule, CasdoorModule, IdentityModule],
+  controllers: [InvitationNestController],
   providers: [
     // 领域规则（纯规则）
     InvitationStateMachine,
     RoutineInvitationStateMachine,
     InvitationPolicy,
     // 基础设施端口（生产替换为 PostgreSQL/Casdoor 适配实现）
-    { provide: INVITATION_REPOSITORY, useClass: InMemoryInvitationRepository },
-    { provide: ROUTINE_INVITATION_REPOSITORY, useClass: InMemoryRoutineInvitationRepository },
-    { provide: CASDOOR_RELATION_PORT, useClass: DefaultCasdoorRelationPort },
+    // 基础设施端口（PostgreSQL；列与迁移 20260822100000 对齐；DB 未连接时 fail-closed）
+    {
+      provide: INVITATION_REPOSITORY,
+      useFactory: (db) => new PostgresInvitationRepository(db),
+      inject: [DB_ADAPTER],
+    },
+    {
+      provide: ROUTINE_INVITATION_REPOSITORY,
+      useFactory: (db) => new PostgresRoutineInvitationRepository(db),
+      inject: [DB_ADAPTER],
+    },
+    {
+      provide: CASDOOR_RELATION_PORT,
+      useFactory: (mappings, casdoor) => new OrgBackedCasdoorRelationPort(mappings, casdoor),
+      inject: [GROUP_MAPPING_REGISTRY, CASDOOR_WRITE_PORT],
+    },
+    // ----- 会话（转发 identity OIDC；endpoint 为空时整体 fail-closed）-----
+    {
+      provide: INVITATION_AUTH_SESSION_PROVIDER,
+      useFactory: (identitySession) => adaptSessionProvider(identitySession),
+      inject: [AUTH_SESSION_PROVIDER],
+    },
+    InvitationAuthGuard,
     // 应用命令与查询
     CreateInvitationCommand,
     AcceptInvitationCommand,

@@ -10,6 +10,7 @@ import {
   StubRecruitmentAuthorization,
   StubRecruitmentForm,
 } from './testing/recruitment-test-support';
+import type { RecruitmentFormPort } from './ports/recruitment-form.port';
 import { DefaultCreateRecruitmentActivityUseCase } from './commands/create-recruitment-activity.use-case';
 import { DefaultPublishRecruitmentActivityUseCase } from './commands/publish-recruitment-activity.use-case';
 import { DefaultOpenApplicationChannelUseCase } from './commands/open-application-channel.use-case';
@@ -84,7 +85,7 @@ describe('recruitment application layer (REC-001~004)', () => {
     });
     assert.strictEqual(opened.channelId, channelId);
 
-    form.seed({ id: 'sub-1', status: 'SUBMITTED', submittedBy: APPLICANT });
+    form.seed({ id: 'sub-1', status: 'SUBMITTED', submittedBy: APPLICANT, versionNumber: 1 });
 
     const submit = new DefaultSubmitApplicationUseCase(repo, auth, form);
     const result = await submit.execute({
@@ -153,7 +154,7 @@ describe('recruitment application layer (REC-001~004)', () => {
     await openChannel.execute({ activityId, actor: ACTOR, now: NOW, id: channelId });
 
     auth.submitAllowed = true;
-    form.seed({ id: 'sub-2', status: 'SUBMITTED', submittedBy: APPLICANT });
+    form.seed({ id: 'sub-2', status: 'SUBMITTED', submittedBy: APPLICANT, versionNumber: 1 });
     const submit = new DefaultSubmitApplicationUseCase(repo, auth, form);
     const { applicationId } = await submit.execute({
       activityId,
@@ -281,7 +282,7 @@ describe('recruitment application layer (REC-001~004)', () => {
     activity.pause(NOW);
     await repo.saveActivity(activity.toSnapshot());
 
-    form.seed({ id: 'sub-p', status: 'SUBMITTED', submittedBy: APPLICANT });
+    form.seed({ id: 'sub-p', status: 'SUBMITTED', submittedBy: APPLICANT, versionNumber: 1 });
     await assert.rejects(
       () =>
         new DefaultSubmitApplicationUseCase(repo, auth, form).execute({
@@ -330,7 +331,7 @@ describe('recruitment application layer (REC-001~004)', () => {
       id: 'ch-deadline',
     });
 
-    form.seed({ id: 'sub-d', status: 'SUBMITTED', submittedBy: APPLICANT });
+    form.seed({ id: 'sub-d', status: 'SUBMITTED', submittedBy: APPLICANT, versionNumber: 1 });
     // NOW = 2026-01-01，活动 endDate = 2026-01-15，尚未截止，可提交
     await new DefaultSubmitApplicationUseCase(repo, auth, form).execute({
       activityId,
@@ -355,6 +356,56 @@ describe('recruitment application layer (REC-001~004)', () => {
           now: new Date('2026-02-01T00:00:00Z'),
         }),
       { code: 'REC_PRECONDITION' },
+    );
+  });
+});
+
+describe('submit-application 表单端口 forbidden 分支（评审补测）', () => {
+  it('跨表单读取：端口返回 forbidden → use case 按无权拒绝（不误报不存在）', async () => {
+    const repo = new InMemoryRecruitmentRepository();
+    const auth = new StubRecruitmentAuthorization();
+    auth.manageAllowed = true;
+    auth.submitAllowed = true;
+    // 完整实现 RecruitmentFormPort（去 as never 强转；评审意见：类型安全、意图清晰）
+    const forbiddenForm: RecruitmentFormPort = {
+      loadSubmission: async () => ({ outcome: 'forbidden' }),
+    };
+    const activityId = 'act-f';
+    const create = new DefaultCreateRecruitmentActivityUseCase(repo, auth);
+    await create.execute({
+      clubId: CLUB_ID,
+      title: '秋招',
+      description: null,
+      actor: ACTOR,
+      now: NOW,
+      id: activityId,
+    });
+    // 活动进行中才能开通道：先 open 活动
+    const activity = RecruitmentActivity.fromSnapshot((await repo.loadActivity(activityId))!);
+    assert.ok(activity.open(new DefaultRecruitmentActivityStateMachine(), NOW), '活动开放失败');
+    await repo.saveActivity(activity.toSnapshot());
+    const channelId = 'ch-f';
+    const openChannel = new DefaultOpenApplicationChannelUseCase(repo, auth);
+    await openChannel.execute({
+      activityId,
+      minChoices: 1,
+      maxChoices: 3,
+      actor: ACTOR,
+      now: NOW,
+      id: channelId,
+    });
+    const submit = new DefaultSubmitApplicationUseCase(repo, auth, forbiddenForm);
+    await assert.rejects(
+      submit.execute({
+        activityId,
+        channelId,
+        applicantId: APPLICANT,
+        departmentChoices: [],
+        formRef: { formId: 'other-form', submissionId: 'sub-x', versionNumber: 1 },
+        actor: APPLICANT,
+        now: NOW,
+      }),
+      /关联表单提交归属不符/,
     );
   });
 });

@@ -13,7 +13,7 @@ import {
   InMemoryRelationCommandAuditStore,
   InMemoryRelationCommandStore,
 } from '../../infrastructure/in-memory/memory-implementations';
-import type { CurrentPermissionsPort } from '../ports';
+import type { CurrentPermissionsPort, GroupMappingRegistry } from '../ports';
 
 class MutablePermissions implements CurrentPermissionsPort {
   perms = new Map<string, string[]>([['club-acm-1', [PermissionCatalog.CLUB_MEMBER_MANAGE]]]);
@@ -31,25 +31,31 @@ class MutablePermissions implements CurrentPermissionsPort {
   }
 }
 
-function buildHarness() {
-  const casdoor = new InMemoryCasdoorPort({
-    groups: [
-      {
-        ref: { owner: 'club-acm', name: 'ACM社团' },
-        displayName: 'ACM社团',
-        parentRef: null,
-        memberIds: ['u_a', 'u_b', 'u_c'],
-      },
-      {
-        ref: { owner: 'club-acm', name: '宣传部' },
-        displayName: '宣传部',
-        parentRef: { owner: 'club-acm', name: 'ACM社团' },
-        memberIds: ['u_a', 'u_b'],
-      },
-    ],
-  });
+function buildHarness(options?: {
+  mappings?: GroupMappingRegistry;
+  casdoor?: InMemoryCasdoorPort;
+}) {
+  const casdoor =
+    options?.casdoor ??
+    new InMemoryCasdoorPort({
+      groups: [
+        {
+          ref: { owner: 'club-acm', name: 'ACM社团' },
+          displayName: 'ACM社团',
+          parentRef: null,
+          memberIds: ['u_a', 'u_b', 'u_c'],
+        },
+        {
+          ref: { owner: 'club-acm', name: '宣传部' },
+          displayName: '宣传部',
+          parentRef: { owner: 'club-acm', name: 'ACM社团' },
+          memberIds: ['u_a', 'u_b'],
+        },
+      ],
+    });
   const clubs = new InMemoryClubStore();
   const relationStore = new InMemoryRelationCommandStore();
+  const mappingRegistry = options?.mappings ?? new InMemoryGroupMappingRegistry();
   const scheduler = new InMemoryJobScheduler();
   const notifications = new InMemoryNotificationPort();
   const permissions = new MutablePermissions();
@@ -58,7 +64,7 @@ function buildHarness() {
     relationStore,
     clubs,
     casdoor,
-    new InMemoryGroupMappingRegistry(),
+    mappingRegistry,
     scheduler,
     notifications,
     permissions,
@@ -81,6 +87,7 @@ function buildHarness() {
     casdoor,
     clubs,
     relationStore,
+    mappingRegistry,
     scheduler,
     notifications,
     audit,
@@ -413,6 +420,272 @@ describe('RelationCommandUseCase', () => {
     assert.ok(byEvent('create_manual_retry').includes('save_new_attempt'));
     assert.ok(byEvent('create_manual_retry').includes('link_original_failure'));
     assert.ok(byEvent('manual_retry_executed').includes('reauthorize_before_retry'));
-    assert.ok(byEvent('manual_retry_executed').includes('readback_actual_relation'));
+  });
+
+  // -------------------------------------------------------------------------
+  // buildSteps：按 Group 用途排序 + 真实原关系回读
+  // -------------------------------------------------------------------------
+
+  async function setupWithMappings(
+    mappings: Array<{
+      ref: { owner: string; name: string };
+      purpose: 'club' | 'department' | 'position';
+    }>,
+  ) {
+    const registry = new InMemoryGroupMappingRegistry();
+    const h2 = buildHarness({ mappings: registry });
+    for (const m of mappings) {
+      await registry.save({
+        ref: m.ref,
+        clubId: 'club-acm-1',
+        purpose: m.purpose,
+        departmentId: null,
+        positionId: null,
+        mappingVersion: 1,
+      });
+    }
+    // ensure club is saved (parent beforeEach already did, but harness was rebuilt)
+    await h2.clubs.save(h2.club);
+    return h2;
+  }
+
+  it('buildSteps：所有 remove 必须先于 add（先撤销后授予，ORG-027/CAS-Q-001）', async () => {
+    // 部门/职位用途都已登记，社团用途也登记
+    const h2 = await setupWithMappings([
+      { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
+      { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
+    ]);
+    const cmd = await h2.useCase.submit(
+      {
+        ...baseInput,
+        targetGroups: [
+          { ref: { owner: 'club-acm', name: '宣传部' }, kind: 'add' },
+          { ref: { owner: 'club-acm', name: 'ACM社团' }, kind: 'add' },
+        ],
+      },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    // 全部 add，无 remove 步；排序由用途决定
+    const orderedKinds = cmd.targetRelation.map((s) => s.kind);
+    const orderedRefs = cmd.targetRelation.map(
+      (s) => `${s.targetGroup.owner}/${s.targetGroup.name}`,
+    );
+    assert.deepEqual(orderedKinds, ['add_member', 'add_member']);
+    // club 应先于 department
+    assert.deepEqual(orderedRefs, ['club-acm/ACM社团', 'club-acm/宣传部']);
+  });
+
+  it('buildSteps：add 步内按用途升序（club < department < position，未识别置末）', async () => {
+    const h2 = await setupWithMappings([
+      { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
+      { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
+      { ref: { owner: 'club-acm', name: '副会长' }, purpose: 'position' },
+      // 杂务组 不登记（未识别）
+    ]);
+    // 准备 4 个 Group（社团/部门/职位/未登记）到 h2 自身的 casdoor
+    h2.casdoor.addGroup({
+      ref: { owner: 'club-acm', name: '副会长' },
+      displayName: '副会长',
+      parentRef: { owner: 'club-acm', name: 'ACM社团' },
+      memberIds: [],
+    });
+    h2.casdoor.addGroup({
+      ref: { owner: 'club-acm', name: '杂务组' },
+      displayName: '杂务组',
+      parentRef: { owner: 'club-acm', name: 'ACM社团' },
+      memberIds: [],
+    });
+    const cmd = await h2.useCase.submit(
+      {
+        ...baseInput,
+        targetGroups: [
+          { ref: { owner: 'club-acm', name: '副会长' }, kind: 'add' },
+          { ref: { owner: 'club-acm', name: '杂务组' }, kind: 'add' },
+          { ref: { owner: 'club-acm', name: 'ACM社团' }, kind: 'add' },
+          { ref: { owner: 'club-acm', name: '宣传部' }, kind: 'add' },
+        ],
+      },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    const orderedRefs = cmd.targetRelation.map(
+      (s) => `${s.targetGroup.owner}/${s.targetGroup.name}`,
+    );
+    assert.deepEqual(orderedRefs, [
+      'club-acm/ACM社团', // club (rank 1)
+      'club-acm/宣传部', // department (rank 2)
+      'club-acm/副会长', // position (rank 3)
+      'club-acm/杂务组', // unknown (rank 4)
+    ]);
+  });
+
+  it('buildSteps：remove 与 add 混合时 remove 全部先执行（即使 add 用 position 用途）', async () => {
+    const h2 = await setupWithMappings([
+      { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
+      { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
+    ]);
+    h2.casdoor.addGroup({
+      ref: { owner: 'club-acm', name: '副会长' },
+      displayName: '副会长',
+      parentRef: { owner: 'club-acm', name: 'ACM社团' },
+      memberIds: [],
+    });
+    await h2.mappingRegistry.save({
+      ref: { owner: 'club-acm', name: '副会长' },
+      clubId: 'club-acm-1',
+      purpose: 'position',
+      departmentId: null,
+      positionId: null,
+      mappingVersion: 1,
+    });
+    const cmd = await h2.useCase.submit(
+      {
+        ...baseInput,
+        targetGroups: [
+          { ref: { owner: 'club-acm', name: '宣传部' }, kind: 'add' },
+          { ref: { owner: 'club-acm', name: '副会长' }, kind: 'add' },
+          { ref: { owner: 'club-acm', name: 'ACM社团' }, kind: 'remove' },
+        ],
+      },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    const orderedKinds = cmd.targetRelation.map((s) => s.kind);
+    const orderedRefs = cmd.targetRelation.map(
+      (s) => `${s.targetGroup.owner}/${s.targetGroup.name}`,
+    );
+    assert.deepEqual(orderedKinds, ['remove_member', 'add_member', 'add_member']);
+    assert.deepEqual(orderedRefs, [
+      'club-acm/ACM社团', // remove (rank 0)
+      'club-acm/宣传部', // add department (rank 2)
+      'club-acm/副会长', // add position (rank 3)
+    ]);
+  });
+
+  it('buildSteps：原关系快照回读 Casdoor 实际成员（confirmed=当前在，failed=当前不在）', async () => {
+    // 初始：u_c 不在 ACM社团 也不在 宣传部（u_c 是社团成员但不在宣传部）
+    const h2 = await setupWithMappings([
+      { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
+      { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
+    ]);
+    // 让 u_c 先在 ACM社团（已是），在 宣传部 仍不在
+    // （初始 InMemoryCasdoorPort 已将 u_c 列为 ACM社团 成员，但不在 宣传部）
+    const cmd = await h2.useCase.submit(
+      {
+        ...baseInput,
+        targetGroups: [
+          { ref: { owner: 'club-acm', name: 'ACM社团' }, kind: 'remove' },
+          { ref: { owner: 'club-acm', name: '宣传部' }, kind: 'add' },
+        ],
+      },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    // ACM社团 remove：u_c 当前是成员 → original.result = 'confirmed'
+    // 宣传部 add：u_c 当前不是成员 → original.result = 'failed'
+    const originalByRef = new Map(
+      cmd.originalRelation.map((s) => [`${s.targetGroup.owner}/${s.targetGroup.name}`, s.result]),
+    );
+    assert.equal(originalByRef.get('club-acm/ACM社团'), 'confirmed');
+    assert.equal(originalByRef.get('club-acm/宣传部'), 'failed');
+  });
+
+  it('buildSteps：原关系快照与目标关系并行回读（共享 idempotencyKey + stepId）', async () => {
+    const h2 = await setupWithMappings([
+      { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
+      { ref: { owner: 'club-acm', name: '宣传部' }, purpose: 'department' },
+    ]);
+    const cmd = await h2.useCase.submit(
+      {
+        ...baseInput,
+        idempotencyKey: 'rel:combined:test',
+        targetGroups: [
+          { ref: { owner: 'club-acm', name: 'ACM社团' }, kind: 'remove' },
+          { ref: { owner: 'club-acm', name: '宣传部' }, kind: 'add' },
+        ],
+      },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    // originalRelation 与 targetRelation 共享 stepId + 步骤级 idempotencyKey
+    const original = new Map(cmd.originalRelation.map((s) => [s.stepId, s]));
+    const target = new Map(cmd.targetRelation.map((s) => [s.stepId, s]));
+    for (const [stepId, targetStep] of target.entries()) {
+      const originalStep = original.get(stepId);
+      assert.ok(originalStep, `originalRelation 缺少 stepId ${stepId}`);
+      assert.equal(originalStep.idempotencyKey, targetStep.idempotencyKey);
+      assert.equal(originalStep.kind, targetStep.kind);
+    }
+  });
+
+  it('buildSteps：目标 Group 缺失时优雅降级而非抛裸 Error（与 readback 容错一致）', async () => {
+    // 目标 Group「不存在」：不在 Casdoor 中（也未登记用途，属可达场景）
+    const h2 = await setupWithMappings([]);
+    const cmd = await h2.useCase.submit(
+      {
+        ...baseInput,
+        idempotencyKey: 'rel:missing-group:test',
+        targetGroups: [{ ref: { owner: 'club-acm', name: '不存在的组' }, kind: 'add' }],
+      },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    // 未抛裸 Error；缺失 Group 视为「空成员集」→ present=false → original.result='failed'
+    assert.equal(cmd.targetRelation.length, 1);
+    assert.equal(cmd.targetRelation[0].targetGroup.name, '不存在的组');
+    assert.equal(cmd.originalRelation.length, 1);
+    assert.equal(cmd.originalRelation[0].result, 'failed');
+  });
+
+  it('buildSteps：目标 Group 远程读取抛异常时收敛为领域错误而非裸 Error', async () => {
+    // 端口级异常（模拟真实 Casdoor 网络/权限故障）不应以裸 Error 冒出，
+    // 应映射为可重试的领域错误，保证 submit 失败路径可控（ORG-027）
+    const base = buildHarness();
+    const flaky = Object.create(base.casdoor) as InMemoryCasdoorPort;
+    // 仅目标 Group（宣传部）读取抛错；社团 Group 读取保持正常，以通过成员前提校验
+    flaky.getGroupMembers = async (ref: { owner: string; name: string }) => {
+      if (ref.name === '宣传部') throw new Error('simulated casdoor failure');
+      return base.casdoor.getGroupMembers(ref);
+    };
+    const h2 = buildHarness({ casdoor: flaky });
+    await h2.clubs.save(h2.club);
+    await assert.rejects(
+      h2.useCase.submit(
+        {
+          ...baseInput,
+          idempotencyKey: 'rel:readback-failure:test',
+          targetGroups: [{ ref: { owner: 'club-acm', name: '宣传部' }, kind: 'add' }],
+        },
+        new Date('2026-08-01T00:00:00.000Z'),
+      ),
+      (err: unknown) => {
+        // 抛出的必须是领域错误（orgError），而非模拟的裸 Error
+        assert.notEqual((err as Error).message, 'simulated casdoor failure');
+        assert.match((err as Error).message, /回读目标 Group 实况失败/);
+        return true;
+      },
+    );
+  });
+
+  it('submit：buildSteps 后二次判重拦截并发冲突（TOCTOU 窗口收窄，IFC-ERR-007）', async () => {
+    const h2 = await setupWithMappings([
+      { ref: { owner: 'club-acm', name: 'ACM社团' }, purpose: 'club' },
+    ]);
+    // 先落库一条"处理中"命令，模拟并发方在 buildSteps 远程回读期间抢先落库
+    const existing = await h2.useCase.submit(
+      { ...baseInput, idempotencyKey: 'rel:concurrent-other' },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    // 让这条命令进入 processing（处理中）
+    await h2.relationStore.save({ ...existing, status: 'processing' as const });
+    // 再次以同一 subject、不同幂等键提交 → buildSteps 后的二次判重应拦截
+    await assert.rejects(
+      h2.useCase.submit(
+        { ...baseInput, idempotencyKey: 'rel:concurrent-this' },
+        new Date('2026-08-01T00:00:00.000Z'),
+      ),
+      (e: Error) => e.message.includes('禁止并发冲突操作'),
+    );
+    // 同一幂等键重试 → 命中已有命令并返回（幂等）
+    const retried = await h2.useCase.submit(
+      { ...baseInput, idempotencyKey: 'rel:concurrent-other' },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    assert.equal(retried.id, existing.id);
   });
 });

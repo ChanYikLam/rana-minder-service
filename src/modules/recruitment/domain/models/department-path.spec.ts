@@ -57,14 +57,29 @@ describe('DepartmentPath (REC-004)', () => {
     assert.equal(p.status, 'ADMITTED');
   });
 
-  it('部门 Group 异常：暂停与恢复', () => {
+  it('部门 Group 异常：暂停与恢复（SRS-SM-REC-004）', () => {
     const p = path();
     p.recordDecision(MACHINE, 'ADVANCE', 'leader', NOW);
     assert.equal(p.suspend(MACHINE, NOW), true);
     assert.equal(p.groupException, true);
     assert.equal(p.status, 'SUSPENDED');
-    p.restore(NOW);
+    assert.equal(p.restore(MACHINE, NOW), true);
     assert.equal(p.status, 'UNDER_REVIEW');
     assert.equal(p.groupException, false);
+  });
+
+  it('终态路径不可被部门异常暂停（SRS-SM-REC-004 源状态限定）', () => {
+    const p = path();
+    p.recordDecision(MACHINE, 'ADMIT', 'leader', NOW);
+    assert.equal(p.status, 'ADMITTED');
+    assert.equal(p.suspend(MACHINE, NOW), false);
+    assert.equal(p.status, 'ADMITTED');
+  });
+
+  it('非暂停状态不可恢复', () => {
+    const p = path();
+    p.recordDecision(MACHINE, 'ADVANCE', 'leader', NOW);
+    assert.equal(p.restore(MACHINE, NOW), false);
+    assert.equal(p.status, 'UNDER_REVIEW');
   });
 });

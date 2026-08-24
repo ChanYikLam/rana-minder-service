@@ -19,9 +19,11 @@ export interface RoutineWithdrawInput {
 
 /** 前置失败 */
 export class RoutineRejectError extends Error {
+  readonly code: 'IFC-ERR-003' | 'IFC-ERR-006' | 'IFC-ERR-007';
   constructor(code: 'IFC-ERR-003' | 'IFC-ERR-006' | 'IFC-ERR-007', message: string) {
     super(`${code}: ${message}`);
     this.name = 'RoutineRejectError';
+    this.code = code;
   }
 }
 
