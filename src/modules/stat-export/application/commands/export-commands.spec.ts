@@ -1055,6 +1055,57 @@ describe('P4 提前删除与联动失效', () => {
     assert.equal(count, 1);
     assert.equal((await h.repo.load(res.task.id))?.status, ExportTaskStatus.PRE_DELETED);
   });
+
+  it('正式删除命中保留既有失权原因（不覆盖 JNT-023 停用原因）', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: { kind: 'club', clubId: 'C1' },
+    });
+    await makeDownloadable(h, res.task);
+    // 先使任务失权（REVOKED），携带 JNT-023 停用原因
+    const revokedTask = (await h.repo.load(res.task.id)) as ExportTaskAggregate;
+    revokedTask.revoke('参与社团 C1 紧急停用（JNT-023）');
+    await h.repo.save(revokedTask);
+    assert.equal((await h.repo.load(res.task.id))?.status, ExportTaskStatus.REVOKED);
+    // 正式删除命中 REVOKED 态 → PRE_DELETED，不得覆盖原始失权原因
+    const count = await h.del.applyFormalDelete({ selection: { clubId: 'C1' } });
+    assert.equal(count, 1);
+    const after = (await h.repo.load(res.task.id)) as ExportTaskAggregate;
+    assert.equal(after.status, ExportTaskStatus.PRE_DELETED);
+    assert.equal(
+      after.toData().revokedReason,
+      '参与社团 C1 紧急停用（JNT-023）',
+      'formal_delete_hit 不得覆盖既有失权原因，否则丢失失权审计信息',
+    );
+  });
+
+  it('正式删除联动：并发跳过候选须留审计（不静默无痕）', async () => {
+    // 模拟并发写者推进：正式删除的 invalidateCandidate 保存持续版本冲突（IFC-ERR-008）
+    // 时，二次重读仍冲突 → 跳过该候选，须留审计（否则正式删除联动下失效遗漏无痕）。
+    const repo = new SaveConflictRepo(1, 'TOCTOU 模拟：被并发写者推进');
+    const h = makeHarnessWithRepo(
+      { clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] } },
+      repo,
+    );
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: { kind: 'club', clubId: 'C1' },
+    });
+    // 第 1 次 save 为 apply 落库，已消费；后续 formalDelete 的 invalidateCandidate save 均抛 008
+    const before = h.audit.findBy('export_formal_delete_invalidate').length;
+    const count = await h.del.applyFormalDelete({ selection: { clubId: 'C1' } });
+    assert.equal(count, 0);
+    // 跳过须留审计：新增一条 outcome=denied 的 export_formal_delete_invalidate 留痕
+    const after = h.audit.findBy('export_formal_delete_invalidate');
+    assert.equal(after.length, before + 1, '并发跳过须留审计，避免失效遗漏无痕');
+    assert.equal(after[after.length - 1].outcome, 'denied');
+    assert.match(after[after.length - 1].reason ?? '', /IFC-ERR-008|跳过/);
+  });
 });
 
 // ---------------------------------------------------------------------------

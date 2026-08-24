@@ -232,7 +232,12 @@ export class ExportTaskAggregate {
   /** 正式删除命中：任一非删除状态 → PRE_DELETED（AUD-009 不可绕删） */
   formalDeleteHit(now?: Date): void {
     const next = this.machine.transition(this.data.status, 'formal_delete_hit');
-    this.mutate({ status: next, revokedReason: 'formal_delete_hit' }, now);
+    // 保留既有失权原因：从 REVOKED 态进入时不得覆盖原始失权原因（如 JNT-023 停用/超管撤销），
+    // 否则会丢失失权审计信息；仅当此前无失权原因时才标记本次正式删除命中来源。
+    this.mutate(
+      { status: next, revokedReason: this.data.revokedReason ?? 'formal_delete_hit' },
+      now,
+    );
   }
 
   canDownload(): boolean {

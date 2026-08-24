@@ -169,6 +169,21 @@ export class ExportDeleteCommand {
         candidate,
         (t) => t.status !== ExportTaskStatus.PRE_DELETED,
         (t) => t.formalDeleteHit(now),
+        // 并发/资格跳过须留痕：避免正式删除联动下"失效遗漏无痕"残留窗口（评审①/④）。
+        async (reason) =>
+          this.audit.record({
+            at: when,
+            action: 'export_formal_delete_invalidate',
+            principalId: input.principalId ?? 'system',
+            privileged: false,
+            clubId: candidate.snapshot.data.scope.clubId,
+            jointActivityId: candidate.snapshot.data.scope.jointActivityId,
+            datasetType: null,
+            exportId: candidate.id,
+            purpose: null,
+            outcome: 'denied',
+            reason,
+          }),
       );
       if (invalidated === null) continue;
       count += 1;
@@ -208,6 +223,22 @@ export class ExportDeleteCommand {
           t.status === ExportTaskStatus.GENERATING ||
           t.status === ExportTaskStatus.DOWNLOADABLE,
         (t) => t.revoke(`参与社团 ${input.clubId} 紧急停用（JNT-023）`, now),
+        // 并发/资格跳过须留痕：参与社团紧急停用（JNT-023）下未过期链接失权若被并发跳过
+        // 且无痕，则封锁存在残留可下载窗口（评审①/④）。
+        async (reason) =>
+          this.audit.record({
+            at: when,
+            action: 'export_suspension_invalidate',
+            principalId: input.principalId ?? 'system',
+            privileged: false,
+            clubId: candidate.snapshot.data.scope.clubId,
+            jointActivityId: candidate.snapshot.data.scope.jointActivityId,
+            datasetType: null,
+            exportId: candidate.id,
+            purpose: null,
+            outcome: 'denied',
+            reason,
+          }),
       );
       if (invalidated === null) continue;
       count += 1;
@@ -238,19 +269,31 @@ export class ExportDeleteCommand {
    * 单条候选的失效：乐观保存失败（IFC-ERR-008）时重读最新聚合后重试一次；
    * 二次仍冲突或候选已被并发写者处理完毕/不再符合失效条件则跳过该条，不中断整批。
    *
+   * 评审约束（并发/审计留痕）：被跳过的候选必须留痕（审计或日志），否则并发竞争下
+   * 会形成"失效遗漏无痕"（AUD-009 不可绕删下存在残留窗口）。故提供 onSkipped 回调，
+   * 由调用方在跳过时记录审计/日志，两种跳过场景均会触发。
+   *
    * @param initial 已从 list 加载的候选脱敏拷贝
    * @param eligible 重读后的资格复核：返回 false 表示候选已被并发处理或不再符合失效条件
    * @param mutate 在资格通过后执行的失效变更（formalDeleteHit / revoke）
+   * @param onSkipped 候选被跳过时的留痕回调（参数为可披露的跳过原因，不含敏感数据）
    * @returns 实际成功失效的聚合（含最新 revisionNumber）；null 表示该条被跳过
    */
   private async invalidateCandidate(
     initial: ExportTaskAggregate,
     eligible: (task: ExportTaskAggregate) => boolean,
     mutate: (task: ExportTaskAggregate) => void,
+    onSkipped: (reason: string) => Promise<void> | void,
   ): Promise<ExportTaskAggregate | null> {
     let task: ExportTaskAggregate | null = initial;
     for (let round = 0; round < 2 && task !== null; round += 1) {
-      if (!eligible(task)) return null;
+      if (!eligible(task)) {
+        // 候选已被并发处理或不再符合失效条件（如已被其他写者提前处理/状态已推进）。
+        await onSkipped(
+          `候选 ${initial.id} 已不再符合失效条件（状态 ${initial.status}），跳过留待后续联动`,
+        );
+        return null;
+      }
       // 记录变更前版本作为乐观并发基线（避免依赖 `revisionNumber - 1` 魔法算术，
       // 与状态机版本递增解耦——transition 后 aggregate.revisionNumber 才会 +1）。
       const expectedRevision = task.revisionNumber;
@@ -263,6 +306,8 @@ export class ExportDeleteCommand {
         task = round === 0 ? await this.repo.load(initial.id) : null;
       }
     }
+    // 二次重读后仍版本冲突（IFC-ERR-008）或并发写者已处理完毕，跳过该条。
+    await onSkipped(`候选 ${initial.id} 在并发失效下仍版本冲突（IFC-ERR-008），跳过留待后续联动`);
     return null;
   }
 
