@@ -40,8 +40,10 @@ export interface ExportSnapshotScope {
 /** 冻结后的不可变导出快照 */
 export interface ExportSnapshotData {
   readonly scope: ExportSnapshotScope;
-  /** 每个数据集冻结后的可导出字段基线（已 clamp 越权/秘密字段） */
-  readonly fieldsByDataset: Readonly<Record<ExportDatasetType, readonly string[]>>;
+  /** 每个数据集冻结后的可导出字段基线（已 clamp 越权/秘密字段）。
+   * 仅对冻结的 `datasets` 存在对应 key（`datasets` 可为全量或子集），
+   * 访问缺省 key 时返回空数组（见 `fields()`），故类型收口为 Partial。 */
+  readonly fieldsByDataset: Partial<Readonly<Record<ExportDatasetType, readonly string[]>>>;
   readonly datasets: readonly ExportDatasetType[];
   readonly frozenAt: string; // ISO
   readonly academicYear: string | null;
