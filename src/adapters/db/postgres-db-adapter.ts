@@ -75,6 +75,8 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       user: string;
       password: string;
       ssl: boolean;
+      /** SSL 证书校验开关：默认 true（校验）；仅测试/内网可显式关闭。 */
+      sslRejectUnauthorized?: boolean;
       max?: number;
       connectionTimeoutMillis?: number;
     },
@@ -85,7 +87,9 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       database: poolConfig.database,
       user: poolConfig.user,
       password: poolConfig.password,
-      ssl: poolConfig.ssl ? { rejectUnauthorized: false } : false,
+      ssl: poolConfig.ssl
+        ? { rejectUnauthorized: poolConfig.sslRejectUnauthorized ?? true }
+        : false,
       max: poolConfig.max ?? 10,
       // 连接超时：避免 DB 不可达时 pool.connect() 无限挂起（如 CI 集成测试阶段
       // dind 网络未就绪时静默阻塞直到 Runner 超时强杀）。超时后快速抛错便于定位。
@@ -96,8 +100,17 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       allowExitOnIdle: true,
     });
 
-    this.pool.on('error', (err) => {
+    this.pool.on('error', (err: Error) => {
       this.logger.error(`PostgreSQL 连接池空闲连接错误：${err.message}`, err.stack);
+    });
+
+    // 归还钩子兜底回滚：若连接上仍有未收口事务即被释放（如调用方遗漏
+    // commit/rollback），归还池前强制 ROLLBACK，避免悬挂事务占用连接或
+    // 污染后续借用的请求（DATA-CON-006 污染防护）。
+    this.pool.on('release', (client: PoolClient) => {
+      void client.query('ROLLBACK').catch(() => {
+        /* 连接即将回收，回滚失败无可挽回，忽略 */
+      });
     });
   }
 

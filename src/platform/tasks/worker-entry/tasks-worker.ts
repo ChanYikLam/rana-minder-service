@@ -8,6 +8,7 @@ export class TasksWorker {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private stopping = false;
+  private currentRun: Promise<void> | null = null;
 
   constructor(
     private readonly scheduler: TaskScheduler,
@@ -33,9 +34,14 @@ export class TasksWorker {
       }
     };
 
-    void run();
+    const tracked = (): Promise<void> => {
+      this.currentRun = run();
+      return this.currentRun;
+    };
+
+    void tracked();
     this.timer = setInterval(() => {
-      void run();
+      void tracked();
     }, this.config.job.schedulerIntervalMs);
   }
 
@@ -44,6 +50,16 @@ export class TasksWorker {
     if (this.timer !== null) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+    // 排空在途轮次：等待当前 runOnce 完成再退出，避免硬切导致任务
+    // 落入 UNCERTAIN（与 BUG-004 恢复重放叠加）。
+    if (this.currentRun !== null) {
+      try {
+        await this.currentRun;
+      } catch {
+        /* run 内部已捕获并记录，停止阶段无需再抛 */
+      }
+      this.currentRun = null;
     }
     this.logger.log('后台任务调度器已停止');
   }

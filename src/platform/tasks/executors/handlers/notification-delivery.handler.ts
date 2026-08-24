@@ -46,7 +46,9 @@ export class NotificationDeliveryHandler implements TaskHandler {
         `通知重试任务处理完成: taskId=${task.taskId}, attemptId=${payload.attemptId}`,
       );
     } else {
-      this.logger.warn(
+      // 未知意图属于坏数据：向上抛出，由任务管道进入失败重试，
+      // 耗尽后转 MANUAL_INTERVENTION（不再静默标记成功，避免毒丸被吞）。
+      throw new Error(
         `NotificationDeliveryHandler 未知任务意图: taskId=${task.taskId}, payload=${JSON.stringify(payload)}`,
       );
     }

@@ -95,6 +95,7 @@ const depLatestRecorder: DepLatestRecorder = new InMemoryDepLatestRecorder();
           user: db.user,
           password,
           ssl: db.ssl,
+          sslRejectUnauthorized: db.sslRejectUnauthorized,
         });
       },
       inject: [RANA_MINDER_CONFIG],
