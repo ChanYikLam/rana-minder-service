@@ -11,7 +11,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createObjectStorePort } from './module';
+import { createObjectStorePort, resolveStorageSecret } from './module';
 import { S3ObjectStoreAdapter } from '../../adapters/storage/s3-object-store.adapter';
 import { InMemoryObjectStore } from './infrastructure/object-store-port';
 
@@ -61,5 +61,41 @@ describe('createObjectStorePort（OBJECT_STORE_PORT 提供者，4.2 收口）', 
   it('development 默认未配置 → 返回 InMemoryObjectStore（本地开发）', () => {
     const port = createObjectStorePort({});
     assert.ok(port instanceof InMemoryObjectStore);
+  });
+});
+
+describe('resolveStorageSecret（评审 warning 修复：_REF 凭据解引用口径与 config.loader 一致）', () => {
+  it('优先读 *_REF 键并解引用 ${env:...}', () => {
+    const env: NodeJS.ProcessEnv = {
+      STORAGE_ACCESS_KEY: 'ak',
+      STORAGE_ACCESS_KEY_REF: '${env:STORAGE_ACCESS_KEY}',
+    };
+    assert.equal(resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY'), 'ak');
+  });
+
+  it('_REF 为普通明文时原样返回（不重复解引用）', () => {
+    const env: NodeJS.ProcessEnv = { STORAGE_ACCESS_KEY_REF: 'plain-key' };
+    assert.equal(resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY'), 'plain-key');
+  });
+
+  it('未配置 _REF 时回退到直接键', () => {
+    const env: NodeJS.ProcessEnv = { STORAGE_ACCESS_KEY: 'direct' };
+    assert.equal(resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY'), 'direct');
+  });
+
+  it('_REF 解引用缺失的 env 目标 → 抛错（fail-closed，不静默降级）', () => {
+    const env: NodeJS.ProcessEnv = { STORAGE_ACCESS_KEY_REF: '${env:NOT_SET_VAR}' };
+    assert.throws(() => resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY'));
+  });
+
+  it('createObjectStorePort：按文档键 STORAGE_*_REF 注入凭据 → 返回 S3 适配器（真实收口）', () => {
+    const port = createObjectStorePort({
+      ...STORAGE_ENV,
+      STORAGE_ACCESS_KEY: 'ref-ak',
+      STORAGE_SECRET_KEY: 'ref-sk',
+      STORAGE_ACCESS_KEY_REF: '${env:STORAGE_ACCESS_KEY}',
+      STORAGE_SECRET_KEY_REF: '${env:STORAGE_SECRET_KEY}',
+    });
+    assert.ok(port instanceof S3ObjectStoreAdapter);
   });
 });
