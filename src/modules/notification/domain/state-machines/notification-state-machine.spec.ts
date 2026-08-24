@@ -61,6 +61,17 @@ describe('NotificationStateMachine (SRS-SM-NTF-001)', () => {
       });
       assert.equal(result.allowed, false);
     });
+
+    it('邮件渠道失败重试 → 拒绝（紧急关闭仅作用于站内信，SRS-SM-NTF-001 §10.1）', () => {
+      const result = sm.evaluate({
+        type: 'KILL_INBOX',
+        currentStatus: 'CREATED_PENDING_DELIVERY',
+        currentChannelStatus: 'FAILED_RETRY',
+        channel: 'EMAIL',
+      });
+      assert.equal(result.allowed, false);
+      assert.ok(result.reason?.includes('站内信'));
+    });
   });
 
   describe('转换 3：站内信服务恢复', () => {
@@ -147,6 +158,24 @@ describe('NotificationStateMachine (SRS-SM-NTF-001)', () => {
       assert.equal(result.allowed, true);
       assert.equal(result.newPresentationStatus, 'HIDDEN');
     });
+
+    it('全部已读：未投递通知 → 拒绝（不得静默置为已读）', () => {
+      const result = sm.evaluate({
+        type: 'MARK_ALL_READ',
+        currentStatus: 'CREATED_PENDING_DELIVERY',
+      });
+      assert.equal(result.allowed, false);
+      assert.ok(result.reason?.includes('尚未投递'));
+    });
+
+    it('全部已读：已投递通知 → 允许', () => {
+      const result = sm.evaluate({
+        type: 'MARK_ALL_READ',
+        currentStatus: 'DELIVERED',
+      });
+      assert.equal(result.allowed, true);
+      assert.equal(result.newPresentationStatus, 'READ');
+    });
   });
 
   describe('转换 8：临时投递失败 → 失败重试', () => {
@@ -232,6 +261,16 @@ describe('NotificationStateMachine (SRS-SM-NTF-001)', () => {
       assert.equal(result.allowed, true);
       // 邮件资格不改变通知事实主状态
       assert.equal(result.newStatus, null);
+    });
+
+    it('非已创建状态 → 拒绝评估（仅已创建可评估邮件资格，SRS-SM-NTF-001）', () => {
+      const result = sm.evaluate({
+        type: 'EVALUATE_EMAIL',
+        currentStatus: 'DELIVERED',
+        channel: 'EMAIL',
+      });
+      assert.equal(result.allowed, false);
+      assert.ok(result.reason?.includes('已创建'));
     });
   });
 
