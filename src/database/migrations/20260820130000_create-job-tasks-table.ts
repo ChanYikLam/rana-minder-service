@@ -58,8 +58,8 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
   )) as { rows?: unknown[] } | Array<{ has_table?: unknown; has_intent?: unknown }> | null;
   const rows = Array.isArray(result)
     ? result
-    : ((result as { rows?: Array<{ has_table?: unknown; has_intent?: unknown }> } | null)
-        ?.rows ?? []);
+    : ((result as { rows?: Array<{ has_table?: unknown; has_intent?: unknown }> } | null)?.rows ??
+      []);
   const row = rows[0] as { has_table?: unknown; has_intent?: unknown } | undefined;
   const truthy = (v: unknown): boolean => v === true || v === 't' || v === 1 || v === '1';
   const hasTable = truthy(row?.has_table);
