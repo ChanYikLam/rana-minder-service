@@ -146,6 +146,18 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
   { file: '20260824000001', tables: [] },
   { file: '20260824000002', tables: ['remedy_windows'] },
   { file: '20260824000003', tables: [] },
+  {
+    file: '20260824100000',
+    tables: [
+      'config_club_profiles',
+      'config_scoped_policy_table',
+      'config_academic_year_settings',
+      'config_club_cohorts',
+      'config_roots',
+      'config_versions',
+      'config_field_mapping_state',
+    ],
+  },
 ];
 
 /** down 后必须消失的核心新建表（每条建表链取代表，避免双 job_tasks 历史纠缠） */
