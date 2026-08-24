@@ -253,10 +253,28 @@ export class RenameCohortCommand {
   }
 }
 
+/**
+ * 届次列表查询（CFG-003）。授权（评审修复）：本社团成员可见自己社团的
+ * 届次沿革；负责人/人事与平台超管天然可见；无关主体拒绝（fail-closed）。
+ */
 export class ListCohortsQuery {
-  constructor(private readonly cohortRepository: CohortRepositoryPort) {}
+  constructor(
+    private readonly cohortRepository: CohortRepositoryPort,
+    private readonly authorization: PolicyAuthorizationPort,
+    private readonly membership: import('../ports').ClubMembershipPort,
+  ) {}
 
-  async execute(input: { clubId: string }): Promise<readonly ClubCohortSnapshot[]> {
+  async execute(input: {
+    clubId: string;
+    subjectId: string;
+  }): Promise<readonly ClubCohortSnapshot[]> {
+    const allowed =
+      (await this.membership.isMember(input.clubId, input.subjectId)) ||
+      (await this.authorization.canManageClub(input.clubId, input.subjectId)) ||
+      (await this.authorization.canManagePlatform(input.subjectId));
+    if (!allowed) {
+      throw cfgErrors.forbidden('仅本社团成员或管理者可查看届次');
+    }
     return this.cohortRepository.listByClub(input.clubId);
   }
 }

@@ -4,12 +4,11 @@
  * 仅负责人/人事（club:config:manage）或平台超管可读；回显 Casdoor Group 对应关系
  * （accessInfo，组织模块暴露绑定查询前为 null）供超管后台核对「展示名↔Group 名」。
  *
- * 不存在时自动初始化并保存：后台首屏配置场景下，新社团尚未有资料属常态，首次
- * 打开即落一条 revisionNumber=1 的默认资料，后续 PUT 直接走乐观锁更新；若改为
- * CFG_NOT_FOUND 则前端需额外处理首屏空态。公开端点不受此影响（公开查询仍 404）。
+ * 不存在时返回 profile=null（评审修复：读端点不再带写副作用——自动初始化职责
+ * 归属写路径，UpdateClubProfileCommand 在资料不存在时自行 createDefault；前端
+ * 以 null 渲染空白表单，首次保存即完成初始化）。公开端点不受影响（仍 404）。
  */
 
-import { ClubProfile } from '../../domain/models/club-profile';
 import type { ClubProfileSnapshot } from '../../domain/models/club-profile';
 import type {
   ClubProfileRepositoryPort,
@@ -24,7 +23,8 @@ export interface GetClubProfileInput {
 }
 
 export interface GetClubProfileResult {
-  readonly profile: ClubProfileSnapshot;
+  /** null=尚未初始化（无写副作用；首存由 PUT 命令完成） */
+  readonly profile: ClubProfileSnapshot | null;
   readonly accessInfo: {
     casdoorGroupId: string;
     casdoorGroupName: string;
@@ -47,18 +47,7 @@ export class DefaultGetClubProfileQuery implements GetClubProfileQuery {
       throw cfgErrors.forbidden('仅社团负责人/人事或平台超管可查看展示资料');
     }
 
-    let snapshot = await this.repository.load(input.clubId);
-    if (snapshot === null) {
-      // 自动初始化默认资料（见文件头注释：便于后台首屏配置）
-      const profile = ClubProfile.createDefault({
-        clubId: input.clubId,
-        clubName: input.clubId,
-        now: new Date(),
-      });
-      snapshot = profile.toSnapshot();
-      await this.repository.save(snapshot);
-    }
-
+    const snapshot = await this.repository.load(input.clubId);
     return { profile: snapshot, accessInfo: await this.accessInfo.getAccessInfo(input.clubId) };
   }
 }

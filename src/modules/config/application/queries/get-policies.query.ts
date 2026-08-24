@@ -10,7 +10,8 @@ import {
   type PolicyKey,
   type ScopedPolicyTableSnapshot,
 } from '../../domain/models/scoped-policy';
-import type { ScopedPolicyTableRepositoryPort } from '../ports';
+import type { ScopedPolicyTableRepositoryPort, PolicyAuthorizationPort } from '../ports';
+import { cfgErrors } from '../errors';
 
 export interface ResolvedPolicyView {
   readonly key: PolicyKey;
@@ -32,10 +33,30 @@ function loadOrCreate(snapshot: ScopedPolicyTableSnapshot | null): ScopedPolicyT
     : ScopedPolicyTable.fromSnapshot(snapshot);
 }
 
+/**
+ * 社团生效策略视图（CFG-002「所有配置显示作用域和生效时间」）。
+ *
+ * 授权（评审修复）：策略治理数据仅管理角色可见——平台超管可看任意社团，
+ * 负责人/人事（club:config:manage）可看本社团；普通成员与无关社团拒绝
+ * （fail-closed）。学生侧的期限信息经活动发布快照进入招新/联合目录，
+ * 不经过本查询。
+ */
 export class GetResolvedPoliciesQuery {
-  constructor(private readonly repository: ScopedPolicyTableRepositoryPort) {}
+  constructor(
+    private readonly repository: ScopedPolicyTableRepositoryPort,
+    private readonly authorization: PolicyAuthorizationPort,
+  ) {}
 
-  async execute(input: { clubId: string }): Promise<readonly ResolvedPolicyView[]> {
+  async execute(input: {
+    clubId: string;
+    subjectId: string;
+  }): Promise<readonly ResolvedPolicyView[]> {
+    const isPlatformAdmin = await this.authorization.canManagePlatform(input.subjectId);
+    const isClubManager = await this.authorization.canManageClub(input.clubId, input.subjectId);
+    if (!isPlatformAdmin && !isClubManager) {
+      throw cfgErrors.forbidden('仅社团负责人/人事或平台超管可查看社团生效策略');
+    }
+
     const raw = await this.repository.load();
     const table = loadOrCreate(raw);
 

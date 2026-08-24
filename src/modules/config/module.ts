@@ -241,8 +241,8 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
     { provide: AMEND_ACTIVITY_POLICY_COMMAND, useClass: AmendActivityPolicyCommand },
     {
       provide: GET_RESOLVED_POLICIES_QUERY,
-      useFactory: (repo) => new GetResolvedPoliciesQuery(repo),
-      inject: [SCOPED_POLICY_TABLE_REPOSITORY],
+      useFactory: (repo, authz) => new GetResolvedPoliciesQuery(repo, authz),
+      inject: [SCOPED_POLICY_TABLE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
     },
     // ----- CFG-003 学年与届次 -----
     {
@@ -268,8 +268,8 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
     },
     {
       provide: LIST_COHORTS_QUERY,
-      useFactory: (cohorts) => new ListCohortsQuery(cohorts),
-      inject: [COHORT_REPOSITORY],
+      useFactory: (cohorts, authz, membership) => new ListCohortsQuery(cohorts, authz, membership),
+      inject: [COHORT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_MEMBERSHIP_PORT],
     },
     // ----- CFG-002 平台策略查询 -----
     {

@@ -32,7 +32,9 @@ import {
   CREATE_COHORT_COMMAND,
   RENAME_COHORT_COMMAND,
   LIST_COHORTS_QUERY,
+  CONFIG_MEMBERSHIP_PORT,
 } from '../../tokens';
+import type { ClubMembershipPort } from '../../application/ports';
 import { ConfigAuthGuard } from './config-auth.guard';
 import { configActorFromRequest, toHttpResponse } from './config-response-mapper';
 import { parseConfigRequestEnvelope } from '../http/config-envelope';
@@ -59,6 +61,8 @@ export class OrgPolicyNestController {
     private readonly renameCohort: RenameCohortCommand,
     @Inject(LIST_COHORTS_QUERY)
     private readonly listCohorts: ListCohortsQuery,
+    @Inject(CONFIG_MEMBERSHIP_PORT)
+    private readonly membership: ClubMembershipPort,
   ) {}
 
   private async run(promise: Promise<unknown>): Promise<ApiSuccess<unknown>> {
@@ -76,8 +80,12 @@ export class OrgPolicyNestController {
   }
 
   @Get('policies')
-  async getPolicies(@Param('clubId') clubId: string): Promise<ApiSuccess<unknown>> {
-    return this.run(this.resolvedPolicies.execute({ clubId }));
+  async getPolicies(
+    @Param('clubId') clubId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    const subjectId = configActorFromRequest(request).subjectId;
+    return this.run(this.resolvedPolicies.execute({ clubId, subjectId }));
   }
 
   @Put('policies/:key')
@@ -100,8 +108,12 @@ export class OrgPolicyNestController {
   }
 
   @Get('cohorts')
-  async getCohorts(@Param('clubId') clubId: string): Promise<ApiSuccess<unknown>> {
-    return this.run(this.listCohorts.execute({ clubId }));
+  async getCohorts(
+    @Param('clubId') clubId: string,
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    const subjectId = configActorFromRequest(request).subjectId;
+    return this.run(this.listCohorts.execute({ clubId, subjectId }));
   }
 
   @Post('cohorts')

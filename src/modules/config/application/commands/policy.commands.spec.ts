@@ -220,6 +220,38 @@ describe('活动快照冻结与受控修订（CFG-002 活动发布时形成配�
   });
 });
 
+describe('GetResolvedPoliciesQuery 授权矩阵（评审修复：读接口 fail-closed）', () => {
+  it('无关主体拒绝；平台超管与社团管理者可见', async () => {
+    const repo = new InMemoryScopedPolicyTableRepository();
+    const auth = new StubPolicyAuthorization();
+    auth.platformAllowed = true;
+    await new SetPlatformPolicyCommand(repo, auth, new RecordingConfigNotification()).execute({
+      subjectId: SA,
+      now: NOW,
+      key: 'INVITATION_VALID_DAYS',
+      defaultValue: 14,
+      allowedMin: 1,
+      allowedMax: 90,
+    });
+    const query = () => new GetResolvedPoliciesQuery(repo, auth);
+
+    // 无任何角色的已登录用户 → CFG_FORBIDDEN（先关闭种子用的平台开关）
+    auth.platformAllowed = false;
+    await assert.rejects(() => query().execute({ clubId: CLUB, subjectId: 'random-user' }), {
+      code: 'CFG_FORBIDDEN',
+    });
+    // 平台超管可见
+    auth.platformAllowed = true;
+    const bySuper = await query().execute({ clubId: CLUB, subjectId: SA });
+    assert.equal(bySuper.length, 4);
+    // 社团管理者可见
+    auth.platformAllowed = false;
+    auth.clubAllowed = true;
+    const byLeader = await query().execute({ clubId: CLUB, subjectId: LEADER });
+    assert.equal(byLeader.length, 4);
+  });
+});
+
 describe('权益影响通知接缝（CFG-002/NTF-002）', () => {
   it('平台策略变化触发通知且携带旧值/新值；同值重设不重复通知', async () => {
     const repo2 = new InMemoryScopedPolicyTableRepository();
@@ -293,7 +325,10 @@ describe('GetResolvedPoliciesQuery（CFG-002 作用域与生效时间展示）',
       value: 72,
     });
 
-    const views = await new GetResolvedPoliciesQuery(repo).execute({ clubId: CLUB });
+    const views = await new GetResolvedPoliciesQuery(repo, auth).execute({
+      clubId: CLUB,
+      subjectId: LEADER,
+    });
     const invitation = views.find((v) => v.key === 'INVITATION_VALID_DAYS')!;
     assert.equal(invitation.scope, 'PLATFORM');
     assert.equal(invitation.resolvedValue, 14);

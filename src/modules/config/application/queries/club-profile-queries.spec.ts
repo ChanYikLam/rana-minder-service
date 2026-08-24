@@ -8,12 +8,14 @@ import assert from 'node:assert/strict';
 import {
   InMemoryClubProfileRepository,
   StubClubAccessInfoPort,
+  RecordingConfigAudit,
   StubClubMembershipPort,
   StubConfigAuthorization,
 } from '../testing/config-test-support';
 import { ClubProfile } from '../../domain/models/club-profile';
 import type { ClubProfileSnapshot } from '../../domain/models/club-profile';
 import { DefaultGetPublicClubProfileQuery } from './get-public-club-profile.query';
+import { DefaultUpdateClubProfileCommand } from '../commands/update-club-profile.command';
 import { DefaultGetClubProfileQuery } from './get-club-profile.query';
 
 const NOW = new Date('2026-01-01T00:00:00Z');
@@ -101,6 +103,7 @@ describe('管理端展示资料查询（CFG-001）', () => {
     auth.manageRole = 'PLATFORM';
     accessInfo.info = { casdoorGroupId: 'g-1', casdoorGroupName: 'grp-old-name' };
     const result = await query.execute({ clubId: CLUB_ID, actor: 'super-1' });
+    assert.ok(result.profile);
     assert.equal(result.profile.history.length, 1);
     assert.deepEqual(result.accessInfo, {
       casdoorGroupId: 'g-1',
@@ -113,12 +116,31 @@ describe('管理端展示资料查询（CFG-001）', () => {
     auth.manageRole = 'OWNER';
     const result = await query.execute({ clubId: CLUB_ID, actor: 'leader-1' });
     assert.equal(result.accessInfo, null);
+    void result.profile;
   });
 
-  it('不存在时自动初始化默认资料并保存（后台首屏配置场景）', async () => {
+  it('不存在时返回 profile=null 且不产生写副作用（评审修复：读端点无写）', async () => {
     auth.manageRole = 'OWNER';
     const result = await query.execute({ clubId: CLUB_ID, actor: 'leader-1' });
-    assert.equal(result.profile.revisionNumber, 1);
-    assert.ok(await repo.load(CLUB_ID));
+    assert.equal(result.profile, null);
+    assert.equal(await repo.load(CLUB_ID), null); // 库中未落任何行
+  });
+
+  it('null 之后经 PUT 命令首次保存即完成初始化（写路径职责）', async () => {
+    auth.manageRole = 'OWNER';
+    const before = await query.execute({ clubId: CLUB_ID, actor: 'leader-1' });
+    assert.equal(before.profile, null);
+
+    const command = new DefaultUpdateClubProfileCommand(repo, auth, new RecordingConfigAudit());
+    await command.execute({
+      clubId: CLUB_ID,
+      actor: 'leader-1',
+      now: NOW,
+      patch: { displayName: '首存名' },
+    });
+
+    const after = await query.execute({ clubId: CLUB_ID, actor: 'leader-1' });
+    assert.ok(after.profile);
+    assert.equal(after.profile.displayName, '首存名');
   });
 });

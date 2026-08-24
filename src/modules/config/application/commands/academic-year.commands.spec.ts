@@ -9,6 +9,7 @@ import {
   InMemoryAcademicYearBoundaryRepository,
   InMemoryCohortRepository,
   RecordingConfigAudit,
+  StubClubMembershipPort,
   StubPolicyAuthorization,
 } from '../testing/config-test-support';
 import {
@@ -175,11 +176,13 @@ describe('社团届次维护（CFG-003 社团届次）', () => {
   let cohorts: InMemoryCohortRepository;
   let boundaryRepo: InMemoryAcademicYearBoundaryRepository;
   let auth: StubPolicyAuthorization;
+  let membership: StubClubMembershipPort;
 
   beforeEach(() => {
     cohorts = new InMemoryCohortRepository();
     boundaryRepo = new InMemoryAcademicYearBoundaryRepository();
     auth = new StubPolicyAuthorization();
+    membership = new StubClubMembershipPort();
     auth.clubAllowed = true;
   });
 
@@ -265,8 +268,48 @@ describe('社团届次维护（CFG-003 社团届次）', () => {
       { code: 'CFG_NOT_FOUND' },
     );
 
-    const list = await new ListCohortsQuery(cohorts).execute({ clubId: CLUB });
+    const list = await new ListCohortsQuery(cohorts, auth, membership).execute({
+      clubId: CLUB,
+      subjectId: LEADER,
+    });
     assert.equal(list.length, 1);
     assert.equal(list[0].name, '新名');
+  });
+});
+
+describe('ListCohortsQuery 授权矩阵（评审修复：读接口 fail-closed）', () => {
+  it('本社团成员/管理者/超管可见，无关主体拒绝', async () => {
+    const cohorts = new InMemoryCohortRepository();
+    const boundaryRepo = new InMemoryAcademicYearBoundaryRepository();
+    const auth = new StubPolicyAuthorization();
+    const membership = new StubClubMembershipPort();
+    const create = new CreateCohortCommand(cohorts, boundaryRepo, auth);
+    auth.clubAllowed = true;
+    await create.execute({
+      clubId: CLUB,
+      subjectId: LEADER,
+      now: NOW,
+      name: '第三十六届',
+      academicYearName: '2025-2026',
+    });
+
+    const query = () => new ListCohortsQuery(cohorts, auth, membership);
+    // 无关主体拒绝（先关闭种子用的管理者开关）
+    auth.clubAllowed = false;
+    await assert.rejects(() => query().execute({ clubId: CLUB, subjectId: 'outsider-1' }), {
+      code: 'CFG_FORBIDDEN',
+    });
+    // 本社团成员可见
+    membership.memberIds.add('member-1');
+    const asMember = await query().execute({ clubId: CLUB, subjectId: 'member-1' });
+    assert.equal(asMember.length, 1);
+    // 管理者可见（重新开启 club:config:manage）
+    auth.clubAllowed = true;
+    const asLeader = await query().execute({ clubId: CLUB, subjectId: LEADER });
+    assert.equal(asLeader.length, 1);
+    // 平台超管可见
+    auth.platformAllowed = true;
+    const asSuper = await query().execute({ clubId: CLUB, subjectId: SA });
+    assert.equal(asSuper.length, 1);
   });
 });
