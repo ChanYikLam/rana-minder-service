@@ -44,7 +44,34 @@
 
 import type { MigrationQueryRunner } from './20260820100000_create-identity-tables';
 
-export async function up(_runner: MigrationQueryRunner): Promise<void> {
+export async function up(runner: MigrationQueryRunner): Promise<void> {
+  // fail-fast 防线（评审 warning）：本迁移改无操作后，若既有部署仍残留旧口径
+  // job_tasks（缺 intent_id 列），后继 20260822120000 会因 uq_job_tasks_intent_id
+  // 索引缺列直接失败、升级中断。此处先行探测并在升级中断前抛出明确处置指引，
+  // 阻断"旧表被静默绕过 → 后继迁移炸"的破坏性路径（OPS-UPG-002 显式声明）。
+  const result = (await runner.query(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'job_tasks') AS has_table,
+            EXISTS (SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'job_tasks'
+          AND column_name = 'intent_id') AS has_intent`,
+  )) as { rows?: unknown[] } | Array<{ has_table?: unknown; has_intent?: unknown }> | null;
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: Array<{ has_table?: unknown; has_intent?: unknown }> } | null)
+        ?.rows ?? []);
+  const row = rows[0] as { has_table?: unknown; has_intent?: unknown } | undefined;
+  const truthy = (v: unknown): boolean => v === true || v === 't' || v === 1 || v === '1';
+  const hasTable = truthy(row?.has_table);
+  const hasIntent = truthy(row?.has_intent);
+  if (hasTable && !hasIntent) {
+    throw new Error(
+      'job_tasks 为旧口径（缺 intent_id 列），升级前须按 OPS-UPG-002 处置：' +
+        '无存量任务直接 DROP TABLE IF EXISTS public.job_tasks；' +
+        '有存量任务先手动重映射到新列形态后移交。' +
+        '详见 20260820130000_create-job-tasks-table.ts 头注释「旧表处置 / 升级路径」。',
+    );
+  }
   // 无操作：job_tasks 由 20260822120000_create-job-task-tables 统一接管。
 }
 

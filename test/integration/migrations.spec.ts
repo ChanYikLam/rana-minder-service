@@ -49,7 +49,7 @@ import * as mPathUnique from '../../src/database/migrations/20260822000005_add-d
 import * as mFormUnique from '../../src/database/migrations/20260822000006_add-form-submission-unique';
 import * as mJobTasksNew from '../../src/database/migrations/20260822120000_create-job-task-tables';
 import * as mAudit from '../../src/database/migrations/20260823000000_create-audit-event-tables';
-import * as mJoint from '../../src/database/migrations/20260823000000_create-joint-tables';
+import * as mJoint from '../../src/database/migrations/20260823120000_create-joint-tables';
 
 const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260820100000', m: mIdentity },
@@ -66,8 +66,13 @@ const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260822000006', m: mFormUnique },
   { name: '20260822120000', m: mJobTasksNew },
   { name: '20260823000000-audit', m: mAudit },
-  { name: '20260823000000-joint', m: mJoint },
+  { name: '20260823120000-joint', m: mJoint },
 ];
+
+/** 迁移时间戳前缀唯一（未来版本登记工具按前缀编号，冲突会失败；评审 info） */
+const MIGRATION_VERSION_UNIQUE = new Set(
+  migrations.map(({ name }) => name.replace(/[-_].*$/, '')),
+).size === migrations.length;
 
 /** 建表类迁移 → 声明的表；加列/约束类为空 */
 const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }> = [
@@ -118,7 +123,7 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
   { file: '20260822120000', tables: ['job_tasks'] },
   { file: '20260823000000-audit', tables: ['audit_event'] },
   {
-    file: '20260823000000-joint',
+    file: '20260823120000-joint',
     tables: [
       'joint_activities',
       'joint_participants',
@@ -137,6 +142,9 @@ const MUST_DROP_AFTER_DOWN: readonly string[] = [
   'form_definitions',
   'recruitment_activities',
   'form_submissions',
+  // job_tasks：本次幂等化改造影响最大的表（20130000 无操作、22120000 接管），
+  // down/恢复行为必须显式断言（评审 info）
+  'job_tasks',
 ];
 
 let pool: pg.Pool | null = null;
@@ -176,6 +184,10 @@ before(async () => {
 after(async () => {
   client?.release();
   await pool?.end();
+});
+
+test('迁移版本时间戳前缀唯一（版本登记工具可安全编号）', () => {
+  assert.equal(MIGRATION_VERSION_UNIQUE, true, '存在时间戳前缀相同的迁移，需错开版本号');
 });
 
 test('全部迁移按序 up 成功且建表齐全；重复 up 幂等可重入', { skip: skipReason }, async () => {
