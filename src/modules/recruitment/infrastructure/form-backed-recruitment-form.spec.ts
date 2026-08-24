@@ -53,4 +53,20 @@ describe('FormBackedRecruitmentForm（4.4b 表单真集成收口）', () => {
     const result = await form.loadSubmission({ formId: 'form-other', submissionId: 'sub-1' });
     assert.equal(result.outcome, 'forbidden');
   });
+
+  it('版本校验：引用的 versionNumber 与快照不符 → not-found（防引用已修订/作废版本）', async () => {
+    const form = new FormBackedRecruitmentForm(makeRepo([makeSnapshot({ versionNumber: 3 })]));
+    const mismatched = await form.loadSubmission({
+      formId: 'form-1',
+      submissionId: 'sub-1',
+      versionNumber: 2,
+    });
+    assert.equal(mismatched.outcome, 'not-found');
+    const matched = await form.loadSubmission({
+      formId: 'form-1',
+      submissionId: 'sub-1',
+      versionNumber: 3,
+    });
+    assert.equal(matched.outcome, 'found');
+  });
 });

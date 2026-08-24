@@ -25,6 +25,8 @@ export interface RecruitmentFormPort {
   loadSubmission(input: {
     readonly formId: string;
     readonly submissionId: string;
+    /** 引用的表单版本（可选；提供时须与快照版本核对，防引用已修订/作废版本） */
+    readonly versionNumber?: number;
   }): Promise<RecruitmentFormLoadResult>;
 }
 
@@ -38,6 +40,7 @@ export class StubRecruitmentForm implements RecruitmentFormPort {
   async loadSubmission(input: {
     readonly formId: string;
     readonly submissionId: string;
+    readonly versionNumber?: number;
   }): Promise<RecruitmentFormLoadResult> {
     const submission = this.submissions.get(input.submissionId);
     if (submission === undefined) {

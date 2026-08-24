@@ -358,3 +358,52 @@ describe('recruitment application layer (REC-001~004)', () => {
     );
   });
 });
+
+describe('submit-application 表单端口 forbidden 分支（评审补测）', () => {
+  it('跨表单读取：端口返回 forbidden → use case 按无权拒绝（不误报不存在）', async () => {
+    const repo = new InMemoryRecruitmentRepository();
+    const auth = new StubRecruitmentAuthorization();
+    auth.manageAllowed = true;
+    auth.submitAllowed = true;
+    const forbiddenForm = {
+      loadSubmission: async () => ({ outcome: 'forbidden' as const }),
+    };
+    const activityId = 'act-f';
+    const create = new DefaultCreateRecruitmentActivityUseCase(repo, auth);
+    await create.execute({
+      clubId: CLUB_ID,
+      title: '秋招',
+      description: null,
+      actor: ACTOR,
+      now: NOW,
+      id: activityId,
+    });
+    // 活动进行中才能开通道：先 open 活动
+    const activity = RecruitmentActivity.fromSnapshot((await repo.loadActivity(activityId))!);
+    assert.ok(activity.open(new DefaultRecruitmentActivityStateMachine(), NOW), '活动开放失败');
+    await repo.saveActivity(activity.toSnapshot());
+    const channelId = 'ch-f';
+    const openChannel = new DefaultOpenApplicationChannelUseCase(repo, auth);
+    await openChannel.execute({
+      activityId,
+      minChoices: 1,
+      maxChoices: 3,
+      actor: ACTOR,
+      now: NOW,
+      id: channelId,
+    });
+    const submit = new DefaultSubmitApplicationUseCase(repo, auth, forbiddenForm as never);
+    await assert.rejects(
+      submit.execute({
+        activityId,
+        channelId,
+        applicantId: APPLICANT,
+        departmentChoices: [],
+        formRef: { formId: 'other-form', submissionId: 'sub-x', versionNumber: 1 },
+        actor: APPLICANT,
+        now: NOW,
+      }),
+      /关联表单提交归属不符/,
+    );
+  });
+});

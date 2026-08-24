@@ -23,6 +23,7 @@ export class FormBackedRecruitmentForm implements RecruitmentFormPort {
   async loadSubmission(input: {
     readonly formId: string;
     readonly submissionId: string;
+    readonly versionNumber?: number;
   }): Promise<RecruitmentFormLoadResult> {
     const snapshot = await this.submissions.load(input.submissionId);
     if (snapshot === null) {
@@ -31,6 +32,11 @@ export class FormBackedRecruitmentForm implements RecruitmentFormPort {
     // 归属校验：提交必须属于请求表单（防跨表单读取；不符按 forbidden 处理）
     if (snapshot.formId !== input.formId) {
       return { outcome: 'forbidden' };
+    }
+    // 版本校验（评审意见）：引用已修订/作废版本 → 引用对象不存在（not-found，
+    // 与跨表单 forbidden 区分——版本不符是"引用的提交版本不存在"而非权限问题）
+    if (input.versionNumber !== undefined && snapshot.versionNumber !== input.versionNumber) {
+      return { outcome: 'not-found' };
     }
     return {
       outcome: 'found',
