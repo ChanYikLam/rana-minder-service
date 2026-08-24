@@ -19,7 +19,7 @@ import { FakeDbAdapter } from '../../src/shared/testing/fake-db-adapter';
 import { FormUnitOfWork } from '../../src/modules/form/infrastructure/unit-of-work';
 import { InMemoryCasdoorPort } from '../../src/modules/organization/infrastructure/in-memory/memory-implementations';
 import { resolveActorFromHeaders } from '../../src/modules/organization/interfaces/actor';
-import { OrgDomainError } from '../../src/modules/organization/domain/types';
+import { OrgDomainError, orgError } from '../../src/modules/organization/domain/types';
 
 const ROOT = path.resolve(__dirname, '../..');
 const exists = (rel: string): boolean => fs.existsSync(path.join(ROOT, rel));
@@ -190,9 +190,15 @@ describe('TST-FAIL 001~013 故障关闭语义', () => {
     });
     // 关键断言：外部写失败绝不允许返回 success（假成功即越权来源）
     assert.equal(result.outcome, 'failure');
-    assert.notEqual(result.outcome, 'success');
-    // 外部结果不确定的领域语义由 EXTERNAL_UNKNOWN 承载（先回读再收口）
-    assert.equal(ErrorCode.EXTERNAL_UNKNOWN, 'IFC-ERR-013');
+    // 外部结果不确定的领域语义由 EXTERNAL_UNKNOWN 承载（先回读再收口）。
+    // 生产映射路径：回读未确认 → 状态机抛出 orgError.externalUnknown（同文件
+    // relation-command.state-machine.ts 的 readback_confirmed 分支），此处调用同一
+    // 领域工厂验证「外部不确定→EXTERNAL_UNKNOWN」确实落到契约错误码 IFC-ERR-013，
+    // 而非仅做常量等值检查。
+    const uncertain = orgError.externalUnknown('模拟：回读未确认（外部结果不确定）');
+    assert.ok(uncertain instanceof OrgDomainError);
+    assert.equal(uncertain.code, ErrorCode.EXTERNAL_UNKNOWN);
+    assert.equal(uncertain.code, 'IFC-ERR-013');
   });
 
   it('FAIL-005 探针：数据库故障——事务内抛错走 rollback 收口，不产生 commit 假成功', async () => {
