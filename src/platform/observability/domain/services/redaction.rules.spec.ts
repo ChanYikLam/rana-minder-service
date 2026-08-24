@@ -51,14 +51,14 @@ describe('redaction.rules', () => {
       assert.ok((v as string).endsWith('...[truncated]'));
     });
 
-    it('mask path 按段首字母+***', () => {
+    it('mask path 按段首字母+***，末段完全遮蔽（BUG-018）', () => {
       const v = redactValue('/var/lib/postgres', { kind: 'mask', hint: 'path' });
-      assert.equal(v, '/v***/l***/p***');
+      assert.equal(v, '/v***/l***/***');
     });
 
-    it('mask path：单段也按规则遮蔽', () => {
+    it('mask path：单段也完全遮蔽（BUG-018）', () => {
       const v = redactValue('/var', { kind: 'mask', hint: 'path' });
-      assert.equal(v, '/v***');
+      assert.equal(v, '/***');
     });
   });
 
@@ -89,7 +89,8 @@ describe('redaction.rules', () => {
       });
       assert.equal(out['userId'], 'u1');
       assert.ok((out['phone'] as string).includes('***'));
-      assert.equal(out['path'] as string, '/v***/l***');
+      // 末段（实体文件名/资源标识）完全遮蔽（BUG-018）
+      assert.equal(out['path'] as string, '/v***/***');
       assert.equal('form.responses.q1' in out, false);
     });
   });

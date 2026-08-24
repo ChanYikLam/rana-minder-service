@@ -23,6 +23,7 @@ import type { ActorContext } from './profiles.controller';
 import { toApiError } from '../http/error-http';
 import type { ApiErrorResult } from '../http/error-http';
 import type { IdentityUnitOfWork } from '../../infrastructure/unit-of-work';
+import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
 import type { RlsScope } from '../../../../shared/db-adapter';
 
 export interface SessionResponse {
@@ -63,6 +64,7 @@ export class AccountAccessController {
     private readonly getMyProfile: GetMyProfileQuery,
     private readonly getAccountAccess: GetAccountAccessQuery,
     private readonly uow: IdentityUnitOfWork,
+    private readonly sessionRevocation: SessionRevocationPort,
   ) {}
 
   /** 单主体 RLS 事务边界：全部请求在事务内执行（仓储读写经 ambient 事务） */
@@ -113,6 +115,26 @@ export class AccountAccessController {
             reason: access.reason,
           },
         };
+      } catch (error) {
+        return toApiError(error);
+      }
+    });
+  }
+
+  /**
+   * POST /api/auth/logout —— 主动吊销本人全部会话令牌（BUG-007 修复）。
+   *
+   * 将主体当前撤销版本自增并标记其全部未失效会话为已吊销；会话解析方
+   * （认证链路 3.3）据此拒绝继续使用令牌。
+   *
+   * 注：本地吊销写入已落地；令牌的"服务端强制失效"依赖认证链路会话解析
+   * （当前为 RejectAllAuthSessionProvider 桩，待认证基建接入后闭环）。
+   */
+  async logout(actor: ActorContext): Promise<AccountAccessControllerResult<{ ok: true; revokedVersion: number }>> {
+    return this.run(actor, async () => {
+      try {
+        const revokedVersion = await this.sessionRevocation.invalidateAllSessions(actor.subjectId);
+        return { ok: true, value: { ok: true, revokedVersion } };
       } catch (error) {
         return toApiError(error);
       }

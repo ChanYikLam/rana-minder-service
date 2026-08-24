@@ -10,10 +10,11 @@ import { PostgresTaskRepository } from './infrastructure/postgres-task-repositor
 import {
   IDEMPOTENCY_STORE,
   InMemoryIdempotencyStore,
+  PostgresIdempotencyStore,
   RecoveryReplayConvergence,
 } from './idempotency';
 import { LeaseManager } from './lease';
-import { InMemoryTransactionOutboxStore, TASK_OUTBOX_STORE, TaskIntentOutbox } from './outbox';
+import { InMemoryTransactionOutboxStore, TASK_OUTBOX_STORE, TaskIntentOutbox, PostgresTransactionOutboxStore } from './outbox';
 import {
   BATCH_ITEM_AUTHORIZATION_PORT,
   BATCH_ITEM_EXECUTOR_PORT,
@@ -24,6 +25,7 @@ import {
   DevelopmentBatchItemExecutor,
   DenyAllBatchItemExecutor,
   InMemoryBatchStore,
+  PostgresBatchStore,
 } from './batch';
 import {
   BatchExecutionHandler,
@@ -50,6 +52,12 @@ import { TasksWorker } from './worker-entry';
 /** 生产环境禁用 Development 桩，改用 fail-closed 实现，直到真实授权/执行接入。 */
 const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
 
+/**
+ * 存储后端选择：测试环境使用内存实现（无需数据库与 `pg` 依赖）；
+ * 其余环境（dev/staging/prod）接入 PostgreSQL，满足重启持久化与跨 worker 一致性（BUG-001）。
+ */
+const useInMemoryStores = (process.env.NODE_ENV ?? 'development') === 'test';
+
 @Module({
   // forwardRef：NotificationModule↔OrganizationModule↔TasksModule 存在装配环（#68），惰性解析
   imports: [
@@ -62,12 +70,15 @@ const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
   providers: [
     PostgresTaskRepository,
     InMemoryTransactionOutboxStore,
+    PostgresTransactionOutboxStore,
     InMemoryIdempotencyStore,
+    PostgresIdempotencyStore,
     InMemoryBatchStore,
+    PostgresBatchStore,
     { provide: TASK_REPOSITORY, useExisting: PostgresTaskRepository },
-    { provide: TASK_OUTBOX_STORE, useExisting: InMemoryTransactionOutboxStore },
-    { provide: IDEMPOTENCY_STORE, useExisting: InMemoryIdempotencyStore },
-    { provide: BATCH_STORE, useExisting: InMemoryBatchStore },
+    { provide: TASK_OUTBOX_STORE, useClass: useInMemoryStores ? InMemoryTransactionOutboxStore : PostgresTransactionOutboxStore },
+    { provide: IDEMPOTENCY_STORE, useClass: useInMemoryStores ? InMemoryIdempotencyStore : PostgresIdempotencyStore },
+    { provide: BATCH_STORE, useClass: useInMemoryStores ? InMemoryBatchStore : PostgresBatchStore },
     { provide: TASK_OPS_TELEMETRY_PORT, useExisting: LogOnlyTaskOpsTelemetry },
     {
       provide: TASK_PRECONDITION_PORT,

@@ -60,6 +60,12 @@ function inMemorySessionRevocation(): SessionRevocationPort & {
     async invalidateSessions(subjectId, version) {
       this.invalidated.push({ subjectId, version });
     },
+    async getRevocation() {
+      return null;
+    },
+    async invalidateAllSessions() {
+      return 0;
+    },
   };
 }
 
