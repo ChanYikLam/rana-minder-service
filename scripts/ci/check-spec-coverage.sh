@@ -5,6 +5,9 @@
 # 职责（P1-A 可选项落地）：本次变更新增/修改的 src/**/*.ts 生产代码文件，
 # 必须存在同名 *.spec.ts（同目录）或在文件内标注豁免标记：
 #   // no-spec-required <原因>
+# 且同名 spec 不得是"陈旧 spec"——若 CI 阶段 4 已产出 coverage/coverage-summary.json，
+# 还须校验该文件在覆盖率报告中 lines.covered>0（即对应用例实际执行到了本次改动，
+# 否则存在同名 spec 却从未覆盖到该文件，判定陈旧 → MISS，评审 warning）。
 # 目的：让 CI-001「新增代码须有对应用例」从口号变为可执行断言。
 # 用法：bash scripts/ci/check-spec-coverage.sh [base-ref]
 #       base-ref 缺省依次尝试 origin/dev；无显式 base 且无 origin/dev 时
@@ -84,11 +87,32 @@ fi
 
 fail=0
 checked=0
+# 覆盖率产物路径：CI 阶段 4（test:cov）产出 coverage/coverage-summary.json，阶段 4b
+# 复用。本地单独运行脚本且无产物时退化为仅校验 spec 存在，不强查陈旧（并提示）。
+COVERAGE_SUMMARY="$root/coverage/coverage-summary.json"
+have_coverage=0
+[ -f "$COVERAGE_SUMMARY" ] && have_coverage=1
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   checked=$((checked + 1))
   spec="${f%.ts}.spec.ts"
   if [ -f "$spec" ]; then
+    # 同名 spec 存在：进一步防"陈旧 spec"——该文件须在覆盖率报告中被实际执行（lines.covered>0）。
+    # 若 coverage-summary.json 无该文件记录或其 lines.covered==0，说明 spec 从未覆盖到本次改动
+    #（陈旧/空壳 spec 蒙混），判定 MISS（评审 warning）。无覆盖率产物时退化为仅查存在性。
+    if [ "$have_coverage" = "1" ]; then
+      if ! node -e "
+        const fs=require('fs');
+        const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
+        const key=require('path').resolve(process.argv[2]);
+        const d=s[key];
+        if (!d || !d.lines || (d.lines.covered||0)===0) process.exit(1);
+      " "$COVERAGE_SUMMARY" "$f"; then
+        echo "MISS  $f -> $spec 存在但未覆盖该文件（陈旧 spec），请更新用例以覆盖本次改动"
+        fail=1
+        continue
+      fi
+    fi
     continue
   fi
   # 同目录无同名 spec：全文件查豁免标记（评审 info：仅前 40 行会超行误报）
@@ -101,6 +125,8 @@ while IFS= read -r f; do
 done <<EOF
 $changed
 EOF
+# 注：heredoc 内容不做 glob 展开，文件名含通配符字面量也会原样交由 read -r 处理，
+# 不存在通配符误展开风险（评审 info，已评估确认无需引号）。
 
 echo "check-spec-coverage: base=$base checked=$checked fail=$fail"
 exit "$fail"
