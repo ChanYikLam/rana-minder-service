@@ -17,6 +17,9 @@
 #       $CNB_PULL_REQUEST_TARGET_SHA 作 base。新建分支首次 push 或浅克隆中目标
 #       SHA 不在本地时参数可能为空/不可解析：空 → 回退 origin/dev；不可解析 →
 #       尝试 merge-base(origin/dev, HEAD) 兜底；两者都失败才 fail-closed（exit 1）。
+#       P1-2 祖先安全：并发合并/非快进 push 下 $CNB_BEFORE_SHA 未必是 HEAD 祖先，
+#       三点 diff 边界可能纳入无关文件（误报 MISS）——解析后校验 base 必须是
+#       HEAD 祖先，否则回退 merge-base(origin/dev, HEAD)（与 release 同级防护）。
 #       对"推送到 dev"的常规 push：origin/dev..HEAD 为空差异 → checked=0 通过，
 #       非漏检。
 # 退出码：0 = 全部通过；1 = 存在缺失用例 / base 最终不可解析（fail-closed）
@@ -50,15 +53,21 @@ resolve_base() {
   return 1
 }
 
+# 公共兜底：确保 origin/dev 可用并返回 merge-base(origin/dev, HEAD)。
+# 供"base 本地不可解析"与"base 非 HEAD 祖先（P1-2）"两处复用，避免重复逻辑。
+origin_dev_merge_base() {
+  git rev-parse --verify --quiet origin/dev >/dev/null 2>&1 || git fetch origin dev --quiet 2>/dev/null || true
+  if git rev-parse --verify --quiet origin/dev >/dev/null 2>&1; then
+    git merge-base origin/dev HEAD 2>/dev/null || true
+  fi
+}
+
 resolved="$(resolve_base "$base" || true)"
 if [ -z "$resolved" ]; then
   echo "WARN check-spec-coverage: base='${base:-<空>}' 本地不可解析，回退 origin/dev。" >&2
-  git rev-parse --verify --quiet origin/dev >/dev/null 2>&1 || git fetch origin dev --quiet 2>/dev/null || true
-  if git rev-parse --verify --quiet origin/dev >/dev/null 2>&1; then
-    resolved="$(git merge-base origin/dev HEAD 2>/dev/null || true)"
-    if [ -n "$resolved" ]; then
-      echo "WARN 已改用 merge-base(origin/dev, HEAD) = $resolved" >&2
-    fi
+  resolved="$(origin_dev_merge_base || true)"
+  if [ -n "$resolved" ]; then
+    echo "WARN 已改用 merge-base(origin/dev, HEAD) = $resolved" >&2
   fi
 fi
 
@@ -67,6 +76,28 @@ if [ -z "$resolved" ] || ! git rev-parse --verify --quiet "${resolved}^{commit}"
   exit 1
 fi
 base="$resolved"
+
+# P1-2 祖先安全：push 流水线以 $CNB_BEFORE_SHA 作 base，并发合并/非快进 push 下
+# 该 SHA 未必是 HEAD 祖先——三点 diff base...HEAD 会按 merge-base 计算边界，可能
+# 纳入无关文件（误报 MISS）或漏检。校验 base 必须是 HEAD 祖先；否则回退到
+# merge-base(origin/dev, HEAD)（与 release 流水线同级防护）。
+# 注：git diff A...B 本身隐含 merge-base 语义（base 非祖先时也会用
+# merge-base(base,HEAD) 作边界而不会报错），此处回退的真正价值是避免 base 分叉点
+# 过远时把大范围历史变更纳入 diff。已知边界：若回退后的 merge-base(origin/dev, HEAD)
+# 仍距 HEAD 较远（dev 落后较多），仍可能误报 MISS——属原设计可接受边界。
+if ! git merge-base --is-ancestor "$base" HEAD 2>/dev/null; then
+  echo "WARN check-spec-coverage: base=$base 不是 HEAD 祖先（并发/非快进 push），改用 merge-base(origin/dev, HEAD) 兜底。" >&2
+  fallback_ancestor="$(origin_dev_merge_base || true)"
+  if [ -n "$fallback_ancestor" ]; then
+    base="$fallback_ancestor"
+    echo "WARN 已改用 merge-base(origin/dev, HEAD) = $base" >&2
+  else
+    # fail-closed：base 非祖先且兜底仍失败，不静默降级（防止 checked=0 静默通过），
+    # 与脚本"全失败才 fail-closed"的口径一致。
+    echo "ERROR check-spec-coverage: base=$base 非 HEAD 祖先且 merge-base(origin/dev, HEAD) 兜底失败，门禁 fail-closed（exit 1）。请显式传 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
+    exit 1
+  fi
+fi
 
 # pathspec 显式覆盖 src/ 顶层（src/*.ts）与嵌套目录（src/**/*.ts）：
 # git 的 '**' 在 pathspec 中要求至少一层目录，仅写 src/**/*.ts 会漏检 src/main.ts 等顶层文件。
