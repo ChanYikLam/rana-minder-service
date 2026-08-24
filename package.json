@@ -23,11 +23,29 @@
     "format": "prettier --write \"{src,test,apps,packages}/**/*.{ts,json,md}\"",
     "format:check": "prettier --check \"{src,test,apps,packages}/**/*.{ts,json,md}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\"",
-    "test:unit": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\"",
-    "test:di": "node --env-file=.env.test --test -r ts-node/register \"test/notification-module-di.spec.ts\"",
+    "test": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
+    "test:unit": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
     "test:integration": "node --env-file=.env.test --test -r ts-node/register \"test/integration/**/*.spec.ts\"",
-    "test:contract": "node --env-file=.env.test --test -r ts-node/register \"test/contract/**/*.spec.ts\""
+    "test:contract": "node --env-file=.env.test --test -r ts-node/register \"test/contract/**/*.spec.ts\"",
+    "coverage:all": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
+    "test:cov": "c8 -o coverage -- npm run coverage:all",
+    "test:cov:gate": "node scripts/ci/coverage-gate.js",
+    "test:cov:baseline": "node scripts/ci/coverage-baseline.js"
+  },
+  "c8": {
+    "include": [
+      "src/**/*.ts"
+    ],
+    "exclude": [
+      "**/*.spec.ts",
+      "src/shared/testing/**",
+      "src/database/migrations/**"
+    ],
+    "reporter": [
+      "text",
+      "text-summary",
+      "json-summary"
+    ]
   },
   "dependencies": {
     "@nestjs/common": "^11.2.1",
@@ -50,6 +68,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.23.1",
+    "c8": "^12.0.0",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.6",
