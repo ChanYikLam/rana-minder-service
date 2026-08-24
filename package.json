@@ -25,7 +25,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
     "test:unit": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
-    "test:integration": "node --env-file=.env.test --test -r ts-node/register \"test/integration/**/*.spec.ts\"",
+    "test:integration": "node --env-file=.env.test --test --test-concurrency=1 -r ts-node/register \"test/integration/**/*.spec.ts\"",
     "test:contract": "node --env-file=.env.test --test -r ts-node/register \"test/contract/**/*.spec.ts\"",
     "coverage:all": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
     "test:cov": "c8 -o coverage -- npm run coverage:all",
