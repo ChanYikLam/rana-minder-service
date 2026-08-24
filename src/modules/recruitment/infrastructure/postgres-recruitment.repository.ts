@@ -69,6 +69,7 @@ interface PathRow {
   status: string;
   revision_number: number;
   allow_transfer: boolean;
+  published: boolean;
   decisions: unknown;
   previous_status_before_suspend: string | null;
   created_at: Date;
@@ -167,6 +168,7 @@ export function departmentPathRowToSnapshot(row: PathRow): DepartmentPathSnapsho
     status: row.status as DepartmentPathSnapshot['status'],
     revisionNumber: Number(row.revision_number),
     allowTransfer: row.allow_transfer,
+    published: row.published,
     decisions: parseJsonb(row.decisions),
     previousStatusBeforeSuspend:
       row.previous_status_before_suspend === null
@@ -402,7 +404,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     const rows = await this.db.query<PathRow>(
       this.uow.active,
       `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
-               decisions, previous_status_before_suspend, created_at, updated_at
+               published, decisions, previous_status_before_suspend, created_at, updated_at
           FROM department_paths WHERE id = $1`,
       [id],
     );
@@ -414,8 +416,8 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         this.uow.active,
         `INSERT INTO department_paths
           (id, application_id, activity_id, club_id, department_id, status, revision_number,
-           allow_transfer, decisions, previous_status_before_suspend, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           allow_transfer, published, decisions, previous_status_before_suspend, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT DO NOTHING RETURNING id`,
         [
           s.id,
@@ -426,6 +428,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
           s.status,
           s.revisionNumber,
           s.allowTransfer,
+          s.published,
           JSON.stringify(s.decisions),
           s.previousStatusBeforeSuspend,
           s.createdAt,
@@ -441,9 +444,9 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
       this.uow.active,
       `UPDATE department_paths SET
         application_id = $2, activity_id = $3, club_id = $4, department_id = $5, status = $6,
-        allow_transfer = $7, decisions = $8, previous_status_before_suspend = $9,
-        revision_number = $10, updated_at = $11
-      WHERE id = $1 AND revision_number = $12
+        allow_transfer = $7, published = $8, decisions = $9, previous_status_before_suspend = $10,
+        revision_number = $11, updated_at = $12
+      WHERE id = $1 AND revision_number = $13
       RETURNING id`,
       [
         s.id,
@@ -453,6 +456,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         s.departmentId,
         s.status,
         s.allowTransfer,
+        s.published,
         JSON.stringify(s.decisions),
         s.previousStatusBeforeSuspend,
         s.revisionNumber,
@@ -471,7 +475,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     const rows = await this.db.query<PathRow>(
       this.uow.active,
       `SELECT id, application_id, activity_id, club_id, department_id, status, revision_number, allow_transfer,
-               decisions, previous_status_before_suspend, created_at, updated_at
+               published, decisions, previous_status_before_suspend, created_at, updated_at
           FROM department_paths WHERE application_id = $1 ORDER BY updated_at DESC`,
       [applicationId],
     );

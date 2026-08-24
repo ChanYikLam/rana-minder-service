@@ -18,6 +18,7 @@ import { RemedyWindow } from '../../domain/models/remedy-window';
 import type { RecruitmentRepository } from '../ports/recruitment-repository.port';
 import type { RecruitmentAuthorizationPort } from '../ports/recruitment-authorization.port';
 import { recruitmentErrors } from '../errors';
+import { randomUUID } from 'node:crypto';
 
 export const RemedyWindowKind = {
   RULE_TIGHTENING: 'RULE_TIGHTENING',
@@ -81,7 +82,12 @@ export class DefaultCreateRemedyWindowUseCase implements CreateRemedyWindowUseCa
     }
 
     // 逐目标申请校验归属并执行补救动作（不自动淘汰既有申请）
-    const windowId = `remedy-${input.activityId}-${input.now.getTime()}`;
+    // windowId 用 UUID，避免同毫秒对同一活动重复开窗时被 UPSERT 静默覆盖（评审）
+    const windowId = randomUUID();
+    // 两阶段：先全部校验，后统一落库，避免"校验到一半已落库"的部分生效（评审：
+    // IDENTITY_ANOMALY 循环内逐条 saveApplication，靠后申请校验失败会残留前面已落库的 restore）
+    const toRestore: Array<{ snapshot: ReturnType<Application['toSnapshot']>; revision: number }> =
+      [];
     for (const applicationId of input.targetApplicationIds) {
       const snapshot = await this.repository.loadApplication(applicationId);
       if (snapshot === null) {
@@ -103,11 +109,14 @@ export class DefaultCreateRemedyWindowUseCase implements CreateRemedyWindowUseCa
           throw recruitmentErrors.preconditionFailed('身份异常顺延仅适用于身份异常申请');
         }
         application.restoreIdentity(input.now);
-        const restored = application.toSnapshot();
-        await this.repository.saveApplication(restored, snapshot.revisionNumber);
+        toRestore.push({ snapshot: application.toSnapshot(), revision: snapshot.revisionNumber });
       }
       // RULE_TIGHTENING：受影响申请补窗（命令层守卫窗口有效性，不切换申请状态，
       // 不自动淘汰——REC-007/REC-044 语义）
+    }
+    // 全部校验通过后统一落库（IDENTITY_ANOMALY 的 restore 集中提交）
+    for (const { snapshot, revision } of toRestore) {
+      await this.repository.saveApplication(snapshot, revision);
     }
 
     // 开窗动作落库（此前为瞬时副作用、windowId 未持久化）：补救窗口为不可变

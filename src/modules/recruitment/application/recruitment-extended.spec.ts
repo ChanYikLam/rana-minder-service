@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   InMemoryRecruitmentRepository,
   StubRecruitmentAuthorization,
+  StubRecruitmentForm,
 } from './testing/recruitment-test-support';
 import { DefaultCreateRecruitmentActivityUseCase } from './commands/create-recruitment-activity.use-case';
 import { DefaultOpenApplicationChannelUseCase } from './commands/open-application-channel.use-case';
+import { DefaultSubmitApplicationUseCase } from './commands/submit-application.use-case';
 import {
   DefaultPauseApplicationChannelUseCase,
   DefaultResumeApplicationChannelUseCase,
@@ -39,10 +41,12 @@ const NOW = new Date('2026-08-24T00:00:00.000Z');
 describe('recruitment 4.4 剩余能力（通道/补救/路径/面试选时）', () => {
   let repo: InMemoryRecruitmentRepository;
   let auth: StubRecruitmentAuthorization;
+  let form: StubRecruitmentForm;
 
   beforeEach(() => {
     repo = new InMemoryRecruitmentRepository();
     auth = new StubRecruitmentAuthorization();
+    form = new StubRecruitmentForm();
     auth.manageAllowed = true;
     auth.submitAllowed = true;
   });
@@ -124,6 +128,51 @@ describe('recruitment 4.4 剩余能力（通道/补救/路径/面试选时）', 
     await assert.rejects(
       pause.execute({ channelId: 'ch-x', actor: ACTOR, now: NOW }),
       /仅开放中的报名通道可暂停/,
+    );
+  });
+
+  // ---------- 报名截止（按窗口 deadline） ----------
+  it('重开新窗口后：未过新截止可报名，超过新截止拒绝（SRS-SM-REC-002 截止强制）', async () => {
+    const activityId = await createOpenActivity();
+    const channelId = await openChannel(activityId);
+    // 首次开放通道（deadline=null，由活动层控截止）
+    form.seed({
+      id: 'sub-ok',
+      formId: 'form-1',
+      status: 'SUBMITTED',
+      submittedBy: 'applicant-1',
+      versionNumber: 1,
+    });
+    const submit = new DefaultSubmitApplicationUseCase(repo, auth, form);
+    // 通道关闭 → 重开新窗口（deadline = NOW + 2h）
+    const close = new DefaultCloseApplicationChannelUseCase(repo, auth);
+    await close.execute({ channelId, actor: ACTOR, now: NOW });
+    const reopen = new DefaultReopenApplicationChannelUseCase(repo, auth);
+    const later = new Date(NOW.getTime() + 2 * 3600000);
+    await reopen.execute({ channelId, newDeadline: later, actor: ACTOR, now: NOW });
+    // 未过新截止：可报名
+    await submit.execute({
+      activityId,
+      channelId,
+      applicantId: 'applicant-1',
+      departmentChoices: ['dept-a'],
+      formRef: { formId: 'form-1', submissionId: 'sub-ok', versionNumber: 1 },
+      actor: 'applicant-1',
+      now: new Date(NOW.getTime() + 3600000),
+    });
+    // 已过新截止（now 晚于 deadline）：拒绝
+    await assert.rejects(
+      () =>
+        submit.execute({
+          activityId,
+          channelId,
+          applicantId: 'applicant-2',
+          departmentChoices: ['dept-a'],
+          formRef: { formId: 'form-1', submissionId: 'sub-ok', versionNumber: 1 },
+          actor: 'applicant-2',
+          now: new Date(NOW.getTime() + 3 * 3600000),
+        }),
+      /报名通道当前窗口已截止/,
     );
   });
 
@@ -243,6 +292,21 @@ describe('recruitment 4.4 剩余能力（通道/补救/路径/面试选时）', 
     const pub = await publish.execute({ pathId: 'path-1', actor: ACTOR, now: nowOffset(3) });
     assert.equal(pub.published, true);
     assert.equal(pub.status, 'ADMITTED');
+
+    // 发布态落库断言（评审修复：此前发布仅返回 published:true，未持久化发布态）
+    const publishedPath = await repo.loadDepartmentPath('path-1');
+    assert.ok(publishedPath, '发布后路径应存在');
+    assert.equal(publishedPath.published, true);
+    // 幂等：重复发布不叠加 revision，仍返回 published:true
+    const pub2 = await publish.execute({ pathId: 'path-1', actor: ACTOR, now: nowOffset(4) });
+    assert.equal(pub2.published, true);
+    const publishedPath2 = await repo.loadDepartmentPath('path-1');
+    assert.equal(publishedPath2!.published, true);
+    assert.equal(
+      publishedPath2!.revisionNumber,
+      publishedPath.revisionNumber,
+      '重复发布不应叠加 revision',
+    );
   });
 
   // ---------- 面试选时/改期 ----------

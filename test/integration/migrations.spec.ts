@@ -56,6 +56,7 @@ import * as mDeletionChecklist from '../../src/database/migrations/2026082312000
 import * as mJoint from '../../src/database/migrations/20260823130000_create-joint-tables';
 import * as mChannelDeadline from '../../src/database/migrations/20260824000000_add-channel-deadline';
 import * as mRemedyWindow from '../../src/database/migrations/20260824000001_add-remedy-window';
+import * as mPathPublished from '../../src/database/migrations/20260824000002_add-path-published';
 
 const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260820100000', m: mIdentity },
@@ -77,6 +78,7 @@ const migrations: Array<{ name: string; m: Migration }> = [
   { name: '20260823130000-joint', m: mJoint },
   { name: '20260824000000-channel-deadline', m: mChannelDeadline },
   { name: '20260824000001-remedy-window', m: mRemedyWindow },
+  { name: '20260824000002-path-published', m: mPathPublished },
 ];
 
 /**
@@ -160,6 +162,7 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
   },
   { file: '20260824000000', tables: [] },
   { file: '20260824000001', tables: ['remedy_windows'] },
+  { file: '20260824000002', tables: [] },
 ];
 
 /** down 后必须消失的核心新建表（每条建表链取代表，避免双 job_tasks 历史纠缠） */

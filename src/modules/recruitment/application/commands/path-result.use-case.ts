@@ -156,19 +156,25 @@ export class DefaultPublishPathResultUseCase implements PublishPathResultUseCase
   async execute(
     input: PublishPathResultInput,
   ): Promise<{ pathId: string; status: string; published: boolean }> {
-    const { path } = await loadPathAndAuthorize(
+    const { path, expectedRevision } = await loadPathAndAuthorize(
       this.repository,
       this.authorization,
       input.pathId,
       input.actor,
       '发布结果',
     );
-    // 发布前置：内部决定须为可发布终态（ADMITTED/REJECTED/WAITLISTED）
-    if (path.status !== 'ADMITTED' && path.status !== 'REJECTED' && path.status !== 'WAITLISTED') {
+    // 发布前置：内部决定须为可发布终态（ADMITTED/REJECTED/WAITLISTED）——
+    // 由领域模型 publish() 校验（终态之外抛异常），此处不再重复校验
+    // Critical/评审修复：发布动作落库（此前仅返回 published:true，未持久化发布态）
+    try {
+      path.publish(input.now);
+    } catch {
       throw recruitmentErrors.preconditionFailed('仅内部决定终态可发布结果');
     }
+    const published = path.toSnapshot();
+    await this.repository.saveDepartmentPath(published, expectedRevision);
     // 发布本身为幂等动作（可修改重发布；归档后仅纠错由上层判定——REC-024）
-    // 结果通知与邀请联动由上层/邀请域接线（本用例收口发布判定）
-    return { pathId: path.id, status: path.status, published: true };
+    // 结果通知与邀请联动由上层/邀请域接线（本用例收口发布判定与落库）
+    return { pathId: path.id, status: path.status, published: path.published };
   }
 }

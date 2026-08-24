@@ -91,6 +91,7 @@ describe('postgres recruitment repository row mapping', () => {
       status: 'ADMITTED',
       revision_number: 0,
       allow_transfer: false,
+      published: false,
       decisions:
         '[{"decision":"ADMIT","decidedBy":"m1","decidedAt":"2026-01-01T00:00:00.000Z","note":null}]',
       previous_status_before_suspend: null,
