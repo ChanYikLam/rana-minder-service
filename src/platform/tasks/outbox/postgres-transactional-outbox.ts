@@ -1,7 +1,7 @@
 /**
  * PostgreSQL 事务发件箱存储（infrastructure；BUG-001 修复）。
  *
- * 表：task_outbox（与迁移 20260824000000_create-task-infra-tables 逐列对齐）。
+ * 表：task_outbox（与迁移 20260824120000_create-task-infra-tables 逐列对齐）。
  * 以真实持久化替代内存实现，避免进程重启丢失意图、跨 worker 去重失效。
  */
 
