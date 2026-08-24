@@ -17,9 +17,10 @@
 #       $CNB_PULL_REQUEST_TARGET_SHA 作 base。新建分支首次 push 或浅克隆中目标
 #       SHA 不在本地时参数可能为空/不可解析：空 → 回退 origin/dev；不可解析 →
 #       尝试 merge-base(origin/dev, HEAD) 兜底；两者都失败才 fail-closed（exit 1）。
-#       P1-2 祖先安全：并发合并/非快进 push 下 $CNB_BEFORE_SHA 未必是 HEAD 祖先，
-#       三点 diff 边界可能纳入无关文件（误报 MISS）——解析后校验 base 必须是
-#       HEAD 祖先，否则回退 merge-base(origin/dev, HEAD)（与 release 同级防护）。
+#       P1-2 祖先安全（评审 #145）：并发合并/非快进 push 下 $CNB_BEFORE_SHA 未必是
+#       HEAD 祖先，三点 diff 边界可能纳入无关文件（误报 MISS）——解析后校验 base
+#       必须是 HEAD 祖先，否则回退 merge-base(origin/dev, HEAD)（与 release 同级防护）。
+#       边缘双失败（非祖先 + origin/dev 不可用）：fail-closed（exit 1），不静默降级。
 #       对"推送到 dev"的常规 push：origin/dev..HEAD 为空差异 → checked=0 通过，
 #       非漏检。
 # 退出码：0 = 全部通过；1 = 存在缺失用例 / base 最终不可解析（fail-closed）
@@ -77,10 +78,10 @@ if [ -z "$resolved" ] || ! git rev-parse --verify --quiet "${resolved}^{commit}"
 fi
 base="$resolved"
 
-# P1-2 祖先安全：push 流水线以 $CNB_BEFORE_SHA 作 base，并发合并/非快进 push 下
-# 该 SHA 未必是 HEAD 祖先——三点 diff base...HEAD 会按 merge-base 计算边界，可能
-# 纳入无关文件（误报 MISS）或漏检。校验 base 必须是 HEAD 祖先；否则回退到
-# merge-base(origin/dev, HEAD)（与 release 流水线同级防护）。
+# P1-2 祖先安全（评审 #145）：push 流水线以 $CNB_BEFORE_SHA 作 base，并发合并/非快进
+# push 下该 SHA 未必是 HEAD 祖先——三点 diff base...HEAD 会按 merge-base 计算边界，
+# 可能纳入无关文件（误报 MISS）或漏检。解析后校验 base 必须是 HEAD 祖先；否则回退
+# merge-base(origin/dev, HEAD)（与 release 流水线 prev_tag 同级防护）。
 # 注：git diff A...B 本身隐含 merge-base 语义（base 非祖先时也会用
 # merge-base(base,HEAD) 作边界而不会报错），此处回退的真正价值是避免 base 分叉点
 # 过远时把大范围历史变更纳入 diff。已知边界：若回退后的 merge-base(origin/dev, HEAD)
@@ -92,9 +93,10 @@ if ! git merge-base --is-ancestor "$base" HEAD 2>/dev/null; then
     base="$fallback_ancestor"
     echo "WARN 已改用 merge-base(origin/dev, HEAD) = $base" >&2
   else
-    # fail-closed：base 非祖先且兜底仍失败，不静默降级（防止 checked=0 静默通过），
-    # 与脚本"全失败才 fail-closed"的口径一致。
-    echo "ERROR check-spec-coverage: base=$base 非 HEAD 祖先且 merge-base(origin/dev, HEAD) 兜底失败，门禁 fail-closed（exit 1）。请显式传 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
+    # 边缘双失败场景：祖先校验失败且 origin/dev 不可用（fetch/merge-base 均失败）。
+    # 此时 base 仍非 HEAD 祖先，三点 diff 边界可能纳入无关文件（误报 MISS）或漏检——
+    # 与脚本顶部 fail-closed 哲学一致，宁可显式失败也不静默降级（避免门禁失真）。
+    echo "ERROR check-spec-coverage: base=$base 非 HEAD 祖先且无法取得 origin/dev 兜底（fallback_ancestor 为空），门禁 fail-closed（exit 1）。请显式传祖先 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
     exit 1
   fi
 fi
