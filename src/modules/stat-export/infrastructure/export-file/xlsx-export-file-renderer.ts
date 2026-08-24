@@ -67,15 +67,28 @@ export class XlsxExportFileRenderer implements ExportFileRendererPort {
       return { kind: 'xlsx', bytes: dataBytes };
     }
 
-    // 附件包：数据表 + attachments/<安全 basename> + manifest.json（EXP-002 清单）
+    // 附件包：数据表 + attachments/<安全唯一 basename> + manifest.json（EXP-002 清单）
     const zip = new ZipWriter({ now: plan.now });
     zip.add({ filename: EXPORT_ZIP_DATA_ENTRY, data: dataBytes });
+    // 同名附件去重（评审⑨建议）：多位申请人材料常同名（如"报名表.pdf"），
+    // 若直接拼 `attachments/<basename>` 会命中 ZipWriter 重复名闸门导致整个
+    // 导出确定性失败。按出现次序追加 `-2`/`-3` 后缀（保留扩展名）；清单仍
+    // 记录原始 filename 与 ref，便于对账区分来源。
+    const usedEntryNames = new Set<string>();
+    const uniqueEntryName = (basename: string): string => {
+      let candidate = basename;
+      for (let i = 2; usedEntryNames.has(candidate); i += 1) {
+        const dot = basename.lastIndexOf('.');
+        candidate =
+          dot > 0 ? `${basename.slice(0, dot)}-${i}${basename.slice(dot)}` : `${basename}-${i}`;
+      }
+      usedEntryNames.add(candidate);
+      return candidate;
+    };
     for (const attachment of plan.attachments) {
+      const basename = safeAttachmentEntryName(attachment.filename, attachment.ref);
       zip.add({
-        filename: `${EXPORT_ZIP_ATTACHMENTS_PREFIX}${safeAttachmentEntryName(
-          attachment.filename,
-          attachment.ref,
-        )}`,
+        filename: `${EXPORT_ZIP_ATTACHMENTS_PREFIX}${uniqueEntryName(basename)}`,
         data: attachment.bytes,
       });
     }

@@ -166,6 +166,30 @@ describe('XlsxExportFileRenderer — 附件打包路径（EXP-002 清单）', ()
     assert.equal(manifest.attachments.length, 4);
   });
 
+  it('同名附件去重：同一 basename 追加 -2/-3 后缀，导出不失败（评审⑨）', async () => {
+    const renderer = new XlsxExportFileRenderer();
+    const plan = makePlan({
+      attachments: [
+        { ref: 'att-1', filename: '报名表.pdf', contentType: null, bytes: new Uint8Array([1]) },
+        { ref: 'att-2', filename: '报名表.pdf', contentType: null, bytes: new Uint8Array([2]) },
+        { ref: 'att-3', filename: '../简历.pdf', contentType: null, bytes: new Uint8Array([3]) },
+      ],
+    });
+    const { bytes } = await renderer.render(plan);
+    const archive = readZipArchive(bytes);
+    assert.deepEqual(
+      archive.entries
+        .map((e) => e.filename)
+        .filter((n) => n.startsWith('attachments/'))
+        .sort(),
+      ['attachments/报名表-2.pdf', 'attachments/报名表.pdf', 'attachments/简历.pdf'],
+    );
+    // 各条目内容与源字节一致（去重不串包）
+    assert.deepEqual([...archive.read('attachments/报名表.pdf')], [1]);
+    assert.deepEqual([...archive.read('attachments/报名表-2.pdf')], [2]);
+    assert.deepEqual([...archive.read('attachments/简历.pdf')], [3]);
+  });
+
   it('safeAttachmentEntryName 纯函数边界', () => {
     assert.equal(safeAttachmentEntryName('正常文件.pdf', 'att-x'), '正常文件.pdf');
     assert.equal(
