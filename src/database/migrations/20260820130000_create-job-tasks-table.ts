@@ -23,6 +23,23 @@
  *
  * 注意：job 模块旧版 PostgresJobTaskStore 为被 platform/tasks 取代前的
  * 遗留实现，其旧表字段已不再维护；运行期数据访问以新迁移为准。
+ *
+ * 旧表处置 / 升级路径（OPS-UPG-002 显式声明）：
+ * 若既有部署在 20260822120000 之前已按本迁移旧口径建过 public.job_tasks
+ * （旧 schema：id/kind/ref_id/schedule_type/at/lease_holder 等，无 intent_id），
+ * 本迁移改无操作后该旧表**不会被本迁移 drop，也不会被 20260822120000
+ * 接管**（新迁移要求 intent_id 等列）。升级到通用任务信封口径前须执行
+ * 一次性处置，二选一并登记：
+ *   (a) 无存量任务（骨架/开发环境默认）：直接
+ *       DROP TABLE IF EXISTS public.job_tasks;   —— 旧表为遗留实现、无数据
+ *           时首选；新迁移随后按新 schema 建表。
+ *   (b) 有需保留的存量任务（生产升级场景）：先核对 pg_attribute 确认旧
+ *       schema，再手动重映射/搬迁到 20260822120000 的 job_tasks 列形态后
+ *       移交，随后由 20260822120000 的 up() 正常接管；不得在同表上同时
+ *       并存两套 schema（避免 uq_job_tasks_intent_id 等索引缺列失败）。
+ * 判定：`SELECT column_name FROM information_schema.columns WHERE
+ *        table_name='job_tasks' AND column_name IN ('intent_id','lease_until');`
+ *        有 intent_id → 新口径已建，无需处置；否则按 (a)/(b) 处置。
  */
 
 import type { MigrationQueryRunner } from './20260820100000_create-identity-tables';
