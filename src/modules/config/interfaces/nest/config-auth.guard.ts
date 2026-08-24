@@ -37,7 +37,7 @@ export class ConfigAuthGuard implements CanActivate {
     if (session === null) {
       throw new HttpException(
         {
-          code: 'CFG-ERR-001',
+          code: 'IFC-ERR-001',
           message: '未认证或认证失效',
           supportId: this.trace.current()?.traceId ?? generateTraceId(),
         },

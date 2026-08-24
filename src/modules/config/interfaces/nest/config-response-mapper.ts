@@ -24,7 +24,7 @@ export function configActorFromRequest(request: Record<string, unknown>): Config
   const session = request[CONFIG_AUTH_SESSION_KEY] as ConfigAuthSession | undefined;
   if (session === undefined) {
     throw new HttpException(
-      { code: 'CFG-ERR-001', message: '未认证或认证失效', supportId: generateTraceId() },
+      { code: 'IFC-ERR-001', message: '未认证或认证失效', supportId: generateTraceId() },
       401,
     );
   }

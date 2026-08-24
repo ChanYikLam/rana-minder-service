@@ -60,6 +60,7 @@ import type {
   SaveFieldMappingDraftCommand,
 } from '../../application/commands/field-mapping.commands';
 import type { GetConfigRootQuery } from '../../application/commands/config-version.commands';
+import { cfgErrors } from '../../application/errors';
 
 @UseGuards(ConfigAuthGuard)
 @Controller('api/admin/config')
@@ -89,9 +90,11 @@ export class AdminConfigNestController {
     private readonly getConfigRoot: GetConfigRootQuery,
   ) {}
 
-  private async run(promise: Promise<unknown>): Promise<ApiSuccess<unknown>> {
+  /** 统一执行：Promise 或 thunk（需要前置鉴权的端点传闭包），领域错误统一脱敏映射 */
+  private async run(op: Promise<unknown> | (() => Promise<unknown>)): Promise<ApiSuccess<unknown>> {
     try {
-      return toHttpResponse({ ok: true, value: await promise });
+      const value = await (typeof op === 'function' ? op() : op);
+      return toHttpResponse({ ok: true, value });
     } catch (error) {
       const mapped = toApiError(error);
       throw new HttpException(mapped.body, mapped.status);
@@ -106,18 +109,12 @@ export class AdminConfigNestController {
   @Get('policies')
   async listPolicies(@Req() request: Record<string, unknown>): Promise<ApiSuccess<unknown>> {
     const subjectId = this.actor(request);
-    if (!(await this.policyAuthorization.canManagePlatform(subjectId))) {
-      const mapped = toApiError(new Error('forbidden'));
-      throw new HttpException(
-        {
-          code: 'CFG_FORBIDDEN',
-          message: '仅平台超管可查看平台策略',
-          supportId: mapped.body.supportId,
-        },
-        403,
-      );
-    }
-    return this.run(this.platformPolicies.execute());
+    return this.run(async () => {
+      if (!(await this.policyAuthorization.canManagePlatform(subjectId))) {
+        throw cfgErrors.forbidden('仅平台超管可查看平台策略');
+      }
+      return this.platformPolicies.execute();
+    });
   }
 
   @Put('policies/:key')
@@ -166,9 +163,18 @@ export class AdminConfigNestController {
     );
   }
 
+  /** 当前学年+已知学年（平台校历数据）：/admin 命名空间内与其他端点一致要求超管 */
   @Get('academic-year/current')
-  async getCurrentAcademicYear(): Promise<ApiSuccess<unknown>> {
-    return this.run(this.currentAcademicYear.execute({ now: new Date() }));
+  async getCurrentAcademicYear(
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<unknown>> {
+    const subjectId = this.actor(request);
+    return this.run(async () => {
+      if (!(await this.policyAuthorization.canManagePlatform(subjectId))) {
+        throw cfgErrors.forbidden('仅平台超管可查看平台学年配置');
+      }
+      return this.currentAcademicYear.execute({ now: new Date() });
+    });
   }
 
   @Get('field-mapping')

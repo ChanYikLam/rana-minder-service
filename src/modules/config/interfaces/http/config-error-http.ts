@@ -35,6 +35,6 @@ export function toApiError(error: unknown): ApiErrorResult {
   return {
     ok: false,
     status: 500,
-    body: { code: 'CFG-ERR-016', message: '服务异常，请稍后重试', supportId },
+    body: { code: 'IFC-ERR-016', message: '服务异常，请稍后重试', supportId },
   };
 }

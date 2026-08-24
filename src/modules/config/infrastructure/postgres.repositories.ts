@@ -439,8 +439,11 @@ export class PostgresConfigRootRepository implements ConfigRootRepositoryPort {
            current_published_version_number = EXCLUDED.current_published_version_number`,
         [snapshot.rootId, snapshot.kind, snapshot.currentPublishedVersionNumber],
       );
-      // 版本行只插入新号——同号已存在说明不可变版本遭改写，DO NOTHING 静默保旧
-      // （应用层 editDraft 已拒绝非 DRAFT 改动，此为最后一道防线）
+      // 版本行全列 upsert：生命周期转换（DRAFT→TESTING→READY_TO_PUBLISH→PUBLISHED）
+      // 与测试凭证/发布事实都是对既有行的合法更新，DO NOTHING 会让发布状态永远
+      // 落不了库（指针指向 state='DRAFT' 的行，评审 #2 实为 P1）。不可变语义由
+      // 聚合守卫：editDraft 拒绝非 DRAFT 改动、publish 冻结 payload、无删除入口；
+      // 本仓储只镜像聚合的最后已知状态。
       for (const v of snapshot.versions) {
         await this.db.query(
           this.uow.active,
@@ -448,7 +451,14 @@ export class PostgresConfigRootRepository implements ConfigRootRepositoryPort {
              (root_id, version_number, state, payload, secret_kind, test_result_ref,
               source_version_number, created_by, created_at, published_at, published_by)
            VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11)
-           ON CONFLICT (root_id, version_number) DO NOTHING`,
+           ON CONFLICT (root_id, version_number) DO UPDATE SET
+             state = EXCLUDED.state,
+             payload = EXCLUDED.payload,
+             secret_kind = EXCLUDED.secret_kind,
+             test_result_ref = EXCLUDED.test_result_ref,
+             source_version_number = EXCLUDED.source_version_number,
+             published_at = EXCLUDED.published_at,
+             published_by = EXCLUDED.published_by`,
           [
             snapshot.rootId,
             v.versionNumber,
