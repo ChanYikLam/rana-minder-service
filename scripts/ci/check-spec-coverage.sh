@@ -91,8 +91,8 @@ while IFS= read -r f; do
   if [ -f "$spec" ]; then
     continue
   fi
-  # 同目录无同名 spec：查豁免标记（前 40 行内）
-  if head -n 40 "$f" | grep -q 'no-spec-required'; then
+  # 同目录无同名 spec：全文件查豁免标记（评审 info：仅前 40 行会超行误报）
+  if grep -q 'no-spec-required' "$f"; then
     echo "SKIP  $f (no-spec-required)"
     continue
   fi

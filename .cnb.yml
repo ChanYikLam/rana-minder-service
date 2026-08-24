@@ -56,7 +56,8 @@
         - "!(docs/**)"
         - "!(**/*.md)"
         - "!*.md"
-        - "!(scripts/ci/**)"
+        # scripts/ci/** 不再排除：门禁脚本（coverage-gate / check-spec-coverage /
+        # coverage-baseline）自身变更须触发 CI，防止改了门禁却未验证（评审 info）
       stages:
         # 阶段 1：安装（pnpm 锁文件驱动；package.json 出现后 pnpm-lock.yaml 缺失/漂移即失败）
         - name: 1-安装
@@ -83,6 +84,10 @@
         # 阶段 4b：覆盖率门禁（P1-A/CI-001）——复用阶段 4 的 coverage/ 产物，不重跑单测（评审：#126 重复执行优化）
         # 1) coverage-gate.js --check-only 对照 coverage-baseline.json 棘轮（只升不降）
         # 2) check-spec-coverage.sh 校验改动文件↔同名 spec
+        # 统计口径（评审对齐）：coverage:all = 仅 L1 单元 + DI 引导
+        #   （src/**/*.spec.ts + test/*.spec.ts）；L2 集成需真实 PG 依赖、L3 契约
+        #   为独立套件，二者均**不纳入覆盖率 % 门禁**，各自阶段单独运行——
+        #   "四套件聚合"指 CI 四阶段覆盖，非覆盖率统计范围。
         # 合并说明：与 PR #130 的 4b-DI引导测试 同处 .cnb.yml；DI spec 已纳入阶段 4 glob，
         # 故 DI 引导不再单独成阶段，保留唯一 L1 阶段防重复执行（先合本 PR，再合 #130 按此收敛）。
         - name: 4b-覆盖率门禁
@@ -207,7 +212,8 @@
         - "!(docs/**)"
         - "!(**/*.md)"
         - "!*.md"
-        - "!(scripts/ci/**)"
+        # scripts/ci/** 不再排除：门禁脚本（coverage-gate / check-spec-coverage /
+        # coverage-baseline）自身变更须触发 CI，防止改了门禁却未验证（评审 info）
       stages:
         - name: 1-安装
           if: "[ -f package.json ]"
@@ -359,9 +365,10 @@
           script: |
             set -e
             node scripts/ci/coverage-gate.js --check-only
-            # 发布流水线改用合并基线（origin/dev..HEAD）：覆盖本发布全量变更，
-            # 避免 $CNB_COMMIT~1 仅校验最后一个 commit 漏检更早提交（评审 info）
-            bash scripts/ci/check-spec-coverage.sh origin/dev
+            # 发布流水线用"上一个发布 tag"作基线（评审：dev 领先时 origin/dev 三点
+            # diff 会覆盖大范围历史变更致误报 MISS）；无前 tag 时回退 origin/dev。
+            prev_tag="$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || true)"
+            bash scripts/ci/check-spec-coverage.sh "${prev_tag:-origin/dev}"
         - name: 5-集成测试L2
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |

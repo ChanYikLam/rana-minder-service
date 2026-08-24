@@ -112,8 +112,10 @@ if (raised) {
     // 升阈收敛到本地 npm run test:cov:gate（完整模式）手动执行并随提交带上。
     console.warn(
       `[RATCHET] 覆盖率较基线提升（lines=${next.lines}% branches=${next.branches}% ` +
-        `functions=${next.functions}%）。CI 只读模式不改写基线；` +
-        `请在本地运行 npm run test:cov:gate 更新 coverage-baseline.json 并随提交带上（棘轮只升不降）。`,
+        `functions=${next.functions}%）。CI 只读模式不改写基线；在提交新基线前，` +
+        `门禁仍按旧基线（含 1pp 容差）放行——历史峰值不会固化，若提升是持久的，` +
+        `请在本地运行 npm run test:cov:gate 更新 coverage-baseline.json 并随提交带上，` +
+        `再触发一次 CI 以固化为新基线（棘轮只升不降）。`,
     );
   } else {
     fs.writeFileSync(BASELINE, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
