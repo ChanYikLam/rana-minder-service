@@ -43,6 +43,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       intent_id       text NOT NULL,
       status          text NOT NULL,
       result_ref      text NULL,
+      executing_until timestamptz NULL,
       updated_at      timestamptz NOT NULL DEFAULT now(),
       CONSTRAINT ck_idempotency_records_status
         CHECK (status IN ('EXECUTING','COMPLETED','FAILED'))

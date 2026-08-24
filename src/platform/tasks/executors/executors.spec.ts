@@ -164,7 +164,7 @@ describe('TaskExecutionPipeline', () => {
     } as TaskRepository;
     const idempotency = new InMemoryIdempotencyStore();
     const leaseMgr = new LeaseManager(repo);
-    const convergence = new RecoveryReplayConvergence(repo, idempotency);
+    const convergence = new RecoveryReplayConvergence(idempotency);
     const registry: TaskProcessorRegistry = {
       register: () => {},
       get: (type) => (overrides.processors ?? []).find((h) => h.taskType === type),
@@ -207,7 +207,7 @@ describe('TaskExecutionPipeline', () => {
       intentId: 'intent-1',
     });
     tasks.set('task-1', task);
-    await idempotency.begin('ik:1', 'intent-1');
+    await idempotency.begin('ik:1', 'intent-1', new Date(Date.now() - 1000).toISOString());
     await idempotency.complete('ik:1', 'intent-1', 'ref://done');
     await pipeline.execute('task-1', 'w1', new Date());
     const updated = tasks.get('task-1');

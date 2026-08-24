@@ -55,7 +55,7 @@ function makeIntent(idempotencyKey: string): TaskIntent {
 function makeEnv() {
   const repository = new InMemoryTaskRepository();
   const idempotency = new InMemoryIdempotencyStore();
-  const convergence = new RecoveryReplayConvergence(repository, idempotency);
+  const convergence = new RecoveryReplayConvergence(idempotency);
   const registry = new FakeProcessorRegistry();
   const pipeline = new TaskExecutionPipeline(
     repository,

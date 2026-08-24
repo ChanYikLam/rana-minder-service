@@ -126,7 +126,10 @@ describe('NotificationDeliveryHandler（评审 #1：后台投递链路生效）'
     assert.equal(updated?.status, 'DELIVERED', '重试命令必须真正执行');
   });
 
-  it('未知意图 → 记录警告不抛错', async () => {
-    await handler.handle(makeTask('unknown', {}));
+  it('未知意图 → 抛不可重试错误，进入 MANUAL_INTERVENTION（BUG-010）', async () => {
+    await assert.rejects(
+      () => handler.handle(makeTask('unknown', {})),
+      /未知任务意图/,
+    );
   });
 });

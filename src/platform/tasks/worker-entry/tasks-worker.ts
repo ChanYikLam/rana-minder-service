@@ -24,20 +24,24 @@ export class TasksWorker {
     const run = async (): Promise<void> => {
       if (this.stopping || this.running) return;
       this.running = true;
-      try {
-        await this.scheduler.runOnce(workerId, new Date());
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`调度循环单次执行失败：${reason}`);
-      } finally {
-        this.running = false;
-      }
+      // BUG-012 修复：仅在真正启动一轮时才把 currentRun 指向在途 promise。
+      // 早退（stopping/running）的调用不覆盖 currentRun，避免 stop() 等待期间
+      // 被"立即 resolve"的空轮次覆盖，导致真正在途轮次未被排空。
+      const runPromise = (async () => {
+        try {
+          await this.scheduler.runOnce(workerId, new Date());
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`调度循环单次执行失败：${reason}`);
+        } finally {
+          this.running = false;
+        }
+      })();
+      this.currentRun = runPromise;
+      return runPromise;
     };
 
-    const tracked = (): Promise<void> => {
-      this.currentRun = run();
-      return this.currentRun;
-    };
+    const tracked = (): Promise<void> => run();
 
     void tracked();
     this.timer = setInterval(() => {

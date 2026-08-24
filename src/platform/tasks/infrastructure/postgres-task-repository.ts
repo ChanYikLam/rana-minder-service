@@ -234,8 +234,8 @@ export class PostgresTaskRepository implements TaskRepository {
                 leased_at = $5,
                 updated_at = $5
           WHERE task_id = $1
-            AND status <> '${TaskStatus.COMPLETED}'
-            AND status <> '${TaskStatus.MANUAL_INTERVENTION}'
+            AND status <> $6
+            AND status <> $7
             AND not_before <= $5
             AND (lease_until IS NULL OR lease_until <= $5)
           RETURNING task_id, task_type, status, intent_id, idempotency_key, scope, source,
@@ -243,7 +243,8 @@ export class PostgresTaskRepository implements TaskRepository {
                 attempts, max_attempts, not_before, failure, result_ref, created_at, updated_at`,
         // 注：lease_version 由 SQL 原子计算（COALESCE(lease_version,0)+1），
         // 不信任调用方基于预读的旧版本号，避免版本回退削弱 SEC-VER-011 旧令牌守卫。
-        [taskId, TaskStatus.LEASED, workerId, leaseUntil, nowIso],
+        // 状态常量以 $6/$7 参数化传入（BUG-015 修复：避免 SQL 模板插值）。
+        [taskId, TaskStatus.LEASED, workerId, leaseUntil, nowIso, TaskStatus.COMPLETED, TaskStatus.MANUAL_INTERVENTION],
       );
       if (rows[0] !== undefined) {
         return { claimed: true, task: rowToRecord(rows[0]) };
@@ -295,7 +296,7 @@ export class PostgresTaskRepository implements TaskRepository {
                 updated_at = $8
           WHERE task_id = $1
             AND lease_version = $2
-            AND status <> 'COMPLETED'
+            AND status <> $9
           RETURNING task_id, task_type, status, intent_id, idempotency_key, scope, source,
                 payload, lease_worker_id, lease_version, lease_until, leased_at,
                 attempts, max_attempts, not_before, failure, result_ref, created_at, updated_at`,
@@ -308,6 +309,7 @@ export class PostgresTaskRepository implements TaskRepository {
           patch.resultRef ?? null,
           patch.notBefore ?? null,
           nowIso,
+          TaskStatus.COMPLETED,
         ],
       );
       if (rows[0] === undefined) {
