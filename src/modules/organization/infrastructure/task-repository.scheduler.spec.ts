@@ -83,4 +83,15 @@ describe('TaskRepositoryJobScheduler（ADR-004 持久任务桥接）', () => {
     assert.equal(due[0].kind, 'relation_execute');
     assert.equal(due[0].scheduleType, 'at');
   });
+
+  it('listDue 多个到期任务并行取回（消除 N+1 串行往返）', async () => {
+    const { scheduler } = makeScheduler();
+    await scheduler.enqueue({ ...TASK, taskId: 'tsk-1' });
+    await scheduler.enqueue({ ...TASK, taskId: 'tsk-2' });
+    await scheduler.enqueue({ ...TASK, taskId: 'tsk-3' });
+    const due = await scheduler.listDue(NOW);
+    assert.equal(due.length, 3);
+    const ids = due.map((t) => t.taskId).sort();
+    assert.deepEqual(ids, ['tsk-1', 'tsk-2', 'tsk-3']);
+  });
 });

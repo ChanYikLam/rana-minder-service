@@ -89,9 +89,11 @@ export class TaskRepositoryJobScheduler implements JobSchedulerPort {
 
   async listDue(now: Date): Promise<ScheduledTask[]> {
     const ids = await this.tasks.listDueTaskIds(now.toISOString(), 100);
+    // 并行按 id 取记录，消除 N+1 串行 DB 往返（上限 100 并发查询，
+    // 由调用方调度频率与平台仓储池共同约束）。
+    const records = await Promise.all(ids.map((id) => this.tasks.findById(id)));
     const out: ScheduledTask[] = [];
-    for (const id of ids) {
-      const record = await this.tasks.findById(id);
+    for (const record of records) {
       if (record === null) continue;
       out.push(this.toScheduled(record));
     }

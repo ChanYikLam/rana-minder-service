@@ -118,10 +118,7 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
     }
   }
 
-  private mapGroup(
-    raw: RawGroup,
-    opts?: { readable?: boolean },
-  ): CasdoorGroupInfo | null {
+  private mapGroup(raw: RawGroup, opts?: { readable?: boolean }): CasdoorGroupInfo | null {
     if (typeof raw?.id !== 'string' || typeof raw?.name !== 'string') return null;
     const parentOwner = typeof raw.parentId === 'string' ? raw.parentId.split('/')[0] : null;
     const parentName =
@@ -150,11 +147,23 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
   }
 
   async listGroups(): Promise<CasdoorGroupInfo[]> {
-    const { ok, data } = await this.request(
+    const { ok, status, data } = await this.request(
       `/get-groups?owner=${encodeURIComponent(this.organization)}`,
       { method: 'GET' },
     );
-    if (!ok || !Array.isArray(data)) return [];
+    // 401/403 → 凭据失权/权限回收：目录整体不可读。上抛而非返回空目录，
+    // 否则会把 no_access 误报为「组织内无 Group」；调用方据此可触发失权处置。
+    if (status === 401 || status === 403) {
+      throw new Error(`casdoor list-groups forbidden (status=${status})`);
+    }
+    // 网络/超时/5xx → 瞬时故障：上抛交由上层重试，严禁伪装成空目录。
+    if (!ok) {
+      throw new Error(`casdoor list-groups failed (status=${status || 'network'})`);
+    }
+    // 200 但 body 非数组：瞬时空/畸形响应，不能当作「确实没有 Group」。
+    if (!Array.isArray(data)) {
+      throw new Error(`casdoor list-groups returned invalid body (status=${status})`);
+    }
     return (data as RawGroup[])
       .map((g) => this.mapGroup(g))
       .filter((g): g is CasdoorGroupInfo => g !== null);
@@ -172,8 +181,7 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
     // 返回 readable:false（而非上抛）是对账 no_access 分支的数据源，
     // 否则 HTTP 适配器下 no_access 永远无法触发（死代码）。
     if (status === 401 || status === 403) {
-      const raw =
-        typeof data === 'object' && data !== null ? (data as RawGroup) : undefined;
+      const raw = typeof data === 'object' && data !== null ? (data as RawGroup) : undefined;
       const mapped = raw ? this.mapGroup(raw, { readable: false }) : null;
       if (mapped !== null) return mapped;
       // 响应未携带可用元数据：仍构造一个最小化 Group 以标记失权，
@@ -203,6 +211,12 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
   async getGroupMembers(ref: GroupStableRef): Promise<readonly string[]> {
     const group = await this.getGroupByRef(ref);
     if (group === null) return [];
+    // readable=false：凭据失权/权限回收，无法读取成员实况。
+    // 严禁回落空 []（会把「不可读」误报为「无成员」，进而使 buildSteps 的
+    // present=false 误判 original.result=failed 走错补偿路径）；上抛由上层处置。
+    if (group.readable === false) {
+      throw new Error(`casdoor group not readable: ${ref.owner}/${ref.name}`);
+    }
     const { ok, status, data } = await this.request(
       `/get-group-users?id=${encodeURIComponent(group.stableId)}`,
       { method: 'GET' },
@@ -295,12 +309,9 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
     const membersByGroup: Record<string, readonly string[]> = {};
     for (const ref of refs) {
       const key = `${ref.owner}/${ref.name}`;
-      try {
-        membersByGroup[key] = await this.getGroupMembers(ref);
-      } catch (err) {
-        void err;
-        membersByGroup[key] = [];
-      }
+      // 不再吞掉异常置空：瞬时故障/失权须向上传播，由对账/补偿依据
+      // 异常而非空成员集判定，避免把「读失败」误报为「确实无人」。
+      membersByGroup[key] = await this.getGroupMembers(ref);
     }
     return { membersByGroup };
   }

@@ -82,10 +82,7 @@ describe('HttpCasdoorGroupAdapter', () => {
 
   it('getGroupByRef：200 但空 body → 上抛而非误判 deleted', async () => {
     const { adapter } = makeFetch(() => ({ status: 200, body: null }));
-    await assert.rejects(
-      () => adapter.getGroupByRef({ owner: 'x', name: 'y' }),
-      /empty body/,
-    );
+    await assert.rejects(() => adapter.getGroupByRef({ owner: 'x', name: 'y' }), /empty body/);
   });
 
   it('writeMembership add：2xx + 回读确认 → success', async () => {
@@ -193,5 +190,52 @@ describe('HttpCasdoorGroupAdapter', () => {
     const auth = (calls[0]?.init.headers as Record<string, string>)['Authorization'];
     assert.ok(auth.startsWith('Basic '));
     assert.ok(!auth.includes('secret'));
+  });
+
+  it('getGroupMembers：readable=false 上抛而非回落空 []（不把失权误报为无成员）', async () => {
+    const { adapter } = makeFetch((url) => {
+      if (isGroupUrl(url))
+        return { status: 403, body: { id: 'g-1', owner: 'club-acm', name: '宣传部' } };
+      return { status: 200, body: [] };
+    });
+    await assert.rejects(
+      () => adapter.getGroupMembers({ owner: 'club-acm', name: '宣传部' }),
+      /not readable/,
+    );
+  });
+
+  it('readback：瞬时故障/失权上抛，不吞掉异常置空 []', async () => {
+    const { adapter } = makeFetch(() => ({ status: 502, body: {} }));
+    await assert.rejects(
+      () => adapter.readback([{ owner: 'club-acm', name: '宣传部' }]),
+      /casdoor get-group failed/,
+    );
+  });
+
+  it('readback：readable=false 上抛而非回落空 []', async () => {
+    const { adapter } = makeFetch((url) => {
+      if (isGroupUrl(url))
+        return { status: 403, body: { id: 'g-1', owner: 'club-acm', name: '宣传部' } };
+      return { status: 200, body: [] };
+    });
+    await assert.rejects(
+      () => adapter.readback([{ owner: 'club-acm', name: '宣传部' }]),
+      /not readable/,
+    );
+  });
+
+  it('listGroups：403 → 上抛而非返回空目录（不掩盖 no_access 信号）', async () => {
+    const { adapter } = makeFetch(() => ({ status: 403, body: {} }));
+    await assert.rejects(() => adapter.listGroups(), /list-groups forbidden/);
+  });
+
+  it('listGroups：5xx 瞬时故障 → 上抛而非返回空目录', async () => {
+    const { adapter } = makeFetch(() => ({ status: 502, body: {} }));
+    await assert.rejects(() => adapter.listGroups(), /list-groups failed/);
+  });
+
+  it('listGroups：200 空数组 → 返回空目录（确实无 Group）', async () => {
+    const { adapter } = makeFetch(() => ({ status: 200, body: [] }));
+    assert.deepEqual(await adapter.listGroups(), []);
   });
 });
