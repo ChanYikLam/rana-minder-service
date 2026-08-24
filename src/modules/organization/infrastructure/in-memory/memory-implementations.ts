@@ -25,6 +25,8 @@ import type {
   CasdoorWriteResult,
   ClubStore,
   RelationCommandStore,
+  RelationCommandAuditEntry,
+  RelationCommandAuditPort,
   AppointmentCommandStore,
   PermissionTemplateStore,
   GroupMappingRegistry,
@@ -38,6 +40,29 @@ import type {
   ScheduledTaskKind,
   ClockPort,
 } from '../../application/ports';
+
+// --------------------------------------------------------------------------
+// 生产装配防护（GOV-007：内存桩禁止生产装配）
+// --------------------------------------------------------------------------
+
+/**
+ * 内存桩生产装配守卫（GOV-007、#68 验收红线）。
+ *
+ * fail-fast 语义：NODE_ENV=production 时构造任何内存桩直接抛错，让应用在
+ * 启动期失败而不是带着内存态"伪持久化"对外服务（数据不落盘、重启即丢、
+ * 且可被同进程任意代码篡改）。开发/测试环境不受影响。
+ */
+export function assertMemoryStubAllowed(
+  component: string,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (env['NODE_ENV'] === 'production') {
+    throw orgError.commitFailed(
+      `生产环境禁止装配内存桩 ${component}（GOV-007/#68）；` +
+        '请配置真实适配器（ORG_DB_REAL=1 / ORG_CASDOOR_REAL=1 等）后重新部署',
+    );
+  }
+}
 
 // --------------------------------------------------------------------------
 // 时钟
@@ -54,6 +79,10 @@ export class SystemClock implements ClockPort {
 // --------------------------------------------------------------------------
 
 export class InMemoryClubStore implements ClubStore {
+  constructor() {
+    assertMemoryStubAllowed('InMemoryClubStore');
+  }
+
   private readonly byId = new Map<string, ClubSpace>();
 
   async save(club: ClubSpace): Promise<void> {
@@ -90,6 +119,10 @@ export class InMemoryClubStore implements ClubStore {
 // --------------------------------------------------------------------------
 
 export class InMemoryRelationCommandStore implements RelationCommandStore {
+  constructor() {
+    assertMemoryStubAllowed('InMemoryRelationCommandStore');
+  }
+
   private readonly byId = new Map<string, RelationCommand>();
 
   async save(command: RelationCommand): Promise<void> {
@@ -143,6 +176,10 @@ export class InMemoryRelationCommandStore implements RelationCommandStore {
 // --------------------------------------------------------------------------
 
 export class InMemoryAppointmentCommandStore implements AppointmentCommandStore {
+  constructor() {
+    assertMemoryStubAllowed('InMemoryAppointmentCommandStore');
+  }
+
   private readonly byId = new Map<string, AppointmentCommand>();
   private readonly byClub = new Map<string, AppointmentCommand[]>();
 
@@ -183,6 +220,10 @@ export class InMemoryAppointmentCommandStore implements AppointmentCommandStore 
 // --------------------------------------------------------------------------
 
 export class InMemoryPermissionTemplateStore implements PermissionTemplateStore {
+  constructor() {
+    assertMemoryStubAllowed('InMemoryPermissionTemplateStore');
+  }
+
   private readonly byId = new Map<string, PermissionTemplate>();
   private bindings: PositionTemplateBinding[] = [];
 
@@ -232,6 +273,10 @@ export class InMemoryPermissionTemplateStore implements PermissionTemplateStore 
 // --------------------------------------------------------------------------
 
 export class InMemoryGroupMappingRegistry implements GroupMappingRegistry {
+  constructor() {
+    assertMemoryStubAllowed('InMemoryGroupMappingRegistry');
+  }
+
   private records: GroupMappingRecord[] = [];
 
   async save(record: GroupMappingRecord): Promise<void> {
@@ -297,6 +342,7 @@ export class InMemoryCasdoorPort implements CasdoorGroupPort {
   private requestSeq = 0;
 
   constructor(seed: MemoryCasdoorSeed) {
+    assertMemoryStubAllowed('InMemoryCasdoorPort');
     this.groups = seed.groups.map((g, i) => this.normalize(g, i));
   }
 
@@ -323,7 +369,10 @@ export class InMemoryCasdoorPort implements CasdoorGroupPort {
   }
 
   async getGroupMembers(ref: GroupStableRef): Promise<readonly string[]> {
-    // 与 readback 端口容错语义一致：Group 缺失视为空成员集，返回 [] 而非抛裸 Error
+    // 与 readback 端口容错语义一致：Group 缺失视为空成员集，返回 [] 而非抛裸 Error。
+    // 约定已与真实适配器 http-casdoor-group.adapter.ts 对齐（getGroupByRef 缺失同样
+    // 返回 []）；"Group 本身缺失"这一配置错误的精确报错由用例层 getGroupByRef 显式
+    // 存在性校验承担（assertMemberPrerequisite/assertOwnerContinuity，ORG-013/024）。
     const g = await this.getGroupByRef(ref);
     return g === null ? [] : [...g.memberIds];
   }
@@ -395,7 +444,9 @@ export interface MemoryReconcileConfig {
 }
 
 export class InMemoryReconcilePort implements ReconcilePort {
-  constructor(private readonly config: MemoryReconcileConfig) {}
+  constructor(private readonly config: MemoryReconcileConfig) {
+    assertMemoryStubAllowed('InMemoryReconcilePort');
+  }
 
   async reconcileClub(clubId: string): Promise<{
     anomaly: boolean;
@@ -426,6 +477,10 @@ type MutableScheduledTask = {
 };
 
 export class InMemoryJobScheduler implements JobSchedulerPort {
+  constructor() {
+    assertMemoryStubAllowed('InMemoryJobScheduler');
+  }
+
   private tasks: MutableScheduledTask[] = [];
 
   async enqueue(task: ScheduledTask): Promise<void> {
@@ -462,6 +517,10 @@ export class InMemoryJobScheduler implements JobSchedulerPort {
 // --------------------------------------------------------------------------
 
 export class InMemoryNotificationPort implements NotificationPort {
+  constructor() {
+    assertMemoryStubAllowed('InMemoryNotificationPort');
+  }
+
   readonly facts: Array<{
     kind: string;
     toUserIds: readonly string[];
@@ -489,6 +548,27 @@ export class InMemoryNotificationPort implements NotificationPort {
 }
 
 // --------------------------------------------------------------------------
+// 关系命令审计留痕（内存：append-only 追加，供单测断言副作用落点）
+// --------------------------------------------------------------------------
+
+export class InMemoryRelationCommandAuditStore implements RelationCommandAuditPort {
+  constructor() {
+    assertMemoryStubAllowed('InMemoryRelationCommandAuditStore');
+  }
+
+  readonly entries: RelationCommandAuditEntry[] = [];
+
+  async record(entry: RelationCommandAuditEntry): Promise<void> {
+    this.entries.push({ ...entry, detail: entry.detail === null ? null : { ...entry.detail } });
+  }
+
+  /** 按命令 id 过滤留痕（测试辅助） */
+  listByCommand(commandId: string): RelationCommandAuditEntry[] {
+    return this.entries.filter((e) => e.commandId === commandId);
+  }
+}
+
+// --------------------------------------------------------------------------
 // 当前权限端口（内存：可配置；默认超管映射为独立 Group，ORG-029）
 // --------------------------------------------------------------------------
 
@@ -503,21 +583,14 @@ export interface MemoryPermissionConfig {
 
 export class MemoryCurrentPermissionsPort implements CurrentPermissionsPort {
   constructor(private readonly config: MemoryPermissionConfig) {
+    assertMemoryStubAllowed('MemoryCurrentPermissionsPort');
     // 门禁隔离：本桩按 Group 名子串（leader/负责人/personnel/人事/dept…）派生权限，
-    // 违反 GOV-007「Group 名称不得授权」。它仅供开发/单测装配，且须显式开启
-    // ORG_DEV_ACTOR_HEADER（与 actor.ts 开发桩口径一致）；生产环境一律拒绝装配。
+    // 违反 GOV-007「Group 名称不得授权」。它仅供开发/单测装配；生产装配由
+    // assertMemoryStubAllowed fail-fast 拒绝（#68）。HTTP 层身份解析的
+    // ORG_DEV_ACTOR_HEADER 门禁由 interfaces/actor.ts 独立 fail-closed 承担，
+    // 此处不再重复校验（否则内存桩无法在开发/测试环境正常构造）。
     // 真实鉴权须由基于 PermissionCalculator（职位 Group → 已发布模板映射 + 业务临时
     // 授权）的适配器实现。
-    if (process.env['NODE_ENV'] === 'production') {
-      throw new Error(
-        'MemoryCurrentPermissionsPort 为 Group 名派生的开发桩，违反 GOV-007，禁止用于生产装配',
-      );
-    }
-    if (process.env['ORG_DEV_ACTOR_HEADER'] !== '1') {
-      throw new Error(
-        'MemoryCurrentPermissionsPort 为开发桩，须显式设置 ORG_DEV_ACTOR_HEADER=1 方可装配',
-      );
-    }
   }
 
   async effectiveForClub(userId: string, clubId: string): Promise<string[]> {

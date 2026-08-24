@@ -33,6 +33,7 @@ import {
   GROUP_MAPPING_REGISTRY,
   PERMISSION_TEMPLATE_STORE,
   RELATION_COMMAND_STORE,
+  RELATION_COMMAND_AUDIT_PORT,
   APPOINTMENT_COMMAND_STORE,
   ADMIN_CLUBS_QUERY,
   GROUP_DIRECTORY_QUERY,
@@ -44,6 +45,7 @@ import {
   InMemoryCasdoorPort,
   InMemoryClubStore,
   InMemoryRelationCommandStore,
+  InMemoryRelationCommandAuditStore,
   InMemoryAppointmentCommandStore,
   InMemoryPermissionTemplateStore,
   InMemoryGroupMappingRegistry,
@@ -121,6 +123,10 @@ import { OrgWorkspaceController } from './interfaces/controllers/org-workspace.c
     {
       provide: RELATION_COMMAND_STORE,
       useFactory: () => new InMemoryRelationCommandStore(),
+    },
+    {
+      provide: RELATION_COMMAND_AUDIT_PORT,
+      useFactory: () => new InMemoryRelationCommandAuditStore(),
     },
     {
       provide: APPOINTMENT_COMMAND_STORE,

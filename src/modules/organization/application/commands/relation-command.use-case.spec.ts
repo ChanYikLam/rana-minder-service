@@ -10,6 +10,7 @@ import {
   InMemoryGroupMappingRegistry,
   InMemoryJobScheduler,
   InMemoryNotificationPort,
+  InMemoryRelationCommandAuditStore,
   InMemoryRelationCommandStore,
 } from '../../infrastructure/in-memory/memory-implementations';
 import type { CurrentPermissionsPort, GroupMappingRegistry } from '../ports';
@@ -58,6 +59,7 @@ function buildHarness(options?: {
   const scheduler = new InMemoryJobScheduler();
   const notifications = new InMemoryNotificationPort();
   const permissions = new MutablePermissions();
+  const audit = new InMemoryRelationCommandAuditStore();
   const useCase = new RelationCommandUseCase(
     relationStore,
     clubs,
@@ -66,6 +68,7 @@ function buildHarness(options?: {
     scheduler,
     notifications,
     permissions,
+    audit,
   );
 
   const club = createClubSpace({
@@ -80,7 +83,18 @@ function buildHarness(options?: {
   club.readonly = false;
   club.clubGroup = { owner: 'club-acm', name: 'ACM社团' };
 
-  return { casdoor, clubs, relationStore, mappingRegistry, scheduler, useCase, club, permissions };
+  return {
+    casdoor,
+    clubs,
+    relationStore,
+    mappingRegistry,
+    scheduler,
+    notifications,
+    audit,
+    useCase,
+    club,
+    permissions,
+  };
 }
 
 describe('RelationCommandUseCase', () => {
@@ -251,6 +265,161 @@ describe('RelationCommandUseCase', () => {
       () => h.relationStore.save({ ...cmd, status: 'processing' as const }),
       (e: Error) => e.message.includes('乐观锁'),
     );
+  });
+
+  // ------------------------------------------------------------------
+  // 审计留痕覆盖（SRS-SM-ORG-002 requiredSideEffects 可验证落点；ORG-027）
+  // ------------------------------------------------------------------
+
+  it('submit：状态机副作用（save_command_audit 等）逐条落痕', async () => {
+    const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
+    const entries = h.audit.listByCommand(cmd.id);
+    const labels = entries.map((e) => e.sideEffect);
+    assert.ok(labels.includes('save_command_audit'));
+    assert.ok(labels.includes('keep_original_relation'));
+    assert.ok(labels.includes('enqueue_execution_task')); // 实体动作已发生后再落痕
+    for (const e of entries) {
+      assert.equal(e.eventType, 'submit');
+      assert.equal(e.fromStatus, 'pending_execution');
+      assert.equal(e.toStatus, 'pending_execution');
+      assert.equal(e.clubId, cmd.clubId);
+      assert.ok(e.occurredAt.length > 0);
+    }
+  });
+
+  it('readback_confirmed：写历史/权限生效/通知主体全链路留痕，且通知不重复', async () => {
+    const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
+    await h.casdoor.writeMembership({
+      ref: { owner: 'club-acm', name: '宣传部' },
+      subjectId: 'u_c',
+      action: 'add',
+      requestId: 'req-audit-confirm',
+    });
+    const after = await h.useCase.systemConfirmReadback({
+      commandId: cmd.id,
+      clubId: cmd.clubId,
+      now: new Date('2026-08-01T00:00:05.000Z'),
+    });
+    assert.equal(after.status, 'readback_confirmed');
+
+    const labels = h.audit.listByCommand(cmd.id).map((e) => [e.eventType, e.sideEffect] as const);
+    assert.ok(labels.some(([ev, se]) => ev === 'write_started' && se === 'record_attempt'));
+    assert.ok(
+      labels.some(
+        ([ev, se]) => ev === 'readback_confirmed' && se === 'write_immutable_relation_history',
+      ),
+    );
+    assert.ok(
+      labels.some(
+        ([ev, se]) => ev === 'readback_confirmed' && se === 'issue_or_revoke_permissions',
+      ),
+    );
+    // 通知主体恰一条（dedupKey 去重）
+    const confirmedFacts = h.notifications.facts.filter(
+      (f) => f.dedupKey === `relation-confirmed:${cmd.id}`,
+    );
+    assert.equal(confirmedFacts.length, 1);
+  });
+
+  it('final_failure：status_audit/notify_operator_admin 留痕 + 运维通知', async () => {
+    const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
+    await h.relationStore.save({
+      ...cmd,
+      status: 'processing' as const,
+      retryDeadline: '2026-08-01T00:00:10.000Z',
+      attemptCount: 2,
+    });
+    const after = await h.useCase.handleReadback(
+      { commandId: cmd.id, now: new Date('2026-08-01T00:30:00.000Z') },
+      { membersByGroup: {} },
+    );
+    assert.equal(after.status, 'failed_original_preserved');
+
+    const labels = h.audit
+      .listByCommand(cmd.id)
+      .filter((e) => e.eventType === 'final_failure')
+      .map((e) => e.sideEffect);
+    assert.ok(labels.includes('record_failure'));
+    assert.ok(labels.includes('keep_original_relation'));
+    assert.ok(labels.includes('notify_operator_admin'));
+    assert.ok(labels.includes('status_audit'));
+    assert.ok(h.notifications.facts.some((f) => f.dedupKey.startsWith(`relation-operator:`)));
+  });
+
+  it('partial_write：补偿逆序声明落痕（detail.compensateOrder）+ 告警通知', async () => {
+    const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
+    await h.relationStore.save({
+      ...cmd,
+      status: 'processing' as const,
+      retryDeadline: '2026-08-01T00:00:10.000Z',
+      targetRelation: [
+        {
+          stepId: 'step-0',
+          kind: 'add_member' as const,
+          targetGroup: { owner: 'club-acm', name: '宣传部' },
+          subjectId: 'u_c',
+          idempotencyKey: `${cmd.idempotencyKey}:0`,
+          order: 1,
+          attemptCount: 0,
+        },
+        {
+          stepId: 'step-1',
+          kind: 'add_member' as const,
+          targetGroup: { owner: 'club-acm', name: '负责人组' },
+          subjectId: 'u_c',
+          idempotencyKey: `${cmd.idempotencyKey}:1`,
+          order: 2,
+          attemptCount: 0,
+        },
+      ],
+    });
+    // step-0 已写入（宣传部含 u_c），step-1 未写入 → 部分成功 → 补偿中
+    const after = await h.useCase.handleReadback(
+      { commandId: cmd.id, now: new Date('2026-08-01T00:05:00.000Z') },
+      {
+        membersByGroup: {
+          'club-acm/宣传部': ['u_a', 'u_b', 'u_c'],
+          'club-acm/负责人组': ['u_a'],
+        },
+      },
+    );
+    assert.equal(after.status, 'processing_compensating');
+
+    const compensate = h.audit
+      .listByCommand(cmd.id)
+      .find((e) => e.sideEffect.startsWith('compensate_in_order:'));
+    assert.ok(compensate);
+    assert.deepEqual(compensate.detail, { compensateOrder: ['step-1', 'step-0'] }); // order 逆序
+    const labels = h.audit
+      .listByCommand(cmd.id)
+      .filter((e) => e.eventType === 'partial_write')
+      .map((e) => e.sideEffect);
+    assert.ok(labels.includes('alarm_operator_admin'));
+    assert.ok(labels.includes('record_steps_audit'));
+    assert.ok(
+      h.notifications.facts.some((f) => f.dedupKey.startsWith(`relation-alarm:${cmd.id}:`)),
+    );
+  });
+
+  it('manualRetry：两次迁移副作用均落痕（create_manual_retry/manual_retry_executed）', async () => {
+    const cmd = await h.useCase.submit(baseInput, new Date('2026-08-01T00:00:00.000Z'));
+    await h.relationStore.save({ ...cmd, status: 'failed_original_preserved' as const });
+    const retried = await h.useCase.manualRetry({
+      commandId: cmd.id,
+      clubId: cmd.clubId,
+      actor: 'u_b',
+      now: new Date('2026-08-01T00:01:00.000Z'),
+    });
+    assert.equal(retried.status, 'pending_execution');
+
+    const byEvent = (ev: string) =>
+      h.audit
+        .listByCommand(cmd.id)
+        .filter((e) => e.eventType === ev)
+        .map((e) => e.sideEffect);
+    assert.ok(byEvent('create_manual_retry').includes('save_new_attempt'));
+    assert.ok(byEvent('create_manual_retry').includes('link_original_failure'));
+    assert.ok(byEvent('manual_retry_executed').includes('reauthorize_before_retry'));
   });
 
   // -------------------------------------------------------------------------
@@ -487,7 +656,7 @@ describe('RelationCommandUseCase', () => {
       (err: unknown) => {
         // 抛出的必须是领域错误（orgError），而非模拟的裸 Error
         assert.notEqual((err as Error).message, 'simulated casdoor failure');
-        assert.match((err as Error).message, /回读目标 Group 实况\/用途失败/);
+        assert.match((err as Error).message, /回读目标 Group 实况失败/);
         return true;
       },
     );

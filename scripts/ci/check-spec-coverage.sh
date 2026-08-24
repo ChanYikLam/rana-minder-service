@@ -5,6 +5,9 @@
 # 职责（P1-A 可选项落地）：本次变更新增/修改的 src/**/*.ts 生产代码文件，
 # 必须存在同名 *.spec.ts（同目录）或在文件内标注豁免标记：
 #   // no-spec-required <原因>
+# 或该文件已被其他测试实际覆盖（coverage-summary.json 中 lines.covered 达
+# MIN_COVERED_LINES 门槛，默认 5 行，如 test/notification-module-di.spec.ts
+# 引导的 src 模块：notification.module 207 行 / tasks.module 143 行 / config 31 行，评审 P2-4）。
 # 且同名 spec 不得是"陈旧 spec"——若 CI 阶段 4 已产出 coverage/coverage-summary.json，
 # 还须校验该文件在覆盖率报告中 lines.covered>0（即对应用例实际执行到了本次改动，
 # 否则存在同名 spec 却从未覆盖到该文件，判定陈旧 → MISS，评审 warning）。
@@ -17,13 +20,19 @@
 #       $CNB_PULL_REQUEST_TARGET_SHA 作 base。新建分支首次 push 或浅克隆中目标
 #       SHA 不在本地时参数可能为空/不可解析：空 → 回退 origin/dev；不可解析 →
 #       尝试 merge-base(origin/dev, HEAD) 兜底；两者都失败才 fail-closed（exit 1）。
+#       P1-2 祖先安全（评审 #145）：并发合并/非快进 push 下 $CNB_BEFORE_SHA 未必是
+#       HEAD 祖先，三点 diff 边界可能纳入无关文件（误报 MISS）——解析后校验 base
+#       必须是 HEAD 祖先，否则回退 merge-base(origin/dev, HEAD)（与 release 同级防护）。
+#       边缘双失败（非祖先 + origin/dev 不可用）：fail-closed（exit 1），不静默降级。
 #       对"推送到 dev"的常规 push：origin/dev..HEAD 为空差异 → checked=0 通过，
 #       非漏检。
 # 退出码：0 = 全部通过；1 = 存在缺失用例 / base 最终不可解析（fail-closed）
 # ============================================================
 set -u
 
-root="$(cd "$(dirname "$0")/../.." && pwd)"
+# pwd -P 解析物理路径，避免 $root 残留 symlink/./ 未规范化，导致下方与 c8
+# coverage-summary.json 中规范化绝对路径 key 拼接/相对化时错位（评审 warning）。
+root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 cd "$root"
 
 base="${1:-}"
@@ -50,15 +59,21 @@ resolve_base() {
   return 1
 }
 
+# 公共兜底：确保 origin/dev 可用并返回 merge-base(origin/dev, HEAD)。
+# 供"base 本地不可解析"与"base 非 HEAD 祖先（P1-2）"两处复用，避免重复逻辑。
+origin_dev_merge_base() {
+  git rev-parse --verify --quiet origin/dev >/dev/null 2>&1 || git fetch origin dev --quiet 2>/dev/null || true
+  if git rev-parse --verify --quiet origin/dev >/dev/null 2>&1; then
+    git merge-base origin/dev HEAD 2>/dev/null || true
+  fi
+}
+
 resolved="$(resolve_base "$base" || true)"
 if [ -z "$resolved" ]; then
   echo "WARN check-spec-coverage: base='${base:-<空>}' 本地不可解析，回退 origin/dev。" >&2
-  git rev-parse --verify --quiet origin/dev >/dev/null 2>&1 || git fetch origin dev --quiet 2>/dev/null || true
-  if git rev-parse --verify --quiet origin/dev >/dev/null 2>&1; then
-    resolved="$(git merge-base origin/dev HEAD 2>/dev/null || true)"
-    if [ -n "$resolved" ]; then
-      echo "WARN 已改用 merge-base(origin/dev, HEAD) = $resolved" >&2
-    fi
+  resolved="$(origin_dev_merge_base || true)"
+  if [ -n "$resolved" ]; then
+    echo "WARN 已改用 merge-base(origin/dev, HEAD) = $resolved" >&2
   fi
 fi
 
@@ -67,6 +82,29 @@ if [ -z "$resolved" ] || ! git rev-parse --verify --quiet "${resolved}^{commit}"
   exit 1
 fi
 base="$resolved"
+
+# P1-2 祖先安全（评审 #145）：push 流水线以 $CNB_BEFORE_SHA 作 base，并发合并/非快进
+# push 下该 SHA 未必是 HEAD 祖先——三点 diff base...HEAD 会按 merge-base 计算边界，
+# 可能纳入无关文件（误报 MISS）或漏检。解析后校验 base 必须是 HEAD 祖先；否则回退
+# merge-base(origin/dev, HEAD)（与 release 流水线 prev_tag 同级防护）。
+# 注：git diff A...B 本身隐含 merge-base 语义（base 非祖先时也会用
+# merge-base(base,HEAD) 作边界而不会报错），此处回退的真正价值是避免 base 分叉点
+# 过远时把大范围历史变更纳入 diff。已知边界：若回退后的 merge-base(origin/dev, HEAD)
+# 仍距 HEAD 较远（dev 落后较多），仍可能误报 MISS——属原设计可接受边界。
+if ! git merge-base --is-ancestor "$base" HEAD 2>/dev/null; then
+  echo "WARN check-spec-coverage: base=$base 不是 HEAD 祖先（并发/非快进 push），改用 merge-base(origin/dev, HEAD) 兜底。" >&2
+  fallback_ancestor="$(origin_dev_merge_base || true)"
+  if [ -n "$fallback_ancestor" ]; then
+    base="$fallback_ancestor"
+    echo "WARN 已改用 merge-base(origin/dev, HEAD) = $base" >&2
+  else
+    # 边缘双失败场景：祖先校验失败且 origin/dev 不可用（fetch/merge-base 均失败）。
+    # 此时 base 仍非 HEAD 祖先，三点 diff 边界可能纳入无关文件（误报 MISS）或漏检——
+    # 与脚本顶部 fail-closed 哲学一致，宁可显式失败也不静默降级（避免门禁失真）。
+    echo "ERROR check-spec-coverage: base=$base 非 HEAD 祖先且无法取得 origin/dev 兜底（fallback_ancestor 为空），门禁 fail-closed（exit 1）。请显式传祖先 merge-base：bash scripts/ci/check-spec-coverage.sh <merge-base>" >&2
+    exit 1
+  fi
+fi
 
 # pathspec 显式覆盖 src/ 顶层（src/*.ts）与嵌套目录（src/**/*.ts）：
 # git 的 '**' 在 pathspec 中要求至少一层目录，仅写 src/**/*.ts 会漏检 src/main.ts 等顶层文件。
@@ -92,6 +130,63 @@ checked=0
 COVERAGE_SUMMARY="$root/coverage/coverage-summary.json"
 have_coverage=0
 [ -f "$COVERAGE_SUMMARY" ] && have_coverage=1
+
+# DI 豁免的最小覆盖行数门槛（评审 info：covered>0 门槛偏低，会被仅"import 捎带加载"
+# 1 行的文件蒙混，如 index.ts 桶文件的 re-export）。实测被 DI 引导测试实际覆盖的
+# src 模块覆盖行数均远高于此（notification.module 207 行、platform/tasks/module
+# 143 行、configuration.module 31 行），故默认 5 行足以挡住捎带加载、不误伤真覆盖。
+# 可通过环境变量 MIN_COVERED_LINES 覆盖。
+MIN_COVERED_LINES="${MIN_COVERED_LINES:-5}"
+
+# P2-4 覆盖率集合（评审 info：性能优化）——一次性解析 coverage-summary.json 生成
+# 两个已覆盖文件集合到临时目录，避免 while 循环内对每个 changed 文件重复
+# node -e + JSON.parse 整个报告：
+#   any —— lines.covered>0（用于陈旧 spec 判定：同名 spec 却未覆盖本次改动）；
+#   sub —— lines.covered>=MIN_COVERED_LINES（用于无同名 spec 但被其他测试
+#         实际覆盖的豁免，如 test/notification-module-di.spec.ts 引导的 src 模块）。
+# coverage-summary.json 的 key 为 c8 输出的绝对路径；这里在 node 内统一用
+# path.relative(root,key) 转成相对路径并统一为 '/' 分隔后入集合（评审 warning：
+# 不再以字符串拼接 $root/$f 去对 key，规避 symlink/./ 规范化错位；同时兼容
+# Windows 下 c8 用反斜杠分隔的 key，统一 '/' 后与 git 相对路径一致，本地测量场景
+# 下 DI 豁免同样生效）。
+cov_tmp=""
+if [ "$have_coverage" = "1" ]; then
+  cov_tmp="$(mktemp -d)"
+  if node -e "
+    const fs=require('fs');
+    const path=require('path');
+    const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
+    const root=process.argv[3];
+    const min=Number(process.argv[4]||0);
+    // key 相对 root 化并统一分隔符为 '/'，兼容 Windows 反斜杠与 Linux 正斜杠。
+    const rel=k=>path.relative(root,k).split(path.sep).join('/');
+    let a='',b='';
+    for (const k of Object.keys(s)) {
+      if (k==='total') continue;
+      const d=s[k];
+      const c=(d&&d.lines&&d.lines.covered)||0;
+      if (c>0) { a+=rel(k)+'\n'; if (c>=min) b+=rel(k)+'\n'; }
+    }
+    fs.writeFileSync(process.argv[2]+'/any',a);
+    fs.writeFileSync(process.argv[2]+'/sub',b);
+  " "$COVERAGE_SUMMARY" "$cov_tmp" "$root" "$MIN_COVERED_LINES"; then
+    # 仅在成功解析后注册清理 trap，避免失败分支 exit 时执行 rm -rf ""（评审 info）。
+    trap 'rm -rf "$cov_tmp"' EXIT
+  else
+    echo "WARN check-spec-coverage: 解析 coverage-summary.json 失败，退化为仅查 spec 存在" >&2
+    have_coverage=0
+    rm -rf "$cov_tmp"
+    cov_tmp=""
+  fi
+fi
+
+# 查询辅助：$1=集合名(any|sub) $2=文件相对路径（git 输出，'/' 分隔）→ 0 表示该文件
+# 在集合内（已覆盖）。集合内为相对化且统一 '/' 的路径，直接与 $2 匹配（评审 warning：
+# 不再拼接 $root 以免规范化错位）。无覆盖率产物时恒返回 1（退化为仅查 spec 存在）。
+covered_in() {
+  [ "$have_coverage" = "1" ] || return 1
+  grep -Fqx "$2" "$cov_tmp/$1"
+}
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   checked=$((checked + 1))
@@ -100,19 +195,19 @@ while IFS= read -r f; do
     # 同名 spec 存在：进一步防"陈旧 spec"——该文件须在覆盖率报告中被实际执行（lines.covered>0）。
     # 若 coverage-summary.json 无该文件记录或其 lines.covered==0，说明 spec 从未覆盖到本次改动
     #（陈旧/空壳 spec 蒙混），判定 MISS（评审 warning）。无覆盖率产物时退化为仅查存在性。
-    if [ "$have_coverage" = "1" ]; then
-      if ! node -e "
-        const fs=require('fs');
-        const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
-        const key=require('path').resolve(process.argv[2]);
-        const d=s[key];
-        if (!d || !d.lines || (d.lines.covered||0)===0) process.exit(1);
-      " "$COVERAGE_SUMMARY" "$f"; then
-        echo "MISS  $f -> $spec 存在但未覆盖该文件（陈旧 spec），请更新用例以覆盖本次改动"
-        fail=1
-        continue
-      fi
+    if ! covered_in any "$f"; then
+      echo "MISS  $f -> $spec 存在但未覆盖该文件（陈旧 spec），请更新用例以覆盖本次改动"
+      fail=1
+      continue
     fi
+    continue
+  fi
+  # P2-4：无同名 spec 但已被其他测试实际覆盖（如 test/notification-module-di.spec.ts
+  # 引导的 src 模块：notification.module / config / tasks.module 等）→ 豁免，不判 MISS，
+  # 避免未来改动这些文件误报（评审 P2-4）。covered 须达 MIN_COVERED_LINES，排除仅
+  # import 捎带加载 1 行的蒙混（评审 info：阈值优化）。
+  if covered_in sub "$f"; then
+    echo "COVERED  $f (由其他测试覆盖>=${MIN_COVERED_LINES}行，如 DI 引导测试；评审 P2-4)"
     continue
   fi
   # 同目录无同名 spec：全文件查豁免标记（评审 info：仅前 40 行会超行误报）

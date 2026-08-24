@@ -2,7 +2,7 @@
  * 集成测试 L2：数据库迁移全量校验（P2 零覆盖补测：src/database/migrations）。
  *
  * 覆盖：
- * - 全部 15 个迁移按序 up 成功（建表/加列 SQL 在真实 PG18 上可执行）
+ * - 全部 18 个迁移按序 up 成功（建表/加列 SQL 在真实 PG18 上可执行）
  * - 幂等可重入：全量 up 重跑一遍不抛错（IF NOT EXISTS 语义）
  * - 建表类迁移的表真实存在（to_regclass 核对）
  * - down 可执行且核心新建表被移除；随后恢复全量 up（不影响其他集成套件）
@@ -132,6 +132,17 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
       'joint_channels',
     ],
   },
+  {
+    file: '20260824000000-org',
+    tables: [
+      'org_club_space',
+      'org_relation_command',
+      'org_appointment_command',
+      'org_permission_template',
+      'org_position_template_binding',
+      'org_group_mapping',
+    ],
+  },
   { file: '20260824000001', tables: [] },
   { file: '20260824000002', tables: ['remedy_windows'] },
   { file: '20260824000003', tables: [] },
@@ -151,6 +162,8 @@ const MUST_DROP_AFTER_DOWN: readonly string[] = [
   'job_tasks',
   // remedy_windows：本 PR 新增补救窗口表（20260824000002），down 后须移除
   'remedy_windows',
+  // org_group_mapping：dev 组织迁移（20260824000000-org）代表表
+  'org_group_mapping',
 ];
 
 let pool: pg.Pool | null = null;
