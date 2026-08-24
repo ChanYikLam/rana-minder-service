@@ -47,7 +47,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
   // 表达式索引：附件上限计数与绑定/清理竞争查询共用
   await runner.query(`
     CREATE INDEX IF NOT EXISTS idx_file_records_target
-      ON public.file_records (target->>'objectType', target->>'objectId', target->>'fieldKey')
+      ON public.file_records ((target->>'objectType'), (target->>'objectId'), (target->>'fieldKey'))
       WHERE target IS NOT NULL
   `);
   await runner.query(`ALTER TABLE public.file_records ENABLE ROW LEVEL SECURITY`);
