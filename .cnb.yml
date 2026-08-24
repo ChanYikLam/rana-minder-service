@@ -359,7 +359,9 @@
           script: |
             set -e
             node scripts/ci/coverage-gate.js --check-only
-            bash scripts/ci/check-spec-coverage.sh "$CNB_COMMIT~1"
+            # 发布流水线改用合并基线（origin/dev..HEAD）：覆盖本发布全量变更，
+            # 避免 $CNB_COMMIT~1 仅校验最后一个 commit 漏检更早提交（评审 info）
+            bash scripts/ci/check-spec-coverage.sh origin/dev
         - name: 5-集成测试L2
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |

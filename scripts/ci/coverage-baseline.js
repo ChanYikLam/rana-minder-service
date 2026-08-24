@@ -41,6 +41,13 @@ if (!fs.existsSync(SUMMARY)) {
 
 const total = JSON.parse(fs.readFileSync(SUMMARY, 'utf8')).total;
 const round1 = (n) => Math.round(n * 10) / 10;
+// 写入前校验：缺失/非有限数值（NaN）直接失败，不落脏基线（评审 warning 同口径）
+for (const m of ['lines', 'branches', 'functions']) {
+  const raw = total[m]?.pct;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    fail(`覆盖率数据缺失/非有限数值：${m}.pct=${String(raw)}（coverage-summary.json 结构异常）`);
+  }
+}
 const baseline = {
   lines: round1(total.lines.pct),
   branches: round1(total.branches.pct),

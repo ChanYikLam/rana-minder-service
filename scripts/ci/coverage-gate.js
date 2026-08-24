@@ -9,7 +9,11 @@
  *
  * 职责（对照 coverage-baseline.json，棘轮只升不降）：
  * 1. lines/branches/functions 任一低于基线 → 失败（exit 1）；
- * 2. 任一项高于基线 → 自动重写基线（升阈）并提示随提交带上；
+ *    覆盖率数据缺失/非有限数值（NaN）同样 fail-closed，不静默放行（评审 warning）；
+ * 2. 任一项高于基线 → 自动重写基线（升阈）并提示随提交带上：
+ *    - --check-only（CI 只读）：不写基线，仅提示本地跑完整模式更新并提交
+ *      （避免 CI 脏工作区；升阈收敛到本地手动执行，评审 warning）；
+ *    - 完整模式（本地）：直接重写 coverage-baseline.json；
  *    （未提交也无害：门禁按旧基线放行，覆盖仍不得低于历史峰值）
  * 3. --check-only 且缺少 coverage/coverage-summary.json → 失败（fail-closed）。
  */
@@ -62,11 +66,20 @@ const current = {
   functions: round1(total.functions.pct),
 };
 
+// NaN fail-closed：pct 缺失/非数值（undefined→round1→NaN）时 NaN < base 恒为
+// false，会静默放行覆盖率缺数据。逐指标强制有限数值（评审 warning）。
+for (const m of METRICS) {
+  const raw = total[m]?.pct;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    fail(`覆盖率数据缺失/非有限数值：${m}.pct=${String(raw)}（coverage-summary.json 结构异常）`);
+  }
+}
+
 let failed = false;
 for (const m of METRICS) {
   const cur = current[m];
   const base = baseline[m];
-  if (typeof base !== 'number') {
+  if (typeof base !== 'number' || !Number.isFinite(base)) {
     fail(`基线缺少指标 ${m}（coverage-baseline.json 结构异常）`);
   }
   if (cur + 1e-9 < base) {
@@ -86,12 +99,22 @@ if (raised) {
     functions: current.functions,
     measuredAt: new Date().toISOString(),
   };
-  fs.writeFileSync(BASELINE, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
-  console.warn(
-    `[RATCHET] 覆盖率较基线提升，已自动重写 coverage-baseline.json：` +
-      `lines=${next.lines}% branches=${next.branches}% functions=${next.functions}%。` +
-      `请将 coverage-baseline.json 纳入本次提交（棘轮只升不降）。`,
-  );
+  if (checkOnly) {
+    // CI 只读校验：不写基线（CI 工作区无法提交，写入只会制造脏树），
+    // 升阈收敛到本地 npm run test:cov:gate（完整模式）手动执行并随提交带上。
+    console.warn(
+      `[RATCHET] 覆盖率较基线提升（lines=${next.lines}% branches=${next.branches}% ` +
+        `functions=${next.functions}%）。CI 只读模式不改写基线；` +
+        `请在本地运行 npm run test:cov:gate 更新 coverage-baseline.json 并随提交带上（棘轮只升不降）。`,
+    );
+  } else {
+    fs.writeFileSync(BASELINE, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+    console.warn(
+      `[RATCHET] 覆盖率较基线提升，已自动重写 coverage-baseline.json：` +
+        `lines=${next.lines}% branches=${next.branches}% functions=${next.functions}%。` +
+        `请将 coverage-baseline.json 纳入本次提交（棘轮只升不降）。`,
+    );
+  }
 }
 
 console.log(
