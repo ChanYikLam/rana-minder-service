@@ -10,10 +10,12 @@
 
 import {
   ConfigRoot,
+  HIGH_RISK_CONFIG_KINDS,
   type ConfigKind,
   type ConfigVersionRecord,
 } from '../../domain/models/config-version';
 import type { ConfigRootRepositoryPort, PolicyAuthorizationPort } from '../ports';
+import type { ConfigNotificationPort } from '../../infrastructure/not-wired.config-ports';
 import { cfgErrors } from '../errors';
 
 /** 版本线操作基座：超管门禁 + 根加载/新建（rootId 约定 `<kind小写>[:<限定名>]`） */
@@ -21,6 +23,7 @@ export class ConfigVersionOperationBase {
   constructor(
     protected readonly repository: ConfigRootRepositoryPort,
     protected readonly authorization: PolicyAuthorizationPort,
+    protected readonly notification: ConfigNotificationPort,
   ) {}
 
   protected async requirePlatformAdmin(subjectId: string): Promise<void> {
@@ -164,6 +167,14 @@ export class PublishConfigVersionCommand extends ConfigVersionOperationBase {
       { by: input.subjectId, now: input.now },
     );
     await this.repository.save(root.toSnapshot());
+    // 发布通知（CFG-005/NTF-005：改变学生权益或管理员权限时必须通知；高风险必达）
+    await this.notification.notifyConfigPublished({
+      rootId: input.rootId,
+      kind: root.kind,
+      versionNumber: input.versionNumber,
+      publishedBy: input.subjectId,
+      highRisk: HIGH_RISK_CONFIG_KINDS.includes(root.kind),
+    });
     const current = root.getCurrentPublished();
     return { rootId: input.rootId, currentPublishedVersionNumber: current?.versionNumber ?? null };
   }

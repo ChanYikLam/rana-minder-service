@@ -15,6 +15,7 @@ import type {
   FieldMappingStateRepositoryPort,
   PolicyAuthorizationPort,
 } from '../ports';
+import type { ConfigNotificationPort } from '../../infrastructure/not-wired.config-ports';
 import { cfgErrors } from '../errors';
 
 /** 字段映射版本线固定 rootId（平台级单例） */
@@ -88,6 +89,7 @@ export class PublishFieldMappingCommand {
     private readonly stateRepository: FieldMappingStateRepositoryPort,
     private readonly rootRepository: ConfigRootRepositoryPort,
     private readonly authorization: PolicyAuthorizationPort,
+    private readonly notification: ConfigNotificationPort,
   ) {}
 
   async execute(input: PublishFieldMappingInput) {
@@ -151,6 +153,15 @@ export class PublishFieldMappingCommand {
       { by: input.subjectId, now: input.now },
     );
     await this.rootRepository.save(root.toSnapshot());
+
+    // 字段映射发布改变外部身份数据口径（CFG-005 高权益影响）：必须通知
+    await this.notification.notifyConfigPublished({
+      rootId: FIELD_MAPPING_ROOT_ID,
+      kind: 'FIELD_MAPPING',
+      versionNumber: draftRecord.versionNumber,
+      publishedBy: input.subjectId,
+      highRisk: true,
+    });
 
     return {
       publishedVersionNumber: draftRecord.versionNumber,

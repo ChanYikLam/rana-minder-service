@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   InMemoryClubProfileRepository,
+  RecordingConfigAudit,
   StubConfigAuthorization,
 } from '../testing/config-test-support';
 import { DefaultUpdateClubProfileCommand } from './update-club-profile.command';
@@ -18,12 +19,14 @@ const ACTOR = 'leader-1';
 describe('更新社团展示资料命令（CFG-001）', () => {
   let repo: InMemoryClubProfileRepository;
   let auth: StubConfigAuthorization;
+  let audit: RecordingConfigAudit;
   let command: DefaultUpdateClubProfileCommand;
 
   beforeEach(() => {
     repo = new InMemoryClubProfileRepository();
     auth = new StubConfigAuthorization();
-    command = new DefaultUpdateClubProfileCommand(repo, auth);
+    audit = new RecordingConfigAudit();
+    command = new DefaultUpdateClubProfileCommand(repo, auth, audit);
   });
 
   it('无权拒绝：授权身份 null → CFG_FORBIDDEN（fail-closed 默认）', async () => {
@@ -50,6 +53,33 @@ describe('更新社团展示资料命令（CFG-001）', () => {
 
     const stored = await repo.load(CLUB_ID);
     assert.equal(stored?.displayName, '新名');
+  });
+
+  it('CFG-001 审计接缝：有变更记录审计（含 onBehalf），空变更不记', async () => {
+    auth.manageRole = 'OWNER';
+    await command.execute({ clubId: CLUB_ID, actor: ACTOR, now: NOW, patch: { displayName: 'X' } });
+    assert.equal(audit.profileChanges.length, 1);
+    assert.equal(audit.profileChanges[0].onBehalf, false);
+
+    auth.manageRole = 'PLATFORM';
+    await command.execute({
+      clubId: CLUB_ID,
+      actor: 'super-1',
+      now: NOW,
+      expectedVersion: 2,
+      patch: { displayName: 'Y' },
+    });
+    assert.equal(audit.profileChanges.length, 2);
+    assert.equal(audit.profileChanges[1].onBehalf, true);
+
+    await command.execute({
+      clubId: CLUB_ID,
+      actor: 'super-1',
+      now: NOW,
+      expectedVersion: 3,
+      patch: {},
+    });
+    assert.equal(audit.profileChanges.length, 2);
   });
 
   it('PLATFORM 超管代改：onBehalf=true 落历史', async () => {

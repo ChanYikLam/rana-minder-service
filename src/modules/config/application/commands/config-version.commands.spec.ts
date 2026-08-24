@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   InMemoryConfigRootRepository,
+  RecordingConfigNotification,
   StubPolicyAuthorization,
 } from '../testing/config-test-support';
 import {
@@ -25,10 +26,12 @@ const ROOT = 'platform_policy';
 describe('配置版本线命令（CFG-005）', () => {
   let repo: InMemoryConfigRootRepository;
   let auth: StubPolicyAuthorization;
+  let notify: RecordingConfigNotification;
 
   beforeEach(() => {
     repo = new InMemoryConfigRootRepository();
     auth = new StubPolicyAuthorization();
+    notify = new RecordingConfigNotification();
     auth.platformAllowed = true;
   });
 
@@ -36,7 +39,7 @@ describe('配置版本线命令（CFG-005）', () => {
     auth.platformAllowed = false;
     await assert.rejects(
       () =>
-        new CreateConfigDraftCommand(repo, auth).execute({
+        new CreateConfigDraftCommand(repo, auth, notify).execute({
           rootId: ROOT,
           kind: 'PLATFORM_POLICY',
           subjectId: 'x',
@@ -45,15 +48,15 @@ describe('配置版本线命令（CFG-005）', () => {
       { code: 'CFG_FORBIDDEN' },
     );
     await assert.rejects(
-      () => new GetConfigRootQuery(repo, auth).execute({ rootId: ROOT, subjectId: 'x' }),
+      () => new GetConfigRootQuery(repo, auth, notify).execute({ rootId: ROOT, subjectId: 'x' }),
       { code: 'CFG_FORBIDDEN' },
     );
   });
 
   it('创建草稿→编辑→发布（低风险免确认）全链路；版本只增不删', async () => {
-    const create = new CreateConfigDraftCommand(repo, auth);
-    const edit = new EditConfigDraftCommand(repo, auth);
-    const publish = new PublishConfigVersionCommand(repo, auth);
+    const create = new CreateConfigDraftCommand(repo, auth, notify);
+    const edit = new EditConfigDraftCommand(repo, auth, notify);
+    const publish = new PublishConfigVersionCommand(repo, auth, notify);
 
     const draftResult = await create.execute({
       rootId: ROOT,
@@ -95,7 +98,7 @@ describe('配置版本线命令（CFG-005）', () => {
   });
 
   it('发布缺测试凭证 → CFG_VALIDATION（markTestPassed 空串拒绝）', async () => {
-    await new CreateConfigDraftCommand(repo, auth).execute({
+    await new CreateConfigDraftCommand(repo, auth, notify).execute({
       rootId: ROOT,
       kind: 'PLATFORM_POLICY',
       subjectId: SA,
@@ -103,7 +106,7 @@ describe('配置版本线命令（CFG-005）', () => {
     });
     await assert.rejects(
       () =>
-        new PublishConfigVersionCommand(repo, auth).execute({
+        new PublishConfigVersionCommand(repo, auth, notify).execute({
           rootId: ROOT,
           versionNumber: 1,
           subjectId: SA,
@@ -115,9 +118,9 @@ describe('配置版本线命令（CFG-005）', () => {
   });
 
   it('回滚：基于旧发布版本建新草稿并保留完整历史', async () => {
-    const create = new CreateConfigDraftCommand(repo, auth);
-    const edit = new EditConfigDraftCommand(repo, auth);
-    const publish = new PublishConfigVersionCommand(repo, auth);
+    const create = new CreateConfigDraftCommand(repo, auth, notify);
+    const edit = new EditConfigDraftCommand(repo, auth, notify);
+    const publish = new PublishConfigVersionCommand(repo, auth, notify);
 
     await create.execute({ rootId: ROOT, kind: 'PLATFORM_POLICY', subjectId: SA, now: NOW });
     await edit.execute({
@@ -151,7 +154,7 @@ describe('配置版本线命令（CFG-005）', () => {
       testResultRef: 't2',
     });
 
-    const rolled = await new RollbackConfigVersionCommand(repo, auth).execute({
+    const rolled = await new RollbackConfigVersionCommand(repo, auth, notify).execute({
       rootId: ROOT,
       sourceVersionNumber: 1,
       subjectId: SA,
@@ -166,23 +169,26 @@ describe('配置版本线命令（CFG-005）', () => {
   });
 
   it('GetConfigRootQuery 返回完整版本线；不存在 CFG_NOT_FOUND', async () => {
-    await new CreateConfigDraftCommand(repo, auth).execute({
+    await new CreateConfigDraftCommand(repo, auth, notify).execute({
       rootId: ROOT,
       kind: 'PLATFORM_POLICY',
       subjectId: SA,
       now: NOW,
     });
-    const snap = await new GetConfigRootQuery(repo, auth).execute({ rootId: ROOT, subjectId: SA });
+    const snap = await new GetConfigRootQuery(repo, auth, notify).execute({
+      rootId: ROOT,
+      subjectId: SA,
+    });
     assert.equal(snap.kind, 'PLATFORM_POLICY');
 
     await assert.rejects(
-      () => new GetConfigRootQuery(repo, auth).execute({ rootId: 'ghost', subjectId: SA }),
+      () => new GetConfigRootQuery(repo, auth, notify).execute({ rootId: 'ghost', subjectId: SA }),
       { code: 'CFG_NOT_FOUND' },
     );
   });
 
   it('同一 rootId 不能以不同种类复用', async () => {
-    await new CreateConfigDraftCommand(repo, auth).execute({
+    await new CreateConfigDraftCommand(repo, auth, notify).execute({
       rootId: ROOT,
       kind: 'PLATFORM_POLICY',
       subjectId: SA,
@@ -190,7 +196,7 @@ describe('配置版本线命令（CFG-005）', () => {
     });
     await assert.rejects(
       () =>
-        new CreateConfigDraftCommand(repo, auth).execute({
+        new CreateConfigDraftCommand(repo, auth, notify).execute({
           rootId: ROOT,
           kind: 'FORM_TEMPLATE',
           subjectId: SA,

@@ -16,6 +16,7 @@ import {
   type PolicyKey,
 } from '../../domain/models/scoped-policy';
 import type { ScopedPolicyTableRepositoryPort, PolicyAuthorizationPort } from '../ports';
+import type { ConfigNotificationPort } from '../../infrastructure/not-wired.config-ports';
 import { cfgErrors } from '../errors';
 
 /** 加载策略表；首次访问时初始化出厂状态并落库 */
@@ -48,6 +49,7 @@ export class SetPlatformPolicyCommand {
   constructor(
     private readonly repository: ScopedPolicyTableRepositoryPort,
     private readonly authorization: PolicyAuthorizationPort,
+    private readonly notification: ConfigNotificationPort,
   ) {}
 
   async execute(input: SetPlatformPolicyInput): Promise<SetPlatformPolicyResult> {
@@ -55,6 +57,8 @@ export class SetPlatformPolicyCommand {
       throw cfgErrors.forbidden('仅平台超管可维护平台策略默认值与允许范围');
     }
     const table = await loadOrCreateTable(this.repository);
+    // 变更前捕获留痕数：setPlatform 仅在值或范围变化时追加，增长才触发通知
+    const recordsBefore = table.changes.length;
     table.setPlatform(
       input.key,
       {
@@ -65,6 +69,22 @@ export class SetPlatformPolicyCommand {
       { by: input.subjectId, now: input.now },
     );
     await this.repository.save(table.toSnapshot());
+
+    // 权益影响通知（CFG-002/NTF-002：四键均 affectsStudentRights，变化即必须通知；
+    // 同事务事实保存随 3.x 通知接线收口，此处为端口接缝）
+    if (table.changes.length > recordsBefore) {
+      const record = table.changes[table.changes.length - 1];
+      await this.notification.notifyPolicyChange({
+        scope: 'PLATFORM',
+        clubId: null,
+        key: record.key,
+        oldValue: record.oldValue,
+        newValue: record.newValue,
+        changedBy: record.by,
+        effectiveAt: record.effectiveAt,
+      });
+    }
+
     const entry = table.listPlatformEntries().find((e) => e.key === input.key);
     if (!entry) {
       throw cfgErrors.notFound(`策略键 ${input.key}`);
@@ -85,6 +105,7 @@ export class SetClubPolicyCommand {
   constructor(
     private readonly repository: ScopedPolicyTableRepositoryPort,
     private readonly authorization: PolicyAuthorizationPort,
+    private readonly notification: ConfigNotificationPort,
   ) {}
 
   async execute(input: SetClubPolicyInput): Promise<{ resolved: number }> {
@@ -92,11 +113,27 @@ export class SetClubPolicyCommand {
       throw cfgErrors.forbidden('仅社团负责人/人事可设置本社团默认值');
     }
     const table = await loadOrCreateTable(this.repository);
+    const recordsBefore = table.changes.length;
     table.setClub(input.clubId, input.key, input.value, {
       by: input.subjectId,
       now: input.now,
     });
     await this.repository.save(table.toSnapshot());
+
+    // 权益影响通知（同上；仅本次新增留痕才通知）
+    if (table.changes.length > recordsBefore) {
+      const record = table.changes[table.changes.length - 1];
+      await this.notification.notifyPolicyChange({
+        scope: 'CLUB',
+        clubId: input.clubId,
+        key: record.key,
+        oldValue: record.oldValue,
+        newValue: record.newValue,
+        changedBy: record.by,
+        effectiveAt: record.effectiveAt,
+      });
+    }
+
     return { resolved: table.resolve(input.clubId, input.key) };
   }
 }

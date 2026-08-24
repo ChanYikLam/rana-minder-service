@@ -161,3 +161,68 @@ export class InMemoryFieldMappingStateRepository implements FieldMappingStateRep
     this.state = state;
   }
 }
+
+// --------------------------------------------------------------------------
+// 通知/审计接缝测试桩（记录调用供断言）
+// --------------------------------------------------------------------------
+
+import type {
+  ConfigNotificationPort,
+  ConfigAuditPort,
+} from '../../infrastructure/not-wired.config-ports';
+
+export class RecordingConfigNotification implements ConfigNotificationPort {
+  readonly policyChanges: Array<{
+    scope: string;
+    clubId: string | null;
+    key: string;
+    oldValue: number;
+    newValue: number;
+  }> = [];
+  readonly published: Array<{ rootId: string; kind: string; versionNumber: number }> = [];
+
+  async notifyPolicyChange(input: {
+    scope: 'PLATFORM' | 'CLUB';
+    clubId: string | null;
+    key: Parameters<ConfigNotificationPort['notifyPolicyChange']>[0]['key'];
+    oldValue: number;
+    newValue: number;
+  }): Promise<void> {
+    this.policyChanges.push({
+      scope: input.scope,
+      clubId: input.clubId,
+      key: input.key,
+      oldValue: input.oldValue,
+      newValue: input.newValue,
+    });
+  }
+
+  async notifyConfigPublished(input: {
+    rootId: string;
+    kind: string;
+    versionNumber: number;
+  }): Promise<void> {
+    this.published.push({
+      rootId: input.rootId,
+      kind: input.kind,
+      versionNumber: input.versionNumber,
+    });
+  }
+}
+
+export class RecordingConfigAudit implements ConfigAuditPort {
+  readonly profileChanges: Array<{ clubId: string; by: string; onBehalf: boolean }> = [];
+  readonly boundaryChanges: Array<{ by: string }> = [];
+
+  async recordProfileChange(input: {
+    clubId: string;
+    by: string;
+    onBehalf: boolean;
+  }): Promise<void> {
+    this.profileChanges.push({ clubId: input.clubId, by: input.by, onBehalf: input.onBehalf });
+  }
+
+  async recordBoundaryChange(input: { by: string }): Promise<void> {
+    this.boundaryChanges.push({ by: input.by });
+  }
+}

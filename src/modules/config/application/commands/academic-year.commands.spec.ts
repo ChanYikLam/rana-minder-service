@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import {
   InMemoryAcademicYearBoundaryRepository,
   InMemoryCohortRepository,
+  RecordingConfigAudit,
   StubPolicyAuthorization,
 } from '../testing/config-test-support';
 import {
@@ -27,10 +28,12 @@ const LEADER = 'leader-1';
 describe('学年自动生成与当前学年解析（CFG-003 自动学年）', () => {
   let repo: InMemoryAcademicYearBoundaryRepository;
   let auth: StubPolicyAuthorization;
+  let audit: RecordingConfigAudit;
 
   beforeEach(() => {
     repo = new InMemoryAcademicYearBoundaryRepository();
     auth = new StubPolicyAuthorization();
+    audit = new RecordingConfigAudit();
     auth.platformAllowed = true;
   });
 
@@ -43,7 +46,7 @@ describe('学年自动生成与当前学年解析（CFG-003 自动学年）', ()
 
   it('非超管调整分界规则拒绝', async () => {
     auth.platformAllowed = false;
-    const command = new UpdateAcademicYearBoundaryCommand(repo, auth);
+    const command = new UpdateAcademicYearBoundaryCommand(repo, auth, audit);
     await assert.rejects(
       () =>
         command.execute({
@@ -58,7 +61,7 @@ describe('学年自动生成与当前学年解析（CFG-003 自动学年）', ()
   });
 
   it('超管调整未来分界规则：重新生成当前+未来学年并落库留痕', async () => {
-    const command = new UpdateAcademicYearBoundaryCommand(repo, auth);
+    const command = new UpdateAcademicYearBoundaryCommand(repo, auth, audit);
     const result = await command.execute({
       subjectId: SA,
       now: BOUNDARY_CHANGE_AT,
@@ -74,10 +77,14 @@ describe('学年自动生成与当前学年解析（CFG-003 自动学年）', ()
     assert.equal(saved.boundary.month, 9);
     assert.equal(saved.lastChangedBy, SA);
     assert.ok(saved.generatedYears.length >= 4);
+
+    // CFG-003 分界规则变更审计接缝
+    assert.equal(audit.boundaryChanges.length, 1);
+    assert.equal(audit.boundaryChanges[0].by, SA);
   });
 
   it('历史保护：改写已开始学年起止被拒绝；同规则重复提交幂等成功', async () => {
-    const command = new UpdateAcademicYearBoundaryCommand(repo, auth);
+    const command = new UpdateAcademicYearBoundaryCommand(repo, auth, audit);
     // 2026-09-15：'2026-2027' 已于 08-01 开始
     const midCycle = new Date('2026-09-15T00:00:00Z');
     await command.execute({
@@ -115,7 +122,7 @@ describe('学年自动生成与当前学年解析（CFG-003 自动学年）', ()
   });
 
   it('P1 回归：改名规则致已开始学年与新窗口交叠即拒绝（不得静默丢弃）', async () => {
-    const command = new UpdateAcademicYearBoundaryCommand(repo, auth);
+    const command = new UpdateAcademicYearBoundaryCommand(repo, auth, audit);
     // 2026-05-01：'2025-2026' 已开始（08-01 规则）
     await command.execute({
       subjectId: SA,
@@ -147,7 +154,7 @@ describe('学年自动生成与当前学年解析（CFG-003 自动学年）', ()
   });
 
   it('非法分界日（02-29）拒绝', async () => {
-    const command = new UpdateAcademicYearBoundaryCommand(repo, auth);
+    const command = new UpdateAcademicYearBoundaryCommand(repo, auth, audit);
     await assert.rejects(
       () =>
         command.execute({ subjectId: SA, now: NOW, month: 2, day: 29, timeZone: 'Asia/Shanghai' }),
@@ -156,7 +163,7 @@ describe('学年自动生成与当前学年解析（CFG-003 自动学年）', ()
   });
 
   it('非法时区拒绝', async () => {
-    const command = new UpdateAcademicYearBoundaryCommand(repo, auth);
+    const command = new UpdateAcademicYearBoundaryCommand(repo, auth, audit);
     await assert.rejects(
       () => command.execute({ subjectId: SA, now: NOW, month: 8, day: 1, timeZone: 'Not/AZone' }),
       { code: 'CFG_VALIDATION' },

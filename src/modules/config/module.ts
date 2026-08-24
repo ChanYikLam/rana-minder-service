@@ -60,6 +60,8 @@ import {
   PUBLISH_FIELD_MAPPING_COMMAND,
   GET_FIELD_MAPPING_QUERY,
   GET_PLATFORM_POLICIES_QUERY,
+  CONFIG_NOTIFICATION_PORT,
+  CONFIG_AUDIT_PORT,
 } from './tokens';
 
 // InMemory 仓储保留在 testing/ 供单元测试直用；模块装配绑定 PostgreSQL 权威实现
@@ -79,6 +81,10 @@ import {
   PostgresFieldMappingStateRepository,
 } from './infrastructure/postgres.repositories';
 import { DB_ADAPTER } from '../../adapters/tokens';
+import {
+  NotWiredConfigNotification,
+  NotWiredConfigAudit,
+} from './infrastructure/not-wired.config-ports';
 
 import { DefaultUpdateClubProfileCommand } from './application/commands/update-club-profile.command';
 import { DefaultGetClubProfileQuery } from './application/queries/get-club-profile.query';
@@ -183,11 +189,14 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
       inject: [CURRENT_PERMISSIONS_PORT],
     },
     { provide: CONFIG_ACCESS_INFO_PORT, useClass: NotWiredClubAccessInfoPort },
+    // ----- 跨模块能力接缝（3.x 通知事实/审计同事务接线前 NotWiring 默认）-----
+    { provide: CONFIG_NOTIFICATION_PORT, useClass: NotWiredConfigNotification },
+    { provide: CONFIG_AUDIT_PORT, useClass: NotWiredConfigAudit },
     // ----- 应用命令/查询 -----
     {
       provide: UPDATE_CLUB_PROFILE_COMMAND,
-      useFactory: (repo, authz) => new DefaultUpdateClubProfileCommand(repo, authz),
-      inject: [CONFIG_REPOSITORY, CONFIG_AUTHORIZATION],
+      useFactory: (repo, authz, audit) => new DefaultUpdateClubProfileCommand(repo, authz, audit),
+      inject: [CONFIG_REPOSITORY, CONFIG_AUTHORIZATION, CONFIG_AUDIT_PORT],
     },
     {
       provide: GET_CLUB_PROFILE_QUERY,
@@ -208,13 +217,21 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
     },
     {
       provide: SET_PLATFORM_POLICY_COMMAND,
-      useFactory: (repo, authz) => new SetPlatformPolicyCommand(repo, authz),
-      inject: [SCOPED_POLICY_TABLE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+      useFactory: (repo, authz, notify) => new SetPlatformPolicyCommand(repo, authz, notify),
+      inject: [
+        SCOPED_POLICY_TABLE_REPOSITORY,
+        CONFIG_POLICY_AUTHORIZATION,
+        CONFIG_NOTIFICATION_PORT,
+      ],
     },
     {
       provide: SET_CLUB_POLICY_COMMAND,
-      useFactory: (repo, authz) => new SetClubPolicyCommand(repo, authz),
-      inject: [SCOPED_POLICY_TABLE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+      useFactory: (repo, authz, notify) => new SetClubPolicyCommand(repo, authz, notify),
+      inject: [
+        SCOPED_POLICY_TABLE_REPOSITORY,
+        CONFIG_POLICY_AUTHORIZATION,
+        CONFIG_NOTIFICATION_PORT,
+      ],
     },
     {
       provide: FREEZE_ACTIVITY_POLICY_COMMAND,
@@ -230,8 +247,8 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
     // ----- CFG-003 学年与届次 -----
     {
       provide: UPDATE_ACADEMIC_YEAR_BOUNDARY_COMMAND,
-      useFactory: (repo, authz) => new UpdateAcademicYearBoundaryCommand(repo, authz),
-      inject: [ACADEMIC_YEAR_BOUNDARY_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+      useFactory: (repo, authz, audit) => new UpdateAcademicYearBoundaryCommand(repo, authz, audit),
+      inject: [ACADEMIC_YEAR_BOUNDARY_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_AUDIT_PORT],
     },
     {
       provide: GET_CURRENT_ACADEMIC_YEAR_QUERY,
@@ -273,8 +290,14 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
     },
     {
       provide: PUBLISH_FIELD_MAPPING_COMMAND,
-      useFactory: (states, roots, authz) => new PublishFieldMappingCommand(states, roots, authz),
-      inject: [FIELD_MAPPING_STATE_REPOSITORY, CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+      useFactory: (states, roots, authz, notify) =>
+        new PublishFieldMappingCommand(states, roots, authz, notify),
+      inject: [
+        FIELD_MAPPING_STATE_REPOSITORY,
+        CONFIG_ROOT_REPOSITORY,
+        CONFIG_POLICY_AUTHORIZATION,
+        CONFIG_NOTIFICATION_PORT,
+      ],
     },
     {
       provide: GET_FIELD_MAPPING_QUERY,
@@ -284,28 +307,28 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
     // ----- CFG-005 配置版本线 -----
     {
       provide: CREATE_CONFIG_DRAFT_COMMAND,
-      useFactory: (roots, authz) => new CreateConfigDraftCommand(roots, authz),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+      useFactory: (roots, authz, notify) => new CreateConfigDraftCommand(roots, authz, notify),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
     },
     {
       provide: EDIT_CONFIG_DRAFT_COMMAND,
-      useFactory: (roots, authz) => new EditConfigDraftCommand(roots, authz),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+      useFactory: (roots, authz, notify) => new EditConfigDraftCommand(roots, authz, notify),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
     },
     {
       provide: PUBLISH_CONFIG_VERSION_COMMAND,
-      useFactory: (roots, authz) => new PublishConfigVersionCommand(roots, authz),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+      useFactory: (roots, authz, notify) => new PublishConfigVersionCommand(roots, authz, notify),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
     },
     {
       provide: ROLLBACK_CONFIG_VERSION_COMMAND,
-      useFactory: (roots, authz) => new RollbackConfigVersionCommand(roots, authz),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+      useFactory: (roots, authz, notify) => new RollbackConfigVersionCommand(roots, authz, notify),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
     },
     {
       provide: GET_CONFIG_ROOT_QUERY,
-      useFactory: (roots, authz) => new GetConfigRootQuery(roots, authz),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
+      useFactory: (roots, authz, notify) => new GetConfigRootQuery(roots, authz, notify),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
     },
   ],
   exports: [

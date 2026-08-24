@@ -27,6 +27,7 @@ import type {
   CohortRepositoryPort,
   PolicyAuthorizationPort,
 } from '../ports';
+import type { ConfigAuditPort } from '../../infrastructure/not-wired.config-ports';
 import { cfgErrors } from '../errors';
 
 /** 平台初始化默认分界规则（CFG-003：首个分界日与时区进平台配置清单；8 月 1 日契合高校校历） */
@@ -60,6 +61,7 @@ export class UpdateAcademicYearBoundaryCommand {
   constructor(
     private readonly repository: AcademicYearBoundaryRepositoryPort,
     private readonly authorization: PolicyAuthorizationPort,
+    private readonly audit: ConfigAuditPort,
   ) {}
 
   async execute(input: UpdateAcademicYearBoundaryInput): Promise<{
@@ -74,6 +76,7 @@ export class UpdateAcademicYearBoundaryCommand {
     const boundary = { month: input.month, day: input.day, timeZone: input.timeZone };
 
     const settings = await loadOrCreateSettings(this.repository);
+    const previousBoundary = settings.boundary;
 
     // 以「当前学年的起始日历年」为窗口起点重新生成（覆盖当前+未来）
     const currentName = academicYearNameForDate(input.now, boundary);
@@ -130,6 +133,14 @@ export class UpdateAcademicYearBoundaryCommand {
       generatedYears: merged,
       lastChangedBy: input.subjectId,
       lastChangedAt: input.now,
+    });
+
+    // 分界规则变更审计（CFG-003「变更须审计」；同事务收口随 AUD-003 接线）
+    await this.audit.recordBoundaryChange({
+      by: input.subjectId,
+      at: input.now,
+      from: previousBoundary,
+      to: boundary,
     });
     return {
       boundary,

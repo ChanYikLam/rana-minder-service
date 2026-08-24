@@ -14,6 +14,7 @@
 import { ClubProfile } from '../../domain/models/club-profile';
 import type { ClubProfileSnapshot, ClubProfileUpdateInput } from '../../domain/models/club-profile';
 import type { ClubProfileRepositoryPort, ClubProfileAuthorizationPort } from '../ports';
+import type { ConfigAuditPort } from '../../infrastructure/not-wired.config-ports';
 import { cfgErrors } from '../errors';
 
 export interface UpdateClubProfileInput {
@@ -38,6 +39,7 @@ export class DefaultUpdateClubProfileCommand implements UpdateClubProfileCommand
   constructor(
     private readonly repository: ClubProfileRepositoryPort,
     private readonly authorization: ClubProfileAuthorizationPort,
+    private readonly audit: ConfigAuditPort,
   ) {}
 
   async execute(input: UpdateClubProfileInput): Promise<UpdateClubProfileResult> {
@@ -66,6 +68,18 @@ export class DefaultUpdateClubProfileCommand implements UpdateClubProfileCommand
     }
 
     await this.repository.save(profile.toSnapshot(), guard);
+
+    // 修改审计（CFG-001「保留修改历史和审计」；同事务写入随 AUD-003 接线收口）
+    if (changes.length > 0) {
+      await this.audit.recordProfileChange({
+        clubId: input.clubId,
+        by: input.actor,
+        onBehalf,
+        at: input.now,
+        changes,
+      });
+    }
+
     return { profile: profile.toSnapshot(), savedAt: input.now };
   }
 }

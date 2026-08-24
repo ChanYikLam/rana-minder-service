@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import {
   InMemoryConfigRootRepository,
   InMemoryFieldMappingStateRepository,
+  RecordingConfigNotification,
   StubPolicyAuthorization,
 } from '../testing/config-test-support';
 import {
@@ -41,11 +42,13 @@ describe('字段映射命令（CFG-004）', () => {
   let states: InMemoryFieldMappingStateRepository;
   let roots: InMemoryConfigRootRepository;
   let auth: StubPolicyAuthorization;
+  let notify: RecordingConfigNotification;
 
   beforeEach(() => {
     states = new InMemoryFieldMappingStateRepository();
     roots = new InMemoryConfigRootRepository();
     auth = new StubPolicyAuthorization();
+    notify = new RecordingConfigNotification();
     auth.platformAllowed = true;
   });
 
@@ -62,7 +65,7 @@ describe('字段映射命令（CFG-004）', () => {
     );
     await assert.rejects(
       () =>
-        new PublishFieldMappingCommand(states, roots, auth).execute({
+        new PublishFieldMappingCommand(states, roots, auth, notify).execute({
           subjectId: SA,
           now: NOW,
           testResultRef: 't',
@@ -121,7 +124,7 @@ describe('字段映射命令（CFG-004）', () => {
 
   it('发布链路：门禁缺一不可 → 版本线 PUBLISHED + 对账标记 + 历史完整', async () => {
     const save = new SaveFieldMappingDraftCommand(states, auth);
-    const publish = new PublishFieldMappingCommand(states, roots, auth);
+    const publish = new PublishFieldMappingCommand(states, roots, auth, notify);
 
     await save.execute({ subjectId: SA, now: NOW, entries: entries() });
 
@@ -188,6 +191,12 @@ describe('字段映射命令（CFG-004）', () => {
     });
     assert.equal(second.publishedVersionNumber, 2);
 
+    // 发布通知接缝断言
+    assert.deepEqual(
+      notify.published.map((x) => x.versionNumber),
+      [1, 2],
+    );
+
     const rootSnap = (await roots.find(FIELD_MAPPING_ROOT_ID))!;
     assert.equal(rootSnap.kind, 'FIELD_MAPPING');
     assert.equal(rootSnap.versions.length, 2);
@@ -198,7 +207,7 @@ describe('字段映射命令（CFG-004）', () => {
   it('草稿不存在时发布拒绝（CFG_PRECONDITION）', async () => {
     await assert.rejects(
       () =>
-        new PublishFieldMappingCommand(states, roots, auth).execute({
+        new PublishFieldMappingCommand(states, roots, auth, notify).execute({
           subjectId: SA,
           now: NOW,
           testResultRef: 't',

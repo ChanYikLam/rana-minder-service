@@ -50,3 +50,7 @@ export const GET_FIELD_MAPPING_QUERY = 'CFG_GET_FIELD_MAPPING_QUERY';
 
 // ----- 组织端策略/届次端点 -----
 export const ORG_POLICY_NEST_CONTROLLER = 'CFG_ORG_POLICY_NEST_CONTROLLER';
+
+// ----- 跨模块能力接缝（3.x 通知/审计接线前 NotWired）-----
+export const CONFIG_NOTIFICATION_PORT = 'CFG_NOTIFICATION_PORT';
+export const CONFIG_AUDIT_PORT = 'CFG_AUDIT_PORT';
