@@ -7,6 +7,9 @@
  *
  * 联合活动验收点（JNT-023）：联合导出中跨社团的评分/评语须逐条标注来源社团与记录人
  * （他社评分/评语不得匿名混出），本快照持有 jointAnnotations 以便生成管线如实落款。
+ *
+ * 5.4.3（EXP-002/EXP-003）：联系方式显式勾选标志 includeContact 与附件引用清单
+ * attachmentRefs 一并在申请时冻结——生成阶段只按快照执行，不重新解析申请语义。
  */
 
 import {
@@ -52,6 +55,9 @@ export interface ExportSnapshotData {
   readonly timeRange: { from: string; to: string } | null;
   readonly includesPersonalCopy: boolean;
   readonly personalTargetUserId: string | null;
+  /** 联系方式显式勾选标志（EXP-002：默认 false；true 时字段基线并入联系方式列，
+   *  前提是申请方已通过 authorizeContactOptIn 字段级权限闸门，EXP-003）。 */
+  readonly includeContact: boolean;
   /** 联合导出：跨社团评分/评语逐条标注来源（JNT-023） */
   readonly jointAnnotations: readonly JointRecordAnnotation[];
   /** 附件清单（个人副本/附带材料），生成时按此落款 */
@@ -79,6 +85,8 @@ export class ExportSnapshot {
     timeRange?: { from: string; to: string } | null;
     includesPersonalCopy?: boolean;
     personalTargetUserId?: string | null;
+    /** 联系方式显式勾选（EXP-002：缺省 false；透传进每次 clampExportFields） */
+    includeContact?: boolean;
     jointAnnotations?: readonly JointRecordAnnotation[];
     attachmentRefs?: readonly string[];
     now?: Date;
@@ -94,7 +102,11 @@ export class ExportSnapshot {
     const rejected: string[] = [];
     for (const type of normalized) {
       const requested = input.requestedFields?.[type];
-      const clamped = input.spec.clampExportFields(type, requested);
+      // includeContact 透传进每次 clamp：勾选时有效基线并入联系方式列（仅人员行数据集），
+      // 秘密标识仍一律拒绝（EXP-002）；未勾选时 phone/email 与越权字段同路径剔除。
+      const clamped = input.spec.clampExportFields(type, requested, {
+        includeContact: input.includeContact === true,
+      });
       fieldsByDataset[type] = clamped.fields;
       rejected.push(...clamped.rejected);
     }
@@ -111,6 +123,7 @@ export class ExportSnapshot {
       timeRange: input.timeRange ?? null,
       includesPersonalCopy: input.includesPersonalCopy ?? false,
       personalTargetUserId: input.personalTargetUserId ?? null,
+      includeContact: input.includeContact ?? false,
       jointAnnotations: input.jointAnnotations ?? [],
       attachmentRefs: input.attachmentRefs ?? [],
     });

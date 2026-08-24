@@ -1,5 +1,5 @@
 /**
- * 导出命令与权限单测（5.4.2，覆盖 P1/P2/P3/P4 验收点）。
+ * 导出命令与权限单测（5.4.2，覆盖 P1/P2/P3/P4 验收点；5.4.3 EXP-002/EXP-003）。
  *
  * 验收点覆盖：
  * - P1：5 类导出者端口解析 + 权限收敛（interviewer 禁批量、member 仅个人副本）；
@@ -8,6 +8,8 @@
  * - P4：提前删除仅本人/授权者、正式删除清单联动失效（AUD-009）、参与社团停用失效（JNT-023）；
  * - JNT-023：联合导出仅限参与社团负责人/人事，快照含来源标注；紧急停用后不能新建/下载、
  *   已有未过期链接立即失效。
+ * - 5.4.3（EXP-002/EXP-003）：联系方式显式勾选（默认关、字段级权限闸门、幂等翻转冲突、
+ *   秘密标识永不导出）；附件显式选择（includeFiles 冻结引用进快照，默认不打包）。
  */
 
 import { describe, it } from 'node:test';
@@ -36,8 +38,13 @@ import {
 import { InMemoryExportFactSource } from '../../infrastructure/in-memory-export-fact-source';
 import { InMemoryExportTaskRepository } from '../../infrastructure/in-memory-export-repository';
 import { InMemoryExportIdempotency } from '../../infrastructure/in-memory-export-idempotency';
+import { InMemoryExportFileStore } from '../../infrastructure/in-memory-export-file-store';
 import type { ExportApplyIdempotencyPort } from '../ports/export-idempotency.port';
-import { ExportApplyCommand, applyIdempotencyHash } from './export-apply.command';
+import {
+  ExportApplyCommand,
+  applyIdempotencyHash,
+  APPLY_IDEMPOTENCY_HASH_VERSION,
+} from './export-apply.command';
 import { ExportRetryCommand } from './export-retry.command';
 import { ExportDeleteCommand } from './export-delete.command';
 import type { ExportTaskRepository } from '../ports/export-repository.port';
@@ -65,9 +72,11 @@ function makeHarness(seed: MemoryExportAuthorizationSeed): Harness {
   const idem = new InMemoryExportIdempotency();
   const safety = new MemoryExportSafetySwitchPort();
   const reauth = new MemoryExportReauthPort();
+  // 5.4.4：删除命令新增对象存储处置端口（AUD-009 并清理）；桩与仓储解耦，仅记录调用
+  const disposal = new InMemoryExportFileStore();
   const apply = new ExportApplyCommand(SPEC, authz, audit, safety, reauth, facts, repo, idem);
   const retry = new ExportRetryCommand(safety, audit, repo, facts, reauth);
-  const del = new ExportDeleteCommand(safety, audit, repo);
+  const del = new ExportDeleteCommand(safety, audit, repo, disposal);
   return { authz, audit, facts, repo, idem, apply, retry, del, safety, reauth };
 }
 
@@ -81,9 +90,10 @@ function makeHarnessWithRepo(
   const idem = new InMemoryExportIdempotency();
   const safety = new MemoryExportSafetySwitchPort();
   const reauth = new MemoryExportReauthPort();
+  const disposal = new InMemoryExportFileStore();
   const apply = new ExportApplyCommand(SPEC, authz, audit, safety, reauth, facts, repo, idem);
   const retry = new ExportRetryCommand(safety, audit, repo, facts, reauth);
-  const del = new ExportDeleteCommand(safety, audit, repo);
+  const del = new ExportDeleteCommand(safety, audit, repo, disposal);
   return {
     authz,
     audit,
@@ -214,23 +224,57 @@ describe('P2 导出申请（幂等/快照/越权/停用/联合失效）', () => 
     assert.ok(res.task.snapshot.data.datasets.length > 0);
   });
 
-  it('批量导出 includeFiles=true → 显式拒绝（IFC-ERR-005）', async () => {
+  it('批量导出 includeFiles=true → 冻结作用域附件引用进快照（EXP-003/R3 显式选择）', async () => {
     const h = makeHarness({
       clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
     });
     h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
-    await assert.rejects(
-      h.apply.execute({
-        principal: clubLeaderPrincipal('hr', 'C1'),
-        request: { kind: 'club', clubId: 'C1', includeFiles: true },
-      }),
-      (e: ExportError) => e.code === 'IFC-ERR-005',
+    // 确定性附件引用（生产适配器从对象存储枚举；桩按作用域键返回）
+    h.facts.seedBatchAttachmentRefs(
+      { kind: 'club', clubId: 'C1', departmentId: null, jointActivityId: null },
+      ['att-C1-001', 'att-C1-002'],
     );
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: { kind: 'club', clubId: 'C1', includeFiles: true },
+    });
+    assert.equal(res.task.status, ExportTaskStatus.PENDING_GENERATION);
+    assert.deepEqual(res.task.snapshot.data.attachmentRefs, ['att-C1-001', 'att-C1-002']);
+  });
+
+  it('批量导出未勾选 includeFiles → 快照不含附件引用（R3 默认不打包）', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    // 事实源已配置附件，但申请未显式勾选 → 不得打包
+    h.facts.seedBatchAttachmentRefs(
+      { kind: 'club', clubId: 'C1', departmentId: null, jointActivityId: null },
+      ['att-C1-001'],
+    );
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: { kind: 'club', clubId: 'C1' },
+    });
+    assert.deepEqual(res.task.snapshot.data.attachmentRefs, []);
+  });
+
+  it('批量导出 includeFiles=true 但作用域无附件 → 空引用照常创建任务（EXP-003 不报错）', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: { kind: 'club', clubId: 'C1', includeFiles: true },
+    });
+    assert.equal(res.task.status, ExportTaskStatus.PENDING_GENERATION);
+    assert.deepEqual(res.task.snapshot.data.attachmentRefs, []);
   });
 
   it('个人副本：越权（代申请他人）+ includeFiles → 越权优先（IFC-ERR-003）', async () => {
-    // 错误码优先级与批量/联合分支统一：越权（IFC-ERR-003）先于能力不支持（IFC-ERR-005）。
-    // 若先判 includeFiles，越权者可借 includeFiles 探测附件功能状态（信息泄露）。
+    // 错误码优先级与批量/联合分支统一：越权（IFC-ERR-003）先于能力/附件分支判定，
+    // 避免越权者以 includeFiles/includeContact 探测功能状态（信息泄露）。
     const h = makeHarness({});
     await assert.rejects(
       h.apply.execute({
@@ -241,15 +285,40 @@ describe('P2 导出申请（幂等/快照/越权/停用/联合失效）', () => 
     );
   });
 
-  it('个人副本：本人合法 + includeFiles → 能力不支持（IFC-ERR-005）', async () => {
+  it('个人副本：合法代申请 + includeFiles=true → 冻结个人材料引用进快照（EXP-003）', async () => {
+    const h = makeHarness({
+      kinds: { hr: 'club_leader_hr' },
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubMembers('C1', ['member-in']);
+    h.facts.seedPersonalRefs('C1', 'member-in', ['att-personal-001']);
+    const ok = await h.apply.execute({
+      principal: {
+        userId: 'hr',
+        kind: 'club_leader_hr',
+        clubScopes: [{ clubId: 'C1', level: 'club', departmentIds: [] }],
+      },
+      request: {
+        kind: 'personal',
+        targetUserId: 'member-in',
+        clubId: 'C1',
+        departmentId: 'D1',
+        includeFiles: true,
+      },
+    });
+    assert.equal(ok.task.snapshot.data.scope.kind, 'personal');
+    assert.deepEqual(ok.task.snapshot.data.attachmentRefs, ['att-personal-001']);
+  });
+
+  it('个人副本：未勾选 includeFiles → 不冻结任何附件引用（R3 默认不打包）', async () => {
+    // 本人副本合法且事实源已配置材料引用，但未勾选 includeFiles → 快照 attachmentRefs 为空
     const h = makeHarness({});
-    await assert.rejects(
-      h.apply.execute({
-        principal: memberPrincipal, // 本人副本合法，但附件能力未接入
-        request: { kind: 'personal', includeFiles: true },
-      }),
-      (e: ExportError) => e.code === 'IFC-ERR-005',
-    );
+    const ok = await h.apply.execute({
+      principal: memberPrincipal,
+      request: { kind: 'personal' },
+    });
+    assert.equal(ok.task.snapshot.data.scope.kind, 'personal');
+    assert.deepEqual(ok.task.snapshot.data.attachmentRefs, []);
   });
 
   it('申请幂等：同 key 语义一致 → 回放同一任务', async () => {
@@ -611,6 +680,276 @@ describe('P2 导出申请（幂等/快照/越权/停用/联合失效）', () => 
     });
     assert.equal(ok.task.snapshot.data.scope.kind, 'personal');
     assert.equal(ok.task.snapshot.data.personalTargetUserId, 'member-in');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5.4.3 联系方式显式勾选（EXP-002/EXP-003）
+// ---------------------------------------------------------------------------
+
+describe('5.4.3 联系方式显式勾选（EXP-002/EXP-003）', () => {
+  it('默认不导出（R2）：未勾选时请求 phone/email → 剔除进 rejectedFields，快照标志为 false', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: {
+        kind: 'club',
+        clubId: 'C1',
+        datasets: ['current_members'],
+        fields: { current_members: ['userId', 'studentNo', 'phone', 'email'] },
+      },
+    });
+    assert.deepEqual(res.task.snapshot.fields('current_members'), ['userId', 'studentNo']);
+    assert.ok(res.rejectedFields.includes('phone'));
+    assert.ok(res.rejectedFields.includes('email'));
+    assert.equal(res.task.snapshot.data.includeContact, false);
+  });
+
+  it('显式勾选：社团负责人 includeContact=true → 快照并入联系方式列并固化标志', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: {
+        kind: 'club',
+        clubId: 'C1',
+        datasets: ['current_members'],
+        fields: { current_members: ['userId', 'studentNo', 'phone', 'email'] },
+        includeContact: true,
+      },
+    });
+    assert.equal(res.task.snapshot.data.includeContact, true);
+    assert.deepEqual(res.task.snapshot.fields('current_members'), [
+      'userId',
+      'studentNo',
+      'phone',
+      'email',
+    ]);
+    assert.deepEqual(res.rejectedFields, []);
+  });
+
+  it('显式勾选且未指定字段 → 全基线+联系方式（人员行数据集）；非人员行数据集无联系方式列', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: {
+        kind: 'club',
+        clubId: 'C1',
+        datasets: ['current_members', 'admission_history', 'club_summary'],
+        includeContact: true,
+      },
+    });
+    for (const t of ['current_members', 'admission_history'] as const) {
+      assert.ok(res.task.snapshot.fields(t).includes('phone'), `${t} 应含 phone`);
+      assert.ok(res.task.snapshot.fields(t).includes('email'), `${t} 应含 email`);
+    }
+    assert.ok(!res.task.snapshot.fields('club_summary').includes('phone'));
+    assert.ok(!res.task.snapshot.fields('club_summary').includes('email'));
+    assert.deepEqual(res.rejectedFields, []);
+  });
+
+  it('面试官勾选 → IFC-ERR-003 并留 denied 审计（interviewer 一律禁止）', async () => {
+    const h = makeHarness({});
+    await assert.rejects(
+      h.apply.execute({
+        principal: interviewerPrincipal,
+        request: { kind: 'personal', includeContact: true },
+      }),
+      (e: ExportError) => e.code === 'IFC-ERR-003' && e.message.includes('联系方式'),
+    );
+    const denied = h.audit.entries.find(
+      (e) =>
+        e.action === 'export_apply' &&
+        e.outcome === 'denied' &&
+        e.principalId === 'iv-1' &&
+        (e.reason ?? '').includes('IFC-ERR-003'),
+    );
+    assert.ok(denied, '越权勾选联系方式须留 denied 审计');
+  });
+
+  it('成员代他人个人副本 / 成员批量申请勾选 → IFC-ERR-003', async () => {
+    const h = makeHarness({});
+    // member_applicant 代他人个人副本 + 勾选
+    await assert.rejects(
+      h.apply.execute({
+        principal: memberPrincipal,
+        request: { kind: 'personal', targetUserId: 'other', includeContact: true },
+      }),
+      (e: ExportError) => e.code === 'IFC-ERR-003' && e.message.includes('联系方式'),
+    );
+    // member_applicant 批量申请 + 勾选（闸门先于批量作用域判定拒绝，不泄露能力状态）
+    await assert.rejects(
+      h.apply.execute({
+        principal: memberPrincipal,
+        request: { kind: 'club', clubId: 'C1', includeContact: true },
+      }),
+      (e: ExportError) => e.code === 'IFC-ERR-003',
+    );
+  });
+
+  it('成员本人个人副本勾选 → 允许并固化标志（EXP-002 字段级权限内）', async () => {
+    const h = makeHarness({});
+    const res = await h.apply.execute({
+      principal: memberPrincipal,
+      request: {
+        kind: 'personal',
+        datasets: ['current_members'],
+        fields: { current_members: ['userId', 'phone'] },
+        includeContact: true,
+      },
+    });
+    assert.equal(res.task.snapshot.data.includeContact, true);
+    assert.deepEqual(res.task.snapshot.fields('current_members'), ['userId', 'phone']);
+    assert.deepEqual(res.rejectedFields, []);
+  });
+
+  it('部门负责人与平台超管勾选 → 允许', async () => {
+    const h = makeHarness({
+      kinds: { dep: 'department_leader' },
+      clubScopes: { dep: [{ clubId: 'C1', level: 'department', departmentIds: ['D1'] }] },
+      superAdminUserIds: ['super'],
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    h.reauth.recordReauth('super');
+    const dept = await h.apply.execute({
+      principal: {
+        userId: 'dep',
+        kind: 'department_leader',
+        clubScopes: [{ clubId: 'C1', level: 'department', departmentIds: ['D1'] }],
+      },
+      request: { kind: 'department', clubId: 'C1', departmentId: 'D1', includeContact: true },
+    });
+    assert.equal(dept.task.snapshot.data.includeContact, true);
+    const admin = await h.apply.execute({
+      principal: platformSuperAdminPrincipal('super'),
+      request: { kind: 'platform', purpose: '审计', includeContact: true },
+    });
+    assert.equal(admin.task.snapshot.data.includeContact, true);
+  });
+
+  it('秘密标识永不导出（R4）：勾选联系方式后请求 password/token/apiKey 仍全部剔除', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const res = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: {
+        kind: 'club',
+        clubId: 'C1',
+        datasets: ['current_members'],
+        fields: { current_members: ['userId', 'password', 'token', 'apiKey'] },
+        includeContact: true,
+      },
+    });
+    assert.deepEqual(res.task.snapshot.fields('current_members'), ['userId']);
+    for (const s of ['password', 'token', 'apiKey']) {
+      assert.ok(res.rejectedFields.includes(s), `秘密标识 ${s} 必须被剔除`);
+    }
+  });
+
+  it('幂等：同 key 同勾选 → 回放稳定；同 key 翻转 includeContact → IFC-ERR-009 冲突', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    const base = { principal: clubLeaderPrincipal('hr', 'C1'), idempotencyKey: 'k-contact' };
+    const first = await h.apply.execute({
+      ...base,
+      request: { kind: 'club', clubId: 'C1', includeContact: true },
+    });
+    assert.equal(first.replayed, false);
+    // 同 key 同语义 → 幂等回放，快照标志保持一致
+    const replay = await h.apply.execute({
+      ...base,
+      request: { kind: 'club', clubId: 'C1', includeContact: true },
+    });
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.task.id, first.task.id);
+    assert.equal(replay.task.snapshot.data.includeContact, true);
+    // 同 key 翻转 includeContact → 申请语义变更（v2 摘要），必须以 IFC-ERR-009 显式冲突
+    await assert.rejects(
+      h.apply.execute({
+        ...base,
+        request: { kind: 'club', clubId: 'C1' }, // 未勾选 → 与首次摘要不一致
+      }),
+      (e: ExportError) => e.code === 'IFC-ERR-009',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5.4.3 附件显式选择（EXP-003/R3：默认不打包、显式选择冻结引用）
+// ---------------------------------------------------------------------------
+
+describe('5.4.3 附件显式选择（EXP-003/R3）', () => {
+  it('联合导出 includeFiles=true → 冻结联合作用域附件引用；未勾选则不含', async () => {
+    const h = makeHarness({
+      clubScopes: { hr: [{ clubId: 'C1', level: 'club', departmentIds: [] }] },
+    });
+    h.facts.seedParticipantClubs('J1', ['C1', 'C2']);
+    h.facts.seedBatchAttachmentRefs(
+      { kind: 'joint', clubId: 'C1', departmentId: null, jointActivityId: 'J1' },
+      ['att-J1-001'],
+    );
+    const withFiles = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: { kind: 'joint', jointActivityId: 'J1', clubId: 'C1', includeFiles: true },
+    });
+    assert.deepEqual(withFiles.task.snapshot.data.attachmentRefs, ['att-J1-001']);
+
+    const withoutFiles = await h.apply.execute({
+      principal: clubLeaderPrincipal('hr', 'C1'),
+      request: { kind: 'joint', jointActivityId: 'J1', clubId: 'C1' },
+    });
+    assert.deepEqual(withoutFiles.task.snapshot.data.attachmentRefs, []);
+  });
+
+  it('部门批量导出 includeFiles=true → 冻结部门作用域附件引用（含 departmentId 维度）', async () => {
+    const h = makeHarness({
+      kinds: { dep: 'department_leader' },
+      clubScopes: { dep: [{ clubId: 'C1', level: 'department', departmentIds: ['D1'] }] },
+    });
+    h.facts.seedClubContext({ clubId: 'C1', forcedSuspension: false });
+    h.facts.seedBatchAttachmentRefs(
+      { kind: 'department', clubId: 'C1', departmentId: 'D1', jointActivityId: null },
+      ['att-D1-001'],
+    );
+    const res = await h.apply.execute({
+      principal: {
+        userId: 'dep',
+        kind: 'department_leader',
+        clubScopes: [{ clubId: 'C1', level: 'department', departmentIds: ['D1'] }],
+      },
+      request: { kind: 'department', clubId: 'C1', departmentId: 'D1', includeFiles: true },
+    });
+    assert.deepEqual(res.task.snapshot.data.attachmentRefs, ['att-D1-001']);
+  });
+
+  it('附件事实源桩契约：loadAttachmentContents 与 refs 同序、字节可配置、未知 ref 空字节占位', async () => {
+    const h = makeHarness({});
+    h.facts.seedAttachmentContent({
+      ref: 'att-C1-001',
+      filename: '报名表.png',
+      contentType: 'image/png',
+      bytes: new Uint8Array([1, 2, 3]),
+    });
+    const contents = await h.facts.loadAttachmentContents(['att-C1-001', 'att-missing']);
+    assert.equal(contents.length, 2);
+    assert.deepEqual([...contents[0].bytes], [1, 2, 3]);
+    assert.equal(contents[0].filename, '报名表.png');
+    assert.equal(contents[0].contentType, 'image/png');
+    // 未配置内容的 ref 返回空字节占位（桩语义），顺序与入参一致（EXP-003：生成阶段回源）
+    assert.equal(contents[1].ref, 'att-missing');
+    assert.equal(contents[1].bytes.length, 0);
   });
 });
 
@@ -1333,6 +1672,20 @@ describe('工具函数', () => {
     assert.notEqual(a, b);
   });
 
+  it('applyIdempotencyHash 并入 includeContact（v2 语义）：勾选与否摘要不同，缺省与 false 一致', () => {
+    // v2（5.4.3，EXP-002/EXP-003）：联系方式勾选改变导出内容语义，须显式进入摘要，
+    // 同 key 翻转 includeContact → IFC-ERR-009 冲突而非静默回放。
+    assert.equal(APPLY_IDEMPOTENCY_HASH_VERSION, 2);
+    const plain = applyIdempotencyHash({ kind: 'club', clubId: 'C1' });
+    const optedIn = applyIdempotencyHash({ kind: 'club', clubId: 'C1', includeContact: true });
+    assert.notEqual(plain, optedIn);
+    // 缺省与显式 false 语义一致（默认关）
+    assert.equal(
+      plain,
+      applyIdempotencyHash({ kind: 'club', clubId: 'C1', includeContact: false }),
+    );
+  });
+
   it('applyIdempotencyHash 对字段 key 顺序不敏感（UTF-16 码元序）', () => {
     const a = applyIdempotencyHash({
       kind: 'club',
@@ -1363,16 +1716,18 @@ describe('工具函数', () => {
       clubId: 'C1',
       datasets: ['club_summary', 'current_members'],
     };
-    // 同版本同请求 → 摘要稳定，幂等回放语义一致；缺省版本恒用常量，生产语义不变。
+    const cur = APPLY_IDEMPOTENCY_HASH_VERSION;
+    // 同版本同请求 → 摘要稳定，幂等回放语义一致；缺省恒用常量，生产语义不变。
     assert.equal(applyIdempotencyHash(req, 'user-A'), applyIdempotencyHash(req, 'user-A'));
-    assert.equal(applyIdempotencyHash(req, 'user-A'), applyIdempotencyHash(req, 'user-A', 1));
-    // 显式驱动版本递增（模拟基线漂移后递增 APPLY_IDEMPOTENCY_HASH_VERSION）：
+    assert.equal(applyIdempotencyHash(req, 'user-A'), applyIdempotencyHash(req, 'user-A', cur));
+    // 显式驱动版本递增（模拟基线漂移后递增 APPLY_IDEMPOTENCY_HASH_VERSION，
+    // 如 v2 并入 includeContact——5.4.3 EXP-002/EXP-003 联系方式勾选语义）：
     // 真正走函数内部分支驱动摘要变化，而非靠手动构造差异断言。
-    const v1 = applyIdempotencyHash(req, 'user-A', 1);
-    const v2 = applyIdempotencyHash(req, 'user-A', 2);
-    assert.notEqual(v1, v2);
+    const vCur = applyIdempotencyHash(req, 'user-A', cur);
+    const vNext = applyIdempotencyHash(req, 'user-A', cur + 1);
+    assert.notEqual(vCur, vNext);
     // 版本号确实固化进摘要：基线漂移后旧 key 语义显式归为不同申请内容（IFC-ERR-009）。
-    assert.equal(JSON.parse(v1).hashVersion, 1);
-    assert.equal(JSON.parse(v2).hashVersion, 2);
+    assert.equal(JSON.parse(vCur).hashVersion, cur);
+    assert.equal(JSON.parse(vNext).hashVersion, cur + 1);
   });
 });
