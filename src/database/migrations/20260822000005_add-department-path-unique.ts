@@ -16,6 +16,9 @@ export interface MigrationQueryRunner {
 
 export async function up(runner: MigrationQueryRunner): Promise<void> {
   await runner.query(
+    `ALTER TABLE public.department_paths DROP CONSTRAINT IF EXISTS uq_department_paths_application_department`,
+  );
+  await runner.query(
     `ALTER TABLE public.department_paths ADD CONSTRAINT uq_department_paths_application_department
      UNIQUE (application_id, department_id)`,
   );

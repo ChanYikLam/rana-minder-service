@@ -14,10 +14,10 @@ export interface MigrationQueryRunner {
 
 export async function up(runner: MigrationQueryRunner): Promise<void> {
   await runner.query(
-    `ALTER TABLE public.application_channels ADD COLUMN min_choices integer NOT NULL DEFAULT 1`,
+    `ALTER TABLE public.application_channels ADD COLUMN IF NOT EXISTS min_choices integer NOT NULL DEFAULT 1`,
   );
   await runner.query(
-    `ALTER TABLE public.application_channels ADD COLUMN max_choices integer NOT NULL DEFAULT 1`,
+    `ALTER TABLE public.application_channels ADD COLUMN IF NOT EXISTS max_choices integer NOT NULL DEFAULT 1`,
   );
 }
 
