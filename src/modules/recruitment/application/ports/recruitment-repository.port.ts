@@ -1,3 +1,4 @@
+// no-spec-required 纯接口端口（无实现逻辑），由基础设施实现（postgres-recruitment.repository.spec.ts）与内存实现（recruitment-test-support）实际覆盖验证
 /**
  * 招新仓储端口（recruitment 应用层；聚合持久化边界）。
  *
