@@ -101,10 +101,13 @@ if (failed) {
 
 const raised = METRICS.some((m) => current[m] > baseline[m] + RATCHET_TOLERANCE_PP);
 if (raised) {
+  // 棘轮只升不降：逐指标取 max(current, baseline)，杜绝"某指标升、另一指标
+  // 因噪声微降"时把降的指标永久固化到更低基线（评审 P1-1 棘轮降阈）。
+  // 仅当存在提升的指标时（raised）才触发重写，降/平的指标保持原基线不动。
   const next = {
-    lines: current.lines,
-    branches: current.branches,
-    functions: current.functions,
+    lines: Math.max(current.lines, baseline.lines),
+    branches: Math.max(current.branches, baseline.branches),
+    functions: Math.max(current.functions, baseline.functions),
     measuredAt: new Date().toISOString(),
   };
   if (checkOnly) {

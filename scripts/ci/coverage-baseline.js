@@ -8,8 +8,10 @@
  * 2. 读取 coverage/coverage-summary.json 的 total 汇总；
  * 3. 写入 coverage-baseline.json（lines/branches/functions 百分比，1 位小数）。
  *
- * 语义：基线只升不降（棘轮）。coverage-gate.js 对照基线门禁；覆盖率提升时
- * 自动重写基线并要求随提交带上（未提交无害，门禁仍按旧基线放行）。
+ * 语义：基线只升不降（棘轮，评审 P1-1）。若已存在旧基线，逐指标取
+ * max(当前值, 旧基线)，绝不因单次运行噪声把历史峰值降阈；首次生成时
+ * 以当前值为基线。coverage-gate.js 对照基线门禁；覆盖率提升时自动重写
+ * 基线并要求随提交带上（未提交无害，门禁仍按旧基线放行）。
  */
 
 const { spawnSync } = require('node:child_process');
@@ -48,10 +50,25 @@ for (const m of ['lines', 'branches', 'functions']) {
     fail(`覆盖率数据缺失/非有限数值：${m}.pct=${String(raw)}（coverage-summary.json 结构异常）`);
   }
 }
+// 棘轮只升不降（评审 P1-1 棘轮降阈）：若已存在旧基线，逐指标取
+// max(当前值, 旧基线)，绝不因单次运行噪声把历史峰值降阈。首次生成
+// （无旧基线）时直接以当前值为基线。
+let prev = null;
+if (fs.existsSync(BASELINE)) {
+  try {
+    prev = JSON.parse(fs.readFileSync(BASELINE, 'utf8'));
+  } catch {
+    fail(`已存在但无法解析 ${path.relative(ROOT, BASELINE)}，请先人工修复或删除后重跑`);
+  }
+}
+const metric = (m) =>
+  prev && typeof prev[m] === 'number' && Number.isFinite(prev[m])
+    ? Math.max(round1(total[m].pct), prev[m])
+    : round1(total[m].pct);
 const baseline = {
-  lines: round1(total.lines.pct),
-  branches: round1(total.branches.pct),
-  functions: round1(total.functions.pct),
+  lines: metric('lines'),
+  branches: metric('branches'),
+  functions: metric('functions'),
   measuredAt: new Date().toISOString(),
 };
 
