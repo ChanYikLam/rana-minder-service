@@ -45,6 +45,13 @@ fi
 # 只看生产代码；测试文件自身不要求配对
 changed="$(printf '%s\n' "$changed" | grep -v '\.spec\.ts$' || true)"
 
+# 与 c8 的 exclude 口径对齐：排除不纳入覆盖率统计的目录（src/shared/testing/**、src/database/migrations/**）。
+# 这些目录内的文件本就无 spec 也无豁免标记（如 fake-db-adapter.ts、迁移脚本），
+# 若在此强制要求 spec 会误报 MISS 使门禁失败；故需在 changed 列表中一并过滤，避免门禁与覆盖率统计口径不一致。
+if [ -n "$changed" ]; then
+  changed="$(printf '%s\n' "$changed" | grep -v -E '^(src/shared/testing/|src/database/migrations/)' || true)"
+fi
+
 fail=0
 checked=0
 while IFS= read -r f; do
