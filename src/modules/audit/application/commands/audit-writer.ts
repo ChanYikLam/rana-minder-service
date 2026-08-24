@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { AuditEventType, AuditOutcome } from '../../domain/models/audit-event';
 import type { AuditEvent, AuditSource } from '../../domain/models/audit-event';
@@ -46,6 +46,7 @@ export class AuditWriter {
     @Inject(AUDIT_REPOSITORY) private readonly repo: AuditRepository,
     private readonly sanitizer: AuditSanitizer,
     /** 可选：PostgreSQL 接线时提供，保证审计与业务同一事务提交（AUD-003/IFC-TX-006） */
+    @Optional()
     private readonly uow?: AuditUnitOfWork,
   ) {}
 
