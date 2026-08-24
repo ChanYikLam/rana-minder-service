@@ -1,0 +1,101 @@
+#!/usr/bin/env node
+/**
+ * 覆盖率门禁（P1-A 棘轮 + CI 阶段 4b）。
+ *
+ * 用法：
+ *   npm run test:cov:gate                        # 完整：先跑覆盖率再对基线（本地便捷）
+ *   node scripts/ci/coverage-gate.js --check-only # 复用已生成的 coverage/ 产物，
+ *                                                # 不在 4b 重复执行单测（CI 阶段 4 已产出）
+ *
+ * 职责（对照 coverage-baseline.json，棘轮只升不降）：
+ * 1. lines/branches/functions 任一低于基线 → 失败（exit 1）；
+ * 2. 任一项高于基线 → 自动重写基线（升阈）并提示随提交带上；
+ *    （未提交也无害：门禁按旧基线放行，覆盖仍不得低于历史峰值）
+ * 3. --check-only 且缺少 coverage/coverage-summary.json → 失败（fail-closed）。
+ */
+
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const ROOT = path.resolve(__dirname, '..', '..');
+const SUMMARY = path.join(ROOT, 'coverage', 'coverage-summary.json');
+const BASELINE = path.join(ROOT, 'coverage-baseline.json');
+
+const METRICS = ['lines', 'branches', 'functions'];
+const checkOnly = process.argv.includes('--check-only');
+
+function fail(message) {
+  console.error(`ERROR coverage-gate: ${message}`);
+  process.exit(1);
+}
+
+if (!checkOnly) {
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const run = spawnSync(npmCmd, ['run', 'test:cov'], {
+    cwd: ROOT,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
+  if (run.status !== 0) {
+    fail(`npm run test:cov 失败（exit=${run.status}）`);
+  }
+}
+
+if (!fs.existsSync(SUMMARY)) {
+  fail(
+    `未找到 ${path.relative(ROOT, SUMMARY)}。` +
+      `--check-only 模式复用 CI 阶段 4 的产物；完整模式请先确认 c8 json-summary reporter 已配置。`,
+  );
+}
+if (!fs.existsSync(BASELINE)) {
+  fail(`未找到 ${path.relative(ROOT, BASELINE)}。请先运行 npm run test:cov:baseline 生成基线。`);
+}
+
+const total = JSON.parse(fs.readFileSync(SUMMARY, 'utf8')).total;
+const baseline = JSON.parse(fs.readFileSync(BASELINE, 'utf8'));
+const round1 = (n) => Math.round(n * 10) / 10;
+
+const current = {
+  lines: round1(total.lines.pct),
+  branches: round1(total.branches.pct),
+  functions: round1(total.functions.pct),
+};
+
+let failed = false;
+for (const m of METRICS) {
+  const cur = current[m];
+  const base = baseline[m];
+  if (typeof base !== 'number') {
+    fail(`基线缺少指标 ${m}（coverage-baseline.json 结构异常）`);
+  }
+  if (cur + 1e-9 < base) {
+    console.error(`  [FAIL] ${m}: ${cur}% < 基线 ${base}%（棘轮只升不降）`);
+    failed = true;
+  }
+}
+if (failed) {
+  fail('覆盖率回退低于基线（P1-A 门禁）');
+}
+
+const raised = METRICS.some((m) => current[m] > baseline[m] + 1e-9);
+if (raised) {
+  const next = {
+    lines: current.lines,
+    branches: current.branches,
+    functions: current.functions,
+    measuredAt: new Date().toISOString(),
+  };
+  fs.writeFileSync(BASELINE, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  console.warn(
+    `[RATCHET] 覆盖率较基线提升，已自动重写 coverage-baseline.json：` +
+      `lines=${next.lines}% branches=${next.branches}% functions=${next.functions}%。` +
+      `请将 coverage-baseline.json 纳入本次提交（棘轮只升不降）。`,
+  );
+}
+
+console.log(
+  `coverage-gate: 通过（lines=${current.lines}% branches=${current.branches}% ` +
+    `functions=${current.functions}%；基线 lines=${baseline.lines}% branches=${baseline.branches}% ` +
+    `functions=${baseline.functions}%）`,
+);

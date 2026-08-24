@@ -30,7 +30,8 @@
     "test:contract": "node --env-file=.env.test --test -r ts-node/register \"test/contract/**/*.spec.ts\"",
     "coverage:all": "node --env-file=.env.test --test -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
     "test:cov": "c8 -o coverage -- npm run coverage:all",
-    "test:cov:gate": "c8 --check-coverage --lines 80 --branches 75 --functions 60 -o coverage -- npm run coverage:all"
+    "test:cov:gate": "node scripts/ci/coverage-gate.js",
+    "test:cov:baseline": "node scripts/ci/coverage-baseline.js"
   },
   "c8": {
     "include": [
@@ -43,7 +44,8 @@
     ],
     "reporter": [
       "text",
-      "text-summary"
+      "text-summary",
+      "json-summary"
     ]
   },
   "dependencies": {

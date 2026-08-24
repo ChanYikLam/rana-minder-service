@@ -76,18 +76,20 @@
         - name: 3-格式
           if: "[ -f package.json ]"
           script: npm run format:check
-        # 阶段 4：单元测试 L1（领域规则，覆盖率新增代码须有对应用例）
+        # 阶段 4：单元测试 L1（一次性运行并产出 coverage/ 产物；glob=src/**/*.spec.ts + test/*.spec.ts，含 DI 引导测试）
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
-          script: npm run test:unit
-        # 阶段 4b：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
-        # 统计范围：L1 单元测试 + DI 引导测试（src/**/*.spec.ts + test/*.spec.ts，即 coverage:all）；
-        # L2 集成/L3 契约需真实依赖环境，覆盖率另行统计。DI spec 已含于 test:unit，不再单独跑 test:di。
+          script: npm run test:cov
+        # 阶段 4b：覆盖率门禁（P1-A/CI-001）——复用阶段 4 的 coverage/ 产物，不重跑单测（评审：#126 重复执行优化）
+        # 1) coverage-gate.js --check-only 对照 coverage-baseline.json 棘轮（只升不降）
+        # 2) check-spec-coverage.sh 校验改动文件↔同名 spec
+        # 合并说明：与 PR #130 的 4b-DI引导测试 同处 .cnb.yml；DI spec 已纳入阶段 4 glob，
+        # 故 DI 引导不再单独成阶段，保留唯一 L1 阶段防重复执行（先合本 PR，再合 #130 按此收敛）。
         - name: 4b-覆盖率门禁
           if: "[ -f package.json ]"
           script: |
             set -e
-            npm run test:cov:gate
+            node scripts/ci/coverage-gate.js --check-only
             bash scripts/ci/check-spec-coverage.sh "$CNB_PULL_REQUEST_TARGET_SHA"
         # 阶段 5：集成测试 L2（真实 PG18：pg_trgm/btree_gist 扩展；dind 已声明）
         - name: 5-集成测试L2
@@ -223,15 +225,13 @@
           script: npm run format:check
         - name: 4-单元测试L1
           if: "[ -f package.json ]"
-          script: npm run test:unit
-        # 阶段 4b：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
-        # 统计范围：L1 单元测试 + DI 引导测试（src/**/*.spec.ts + test/*.spec.ts，即 coverage:all）；
-        # L2 集成/L3 契约需真实依赖环境，覆盖率另行统计。DI spec 已含于 test:unit，不再单独跑 test:di。
+          script: npm run test:cov
+        # 阶段 4b：覆盖率门禁（复用阶段 4 产物，不重跑单测；合并说明见 PR 流水线 4b 注释）
         - name: 4b-覆盖率门禁
           if: "[ -f package.json ]"
           script: |
             set -e
-            npm run test:cov:gate
+            node scripts/ci/coverage-gate.js --check-only
             bash scripts/ci/check-spec-coverage.sh "$CNB_BEFORE_SHA"
         - name: 5-集成测试L2
           if: "[ -f package.json ]"
@@ -352,13 +352,13 @@
           script: npm run format:check
         - name: 4-单元测试L1
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
-          script: npm run test:unit
-        # 阶段 4b：覆盖率统计与门禁（P1-A/CI-001：行/分支覆盖率证据 + 阈值门禁 + 改动文件↔用例对应）
+          script: npm run test:cov
+        # 阶段 4b：覆盖率门禁（复用阶段 4 产物，不重跑单测；合并说明见 PR 流水线 4b 注释）
         - name: 4b-覆盖率门禁
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |
             set -e
-            npm run test:cov:gate
+            node scripts/ci/coverage-gate.js --check-only
             bash scripts/ci/check-spec-coverage.sh "$CNB_COMMIT~1"
         - name: 5-集成测试L2
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'

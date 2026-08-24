@@ -10,6 +10,10 @@
 #       base-ref 缺省依次尝试 origin/dev；无显式 base 且无 origin/dev 时
 #       fail-closed（exit 1），不静默降级，避免门禁失效。
 #       多 commit PR 请显式传 merge-base（CI 已传内置变量），避免漏检中间 commit。
+# 边界说明（评审 info）：push 流水线以 $CNB_BEFORE_SHA 作 base；新建分支首次 push
+#       该变量可能为空 → 参数落空 → 脚本回退 origin/dev（设计内保守行为）。
+#       对"推送到 dev"的常规 push：origin/dev..HEAD 为空差异 → checked=0 通过，
+#       非漏检。仅"显式传入但不可解析"的 base 才 fail-closed（exit 1）。
 # 退出码：0 = 全部通过；1 = 存在缺失用例 / base 不可解析（fail-closed）
 # ============================================================
 set -u
