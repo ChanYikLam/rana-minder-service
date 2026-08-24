@@ -78,10 +78,15 @@ export class DefaultSubmitApplicationUseCase implements SubmitApplicationUseCase
       throw recruitmentErrors.preconditionFailed('报名通道未开放');
     }
     if (input.formRef) {
-      const submission = await this.form.loadSubmission(input.formRef);
-      if (submission === null) {
+      const result = await this.form.loadSubmission(input.formRef);
+      if (result.outcome === 'forbidden') {
+        // 快照存在但归属表单不符：按无权处理，不误报"不存在"（评审意见）
+        throw recruitmentErrors.forbidden('关联表单提交归属不符');
+      }
+      if (result.outcome === 'not-found') {
         throw recruitmentErrors.validation('关联的表单提交不存在', input.formRef);
       }
+      const submission = result.submission;
       if (submission.submittedBy !== input.actor) {
         throw recruitmentErrors.forbidden('表单提交非本人填写');
       }
