@@ -94,6 +94,7 @@ function makeHarness(overrides?: {
     datasetSource,
     renderer,
     fileStore,
+    fileStore, // InMemoryExportFileStore 同时实现写入与处置端口（评审⑧）
     retention,
     facts,
     audit,
@@ -712,6 +713,7 @@ describe('ExportGenerationCommand — 失败收敛（转换 4）', () => {
       failingSource as never,
       h.renderer,
       h.fileStore,
+      h.fileStore,
       h.retention,
       h.facts,
       h.audit,
@@ -788,6 +790,7 @@ describe('ExportGenerationCommand — 失败收敛（转换 4）', () => {
       h.safety,
       h.datasetSource,
       h.renderer,
+      h.fileStore,
       h.fileStore,
       h.retention,
       h.facts,

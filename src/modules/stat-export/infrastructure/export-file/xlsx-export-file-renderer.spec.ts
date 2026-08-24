@@ -11,7 +11,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { XlsxExportFileRenderer } from './xlsx-export-file-renderer';
+import { XlsxExportFileRenderer, safeAttachmentEntryName } from './xlsx-export-file-renderer';
 import { readZipArchive } from './zip-writer';
 import { buildExportWatermarkMetadata } from '../../domain/services/export-watermark.policy';
 import type { ExportRenderPlan } from '../../application/ports/export-file-renderer.port';
@@ -136,5 +136,46 @@ describe('XlsxExportFileRenderer — 附件打包路径（EXP-002 清单）', ()
     const b = await renderer.render(plan);
     assert.equal(a.kind, 'zip');
     assert.deepEqual([...a.bytes], [...b.bytes]);
+  });
+
+  it('恶意附件文件名被安全归一化（Zip Slip 防线，EXP-002）', async () => {
+    const renderer = new XlsxExportFileRenderer();
+    const evil = [
+      { ref: 'att-e1', filename: '../../evil.sh', contentType: null, bytes: new Uint8Array([1]) },
+      { ref: 'att-e2', filename: '/etc/passwd', contentType: null, bytes: new Uint8Array([2]) },
+      { ref: 'att-e3', filename: 'C:\\evil.bat', contentType: null, bytes: new Uint8Array([3]) },
+      {
+        ref: 'att-e4',
+        filename: 'a\\b\\resume.pdf',
+        contentType: null,
+        bytes: new Uint8Array([4]),
+      },
+    ];
+    const plan = makePlan({ attachments: evil as never });
+    const { bytes } = await renderer.render(plan);
+    const archive = readZipArchive(bytes);
+    // 归一化后：无任何 ../ 或绝对路径条目；路径形态被剥为安全 basename
+    const names = archive.entries.map((e) => e.filename);
+    assert.ok(names.every((n) => !n.includes('..') && !n.startsWith('/') && !n.includes('\\')));
+    assert.ok(names.includes('attachments/evil.sh'), '../../evil.sh → basename evil.sh');
+    assert.ok(names.includes('attachments/passwd'), '/etc/passwd → basename passwd');
+    assert.ok(names.includes('attachments/evil.bat'), 'C:\\evil.bat → basename evil.bat');
+    assert.ok(names.includes('attachments/resume.pdf'), 'a\\b\\resume.pdf → basename resume.pdf');
+    // 清单中的原始 filename 仅作溯源展示，不影响归档安全
+    const manifest = JSON.parse(archive.text('manifest.json')) as { attachments: unknown[] };
+    assert.equal(manifest.attachments.length, 4);
+  });
+
+  it('safeAttachmentEntryName 纯函数边界', () => {
+    assert.equal(safeAttachmentEntryName('正常文件.pdf', 'att-x'), '正常文件.pdf');
+    assert.equal(
+      safeAttachmentEntryName('../evil.sh', 'att-x'),
+      'evil.sh',
+      '剥离路径段保留安全 basename',
+    );
+    assert.equal(safeAttachmentEntryName('/etc/passwd', 'att-x'), 'passwd');
+    assert.equal(safeAttachmentEntryName('a/b/c.txt', 'att-x'), 'c.txt');
+    assert.equal(safeAttachmentEntryName('C:\\evil.bat', 'att-x'), 'evil.bat');
+    assert.equal(safeAttachmentEntryName('', 'att-x'), 'att-att-x', '空名回退为 ref 派生名');
   });
 });

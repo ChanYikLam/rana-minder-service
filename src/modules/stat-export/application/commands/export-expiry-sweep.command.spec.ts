@@ -135,7 +135,7 @@ describe('ExportExpirySweepCommand — 过期收敛（转换 8）', () => {
 
     const res = await cmd.run(LATER);
 
-    assert.deepEqual(res, { expired: 1, disposed: 1 });
+    assert.deepEqual(res, { expired: 1, disposed: 1, recovered: 0 });
     const reloaded = await h.repo.load(task.id);
     assert.equal(reloaded?.status, ExportTaskStatus.EXPIRED);
 
@@ -152,15 +152,15 @@ describe('ExportExpirySweepCommand — 过期收敛（转换 8）', () => {
     const cmd = new ExportExpirySweepCommand(h.repo, h.store, h.audit);
 
     const first = await cmd.run(BEFORE);
-    assert.deepEqual(first, { expired: 0, disposed: 0 });
+    assert.deepEqual(first, { expired: 0, disposed: 0, recovered: 0 });
     assert.equal((await h.repo.load('exp-fresh'))?.status, ExportTaskStatus.DOWNLOADABLE);
 
     // 到期后再扫：恰好一次收敛
     const second = await cmd.run(LATER);
-    assert.deepEqual(second, { expired: 1, disposed: 1 });
+    assert.deepEqual(second, { expired: 1, disposed: 1, recovered: 0 });
     // 重复扫描零副作用（命令幂等）
     const third = await cmd.run(new Date(LATER.getTime() + 86_400_000));
-    assert.deepEqual(third, { expired: 0, disposed: 0 });
+    assert.deepEqual(third, { expired: 0, disposed: 0, recovered: 0 });
     assert.equal(h.audit.findBy('export_expire').length, 1);
   });
 
@@ -173,7 +173,7 @@ describe('ExportExpirySweepCommand — 过期收敛（转换 8）', () => {
 
     const res = await cmd.run(LATER);
 
-    assert.deepEqual(res, { expired: 1, disposed: 0 });
+    assert.deepEqual(res, { expired: 1, disposed: 0, recovered: 0 });
     const reloaded = await h.repo.load(task.id);
     assert.equal(reloaded?.status, ExportTaskStatus.EXPIRED, '存储故障不得回滚状态机收敛');
     assert.equal(h.audit.findBy('export_expire').length, 1, '过期审计不受清理失败影响');
@@ -189,7 +189,7 @@ describe('ExportExpirySweepCommand — 过期收敛（转换 8）', () => {
 
     const res = await cmd.run(LATER);
 
-    assert.deepEqual(res, { expired: 1, disposed: 0 });
+    assert.deepEqual(res, { expired: 1, disposed: 0, recovered: 0 });
     assert.equal((await h.repo.load('exp-no-file'))?.status, ExportTaskStatus.EXPIRED);
   });
 
@@ -281,5 +281,139 @@ describe('InMemoryExportTaskRepository.listDueForExpiry — 扫描口径', () =>
       ).map((t) => t.id),
       ['due'],
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 生成租约过期回收（评审⑧）
+// ---------------------------------------------------------------------------
+
+describe('ExportExpirySweepCommand — 生成租约过期回收（评审⑧）', () => {
+  it('GENERATING 且租约已过期 → FAILED（可重试）并审计 export_expire', async () => {
+    const h = makeHarness();
+    // 构造一个卡死任务：PENDING → GENERATING（租约 holder w1，60s）
+    const { snapshot } = ExportSnapshot.freeze({
+      spec: SPEC,
+      scope: {
+        kind: 'club',
+        clubId: 'C1',
+        departmentId: null,
+        departmentIds: [],
+        jointActivityId: null,
+        participantClubIds: [],
+      },
+      datasets: ['club_summary'],
+      now: NOW,
+    });
+    const agg = ExportTaskAggregate.create({
+      machine: new ExportTaskStateMachine(),
+      id: 'stuck-1',
+      snapshot,
+      ownerUserId: 'hr-1',
+      authorizerUserId: null,
+      requestedByUserId: 'hr-1',
+      now: NOW,
+    });
+    agg.markApplied(NOW);
+    agg.claimGeneration('w1', 60_000, NOW);
+    await h.repo.save(agg);
+    const cmd = new ExportExpirySweepCommand(h.repo, h.store, h.audit);
+
+    // 租约未过期：不回收
+    const before = await cmd.run(new Date(NOW.getTime() + 30_000));
+    assert.deepEqual(before, { expired: 0, disposed: 0, recovered: 0 });
+    assert.equal((await h.repo.load('stuck-1'))?.status, ExportTaskStatus.GENERATING);
+
+    // 租约过期：回收为 FAILED（转换 4，可重试）
+    const after = await cmd.run(new Date(NOW.getTime() + 61_000));
+    assert.deepEqual(after, { expired: 0, disposed: 0, recovered: 1 });
+    const reloaded = await h.repo.load('stuck-1');
+    assert.equal(reloaded?.status, ExportTaskStatus.FAILED);
+    assert.ok(reloaded?.failureReason?.includes('lease timeout'));
+    assert.equal(h.audit.findBy('export_expire').length, 1);
+  });
+
+  it('租约过期回收幂等：重复扫描不再回收（任务已 FAILED 不在 GENERATING）', async () => {
+    const h = makeHarness();
+    const { snapshot } = ExportSnapshot.freeze({
+      spec: SPEC,
+      scope: {
+        kind: 'personal',
+        clubId: null,
+        departmentId: null,
+        departmentIds: [],
+        jointActivityId: null,
+        participantClubIds: [],
+      },
+      datasets: ['club_summary'],
+      now: NOW,
+    });
+    const agg = ExportTaskAggregate.create({
+      machine: new ExportTaskStateMachine(),
+      id: 'stuck-2',
+      snapshot,
+      ownerUserId: 'u-1',
+      authorizerUserId: null,
+      requestedByUserId: 'u-1',
+      now: NOW,
+    });
+    agg.markApplied(NOW);
+    agg.claimGeneration('w1', 60_000, NOW);
+    await h.repo.save(agg);
+    const cmd = new ExportExpirySweepCommand(h.repo, h.store, h.audit);
+    const at = new Date(NOW.getTime() + 61_000);
+
+    assert.deepEqual(await cmd.run(at), { expired: 0, disposed: 0, recovered: 1 });
+    assert.deepEqual(await cmd.run(new Date(at.getTime() + 60_000)), {
+      expired: 0,
+      disposed: 0,
+      recovered: 0,
+    });
+    assert.equal(h.audit.findBy('export_expire').length, 1);
+  });
+
+  it('租约过期但任务已被并发推进（如原 worker 实际成功）→ 跳过不误伤', async () => {
+    const h = makeHarness();
+    const { snapshot } = ExportSnapshot.freeze({
+      spec: SPEC,
+      scope: {
+        kind: 'club',
+        clubId: 'C1',
+        departmentId: null,
+        departmentIds: [],
+        jointActivityId: null,
+        participantClubIds: [],
+      },
+      datasets: ['club_summary'],
+      now: NOW,
+    });
+    const agg = ExportTaskAggregate.create({
+      machine: new ExportTaskStateMachine(),
+      id: 'stuck-3',
+      snapshot,
+      ownerUserId: 'hr-1',
+      authorizerUserId: null,
+      requestedByUserId: 'hr-1',
+      now: NOW,
+    });
+    agg.markApplied(NOW);
+    agg.claimGeneration('w1', 60_000, NOW);
+    await h.repo.save(agg);
+    // 并发写者把任务推进为 DOWNLOADABLE（原 worker 实际已完成；
+    // 任务已 GENERATING，可直接 markGenerationSucceeded，无需重复领取）
+    const claimed = await h.repo.load('stuck-3');
+    claimed!.markGenerationSucceeded({
+      fileRef: 'export-file://stuck-3/x',
+      fileHash: 'h-3',
+      fileSize: 4,
+      now: NOW,
+    });
+    await h.repo.save(claimed!);
+    const cmd = new ExportExpirySweepCommand(h.repo, h.store, h.audit);
+
+    const res = await cmd.run(new Date(NOW.getTime() + 61_000));
+    // 任务已是 DOWNLOADABLE（未到期）→ 既不过期也不回收
+    assert.deepEqual(res, { expired: 0, disposed: 0, recovered: 0 });
+    assert.equal((await h.repo.load('stuck-3'))?.status, ExportTaskStatus.DOWNLOADABLE);
   });
 });

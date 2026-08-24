@@ -12,16 +12,17 @@
  *   联动（AUD-009 includeTerminal 已覆盖 EXPIRED）兜底清理。单条存储故障不应阻塞
  *   整批过期收敛，故失败不回滚。
  * - 每条成功过期记录审计 export_expire(allowed)（principalId='system'，系统收敛操作）。
+ *
+ * 5.4.4 扩展（评审⑧ 租约回收）：同时扫描「生成租约已过期但任务仍停在 GENERATING」
+ * 的卡死任务（worker 崩溃/进程被杀后遗留），逐条 markGenerationFailed 置为 FAILED
+ * （转换 4，可重试、沿用原快照）——避免任务永久停留在 GENERATING、无任何恢复路径。
  */
 
 import { Inject, Logger } from '@nestjs/common';
 
 import { EXPORT_TASK_REPOSITORY, type ExportTaskRepository } from '../ports/export-repository.port';
 import { EXPORT_DISPOSAL_PORT, type ExportDisposalPort } from '../ports/export-disposal.port';
-import {
-  EXPORT_AUDIT_PORT,
-  type ExportAuditPort,
-} from '../ports/export-authorization.port';
+import { EXPORT_AUDIT_PORT, type ExportAuditPort } from '../ports/export-authorization.port';
 import { ExportTaskAggregate } from '../../domain/models/export-task';
 import { ExportTaskStatus } from '../../domain/state-machines/export-task.state-machine';
 
@@ -30,6 +31,8 @@ export interface ExportExpirySweepResult {
   readonly expired: number;
   /** 本轮成功删除对象存储文件的任务数（dispose 失败不计入，也不回滚过期） */
   readonly disposed: number;
+  /** 本轮因生成租约过期被回收为 FAILED（可重试）的任务数（评审⑧） */
+  readonly recovered: number;
 }
 
 export class ExportExpirySweepCommand {
@@ -59,20 +62,20 @@ export class ExportExpirySweepCommand {
       if (doneData.fileRef !== null && (await this.disposeBestEffort(doneData.fileRef, done.id))) {
         disposed += 1;
       }
-      await this.audit.record({
-        at,
-        action: 'export_expire',
-        principalId: 'system',
-        privileged: false,
-        clubId: done.snapshot.data.scope.clubId,
-        jointActivityId: done.snapshot.data.scope.jointActivityId,
-        datasetType: null,
-        exportId: done.id,
-        purpose: null,
-        outcome: 'allowed',
-      });
+      await this.recordExpireAudit(at, done.id, done);
     }
-    return { expired, disposed };
+
+    // 租约过期回收（评审⑧）：GENERATING 且 lease.until<=now → FAILED（可重试）
+    const stuck = await this.repo.listExpiredLeaseGenerating(at);
+    let recovered = 0;
+    for (const candidate of stuck) {
+      const done = await this.recoverStaleLease(candidate, at);
+      if (done === null) continue;
+      recovered += 1;
+      await this.recordExpireAudit(at, done.id, done);
+    }
+
+    return { expired, disposed, recovered };
   }
 
   // -------------------------------------------------------------------------
@@ -85,6 +88,34 @@ export class ExportExpirySweepCommand {
       ((err as Error & { code?: string }).code === 'IFC-ERR-008' ||
         err.message.includes('IFC-ERR-008'))
     );
+  }
+
+  /** 过期审计（best-effort：审计通道故障仅告警，不阻塞状态收敛，评审⑧） */
+  private async recordExpireAudit(
+    at: string,
+    exportId: string,
+    task: ExportTaskAggregate,
+  ): Promise<void> {
+    try {
+      await this.audit.record({
+        at,
+        action: 'export_expire',
+        principalId: 'system',
+        privileged: false,
+        clubId: task.snapshot.data.scope.clubId,
+        jointActivityId: task.snapshot.data.scope.jointActivityId,
+        datasetType: null,
+        exportId,
+        purpose: null,
+        outcome: 'allowed',
+      });
+    } catch (err) {
+      this.logger.warn(
+        `导出过期/租约回收审计记录失败（exportId=${exportId}）：${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**
@@ -110,6 +141,36 @@ export class ExportExpirySweepCommand {
       }
       const expectedRevision = task.revisionNumber;
       task.expire(new Date(at));
+      try {
+        await this.repo.save(task, { expectedRevision });
+        return task;
+      } catch (err) {
+        if (!this.isVersionConflict(err)) throw err; // 真实仓储异常不静默吞掉
+        task = round === 0 ? await this.repo.load(initial.id) : null;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 租约过期回收（评审⑧）：GENERATING 且租约已到期 → markGenerationFailed
+   * （转换 4 GENERATING→FAILED，可重试、沿用原快照）。乐观保存失败时重读重试
+   * 一次；二次冲突/已被并发处理（如原 worker 实际仍在跑并已成功）则跳过。
+   *
+   * @returns 回收后的聚合；null 表示该条被跳过
+   */
+  private async recoverStaleLease(
+    initial: ExportTaskAggregate,
+    at: string,
+  ): Promise<ExportTaskAggregate | null> {
+    let task: ExportTaskAggregate | null = initial;
+    for (let round = 0; round < 2 && task !== null; round += 1) {
+      const data = task.toData();
+      if (task.status !== ExportTaskStatus.GENERATING || data.lease === null) {
+        return null; // 已被并发处理（成功/失权/过期/删除）
+      }
+      const expectedRevision = task.revisionNumber;
+      task.markGenerationFailed('生成租约已过期，系统回收（lease timeout）', new Date(at));
       try {
         await this.repo.save(task, { expectedRevision });
         return task;

@@ -11,7 +11,7 @@
  *   字段投影严格取 snapshot.fields(dataset)（纵深防御二次裁剪；includeContact=false
  *   时联系方式键绝不放行），附件仅在快照 attachmentRefs 显式冻结时打包（EXP-002
  *   「附件默认不打包」）；
- * - 成功落库（转换 3）：sha256 哈希 + 字节长度 → 对象存储写出 → 
+ * - 成功落库（转换 3）：sha256 哈希 + 字节长度 → 对象存储写出 →
  *   markGenerationSucceeded(validityMs=有效期配置) → 乐观保存（一次冲突容忍）；
  *   落库成功后才审计 export_generate(allowed) 与站内信通知（EXP-001，尽力而为副作用，
  *   失败不回滚业务结果）；
@@ -43,6 +43,7 @@ import {
   EXPORT_FILE_WRITER_PORT,
   type ExportFileWriterPort,
 } from '../ports/export-file-writer.port';
+import { EXPORT_DISPOSAL_PORT, type ExportDisposalPort } from '../ports/export-disposal.port';
 import {
   EXPORT_RETENTION_CONFIG_PORT,
   type ExportRetentionConfigPort,
@@ -84,7 +85,8 @@ export interface ExportGenerationResult {
 function isVersionConflict(err: unknown): boolean {
   return (
     err instanceof Error &&
-    ((err as Error & { code?: string }).code === 'IFC-ERR-008' || err.message.includes('IFC-ERR-008'))
+    ((err as Error & { code?: string }).code === 'IFC-ERR-008' ||
+      err.message.includes('IFC-ERR-008'))
   );
 }
 
@@ -147,6 +149,7 @@ export class ExportGenerationCommand {
     @Inject(EXPORT_DATASET_SOURCE) private readonly datasets: ExportDatasetSourcePort,
     @Inject(EXPORT_FILE_RENDERER_PORT) private readonly renderer: ExportFileRendererPort,
     @Inject(EXPORT_FILE_WRITER_PORT) private readonly fileWriter: ExportFileWriterPort,
+    @Inject(EXPORT_DISPOSAL_PORT) private readonly disposal: ExportDisposalPort,
     @Inject(EXPORT_RETENTION_CONFIG_PORT) private readonly retention: ExportRetentionConfigPort,
     @Inject(EXPORT_FACT_SOURCE) private readonly facts: ExportFactSourcePort,
     @Inject(EXPORT_AUDIT_PORT) private readonly audit: ExportAuditPort,
@@ -168,10 +171,7 @@ export class ExportGenerationCommand {
 
     // 1. 幂等回放（EXP-003：生成成功按任务版本/文件哈希幂等）：不重复写文件/
     //    发通知/审计——重复投递同一生成任务时直接返回既有结果。
-    if (
-      task.status === ExportTaskStatus.DOWNLOADABLE &&
-      task.toData().fileHash !== null
-    ) {
+    if (task.status === ExportTaskStatus.DOWNLOADABLE && task.toData().fileHash !== null) {
       return this.idempotentResult(task);
     }
 
@@ -310,7 +310,9 @@ export class ExportGenerationCommand {
 
     // 6. 附件（EXP-002：默认不打包，仅显式冻结进快照的 refs 才回源打包）
     const attachments =
-      snap.attachmentRefs.length > 0 ? await this.facts.loadAttachmentContents(snap.attachmentRefs) : [];
+      snap.attachmentRefs.length > 0
+        ? await this.facts.loadAttachmentContents(snap.attachmentRefs)
+        : [];
 
     const rendered = await this.renderer.render({
       sheets,
@@ -352,9 +354,12 @@ export class ExportGenerationCommand {
       const fresh = await this.repo.load(task.id);
       if (fresh === null || fresh.isTerminal || fresh.toData().lease?.holderId !== input.workerId) {
         // 已被并发写者推进到终态（失权/过期/提前删除）或租约易主：
-        // 本轮生成结果作废（superseded），静默放弃——不覆盖他人写入、不审计 allowed、不通知
+        // 本轮生成结果作废（superseded），静默放弃——不覆盖他人写入、不审计 allowed、不通知。
+        // 已写入的文件无人引用，须尽力而为清理，避免对象存储残留个人数据
+        // 脱离 AUD-009 清理链（评审⑧）。
+        await this.disposeSupersededFile(written.fileRef, task.id);
         this.logger.warn(
-          `导出生成完成前任务已被并发推进（exportId=${task.id}, status=${fresh?.status ?? 'unknown'}），本轮结果作废`,
+          `导出生成完成前任务已被并发推进（exportId=${task.id}, status=${fresh?.status ?? 'unknown'}），本轮结果作废并清理已写文件`,
         );
         return { status: fresh ? fresh.status : task.status };
       }
@@ -370,19 +375,30 @@ export class ExportGenerationCommand {
       task = fresh;
     }
 
-    // 8. 成功审计（业务结果持久化之后才记录 allowed；privileged 仅平台级作用域为 true）
-    await this.audit.record({
-      at: now.toISOString(),
-      action: 'export_generate',
-      principalId: task.requestedByUserId, // 生成行为归属导出发起方（worker 触发，见 JSDoc）
-      privileged: snap.scope.kind === 'platform',
-      clubId: snap.scope.clubId,
-      jointActivityId: snap.scope.jointActivityId,
-      datasetType: snap.datasets.length > 0 ? snap.datasets.join(',') : null,
-      exportId: task.id,
-      purpose: null,
-      outcome: 'allowed',
-    });
+    // 8. 成功审计（业务结果持久化之后才记录 allowed；privileged 仅平台级作用域为 true）。
+    // 审计为尽力而为副作用：与通知同口径隔离——审计通道故障不得回滚已持久化的业务结果，
+    // 也不得使命令向上抛错导致任务管道重试（幂等重放路径不重审，见 JSDoc 评审⑧）；
+    // 审计通道的可靠性由生产适配器承担（落盘失败须告警）。
+    try {
+      await this.audit.record({
+        at: now.toISOString(),
+        action: 'export_generate',
+        principalId: task.requestedByUserId, // 生成行为归属导出发起方（worker 触发，见 JSDoc）
+        privileged: snap.scope.kind === 'platform',
+        clubId: snap.scope.clubId,
+        jointActivityId: snap.scope.jointActivityId,
+        datasetType: snap.datasets.length > 0 ? snap.datasets.join(',') : null,
+        exportId: task.id,
+        purpose: null,
+        outcome: 'allowed',
+      });
+    } catch (err) {
+      this.logger.warn(
+        `导出生成成功审计失败（业务结果不受影响，exportId=${task.id}）：${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
 
     // 站内信通知（EXP-001：完成后站内信，不用邮件附件交付）。尽力而为副作用：
     // 业务结果已持久化，通知失败仅告警不使命令失败（生产适配器负责重试/落告警）。
@@ -431,7 +447,9 @@ export class ExportGenerationCommand {
     try {
       current = await this.repo.load(task.id);
     } catch {
-      current = null; // 重读失败不影响后续以内存态兜底尝试
+      // 重读失败按「任务已不在本 worker 名下」处理（不落失败标记、不重复写）；
+      // 失败状态由任务持有者或过期租约回收路径兜底，不在此处伪造成功/失败。
+      current = null;
     }
     const target =
       current !== null &&
@@ -475,20 +493,43 @@ export class ExportGenerationCommand {
       }
     }
 
-    await this.audit.record({
-      at: now.toISOString(),
-      action: 'export_generate',
-      principalId: task.requestedByUserId,
-      privileged: task.snapshot.data.scope.kind === 'platform',
-      clubId: task.snapshot.data.scope.clubId,
-      jointActivityId: task.snapshot.data.scope.jointActivityId,
-      datasetType:
-        task.snapshot.data.datasets.length > 0 ? task.snapshot.data.datasets.join(',') : null,
-      exportId: task.id,
-      purpose: null,
-      outcome: 'denied',
-      reason: disposableFailureReason(failure),
-    });
+    // 失败审计（export_generate denied）：与成功审计同口径隔离——审计通道故障
+    // 仅告警，不掩盖原始生成错误（原错误仍由调用方重抛）。
+    try {
+      await this.audit.record({
+        at: now.toISOString(),
+        action: 'export_generate',
+        principalId: task.requestedByUserId,
+        privileged: task.snapshot.data.scope.kind === 'platform',
+        clubId: task.snapshot.data.scope.clubId,
+        jointActivityId: task.snapshot.data.scope.jointActivityId,
+        datasetType:
+          task.snapshot.data.datasets.length > 0 ? task.snapshot.data.datasets.join(',') : null,
+        exportId: task.id,
+        purpose: null,
+        outcome: 'denied',
+        reason: disposableFailureReason(failure),
+      });
+    } catch (auditErr) {
+      this.logger.warn(
+        `导出生成失败审计记录失败（原始错误仍向上抛出，exportId=${task.id}）：${
+          auditErr instanceof Error ? auditErr.message : String(auditErr)
+        }`,
+      );
+    }
+  }
+
+  /** 尽力而为清理被作废（superseded）时已写入的导出文件（评审⑧，AUD-009 清理链） */
+  private async disposeSupersededFile(fileRef: string, exportId: string): Promise<void> {
+    try {
+      await this.disposal.dispose(fileRef);
+    } catch (err) {
+      this.logger.warn(
+        `导出结果作废后文件清理失败（exportId=${exportId}, fileRef=${fileRef}）：${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /** 幂等回放结果（DOWNLOADABLE 且已有文件哈希） */

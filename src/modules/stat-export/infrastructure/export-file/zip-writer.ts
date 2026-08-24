@@ -135,6 +135,38 @@ export interface ZipEntryInput {
   readonly data: Uint8Array | string;
 }
 
+/**
+ * ZIP 条目文件名安全校验（5.4.3，EXP-002：附件包防路径穿越 / Zip Slip）。
+ *
+ * 直接拒绝以下形态（任何调用方经 add() 写入均受本闸门约束）：
+ * - 空文件名；
+ * - 含 `..` 路径段（`../x`、`a/../b`、纯 `..`）；
+ * - 以 `/` 开头的绝对路径（`/etc/passwd`）；
+ * - 含反斜杠 `\`（Windows 路径分隔/盘符形态 `C:\x`）；
+ * - 含控制字符（0x00–0x1F、0x7F，防终端/解压器注入）。
+ *
+ * 正斜杠允许（ZIP 规范目录分隔符）；文件名须为相对路径且不越出归档根。
+ */
+export function assertSafeZipEntryName(filename: string): void {
+  if (filename.length === 0) {
+    throw new Error('EXP-002: ZIP 条目文件名不得为空');
+  }
+  if (filename.startsWith('/')) {
+    throw new Error(`EXP-002: ZIP 条目文件名不得为绝对路径：${filename}`);
+  }
+  if (filename.includes('\\')) {
+    throw new Error(`EXP-002: ZIP 条目文件名不得含反斜杠：${filename}`);
+  }
+  const segments = filename.split('/');
+  if (segments.some((seg) => seg === '..' || seg === '.')) {
+    throw new Error(`EXP-002: ZIP 条目文件名不得含路径穿越段（.. / .）：${filename}`);
+  }
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(filename)) {
+    throw new Error(`EXP-002: ZIP 条目文件名不得含控制字符：${JSON.stringify(filename)}`);
+  }
+}
+
 export interface ZipWriterOptions {
   /** 归档时间戳（缺省 new Date()；注入后输出确定） */
   readonly now?: Date;
@@ -150,11 +182,9 @@ export class ZipWriter {
     this.options = options ?? {};
   }
 
-  /** 追加一个条目；文件名重复或为空立即抛错（防呆，避免生成歧义归档） */
+  /** 追加一个条目；文件名非法（路径穿越/空/重复）立即抛错（防呆，避免生成歧义归档） */
   add(entry: ZipEntryInput): this {
-    if (!entry.filename) {
-      throw new Error('EXP-002: ZIP 条目文件名不得为空');
-    }
+    assertSafeZipEntryName(entry.filename);
     if (this.seenNames.has(entry.filename)) {
       throw new Error(`EXP-002: ZIP 条目文件名重复：${entry.filename}`);
     }

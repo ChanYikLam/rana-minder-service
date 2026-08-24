@@ -18,7 +18,7 @@ import {
   type ExportRenderPlan,
 } from '../../application/ports/export-file-renderer.port';
 import { buildExportManifest } from '../../domain/services/export-manifest.policy';
-import { ZipWriter } from './zip-writer';
+import { ZipWriter, assertSafeZipEntryName } from './zip-writer';
 import { XlsxWriter } from './xlsx-writer';
 
 /** ZIP 包内固定条目名：内层数据表与清单 */
@@ -26,6 +26,29 @@ export const EXPORT_ZIP_DATA_ENTRY = '导出数据.xlsx';
 export const EXPORT_ZIP_MANIFEST_ENTRY = 'manifest.json';
 /** 附件条目前缀（ZIP 内相对路径） */
 export const EXPORT_ZIP_ATTACHMENTS_PREFIX = 'attachments/';
+
+/**
+ * 附件 ZIP 条目文件名归一化（5.4.3，EXP-002：防 Zip Slip）。
+ *
+ * 附件 filename 来自上传/回源适配器（用户可控），不得原样拼进 ZIP 条目：
+ * - 只取最后一个路径段（按 `/` 与 `\` 均切分）作为 basename，剥离
+ *   `../`、绝对路径、Windows 盘符等路径形态；
+ * - 归一化后仍不通过 assertSafeZipEntryName（控制字符/残留穿越段）→
+ *   回退为基于 ref 的稳定名 `att-<ref 尾部>`，保证导出不因单个异常文件名
+ *   整体失败（fail-safe 且不泄露原始路径结构）。
+ */
+export function safeAttachmentEntryName(filename: string, ref: string): string {
+  const basename = filename.split(/[\\/]/).filter(Boolean).pop() ?? '';
+  if (basename.length === 0) {
+    return `att-${ref.split('/').filter(Boolean).pop() ?? 'file'}`;
+  }
+  try {
+    assertSafeZipEntryName(basename);
+    return basename;
+  } catch {
+    return `att-${ref.split('/').filter(Boolean).pop() ?? 'file'}`;
+  }
+}
 
 export class XlsxExportFileRenderer implements ExportFileRendererPort {
   async render(plan: ExportRenderPlan): Promise<{ kind: 'xlsx' | 'zip'; bytes: Uint8Array }> {
@@ -44,12 +67,15 @@ export class XlsxExportFileRenderer implements ExportFileRendererPort {
       return { kind: 'xlsx', bytes: dataBytes };
     }
 
-    // 附件包：数据表 + attachments/<filename> + manifest.json（EXP-002 清单）
+    // 附件包：数据表 + attachments/<安全 basename> + manifest.json（EXP-002 清单）
     const zip = new ZipWriter({ now: plan.now });
     zip.add({ filename: EXPORT_ZIP_DATA_ENTRY, data: dataBytes });
     for (const attachment of plan.attachments) {
       zip.add({
-        filename: `${EXPORT_ZIP_ATTACHMENTS_PREFIX}${attachment.filename}`,
+        filename: `${EXPORT_ZIP_ATTACHMENTS_PREFIX}${safeAttachmentEntryName(
+          attachment.filename,
+          attachment.ref,
+        )}`,
         data: attachment.bytes,
       });
     }

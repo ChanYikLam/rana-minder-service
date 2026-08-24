@@ -108,6 +108,19 @@ export class InMemoryExportTaskRepository implements ExportTaskRepository {
       return new Date(t.expiresAt).getTime() <= nowMs;
     });
   }
+
+  async listExpiredLeaseGenerating(nowIso: string): Promise<readonly ExportTaskAggregate[]> {
+    // 生成租约回收（5.4.4，评审⑧）：GENERATING 且 lease.until<=now（worker 崩溃遗留）。
+    const nowMs = new Date(nowIso).getTime();
+    const detach = (t: ExportTaskAggregate) =>
+      ExportTaskAggregate.fromSnapshot(new ExportTaskStateMachine(), t.toData());
+    return [...this.store.values()].map(detach).filter((t) => {
+      if (t.status !== ExportTaskStatus.GENERATING) return false;
+      const until = t.lease?.until;
+      if (until === undefined || until === null) return false;
+      return new Date(until).getTime() <= nowMs;
+    });
+  }
 }
 
 export { EXPORT_TASK_REPOSITORY };

@@ -80,6 +80,7 @@ function makeGenerationHandler(): { handler: ExportGenerationHandler; deps: Deps
     new InMemoryExportDatasetSource(),
     new XlsxExportFileRenderer(),
     store,
+    store,
     new MemoryExportRetentionConfig(),
     new InMemoryExportFactSource(),
     audit,

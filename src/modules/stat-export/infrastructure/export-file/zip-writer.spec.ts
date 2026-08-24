@@ -203,4 +203,37 @@ describe('ZipWriter — 防呆约束（EXP-002）', () => {
     const parsed = readZipArchive(bytes);
     assert.throws(() => parsed.read('missing.txt'), /不存在/);
   });
+
+  it('路径穿越文件名拒绝（Zip Slip 防线，EXP-002）', () => {
+    const badNames = [
+      '../evil.sh',
+      'a/../../evil.sh',
+      '/etc/passwd',
+      'C:\\evil.bat',
+      'dir\\evil.bat',
+      'a/./b.txt',
+      '..',
+    ];
+    for (const name of badNames) {
+      assert.throws(
+        () => new ZipWriter().add({ filename: name, data: 'x' }),
+        /EXP-002/,
+        `应拒绝条目名：${JSON.stringify(name)}`,
+      );
+    }
+  });
+
+  it('含控制字符的文件名拒绝', () => {
+    assert.throws(
+      () => new ZipWriter().add({ filename: 'bad\u0000name.txt', data: 'x' }),
+      /控制字符/,
+    );
+  });
+
+  it('合法相对路径（含子目录与点文件）放行', () => {
+    const writer = new ZipWriter({ now: new Date(0) });
+    assert.doesNotThrow(() => writer.add({ filename: '_rels/.rels', data: '<x/>' }));
+    assert.doesNotThrow(() => writer.add({ filename: 'xl/worksheets/sheet1.xml', data: '<x/>' }));
+    assert.doesNotThrow(() => writer.add({ filename: 'attachments/报名表.pdf', data: 'x' }));
+  });
 });

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { hostname } from 'node:os';
 import type { TaskHandler, TaskRecord } from '../../contracts';
 import { TaskType } from '../../contracts';
 import { ExportGenerationCommand } from '../../../../modules/stat-export/application/commands/export-generation.command';
@@ -15,9 +16,14 @@ import { ExportGenerationCommand } from '../../../../modules/stat-export/applica
  * 避免脏投递反复重试无意义失败）；命令执行失败向上抛出，交由任务管道进入
  * 失败重试/人工介入，不静默吞掉（IFC-ERR-008 版本冲突等必须可见可重试）。
  *
- * 幂等说明：生成命令按任务版本/文件哈希幂等（EXP-003），管道重复投递安全；
- * workerId 取固定 'task-worker'（单 worker 语义下租约持有者标识）。
+ * 幂等说明：生成命令按任务版本/文件哈希幂等（EXP-003），管道重复投递安全。
+ *
+ * workerId 取「主机名-进程号」（评审⑧）：多副本部署时各进程租约持有者不同，
+ * 命令层据此做租约互斥——同一任务不会被两个副本同时视为"本 worker 持有"，
+ * 避免重复渲染与重复写对象存储；固定字面量会在多副本下破坏租约排他性。
  */
+const WORKER_ID = `${hostname()}-${process.pid}`;
+
 @Injectable()
 export class ExportGenerationHandler implements TaskHandler {
   readonly taskType = TaskType.EXPORT_GENERATION;
@@ -39,7 +45,7 @@ export class ExportGenerationHandler implements TaskHandler {
 
     await this.generation.execute({
       exportId: payload.exportId,
-      workerId: 'task-worker',
+      workerId: WORKER_ID,
     });
     this.logger.log(
       `ExportGenerationHandler 导出生成任务处理完成: taskId=${task.taskId}, exportId=${payload.exportId}`,
