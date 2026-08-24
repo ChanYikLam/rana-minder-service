@@ -165,6 +165,34 @@ describe('HttpCasdoorGroupAdapter', () => {
     assert.equal(groupUrls, 1);
   });
 
+  it('getGroupMembers：读失败且元数据未携带成员字段 → 上抛（不把读失败误判为无人）', async () => {
+    // get-group 元数据无 users 字段（memberIds=[]），get-group-users 又 502：
+    // 无任何真实成员依据，必须上抛而非回落 [] （评审：228-240）
+    const { adapter } = makeFetch((url) => {
+      if (isGroupUrl(url))
+        return { status: 200, body: { id: 'g-1', owner: 'club-acm', name: '宣传部' } };
+      if (isMembersUrl(url)) return { status: 502, body: {} };
+      return { status: 200, body: {} };
+    });
+    await assert.rejects(
+      () => adapter.getGroupMembers({ owner: 'club-acm', name: '宣传部' }),
+      /get-group-users failed/,
+    );
+  });
+
+  it('getGroupMembers：2xx 但成员响应非数组且元数据无成员字段 → 上抛', async () => {
+    const { adapter } = makeFetch((url) => {
+      if (isGroupUrl(url))
+        return { status: 200, body: { id: 'g-1', owner: 'club-acm', name: '宣传部' } };
+      if (isMembersUrl(url)) return { status: 200, body: { unexpected: true } };
+      return { status: 200, body: {} };
+    });
+    await assert.rejects(
+      () => adapter.getGroupMembers({ owner: 'club-acm', name: '宣传部' }),
+      /get-group-users failed/,
+    );
+  });
+
   it('writeMembership：Group 不存在 → failure；5xx → unknown 可重试', async () => {
     const missing = makeFetch(() => ({ status: 404, body: {} }));
     const r1 = await missing.adapter.writeMembership({

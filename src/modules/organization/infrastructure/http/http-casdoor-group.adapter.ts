@@ -50,6 +50,13 @@ interface RawGroup {
   [key: string]: unknown;
 }
 
+/**
+ * 适配器内部映射结果：hasMemberList 标记 get-group 响应是否确实携带了
+ * membersField 成员数组。用于收紧 getGroupMembers 的回落口径——只有元数据
+ * 真实携带过成员列表时才允许作为读失败的回落依据（评审：228-240）。
+ */
+type MappedCasdoorGroup = CasdoorGroupInfo & { readonly hasMemberList?: boolean };
+
 export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
   private readonly base: string;
   private readonly authHeader: string;
@@ -118,16 +125,20 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
     }
   }
 
-  private mapGroup(raw: RawGroup, opts?: { readable?: boolean }): CasdoorGroupInfo | null {
+  private mapGroup(raw: RawGroup, opts?: { readable?: boolean }): MappedCasdoorGroup | null {
     if (typeof raw?.id !== 'string' || typeof raw?.name !== 'string') return null;
     const parentOwner = typeof raw.parentId === 'string' ? raw.parentId.split('/')[0] : null;
     const parentName =
       typeof raw.parentId === 'string' ? raw.parentId.split('/').slice(1).join('/') : null;
-    const memberIds = Array.isArray(raw[this.membersField])
+    // 成员字段是否真实携带（数组）必须与"空列表"区分：前者可作为读失败的
+    // 回落依据，后者只是元数据缺省，不得伪装成"无人"
+    const memberList = Array.isArray(raw[this.membersField])
       ? (raw[this.membersField] as Array<{ id?: string }>)
-          .map((u) => u.id)
-          .filter((id): id is string => typeof id === 'string')
-      : [];
+      : null;
+    const memberIds =
+      memberList === null
+        ? []
+        : memberList.map((u) => u.id).filter((id): id is string => typeof id === 'string');
     // 用途推断（ORG-011/012）：Casdoor Group 无原生用途语义，精确用途以本地
     // GroupMappingRegistry 登记为准；目录展示兜底为 department（保守缺省）。
     return {
@@ -143,6 +154,7 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
       memberIds,
       readable: opts?.readable ?? true,
       deleted: false,
+      ...(memberList !== null ? { hasMemberList: true as const } : {}),
     };
   }
 
@@ -228,16 +240,20 @@ export class HttpCasdoorGroupAdapter implements CasdoorGroupPort {
       `/get-group-users?id=${encodeURIComponent(group.stableId)}`,
       { method: 'GET' },
     );
-    if (ok && status >= 200 && status < 300) {
-      if (!Array.isArray(data)) return group.memberIds;
+    if (ok && status >= 200 && status < 300 && Array.isArray(data)) {
       return (data as Array<{ id?: string }>)
         .map((u) => u.id)
         .filter((id): id is string => typeof id === 'string');
     }
-    // 读失败 fail-closed：回落 Group 元数据内嵌成员（仍拿不到则空集），
-    // 不把"读不到"伪装成"无人"（失权检测交由对账 no_access 分支）。
-    // 复用顶部已取到的 group，避免重复 fetch 同一 Group。
-    return group.memberIds;
+    // 读失败/成员响应畸形时的回落口径收紧（评审：228-240，与 readback 的
+    // "不吞异常上抛"语义对齐）：仅当 get-group 元数据确实携带过成员数组
+    // （同一请求内的真实实况）才允许回落复用；元数据缺省成员字段时不存在
+    // 任何真实依据 —— 上抛瞬时故障，严禁把"读失败"误判为当前成员状态
+    // （此前无条件回落会把缺省 [] 当作"无人"，remove 回读门控可能恒真误报成功）。
+    if ((group as MappedCasdoorGroup).hasMemberList === true) {
+      return group.memberIds;
+    }
+    throw new Error(`casdoor get-group-users failed (status=${status || 'network'})`);
   }
 
   async writeMembership(input: {

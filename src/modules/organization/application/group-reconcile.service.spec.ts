@@ -192,4 +192,45 @@ describe('GroupReconcileService（真实检测语义，#68 验收）', () => {
     assert.equal(r.kind, 'deleted');
     assert.equal(r.readonlyRenamedOnly, false);
   });
+
+  it('多 Group 同时仅改名：listGroups 全量目录仅拉取一次（同轮对账复用）', async () => {
+    const { casdoor, service } = await setup();
+    let listCalls = 0;
+    const spy = casdoor as unknown as { listGroups(): Promise<CasdoorGroupInfo[]> };
+    spy.listGroups = async () => {
+      listCalls += 1;
+      return [
+        {
+          stableId: 'g-0',
+          ref: { owner: 'club-acm', name: 'ACM社团（新名）' },
+          displayName: 'ACM社团（新名）',
+          path: '/x',
+          parentRef: null,
+          memberIds: [],
+          readable: true,
+          deleted: false,
+        },
+        {
+          stableId: 'g-1',
+          ref: { owner: 'club-acm', name: '宣传部（新名）' },
+          displayName: '宣传部（新名）',
+          path: '/y',
+          parentRef: { owner: 'club-acm', name: 'ACM社团（新名）' },
+          memberIds: [],
+          readable: true,
+          deleted: false,
+        },
+      ];
+    };
+    service.setParentBaselines([
+      { owner: 'club-acm', name: 'ACM社团', parentOwner: null, parentName: null, stableId: 'g-0' },
+      { owner: 'club-acm', name: '宣传部', parentOwner: null, parentName: null, stableId: 'g-1' },
+    ]);
+    await casdoor.simulateAnomaly({ owner: 'club-acm', name: 'ACM社团' }, 'deleted');
+    await casdoor.simulateAnomaly({ owner: 'club-acm', name: '宣传部' }, 'deleted');
+
+    const r = await service.reconcileClub('club-1');
+    assert.deepEqual(r, { anomaly: false, kind: null, readonlyRenamedOnly: true });
+    assert.equal(listCalls, 1); // 两个失联 ref 共享一次目录拉取
+  });
 });

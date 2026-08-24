@@ -18,6 +18,7 @@
 
 import type {
   ClubStore,
+  CasdoorGroupInfo,
   CasdoorGroupPort,
   GroupMappingRegistry,
   ReconcileAnomalyKind,
@@ -78,12 +79,21 @@ export class GroupReconcileService implements ReconcilePort {
       refs.set(`${club.leaderGroup.owner}/${club.leaderGroup.name}`, club.leaderGroup);
     }
 
+    // 目录懒加载缓存：同一轮对账内多个失联 ref 复用一次 listGroups 结果，
+    // 避免"每个失联 Group 都全量拉目录"的 N 次读取（评审：84-90）。
+    // 仅在首个需要改名判定的 ref 上触发；基线未提供 stableId 时不拉取。
+    let directoryPromise: Promise<CasdoorGroupInfo[]> | null = null;
+    const loadDirectoryOnce = (): Promise<CasdoorGroupInfo[]> => {
+      if (directoryPromise === null) directoryPromise = this.deps.casdoor.listGroups();
+      return directoryPromise;
+    };
+
     let renamedOnly = false;
     for (const [key, ref] of refs) {
       const group = await this.deps.casdoor.getGroupByRef(ref);
       if (group === null || group.deleted) {
         // 先做"仅改名"判定：同 stableId 存活 Group 在另一 ref 下 → 不算异常
-        if (await this.isRenamedOnly(key)) {
+        if (await this.isRenamedOnly(key, loadDirectoryOnce)) {
           renamedOnly = true;
           continue;
         }
@@ -108,12 +118,16 @@ export class GroupReconcileService implements ReconcilePort {
   /**
    * 仅改名判定：该 ref 的基线携带 stableId，且 Casdoor 目录中存在同 stableId、
    * 未删除、且 ref 与注册名不一致的存活 Group。找不到/未提供 stableId → false
-   * （调用方按原口径报 deleted，保守不吞异常）。
+   * （调用方按原口径报 deleted，保守不吞异常）。目录经 loadDirectory 复用，
+   * 同一轮对账只全量拉取一次（评审：84-90）。
    */
-  private async isRenamedOnly(key: string): Promise<boolean> {
+  private async isRenamedOnly(
+    key: string,
+    loadDirectory: () => Promise<CasdoorGroupInfo[]>,
+  ): Promise<boolean> {
     const baseline = this.baselines.get(key);
     if (baseline?.stableId === undefined) return false;
-    const directory = await this.deps.casdoor.listGroups();
+    const directory = await loadDirectory();
     return directory.some(
       (g) =>
         !g.deleted &&
