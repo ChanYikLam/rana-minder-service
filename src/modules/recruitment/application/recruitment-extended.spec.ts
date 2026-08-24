@@ -154,6 +154,14 @@ describe('recruitment 4.4 剩余能力（通道/补救/路径/面试选时）', 
     });
     assert.equal(result.kind, RemedyWindowKind.PERSONAL_RECOVERY);
     assert.equal(result.targetApplicationIds.length, 1);
+    // Info 修复断言：补救窗口已落库（此前为瞬时副作用、windowId 未持久化）
+    const persisted = await repo.loadRemedyWindow(result.windowId);
+    assert.ok(persisted, '补救窗口应已持久化');
+    assert.equal(persisted!.kind, RemedyWindowKind.PERSONAL_RECOVERY);
+    assert.equal(persisted!.activityId, activityId);
+    assert.deepEqual([...persisted!.targetApplicationIds], ['app-1']);
+    assert.equal(persisted!.deadline.getTime(), nowOffset(2).getTime());
+    assert.equal(persisted!.createdBy, ACTOR);
     // 身份异常顺延：非身份异常申请被拒
     await assert.rejects(
       remedy.execute({

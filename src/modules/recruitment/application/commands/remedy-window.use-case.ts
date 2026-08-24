@@ -14,6 +14,7 @@
  */
 
 import { Application } from '../../domain/models/application';
+import { RemedyWindow } from '../../domain/models/remedy-window';
 import type { RecruitmentRepository } from '../ports/recruitment-repository.port';
 import type { RecruitmentAuthorizationPort } from '../ports/recruitment-authorization.port';
 import { recruitmentErrors } from '../errors';
@@ -108,6 +109,21 @@ export class DefaultCreateRemedyWindowUseCase implements CreateRemedyWindowUseCa
       // RULE_TIGHTENING：受影响申请补窗（命令层守卫窗口有效性，不切换申请状态，
       // 不自动淘汰——REC-007/REC-044 语义）
     }
+
+    // 开窗动作落库（此前为瞬时副作用、windowId 未持久化）：补救窗口为不可变
+    // 事件记录，供审计与追踪（REC-003/REC-044）
+    await this.repository.saveRemedyWindow(
+      RemedyWindow.create({
+        windowId,
+        activityId: input.activityId,
+        kind: input.kind,
+        targetApplicationIds: input.targetApplicationIds,
+        deadline: input.deadline,
+        reason: input.reason,
+        createdBy: input.actor,
+        createdAt: input.now,
+      }).toSnapshot(),
+    );
 
     return {
       windowId,

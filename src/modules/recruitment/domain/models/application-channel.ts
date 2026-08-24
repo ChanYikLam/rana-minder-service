@@ -126,6 +126,12 @@ export class ApplicationChannel {
    * 新截止持久化到 deadline（报名用例按窗口截止校验）。
    */
   reopen(machine: ApplicationChannelStateMachine, newDeadline: Date, now: Date): boolean {
+    // 防御纵深：截止守卫收口到聚合（SRS-SM-REC-002 拒绝条件
+    // 「新截止缺失/越界/不晚于重开时刻」）。状态机仅校验 CLOSED→OPEN 必须携带
+    // 重开标志，此处直接校验新截止严格晚于重开时刻，杜绝调用方绕过命令层校验。
+    if (newDeadline.getTime() <= now.getTime()) {
+      return false;
+    }
     if (
       !this.transition(machine, ApplicationChannelEvent.OPEN, now, {
         newDeadlineStrictlyAfterNow: true,

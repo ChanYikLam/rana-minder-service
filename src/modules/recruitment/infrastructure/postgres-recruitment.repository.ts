@@ -17,6 +17,7 @@ import type { ApplicationChannelSnapshot } from '../domain/models/application-ch
 import type { ApplicationSnapshot } from '../domain/models/application';
 import type { DepartmentPathSnapshot } from '../domain/models/department-path';
 import type { InterviewRecordSnapshot } from '../domain/models/interview-record';
+import type { RemedyWindowSnapshot } from '../domain/models/remedy-window';
 
 interface ActivityRow {
   id: string;
@@ -90,6 +91,16 @@ interface InterviewRow {
   evaluations: unknown;
   created_at: Date;
   updated_at: Date;
+}
+interface RemedyWindowRow {
+  window_id: string;
+  activity_id: string;
+  kind: string;
+  target_application_ids: unknown;
+  deadline: Date;
+  reason: string;
+  created_by: string;
+  created_at: Date;
 }
 
 function parseJsonb<T>(value: unknown): T {
@@ -183,6 +194,19 @@ export function interviewRowToSnapshot(row: InterviewRow): InterviewRecordSnapsh
     evaluations: parseJsonb(row.evaluations),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+export function remedyWindowRowToSnapshot(row: RemedyWindowRow): RemedyWindowSnapshot {
+  return {
+    windowId: row.window_id,
+    activityId: row.activity_id,
+    kind: row.kind as RemedyWindowSnapshot['kind'],
+    targetApplicationIds: parseJsonb<string[]>(row.target_application_ids),
+    deadline: row.deadline,
+    reason: row.reason,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
   };
 }
 
@@ -544,5 +568,38 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
       [roundId],
     );
     return rows.map(interviewRowToSnapshot);
+  }
+
+  // ----- 补救窗口 -----
+  async saveRemedyWindow(s: RemedyWindowSnapshot): Promise<void> {
+    await this.db.query(
+      this.uow.active,
+      `INSERT INTO remedy_windows
+          (window_id, activity_id, kind, target_application_ids, deadline, reason, created_by, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        ON CONFLICT (window_id) DO UPDATE SET
+          activity_id = EXCLUDED.activity_id, kind = EXCLUDED.kind,
+          target_application_ids = EXCLUDED.target_application_ids, deadline = EXCLUDED.deadline,
+          reason = EXCLUDED.reason, created_by = EXCLUDED.created_by, created_at = EXCLUDED.created_at`,
+      [
+        s.windowId,
+        s.activityId,
+        s.kind,
+        JSON.stringify(s.targetApplicationIds),
+        s.deadline,
+        s.reason,
+        s.createdBy,
+        s.createdAt,
+      ],
+    );
+  }
+  async loadRemedyWindow(windowId: string): Promise<RemedyWindowSnapshot | null> {
+    const rows = await this.db.query<RemedyWindowRow>(
+      this.uow.active,
+      `SELECT window_id, activity_id, kind, target_application_ids, deadline, reason, created_by, created_at
+          FROM remedy_windows WHERE window_id = $1`,
+      [windowId],
+    );
+    return rows[0] ? remedyWindowRowToSnapshot(rows[0]) : null;
   }
 }
