@@ -29,7 +29,8 @@ export class FormBackedRecruitmentForm implements RecruitmentFormPort {
   }): Promise<RecruitmentFormLoadResult> {
     const snapshot = await this.submissions.load(input.submissionId);
     if (snapshot === null) {
-      return { outcome: 'not-found', reason: 'submission-missing' };
+      // 统一走共享校验函数（评审意见：唯一入口，not-found/submission-missing 语义单一）
+      return resolveRecruitmentFormSubmission(null, input);
     }
     // 仅透出招新所需字段（不泄露答案明细）；formId/versionNumber 供共享校验使用
     const view: RecruitmentFormSubmissionView = {
