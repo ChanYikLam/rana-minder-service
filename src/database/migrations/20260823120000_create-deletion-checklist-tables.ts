@@ -69,7 +69,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
   await runner.query(`ALTER TABLE public.deletion_checklist ENABLE ROW LEVEL SECURITY`);
   // 幂等重入：先 DROP POLICY IF EXISTS 再 CREATE，避免全量 up 重跑时
   // "policy already exists" 失败（OPS-UPG-002 幂等重入；与 down() 对称）
-  await runner.query(`DROP POLICY IF EXISTS public.p_deletion_checklist_all`);
+  await runner.query(`DROP POLICY IF EXISTS p_deletion_checklist_all ON public.deletion_checklist`);
   await runner.query(`
     CREATE POLICY p_deletion_checklist_all ON public.deletion_checklist
       FOR ALL TO PUBLIC USING (true) WITH CHECK (true)
@@ -77,7 +77,7 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
 }
 
 export async function down(runner: MigrationQueryRunner): Promise<void> {
-  await runner.query(`DROP POLICY IF EXISTS public.p_deletion_checklist_all`);
+  await runner.query(`DROP POLICY IF EXISTS p_deletion_checklist_all ON public.deletion_checklist`);
   await runner.query(`ALTER TABLE public.deletion_checklist DISABLE ROW LEVEL SECURITY`);
   await runner.query(`DROP INDEX IF EXISTS public.idx_deletion_checklist_scope`);
   await runner.query(`DROP INDEX IF EXISTS public.idx_deletion_checklist_completed`);
