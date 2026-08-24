@@ -42,6 +42,7 @@ describe('postgres recruitment repository row mapping', () => {
       status: 'PAUSED',
       open_at: NOW,
       close_at: null,
+      deadline: null,
       min_choices: 1,
       max_choices: 1,
       created_at: NOW,

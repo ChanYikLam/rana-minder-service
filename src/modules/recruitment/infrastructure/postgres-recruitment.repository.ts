@@ -37,6 +37,7 @@ interface ChannelRow {
   status: string;
   open_at: Date | null;
   close_at: Date | null;
+  deadline: Date | null;
   min_choices: number;
   max_choices: number;
   created_at: Date;
@@ -120,6 +121,7 @@ export function channelRowToSnapshot(row: ChannelRow): ApplicationChannelSnapsho
     status: row.status as ApplicationChannelSnapshot['status'],
     openAt: row.open_at,
     closeAt: row.close_at,
+    deadline: row.deadline,
     minChoices: row.min_choices,
     maxChoices: row.max_choices,
     createdAt: row.created_at,
@@ -252,7 +254,7 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         ON CONFLICT (id) DO UPDATE SET
           activity_id = EXCLUDED.activity_id, club_id = EXCLUDED.club_id, status = EXCLUDED.status,
-          open_at = EXCLUDED.open_at, close_at = EXCLUDED.close_at, min_choices = EXCLUDED.min_choices,
+          open_at = EXCLUDED.open_at, close_at = EXCLUDED.close_at, deadline = EXCLUDED.deadline, min_choices = EXCLUDED.min_choices,
           max_choices = EXCLUDED.max_choices, updated_at = EXCLUDED.updated_at`,
       [
         s.id,
