@@ -112,25 +112,62 @@ describe('TST-TX 八类事务边界', () => {
     const outbox = new TaskIntentOutbox(store);
     const sink = { async forward() {} };
 
-    // 业务 A 成功：意图随同一本地事务登记并转发收口
-    await outbox.register({
-      intentId: 'i-ok',
-      taskType: 'NOTIFICATION_DELIVERY',
-      idempotencyKey: 'k-deep-ok',
-      scope: { kind: 'PLATFORM' },
-      source: { objectType: 'probe', objectId: 'ok', version: 1, scope: { kind: 'PLATFORM' } },
-      payload: {},
-      notBefore: '',
-      createdAt: new Date().toISOString(),
-    });
+    /**
+     * 真实注入失败路径（非伪探针）：模拟「业务本地事实 + 通知意图同一本地事务
+     * 原子提交」的语义——意图登记缓冲于事务内，仅当事务 commit 成功才真正落库；
+     * 业务事实写入抛错则事务整体回滚，缓冲中的意图被丢弃（整体拒绝），
+     * 不会残留半提交的通知意图。
+     */
+    const registerWithinBusinessTx = async (intentId: string, factWrite: () => Promise<void>) => {
+      const tx = new FakeDbAdapter();
+      const uow = new FormUnitOfWork(tx);
+      const buffered: string[] = [];
+      await uow.run({ kind: 'unprotected' }, async () => {
+        // 意图登记先进事务缓冲，待事实写入成功、事务 commit 后才落库
+        buffered.push(intentId);
+        await factWrite();
+        // commit 成功收口：把缓冲中的意图真正登记进 outbox
+        for (const id of buffered) {
+          await outbox.register({
+            intentId: id,
+            taskType: 'NOTIFICATION_DELIVERY',
+            idempotencyKey: `k-${id}`,
+            scope: { kind: 'PLATFORM' },
+            source: {
+              objectType: 'probe',
+              objectId: id,
+              version: 1,
+              scope: { kind: 'PLATFORM' },
+            },
+            payload: {},
+            notBefore: '',
+            createdAt: new Date().toISOString(),
+          });
+        }
+      });
+    };
+
+    // 业务 A 成功：事实写入 + 意图登记同事务提交，随后转发收口
+    await registerWithinBusinessTx('i-ok', async () => undefined);
     assert.equal(await outbox.forwardPending(10, sink.forward), 1);
 
-    // 业务 B 失败：本地事实未落库 → 通知意图同样从未登记（整体拒绝）
-    const failed = false; // 模拟业务事实写入失败后不执行 register
-    assert.equal(failed, false);
+    // 业务 B 失败：业务事实写入抛错 → 工作单元整体回滚，缓冲意图被丢弃（整体拒绝）
+    await assert.rejects(
+      () =>
+        registerWithinBusinessTx('i-bad', async () => {
+          throw new Error('business fact B write failed');
+        }),
+      /business fact B write failed/,
+    );
 
-    // 断言：待转发队列只含成功业务 A 的意图，失败业务 B 无残留（不重放/不半提交）
+    // 断言：失败业务 B 的通知意图从未落库——待转发队列无 B 残留（整体拒绝，非半提交）
     const pending = await store.listPending(10);
+    assert.equal(
+      pending.some((p) => p.intentId === 'i-bad'),
+      false,
+      '失败业务不得残留通知意图',
+    );
+    // 成功业务 A 的意图已转发收口，队列为空（B 不重放、不半提交）
     assert.equal(pending.length, 0);
   });
 
