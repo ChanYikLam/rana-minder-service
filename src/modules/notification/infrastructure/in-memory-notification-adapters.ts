@@ -333,6 +333,14 @@ export class InMemoryChannelDeliveryAttemptRepository implements ChannelDelivery
     return updated;
   }
 
+  async claimForRetry(attemptId: string): Promise<ChannelDeliveryAttemptModel | null> {
+    const existing = this.attemptStore.get(attemptId);
+    if (!existing || existing.status !== 'FAILED_RETRY') return null;
+    const claimed: ChannelDeliveryAttemptModel = { ...existing, status: 'PENDING' };
+    this.attemptStore.set(attemptId, claimed);
+    return claimed;
+  }
+
   async findRetryableAttempts(limit: number): Promise<readonly ChannelDeliveryAttemptModel[]> {
     return [...this.attemptStore.values()]
       .filter((a) => a.status === 'FAILED_RETRY')
@@ -356,7 +364,11 @@ export class InMemoryChannelDeliveryAttemptRepository implements ChannelDelivery
 // ---------------------------------------------------------------------------
 
 export class InMemoryTemplateSnapshotService implements TemplateSnapshotService {
-  async snapshotTemplate(kind: string, _channel: 'INBOX' | 'EMAIL'): Promise<string> {
+  async snapshotTemplate(
+    kind: string,
+    _channel: 'INBOX' | 'EMAIL',
+    _scope?: { readonly type: string; readonly clubId: string | null },
+  ): Promise<string> {
     return `tmpl-${kind}-${Date.now()}`;
   }
 }

@@ -16,6 +16,7 @@ import {
   PostgresKillSwitchRepository,
   PostgresEmailTemplateStore,
   PostgresTemplateSnapshotService,
+  PostgresChannelDeliveryAttemptRepository,
 } from './postgres-notification-adapters';
 import type { NotificationFactModel } from '../domain/models/notification-fact.model';
 
@@ -160,5 +161,184 @@ describe('Postgres 通知基础设施（4.3 收口）', () => {
     const snapshot = new PostgresTemplateSnapshotService(store);
     const id = await snapshot.snapshotTemplate('interview', 'EMAIL');
     assert.match(id, /^tmpl-interview-/);
+  });
+
+  it('updateAttempt：UPDATE 必须落 attempt_number（C2 防回归，退避递增依赖）', async () => {
+    const calls: { sql: string; params: readonly unknown[] }[] = [];
+    const db = {
+      beginTransaction: async () => ({ tx: 1 }),
+      commit: async () => undefined,
+      rollback: async () => undefined,
+      setRlsContext: async () => undefined,
+      clearRlsContext: async () => undefined,
+      query: async <T>(_tx: unknown, sql: string, params: readonly unknown[]): Promise<T[]> => {
+        calls.push({ sql, params });
+        if (sql.includes('FROM channel_delivery_attempts WHERE attempt_id')) {
+          return [
+            {
+              attempt_id: 'a1',
+              fact_id: 'f1',
+              snapshot_id: null,
+              recipient_id: null,
+              channel: 'EMAIL',
+              status: 'FAILED_RETRY',
+              attempt_number: 1,
+              channel_message_id: null,
+              target_address: 'stu@example.com',
+              template_version_id: null,
+              sender_identity: null,
+              email_subject: null,
+              email_body: null,
+              first_failed_at: null,
+              payload: JSON.stringify({
+                responseCategory: 'TEMPORARY_FAILURE',
+                sanitizedError: null,
+                nextRetryAt: null,
+                completedAt: null,
+                version: 1,
+              }),
+              created_at: new Date('2026-08-25T00:00:00.000Z'),
+            },
+          ] as T[];
+        }
+        return [] as T[];
+      },
+    };
+    const repo = new PostgresChannelDeliveryAttemptRepository(db as never);
+    await repo.updateAttempt('a1', { status: 'DELIVERED', attemptNumber: 2, completedAt: '2026-08-25T01:00:00.000Z' });
+    const upd = calls.find((c) => c.sql.includes('UPDATE channel_delivery_attempts'));
+    assert.ok(upd, '必须发出 UPDATE');
+    assert.match(upd!.sql, /attempt_number = \$3/, 'UPDATE 必须包含 attempt_number 列（C2）');
+    assert.equal(upd!.params.length, 6, '无冗余占位符（I1：$2 冗余已去除）');
+    assert.equal(upd!.params[2], 2, 'attempt_number 新值必须落库');
+  });
+
+  it('claimForRetry：仅 FAILED_RETRY 可原子抢占为 PENDING（W1 防并发重复发送）', async () => {
+    const calls: { sql: string; params: readonly unknown[] }[] = [];
+    const db = {
+      beginTransaction: async () => ({ tx: 1 }),
+      commit: async () => undefined,
+      rollback: async () => undefined,
+      setRlsContext: async () => undefined,
+      clearRlsContext: async () => undefined,
+      query: async <T>(_tx: unknown, sql: string, params: readonly unknown[]): Promise<T[]> => {
+        calls.push({ sql, params });
+        if (sql.includes('UPDATE channel_delivery_attempts') && sql.includes("status = 'PENDING'")) {
+          return [
+            {
+              attempt_id: 'a1',
+              fact_id: 'f1',
+              snapshot_id: null,
+              recipient_id: null,
+              channel: 'EMAIL',
+              status: 'PENDING',
+              attempt_number: 1,
+              channel_message_id: null,
+              target_address: 'stu@example.com',
+              template_version_id: null,
+              sender_identity: null,
+              email_subject: null,
+              email_body: null,
+              first_failed_at: null,
+              payload: JSON.stringify({
+                responseCategory: null,
+                sanitizedError: null,
+                nextRetryAt: null,
+                completedAt: null,
+                version: 1,
+              }),
+              created_at: new Date('2026-08-25T00:00:00.000Z'),
+            },
+          ] as T[];
+        }
+        return [] as T[];
+      },
+    };
+    const repo = new PostgresChannelDeliveryAttemptRepository(db as never);
+    const claimed = await repo.claimForRetry('a1');
+    const upd = calls.find((c) => c.sql.includes('UPDATE channel_delivery_attempts'));
+    assert.ok(upd, '必须发出抢占 UPDATE');
+    assert.match(upd!.sql, /status = 'FAILED_RETRY'/, '抢占条件必须限定 FAILED_RETRY（W1）');
+    assert.equal(claimed?.status, 'PENDING');
+  });
+
+  it('saveFactWithSnapshots：去重键冲突抛出领域错误（NTF-003 幂等入口）', async () => {
+    const db = {
+      beginTransaction: async () => ({ tx: 1 }),
+      commit: async () => undefined,
+      rollback: async () => undefined,
+      setRlsContext: async () => undefined,
+      clearRlsContext: async () => undefined,
+      query: async <T>(_tx: unknown, _sql: string, _params: readonly unknown[]): Promise<T[]> =>
+        [{ n: 1 }] as T[],
+    };
+    const repo = new PostgresNotificationRepository(db as never);
+    await assert.rejects(
+      repo.saveFactWithSnapshots(
+        {
+          logicalEventId: 'evt-1',
+          sourceObjectId: 'obj-1',
+          sourceObjectVersion: 1,
+          sourceCommandId: 'cmd-1',
+          eventType: 'interview',
+          eventTime: NOW.toISOString(),
+          summary: 's',
+          targetObjectRef: null,
+          scope: { type: 'PLATFORM', clubId: null },
+        },
+        [
+          {
+            snapshotId: 'snap-1',
+            factId: '',
+            recipientId: 'stu-1',
+            reason: '本人',
+            scope: { type: 'PLATFORM', clubId: null },
+            dedupKey: 'evt-1:stu-1',
+            createdAt: NOW.toISOString(),
+          },
+        ],
+      ),
+      /去重键冲突/,
+    );
+  });
+
+  it('模板快照：CLUB 作用域命中社团模板，PLATFORM 命中平台模板（W2）', async () => {
+    const calls: { sql: string; params: readonly unknown[] }[] = [];
+    const db = {
+      beginTransaction: async () => ({ tx: 1 }),
+      commit: async () => undefined,
+      rollback: async () => undefined,
+      setRlsContext: async () => undefined,
+      clearRlsContext: async () => undefined,
+      query: async <T>(_tx: unknown, sql: string, params: readonly unknown[]): Promise<T[]> => {
+        calls.push({ sql, params });
+        if (sql.includes('FROM email_templates')) {
+          return [
+            {
+              template_id: 'tmpl-1',
+              scope_type: params[0],
+              scope_key: params[1],
+              kind: params[2],
+              active_version: 3,
+              versions: JSON.stringify([
+                { templateId: 'tmpl-1', version: 3, subject: 's', htmlBody: '<p>b</p>', createdBy: 'sa', createdAt: NOW.toISOString(), note: 'n' },
+              ]),
+              created_at: NOW,
+            },
+          ] as T[];
+        }
+        return [] as T[];
+      },
+    };
+    const store = new PostgresEmailTemplateStore(db as never);
+    const svc = new PostgresTemplateSnapshotService(store);
+    const clubId = await svc.snapshotTemplate('interview', 'EMAIL', { type: 'CLUB', clubId: 'club-9' });
+    const platformId = await svc.snapshotTemplate('interview', 'EMAIL', { type: 'PLATFORM', clubId: null });
+    const clubQuery = calls.find((c) => c.params[0] === 'CLUB');
+    const platformQuery = calls.find((c) => c.params[0] === 'PLATFORM');
+    assert.ok(clubQuery, 'CLUB 事实必须查询社团模板（W2）');
+    assert.equal(clubQuery!.params[1], 'club-9');
+    assert.equal(clubId, 'tmpl-1:v3');
+    assert.equal(platformId, 'tmpl-1:v3');
   });
 });

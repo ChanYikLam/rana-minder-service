@@ -18,11 +18,12 @@ export interface RecipientSnapshot {
   readonly reason: string;
   /** 作用域 */
   readonly scope: RecipientScope;
-  /**
-   * 去重键：逻辑事件＋收件人唯一。
-   * 格式：`${logicalEventId}:${recipientId}`
-   */
-  readonly dedupKey: string;
+/**
+ * 去重键：逻辑事件＋收件人唯一。
+ * 格式：`${logicalEventId}:${recipientId}`
+ * 分隔符使用 ':'（PostgreSQL text 列禁止 NUL 字节；见 4.3 收口评审 C1）。
+ */
+readonly dedupKey: string;
   /** 创建时间 */
   readonly createdAt: string;
 }
@@ -33,9 +34,9 @@ export interface RecipientScope {
   readonly clubId: string | null;
 }
 
-/** 构建去重键 */
+/** 构建去重键（逻辑事件＋收件人唯一；':' 分隔，Postgres text 可安全存储） */
 export function buildDedupKey(logicalEventId: string, recipientId: string): string {
-  return `${logicalEventId}\u0000${recipientId}`;
+  return `${logicalEventId}:${recipientId}`;
 }
 
 /** 收件人解析输入 */

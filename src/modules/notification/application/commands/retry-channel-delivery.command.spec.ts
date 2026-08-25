@@ -184,4 +184,16 @@ describe('RetryChannelDeliveryCommand（评审 #3/#1/#2）', () => {
     assert.equal(updated?.responseCategory, 'TEMPORARY_FAILURE');
     assert.ok(updated?.nextRetryAt, '应记录下次重试时间');
   });
+
+  it('已被其他 worker 抢占（PENDING）→ 不发送、不覆盖（W1 防并发重复发送）', async () => {
+    await attempts.saveAttempt(makeAttempt('attempt-claimed', 'FAILED_RETRY'));
+    // 模拟另一实例已抢占：置为 PENDING
+    await attempts.updateAttempt('attempt-claimed', { status: 'PENDING' });
+
+    await command.execute('attempt-claimed');
+
+    assert.equal(email.sent.length, 0, '已被抢占的尝试不得重复发送');
+    const updated = await attempts.findAttemptById('attempt-claimed');
+    assert.equal(updated?.status, 'PENDING', '抢占状态不得被覆盖');
+  });
 });

@@ -38,13 +38,13 @@ export class RetryChannelDeliveryCommand {
    * @param attemptId 待重试的渠道投递尝试标识
    */
   async execute(attemptId: string): Promise<void> {
-    const attempt = await this.attemptRepository.findAttemptById(attemptId);
+    // 原子抢占（W1）：仅 FAILED_RETRY 可被本 worker 抢占为 PENDING；
+    // 已被其他实例/worker 抢占（返回 null）时直接放弃，避免并发重复发送
+    const attempt = await this.attemptRepository.claimForRetry(attemptId);
     if (!attempt) {
-      this.logger.warn(`投递尝试不存在: ${attemptId}`);
-      return;
-    }
-    if (attempt.status !== 'FAILED_RETRY') {
-      this.logger.warn(`投递尝试不在可重试状态: attemptId=${attemptId}, status=${attempt.status}`);
+      this.logger.warn(
+        `投递尝试不可抢占（不存在或不在 FAILED_RETRY）: attemptId=${attemptId}`,
+      );
       return;
     }
 

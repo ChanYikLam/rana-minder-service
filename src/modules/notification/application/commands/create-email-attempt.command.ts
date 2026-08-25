@@ -102,8 +102,12 @@ export class CreateEmailAttemptCommand {
       return null;
     }
 
-    // 冻结模板版本
-    const templateVersionId = await this.templateService.snapshotTemplate(input.eventType, 'EMAIL');
+    // 冻结模板版本（按事实作用域选模板：CLUB 命中社团模板，评审 W2）
+    const templateVersionId = await this.templateService.snapshotTemplate(
+      input.eventType,
+      'EMAIL',
+      fact.scope,
+    );
 
     const now = new Date().toISOString();
     const attempt: ChannelDeliveryAttemptModel = {

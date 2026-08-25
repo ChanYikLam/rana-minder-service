@@ -209,7 +209,15 @@ export interface ChannelDeliveryAttemptRepository {
   ): Promise<ChannelDeliveryAttemptModel>;
 
   /**
+   * 原子抢占一次重试（W1：多实例并发防重复发送）。
+   * 仅当尝试处于 FAILED_RETRY 时置为 PENDING 并返回新状态；
+   * 已被其他 worker 抢占（状态已变）时返回 null，调用方不得发送。
+   */
+  claimForRetry(attemptId: string): Promise<ChannelDeliveryAttemptModel | null>;
+
+  /**
    * 查询失败重试中的尝试。
+   * 含超时恢复：PENDING 超过恢复窗口（worker 崩溃遗留）视为可重新抢占。
    */
   findRetryableAttempts(limit: number): Promise<readonly ChannelDeliveryAttemptModel[]>;
 
@@ -233,8 +241,14 @@ export interface TemplateSnapshotService {
   /**
    * 冻结模板版本并返回版本标识。
    * 发送时冻结模板版本与发件身份（NTF-008/009）。
+   * scope 用于选择作用域模板（W2：CLUB 事实应命中社团模板；
+   * 缺省或非 CLUB 作用域回退平台模板）。
    */
-  snapshotTemplate(kind: string, channel: 'INBOX' | 'EMAIL'): Promise<string>;
+  snapshotTemplate(
+    kind: string,
+    channel: 'INBOX' | 'EMAIL',
+    scope?: { readonly type: string; readonly clubId: string | null },
+  ): Promise<string>;
 }
 
 /**

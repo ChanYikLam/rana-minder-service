@@ -67,7 +67,9 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       payload          jsonb       NOT NULL DEFAULT '{}',
       created_at       timestamptz NOT NULL,
       updated_at       timestamptz NOT NULL,
-      CONSTRAINT uq_notification_presentation_fact_recipient UNIQUE (fact_id, recipient_id)
+      CONSTRAINT uq_notification_presentation_fact_recipient UNIQUE (fact_id, recipient_id),
+      CONSTRAINT ck_notification_inbox_status CHECK (status IN
+        ('READ','UNREAD','PROCESSED','HIDDEN'))
     )
   `);
   await runner.query(`
@@ -104,7 +106,9 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
       first_failed_at     timestamptz NULL,
       payload             jsonb       NOT NULL DEFAULT '{}',
       created_at          timestamptz NOT NULL,
-      updated_at          timestamptz NOT NULL
+      updated_at          timestamptz NOT NULL,
+      CONSTRAINT ck_channel_delivery_attempts_status CHECK (status IN
+        ('PENDING','DELIVERED','FAILED_RETRY','PERMANENT_FAILURE'))
     )
   `);
   await runner.query(`

@@ -57,7 +57,12 @@ export class ManualResendCommand {
       return null;
     }
 
-    const templateVersionId = await this.templateService.snapshotTemplate(eventType, 'EMAIL');
+    // 冻结模板版本（按事实作用域选模板：CLUB 命中社团模板，评审 W2）
+    const templateVersionId = await this.templateService.snapshotTemplate(
+      eventType,
+      'EMAIL',
+      fact.scope,
+    );
 
     // 回溯收件人快照，保证投递尝试与快照的关联完整性（DATA-NTF-001）。
     // 人工补发不传入收件人标识，取该事实的首条收件人快照作为关联引用；

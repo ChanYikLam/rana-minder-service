@@ -725,15 +725,17 @@ export class PostgresChannelDeliveryAttemptRepository implements ChannelDelivery
       const current = PostgresChannelDeliveryAttemptRepository.fromRow(rows[0]);
       const merged: ChannelDeliveryAttemptModel = { ...current, ...patch };
       const row = PostgresChannelDeliveryAttemptRepository.toRow(merged);
+      // 列全量对齐：attempt_number 必须持久化（重试退避 2^N 依赖其递增，评审 C2）；
+      // completedAt/nextRetryAt/responseCategory 等随 payload 整包更新
       await this.db.query(
         tx,
-        `UPDATE channel_delivery_attempts SET status = $3, channel_message_id = $4, first_failed_at = $5,
-           payload = $6::jsonb, updated_at = now()
+        `UPDATE channel_delivery_attempts SET status = $2, attempt_number = $3,
+           channel_message_id = $4, first_failed_at = $5, payload = $6::jsonb, updated_at = now()
           WHERE attempt_id = $1`,
         [
           attemptId,
-          '',
           row.status,
+          row.attempt_number,
           row.channel_message_id,
           row.first_failed_at,
           JSON.stringify(row.payload),
@@ -743,12 +745,33 @@ export class PostgresChannelDeliveryAttemptRepository implements ChannelDelivery
     });
   }
 
+  async claimForRetry(attemptId: string): Promise<ChannelDeliveryAttemptModel | null> {
+    return this.inTx(async (tx) => {
+      // 原子抢占：仅 FAILED_RETRY 可被抢占为 PENDING，防止多实例并发重复发送（评审 W1）
+      const rows = await this.db.query<AttemptRow>(
+        tx,
+        `UPDATE channel_delivery_attempts SET status = 'PENDING', updated_at = now()
+           WHERE attempt_id = $1 AND status = 'FAILED_RETRY'
+           RETURNING attempt_id, fact_id, snapshot_id, recipient_id, channel, status,
+             attempt_number, channel_message_id, target_address, template_version_id,
+             sender_identity, email_subject, email_body, first_failed_at, payload, created_at`,
+        [attemptId],
+      );
+      return rows.length === 0
+        ? null
+        : PostgresChannelDeliveryAttemptRepository.fromRow(rows[0]);
+    });
+  }
+
   async findRetryableAttempts(limit: number): Promise<readonly ChannelDeliveryAttemptModel[]> {
     return this.inTx(async (tx) => {
+      // 含超时恢复：PENDING 超过 30 分钟视为 worker 崩溃遗留，可重新抢占（评审 W1）
       const rows = await this.db.query<AttemptRow>(
         tx,
         `${PostgresChannelDeliveryAttemptRepository.SELECT}
-           FROM channel_delivery_attempts WHERE status = 'FAILED_RETRY'
+           FROM channel_delivery_attempts
+           WHERE status = 'FAILED_RETRY'
+              OR (status = 'PENDING' AND updated_at < now() - interval '30 minutes')
            ORDER BY created_at LIMIT $1`,
         [limit],
       );
@@ -868,10 +891,12 @@ export class PostgresEmailTemplateStore implements EmailTemplateStore {
   ): Promise<EmailTemplateModel> {
     const { type, key } = PostgresEmailTemplateStore.scopeKey(scope);
     return this.inTx(async (tx) => {
+      // 行锁防并发版本号重复（评审 I8）：同一作用域×类型同时保存时串行化
       const existing = await this.db.query<EmailTemplateRow>(
         tx,
         `SELECT template_id, scope_type, scope_key, kind, active_version, versions, created_at
-           FROM email_templates WHERE scope_type = $1 AND scope_key = $2 AND kind = $3`,
+           FROM email_templates WHERE scope_type = $1 AND scope_key = $2 AND kind = $3
+           FOR UPDATE`,
         [type, key, kind],
       );
       const now = new Date().toISOString();
@@ -936,10 +961,12 @@ export class PostgresEmailTemplateStore implements EmailTemplateStore {
     rolledBackBy: string,
   ): Promise<EmailTemplateModel> {
     return this.inTx(async (tx) => {
+      // 行锁防并发回滚产生重复版本号（评审 I8）
       const rows = await this.db.query<EmailTemplateRow>(
         tx,
         `SELECT template_id, scope_type, scope_key, kind, active_version, versions, created_at
-           FROM email_templates WHERE template_id = $1`,
+           FROM email_templates WHERE template_id = $1
+           FOR UPDATE`,
         [templateId],
       );
       if (rows.length === 0) {
@@ -999,8 +1026,17 @@ export class PostgresEmailTemplateStore implements EmailTemplateStore {
 export class PostgresTemplateSnapshotService implements TemplateSnapshotService {
   constructor(private readonly templates: PostgresEmailTemplateStore) {}
 
-  async snapshotTemplate(kind: string, _channel: 'INBOX' | 'EMAIL'): Promise<string> {
-    const active = await this.templates.findActive({ type: 'PLATFORM' }, kind as NotificationKind);
+  async snapshotTemplate(
+    kind: string,
+    _channel: 'INBOX' | 'EMAIL',
+    scope?: { readonly type: string; readonly clubId: string | null },
+  ): Promise<string> {
+    // 按事实作用域选择模板（评审 W2）：CLUB 命中社团模板；PLATFORM/JOINT 回退平台模板
+    const target: EmailTemplateScope =
+      scope !== undefined && scope.type === 'CLUB' && scope.clubId != null
+        ? { type: 'CLUB', clubId: scope.clubId }
+        : { type: 'PLATFORM' };
+    const active = await this.templates.findActive(target, kind as NotificationKind);
     if (active === null) {
       // 无活跃模板：生成占位快照标识（邮件发送仍可进行，正文由调用方最少摘要兜底）
       return `tmpl-${kind}-${Date.now()}`;

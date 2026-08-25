@@ -5,7 +5,8 @@
  * EHLO → AUTH LOGIN → MAIL FROM → RCPT TO → DATA。
  *
  * - 结果映射：DATA 250 → SENT；4xx/超时/断连 → TEMPORARY_FAILURE（可重试）；
- *   RCPT 5xx → BOUNCE（地址级永久失败）；其他 5xx → PERMANENT_FAILURE；
+ *   RCPT 5xx → BOUNCE（地址级永久失败）；DATA 5xx → BOUNCE
+ *   （端口无 PERMANENT_FAILURE 值，退信语义统一为不可重试的 BOUNCE）；
  *   无法确定性判定 → UNCERTAIN（调用方回读提供商结果，NTF-008/009）。
  * - 信封 From 与 Reply-To 固定为配置 fromAddress（NTF-008/009：不得被模板覆盖）。
  * - 错误一律脱敏（不回显 SMTP 凭据/完整响应）。
@@ -107,15 +108,21 @@ export class SmtpEmailAdapter implements EmailAdapter {
     const sanitized = (raw: unknown): string | null =>
       typeof raw === 'string' && raw.length > 0 ? 'smtp-send-failed' : null;
     try {
-      // 1. banner（220）
+      // 1. banner（必须 2xx；421/554 等拒绝服务的 banner 不再继续协议流程）
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           socket.destroy();
           reject(new Error('smtp-banner-timeout'));
         }, this.timeoutMs);
         socket.once('connect', () => {
-          socket.once('data', () => {
+          socket.once('data', (chunk) => {
             clearTimeout(timer);
+            const banner = chunk.toString('utf8').trim();
+            if (!/^2\d{2} /.test(banner)) {
+              socket.destroy();
+              reject(new Error('smtp-banner-rejected'));
+              return;
+            }
             resolve();
           });
         });
