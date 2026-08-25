@@ -18,12 +18,12 @@ export interface RecipientSnapshot {
   readonly reason: string;
   /** 作用域 */
   readonly scope: RecipientScope;
-/**
- * 去重键：逻辑事件＋收件人唯一。
- * 格式：`${logicalEventId}:${recipientId}`
- * 分隔符使用 ':'（PostgreSQL text 列禁止 NUL 字节；见 4.3 收口评审 C1）。
- */
-readonly dedupKey: string;
+  /**
+   * 去重键：逻辑事件＋收件人唯一。
+   * 格式：`${logicalEventId}:${recipientId}`
+   * 分隔符使用 ':'（PostgreSQL text 列禁止 NUL 字节；见 4.3 收口评审 C1）。
+   */
+  readonly dedupKey: string;
   /** 创建时间 */
   readonly createdAt: string;
 }
@@ -34,7 +34,14 @@ export interface RecipientScope {
   readonly clubId: string | null;
 }
 
-/** 构建去重键（逻辑事件＋收件人唯一；':' 分隔，Postgres text 可安全存储） */
+/**
+ * 构建去重键（逻辑事件＋收件人唯一；':' 分隔，Postgres text 可安全存储）。
+ *
+ * 分隔符选用 ':'（Postgres text 禁止 NUL 字节，故不能用 '\0'）。虽理论上存在
+ * `a:b`+`c` 与 `a`+`b:c` 的拼接歧义，但实际两段均由 UUID 派生（logicalEventId
+ * 内嵌 attemptId/factId，recipientId 为 UUIDv7），均不含 ':'，因此无碰撞风险；
+ * 若未来引入可含 ':' 的段，需改用不可见分隔符（如 '\x1F'）。
+ */
 export function buildDedupKey(logicalEventId: string, recipientId: string): string {
   return `${logicalEventId}:${recipientId}`;
 }

@@ -757,9 +757,7 @@ export class PostgresChannelDeliveryAttemptRepository implements ChannelDelivery
              sender_identity, email_subject, email_body, first_failed_at, payload, created_at`,
         [attemptId],
       );
-      return rows.length === 0
-        ? null
-        : PostgresChannelDeliveryAttemptRepository.fromRow(rows[0]);
+      return rows.length === 0 ? null : PostgresChannelDeliveryAttemptRepository.fromRow(rows[0]);
     });
   }
 

@@ -42,9 +42,7 @@ export class RetryChannelDeliveryCommand {
     // 已被其他实例/worker 抢占（返回 null）时直接放弃，避免并发重复发送
     const attempt = await this.attemptRepository.claimForRetry(attemptId);
     if (!attempt) {
-      this.logger.warn(
-        `投递尝试不可抢占（不存在或不在 FAILED_RETRY）: attemptId=${attemptId}`,
-      );
+      this.logger.warn(`投递尝试不可抢占（不存在或不在 FAILED_RETRY）: attemptId=${attemptId}`);
       return;
     }
 

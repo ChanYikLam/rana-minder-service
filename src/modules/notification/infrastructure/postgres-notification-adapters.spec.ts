@@ -205,7 +205,11 @@ describe('Postgres 通知基础设施（4.3 收口）', () => {
       },
     };
     const repo = new PostgresChannelDeliveryAttemptRepository(db as never);
-    await repo.updateAttempt('a1', { status: 'DELIVERED', attemptNumber: 2, completedAt: '2026-08-25T01:00:00.000Z' });
+    await repo.updateAttempt('a1', {
+      status: 'DELIVERED',
+      attemptNumber: 2,
+      completedAt: '2026-08-25T01:00:00.000Z',
+    });
     const upd = calls.find((c) => c.sql.includes('UPDATE channel_delivery_attempts'));
     assert.ok(upd, '必须发出 UPDATE');
     assert.match(upd!.sql, /attempt_number = \$3/, 'UPDATE 必须包含 attempt_number 列（C2）');
@@ -223,7 +227,10 @@ describe('Postgres 通知基础设施（4.3 收口）', () => {
       clearRlsContext: async () => undefined,
       query: async <T>(_tx: unknown, sql: string, params: readonly unknown[]): Promise<T[]> => {
         calls.push({ sql, params });
-        if (sql.includes('UPDATE channel_delivery_attempts') && sql.includes("status = 'PENDING'")) {
+        if (
+          sql.includes('UPDATE channel_delivery_attempts') &&
+          sql.includes("status = 'PENDING'")
+        ) {
           return [
             {
               attempt_id: 'a1',
@@ -321,7 +328,15 @@ describe('Postgres 通知基础设施（4.3 收口）', () => {
               kind: params[2],
               active_version: 3,
               versions: JSON.stringify([
-                { templateId: 'tmpl-1', version: 3, subject: 's', htmlBody: '<p>b</p>', createdBy: 'sa', createdAt: NOW.toISOString(), note: 'n' },
+                {
+                  templateId: 'tmpl-1',
+                  version: 3,
+                  subject: 's',
+                  htmlBody: '<p>b</p>',
+                  createdBy: 'sa',
+                  createdAt: NOW.toISOString(),
+                  note: 'n',
+                },
               ]),
               created_at: NOW,
             },
@@ -332,12 +347,20 @@ describe('Postgres 通知基础设施（4.3 收口）', () => {
     };
     const store = new PostgresEmailTemplateStore(db as never);
     const svc = new PostgresTemplateSnapshotService(store);
-    const clubId = await svc.snapshotTemplate('interview', 'EMAIL', { type: 'CLUB', clubId: 'club-9' });
-    const platformId = await svc.snapshotTemplate('interview', 'EMAIL', { type: 'PLATFORM', clubId: null });
+    const clubId = await svc.snapshotTemplate('interview', 'EMAIL', {
+      type: 'CLUB',
+      clubId: 'club-9',
+    });
+    const platformId = await svc.snapshotTemplate('interview', 'EMAIL', {
+      type: 'PLATFORM',
+      clubId: null,
+    });
     const clubQuery = calls.find((c) => c.params[0] === 'CLUB');
     const platformQuery = calls.find((c) => c.params[0] === 'PLATFORM');
     assert.ok(clubQuery, 'CLUB 事实必须查询社团模板（W2）');
     assert.equal(clubQuery!.params[1], 'club-9');
+    assert.ok(platformQuery, 'PLATFORM 事实必须查询平台模板（scope）');
+    assert.equal(platformQuery!.params[1], 'platform');
     assert.equal(clubId, 'tmpl-1:v3');
     assert.equal(platformId, 'tmpl-1:v3');
   });
