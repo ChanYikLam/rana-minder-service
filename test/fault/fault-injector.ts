@@ -2,13 +2,13 @@
  * FaultInjector：L4 故障注入通用助手（TST-FAIL-* 锚点的行为级验证）。
  *
  * 三步模式：注入故障 → 验证失败关闭 → 移除故障并验证恢复。
- * 支持一次性故障（failNextCall）、持续故障、N 次后恢复。
+ * 支持两种模式：
+ * - persistent：持续故障直到手动 clearFault()；
+ * - failOnce：首次调用故障后自动恢复（模拟瞬时超时）。
  */
 
 export interface FaultTarget {
-  /** 调用计数 */
   readonly callCount: () => number;
-  /** 是否处于故障状态 */
   readonly isFaulted: () => boolean;
 }
 
@@ -17,7 +17,7 @@ export interface FaultTarget {
  *
  * @param original 原始实现
  * @param error 故障时抛出的错误
- * @param mode failOnce = 仅首次调用故障后自动恢复；persistent = 持续故障直到 clearFault
+ * @param mode 'persistent'（默认）= 持续故障直到 clearFault；'failOnce' = 首次调用后自动恢复
  */
 export function injectFault<T extends (...args: never[]) => Promise<unknown>>(
   original: T,

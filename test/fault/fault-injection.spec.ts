@@ -11,31 +11,10 @@ import assert from 'node:assert/strict';
 import { FakeDbAdapter } from '../../src/shared/testing/fake-db-adapter';
 import { FormUnitOfWork } from '../../src/modules/form/infrastructure/unit-of-work';
 import { InMemoryCasdoorPort } from '../../src/modules/organization/infrastructure/in-memory/memory-implementations';
-
-// ---- FaultInjector ----
-function injectFault<T extends (...args: never[]) => Promise<unknown>>(
-  original: T,
-  error: Error,
-  mode: 'persistent' | 'failOnce' = 'persistent',
-): T & { clearFault(): void; isFaulted(): boolean } {
-  let faulted = true;
-  const wrapped = async (...args: Parameters<T>): Promise<unknown> => {
-    if (faulted) {
-      if (mode === 'failOnce') faulted = false;
-      throw error;
-    }
-    return original(...args);
-  };
-  return Object.assign(wrapped, {
-    clearFault() {
-      faulted = false;
-    },
-    isFaulted: () => faulted,
-  }) as never;
-}
+import { injectFault } from './fault-injector';
 
 describe('L4 故障注入：Casdoor Group 写入失败（FAIL-004）', () => {
-  it('注入：Casdoor 异常 Group 写成员 → failure 不假成功；恢复：清除后成功', async () => {
+  it('注入：simulateAnomaly → writeMembership failure；清障：clearAnomaly → 同 Group 恢复 success', async () => {
     const casdoor = new InMemoryCasdoorPort({
       groups: [
         {
@@ -46,27 +25,27 @@ describe('L4 故障注入：Casdoor Group 写入失败（FAIL-004）', () => {
         },
       ],
     });
-    // 注入故障
-    await casdoor.simulateAnomaly({ owner: 'club-acm', name: '宣传部' }, 'no_access');
+    const ref = { owner: 'club-acm', name: '宣传部' };
+
+    // ① 注入故障
+    await casdoor.simulateAnomaly(ref, 'no_access');
     const failResult = await casdoor.writeMembership({
-      ref: { owner: 'club-acm', name: '宣传部' },
+      ref,
       subjectId: 'u_x',
       action: 'add',
       requestId: 'req-fail',
     });
     assert.equal(failResult.outcome, 'failure');
 
-    // 恢复：移除异常标记后写入成功
-    // simulateAnomaly 无直接恢复方法，改用正常 Group 验证恢复语义
-    const okGroup = await casdoor
-      .writeMembership({
-        ref: { owner: 'club-acm', name: 'ACM社团' },
-        subjectId: 'u_y',
-        action: 'add',
-        requestId: 'req-ok',
-      })
-      .catch(() => ({ outcome: 'failure' }));
-    assert.equal((okGroup as { outcome: string }).outcome !== undefined, true);
+    // ② 清除故障标记（真实恢复：同一 Group）
+    casdoor.clearAnomaly(ref);
+    const okResult = await casdoor.writeMembership({
+      ref,
+      subjectId: 'u_x',
+      action: 'add',
+      requestId: 'req-recover',
+    });
+    assert.equal(okResult.outcome, 'success');
   });
 });
 
@@ -75,22 +54,17 @@ describe('L4 故障注入：数据库 commit 失败（FAIL-005）', () => {
     const db = new FakeDbAdapter();
     const uow = new FormUnitOfWork(db);
 
-    // 注入故障：commit 将失败
     db.commitError = new Error('connection reset during commit');
     await assert.rejects(
       () => uow.run({ kind: 'unprotected' }, async () => 'data'),
       /connection reset/,
     );
-    assert.equal(
-      db.events.some(
-        (e) => e.startsWith('commit:') && !db.events.some((e) => e.startsWith('rollback:')),
-      ),
-      false,
-    );
-    // rollback 必须出现
-    assert.ok(db.events.some((e) => e.startsWith('rollback:')));
+    // 按 tx id 配对：begin 后必有 rollback（FakeDbAdapter 的 commit 事件在抛错前已入 events，
+    // 因此不能断言 commits=0，而是断言 rollback 存在即证明事务被回滚而非假成功）
+    const rollbacks = db.events.filter((e) => e.startsWith('rollback:'));
+    assert.ok(rollbacks.length >= 1, '失败路径应有 rollback 收口');
 
-    // 恢复：清除故障
+    // 恢复：清除故障后正常提交
     db.commitError = null;
     const result = await uow.run({ kind: 'unprotected' }, async () => 'recovered');
     assert.equal(result, 'recovered');
@@ -115,32 +89,28 @@ describe('L4 故障注入：数据库 commit 失败（FAIL-005）', () => {
 });
 
 describe('L4 故障注入：外部依赖不可用（通用模式）', () => {
-  it('注入：SMTP/通知渠道持续失败 → 调用方收到异常而非静默成功；恢复后正常', async () => {
-    // 模拟一个通知渠道依赖
+  it('SMTP/通知渠道持续失败 → 异常上抛不静默吞；恢复后正常投递', async () => {
     const realChannel = async (_msg: string): Promise<{ delivered: boolean }> => ({
       delivered: true,
     });
     const faulty = injectFault(realChannel, new Error('SMTP connection refused'));
 
-    // 故障期：调用必须收到异常（不静默吞）
     await assert.rejects(() => faulty('hello'), /SMTP connection refused/);
     assert.ok(faulty.isFaulted());
 
-    // 恢复：清障后投递成功
     faulty.clearFault();
     const r = (await faulty('hello-after-recovery')) as { delivered: boolean };
     assert.equal(r.delivered, true);
   });
 
-  it('注入：文件检查服务不可用 → 上传校验 fail-closed（不得放行未检查文件）', async () => {
-    // 模拟文件检查依赖
-    const realCheck = async (_fileId: string): Promise<{ safe: boolean }> => ({ safe: true });
+  it('文件检查服务不可用 → 上传校验 fail-closed；恢复后检查通过', async () => {
+    const realCheck = async (_fileId: string): Promise<{ safe: boolean }> => ({
+      safe: true,
+    });
     const faulty = injectFault(realCheck, new Error('file-check service unreachable'));
 
-    // 故障期：检查调用抛错 → 上传流程应视为"未核验"，不放行
     await assert.rejects(() => faulty('file-001'), /file-check service unreachable/);
 
-    // 恢复后检查通过
     faulty.clearFault();
     const r = (await faulty('file-002')) as { safe: boolean };
     assert.equal(r.safe, true);
@@ -149,10 +119,8 @@ describe('L4 故障注入：外部依赖不可用（通用模式）', () => {
   it('failOnce 模式：首次故障自动恢复（模拟瞬时超时）', async () => {
     const realOp = async (): Promise<string> => 'ok';
     const faulty = injectFault(realOp, new Error('transient timeout'), 'failOnce');
-    // 第一次调用故障
     await assert.rejects(() => faulty(), /transient timeout/);
-    assert.equal(faulty.isFaulted(), false); // failOnce 自动解除
-    // 第二次调用恢复正常（无需手动 clearFault）
+    assert.equal(faulty.isFaulted(), false);
     const r = await faulty();
     assert.equal(r, 'ok');
   });
