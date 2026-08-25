@@ -19,7 +19,10 @@ import {
   ExportTaskStateMachine,
 } from '../../domain/state-machines/export-task.state-machine';
 import { StatisticsSpecification } from '../../domain/models/statistics-specification';
-import { InMemoryExportAuditPort, MemoryExportSafetySwitchPort } from '../../infrastructure/memory-export-access';
+import {
+  InMemoryExportAuditPort,
+  MemoryExportSafetySwitchPort,
+} from '../../infrastructure/memory-export-access';
 import { InMemoryExportTaskRepository } from '../../infrastructure/in-memory-export-repository';
 import type { ExportDisposalPort } from '../ports/export-disposal.port';
 import { platformSuperAdminPrincipal } from '../export-authorization.policy';
@@ -56,7 +59,13 @@ function makeHarness(): Harness {
   const safety = new MemoryExportSafetySwitchPort();
   const audit = new InMemoryExportAuditPort();
   const disposal = new RecordingDisposal();
-  return { repo, safety, audit, disposal, del: new ExportDeleteCommand(safety, audit, repo, disposal) };
+  return {
+    repo,
+    safety,
+    audit,
+    disposal,
+    del: new ExportDeleteCommand(safety, audit, repo, disposal),
+  };
 }
 
 async function seedTask(
@@ -162,10 +171,7 @@ describe('ExportDeleteCommand — 删除联动对象存储清理（5.4.4，AUD-0
     assert.equal(count, 2);
     assert.deepEqual(
       [...h.disposal.calls].sort(),
-      [
-        'export-file://exp-fd-1/EXP-TEST.xlsx',
-        'export-file://exp-fd-2/EXP-TEST.xlsx',
-      ].sort(),
+      ['export-file://exp-fd-1/EXP-TEST.xlsx', 'export-file://exp-fd-2/EXP-TEST.xlsx'].sort(),
     );
     assert.equal((await h.repo.load(downloadable.id))?.status, ExportTaskStatus.PRE_DELETED);
     assert.equal((await h.repo.load(expired.id))?.status, ExportTaskStatus.PRE_DELETED);

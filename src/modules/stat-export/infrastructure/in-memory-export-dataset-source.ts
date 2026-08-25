@@ -12,10 +12,7 @@
  *   无时间戳键（acceptedAt/appliedAt/concludedAt）的行原样放行。
  */
 
-import {
-  CONTACT_FIELDS,
-  type ExportDatasetType,
-} from '../domain/models/statistics-specification';
+import { CONTACT_FIELDS, type ExportDatasetType } from '../domain/models/statistics-specification';
 import {
   EXPORT_DATASET_SOURCE,
   type ExportDatasetQuery,
@@ -26,7 +23,9 @@ import {
 const TIMESTAMP_KEYS = ['acceptedAt', 'appliedAt', 'concludedAt'] as const;
 
 /** 各数据集的确定性默认种子（未 seed 时使用；键序固定保证输出确定） */
-function buildDefaultRows(): Readonly<Record<ExportDatasetType, ReadonlyArray<Record<string, unknown>>>> {
+function buildDefaultRows(): Readonly<
+  Record<ExportDatasetType, ReadonlyArray<Record<string, unknown>>>
+> {
   return {
     club_summary: [
       {

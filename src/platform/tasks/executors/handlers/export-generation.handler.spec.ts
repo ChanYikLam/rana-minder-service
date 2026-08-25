@@ -173,7 +173,10 @@ describe('ExportExpiryScanHandler — 过期扫描任务接线（5.4.4）', () =
     const sweep = new StubSweep();
     const handler = new ExportExpiryScanHandler(sweep as never);
 
-    await handler.handle({ ...makeTask({ intent: 'scan' }), taskType: TaskType.EXPORT_EXPIRY_SCAN });
+    await handler.handle({
+      ...makeTask({ intent: 'scan' }),
+      taskType: TaskType.EXPORT_EXPIRY_SCAN,
+    });
     await handler.handle({ ...makeTask(undefined), taskType: TaskType.EXPORT_EXPIRY_SCAN });
 
     assert.equal(sweep.runCalls, 2);
