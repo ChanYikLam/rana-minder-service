@@ -57,13 +57,6 @@ describe('TST-SM 六分面矩阵（P0 工作包①）', () => {
 
   it('JNT-001 联合活动：全枚举 NOM+STA+确定性+终态闭合', () => {
     const machine = new JointActivityStateMachine();
-    const nonTerminal = [
-      JointActivityStatus.DRAFT_CONFIRMING,
-      JointActivityStatus.ESTABLISHED,
-      JointActivityStatus.PUBLISHED,
-      JointActivityStatus.INVITING,
-      JointActivityStatus.END_CONFIRMING,
-    ];
     const legal = [
       {
         from: JointActivityStatus.DRAFT_CONFIRMING,
@@ -116,7 +109,6 @@ describe('TST-SM 六分面矩阵（P0 工作包①）', () => {
       legal,
     });
     matrix.verifyAll();
-    void nonTerminal;
   });
 
   it('JNT-003 联合申请：全枚举 NOM+STA+确定性+终态闭合', () => {

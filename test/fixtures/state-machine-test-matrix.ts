@@ -45,17 +45,27 @@ export function probe(
   event: string,
   currentState: string,
 ): ProbeResult {
+  let raw: Record<string, unknown> | undefined;
   try {
-    const raw = machine.transition({ event, currentState }) as Record<string, unknown>;
-    const allowed = typeof raw?.['allowed'] === 'boolean' ? (raw['allowed'] as boolean) : true;
-    const nextState = raw?.['nextState'] as string | undefined;
-    return allowed ? { allowed: true, nextState } : { allowed: false };
+    raw = machine.transition({ event, currentState }) as Record<string, unknown> | undefined;
   } catch {
+    // 机器抛异常表示拒绝（errorMode: 'throw'）
     if (cfg.errorMode === 'throw') {
       return { allowed: false };
     }
     throw new Error('transition 意外抛错（return 模式下不应有异常）');
   }
+  // 拒绝纯度：无论允许/拒绝都必须携带布尔 allowed，缺失即为基建缺陷，fail-fast 而非默认放行
+  if (typeof raw?.['allowed'] !== 'boolean') {
+    throw new Error(
+      `transition 返回缺少布尔 allowed（event=${event}, currentState=${currentState}）`,
+    );
+  }
+  // 原样透传 nextState（含拒绝时的泄漏），交由断言校验「拒绝时不得泄漏 nextState」
+  return {
+    allowed: raw['allowed'] as boolean,
+    nextState: raw['nextState'] as string | undefined,
+  };
 }
 
 export function enumerateAll(cfg: MatrixConfig): Map<string, ProbeResult> {
