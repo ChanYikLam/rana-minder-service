@@ -113,6 +113,46 @@ function makeAuthAllAllow(): JointAuthorizationPort {
   return Object.fromEntries(methods.map((m) => [m, async () => true])) as never;
 }
 
+/** 预置一条有效活动快照 + 参与者（使 loadActivity 命中且通过域层作用域校验） */
+function seedActivity(
+  repo: ReturnType<typeof makeMemoryRepo>,
+  id: string,
+  status = 'ESTABLISHED',
+  clubIds = ['club-a', 'club-b'],
+) {
+  (repo.activities as Map<string, unknown>).set(id, {
+    id,
+    title: '预置活动',
+    description: null,
+    status,
+    confirmRound: 1,
+    confirmDeadline: NOW,
+    publishedAt: null,
+    firstInvitationAt: null,
+    cancelRound: 0,
+    forcedEndedReason: null,
+    revisionNumber: 1,
+    createdBy: 'u_admin',
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  const list = (repo.participants as Map<string, unknown[]>).get(id) ?? [];
+  for (const cid of clubIds) {
+    list.push({
+      id: `part-${cid}`,
+      activityId: id,
+      clubId: cid,
+      status: 'PROPOSED',
+      roundId: 1,
+      confirmedAt: null,
+      revisionNumber: 1,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+  }
+  (repo.participants as Map<string, unknown[]>).set(id, list);
+}
+
 const tasksStub: JointTaskEnqueuer = {
   scheduleConfirmDeadlineScan: async () => undefined,
 } as never;
@@ -120,7 +160,7 @@ const tasksStub: JointTaskEnqueuer = {
 const NOW = new Date('2026-08-01T00:00:00Z');
 
 describe('InitiateJointActivityUseCase', () => {
-  it('授权拒绝 → forbidden', async () => {
+  it('正常路径：创建活动 + 参与者落盘 + 通道初始化 + 任务调度', async () => {
     const repo = makeMemoryRepo();
     const useCase = new DefaultInitiateJointActivityUseCase(repo, makeAuthAllAllow(), tasksStub);
     // 先验证正常路径可执行
@@ -189,10 +229,12 @@ describe('InitiateJointActivityUseCase', () => {
 });
 
 describe('CancelJointActivityUseCase（授权拒绝冒烟）', () => {
-  it('未授权 → forbidden（fail-closed）', async () => {
+  it('预置活动 + deny canCancelOrForceEnd → forbidden', async () => {
     const repo = makeMemoryRepo();
-    const denyAll = Object.fromEntries(['canCancelOrForceEnd'].map((m) => [m, async () => false]));
-    const auth = Object.assign(makeAuthAllAllow(), denyAll);
+    seedActivity(repo, 'act-x', 'DRAFT_CONFIRMING');
+    const auth = Object.assign(makeAuthAllAllow(), {
+      canCancelOrForceEnd: async () => false,
+    });
     const useCase = new DefaultCancelJointActivityUseCase(repo, auth as never, tasksStub as never);
     await assert.rejects(
       () =>
@@ -202,17 +244,15 @@ describe('CancelJointActivityUseCase（授权拒绝冒烟）', () => {
           actingClubId: 'club-a',
           now: NOW,
         } as never),
-      (e: unknown) => {
-        assert.ok((e as Error).message.length > 0);
-        return true;
-      },
+      /授权|forbidden|仅/i,
     );
   });
 });
 
 describe('ForceEndJointActivityUseCase（授权拒绝冒烟）', () => {
-  it('未授权 → 拒绝', async () => {
+  it('预置活动 + deny canCancelOrForceEnd → forbidden', async () => {
     const repo = makeMemoryRepo();
+    seedActivity(repo, 'act-y', 'INVITING');
     const auth = Object.assign(makeAuthAllAllow(), {
       canCancelOrForceEnd: async () => false,
     });
@@ -230,17 +270,15 @@ describe('ForceEndJointActivityUseCase（授权拒绝冒烟）', () => {
           reason: '紧急停用',
           now: NOW,
         } as never),
-      (e: unknown) => {
-        assert.ok((e as Error).message.length > 0);
-        return true;
-      },
+      /授权|forbidden|仅/i,
     );
   });
 });
 
 describe('PublishJointActivityUseCase（授权拒绝冒烟）', () => {
-  it('未授权 → 拒绝', async () => {
+  it('预置活动 + deny canPublish → forbidden', async () => {
     const repo = makeMemoryRepo();
+    seedActivity(repo, 'act-p', 'ESTABLISHED');
     const auth = Object.assign(makeAuthAllAllow(), {
       canPublish: async () => false,
     });
@@ -253,19 +291,17 @@ describe('PublishJointActivityUseCase（授权拒绝冒烟）', () => {
           actingClubId: 'club-a',
           now: NOW,
         } as never),
-      (e: unknown) => {
-        assert.ok((e as Error).message.length > 0);
-        return true;
-      },
+      /授权|forbidden|仅/i,
     );
   });
 });
 
 describe('EndJointActivityUseCase（授权拒绝冒烟）', () => {
-  it('未授权 → 拒绝', async () => {
+  it('预置活动 + deny canManageInvitation → forbidden（实际检查方法）', async () => {
     const repo = makeMemoryRepo();
+    seedActivity(repo, 'act-e', 'END_CONFIRMING');
     const auth = Object.assign(makeAuthAllAllow(), {
-      canCancelOrForceEnd: async () => false,
+      canManageInvitation: async () => false,
     });
     const useCase = new DefaultEndJointActivityUseCase(repo, auth as never, tasksStub);
     await assert.rejects(
@@ -276,19 +312,17 @@ describe('EndJointActivityUseCase（授权拒绝冒烟）', () => {
           actingClubId: 'club-a',
           now: NOW,
         } as never),
-      (e: unknown) => {
-        assert.ok((e as Error).message.length > 0);
-        return true;
-      },
+      /授权|forbidden|仅/i,
     );
   });
 });
 
 describe('BeginEndConfirmUseCase（授权拒绝冒烟）', () => {
-  it('未授权 → 拒绝', async () => {
+  it('预置活动 + deny canManageInvitation → forbidden（实际检查方法）', async () => {
     const repo = makeMemoryRepo();
+    seedActivity(repo, 'act-b', 'INVITING');
     const auth = Object.assign(makeAuthAllAllow(), {
-      canConfirmRound: async () => false,
+      canManageInvitation: async () => false,
     });
     const useCase = new DefaultBeginEndConfirmUseCase(repo, auth as never);
     await assert.rejects(
@@ -299,10 +333,7 @@ describe('BeginEndConfirmUseCase（授权拒绝冒烟）', () => {
           actingClubId: 'club-a',
           now: NOW,
         } as never),
-      (e: unknown) => {
-        assert.ok((e as Error).message.length > 0);
-        return true;
-      },
+      /授权|forbidden|仅/i,
     );
   });
 });
