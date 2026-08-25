@@ -67,6 +67,9 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
   private readonly logger = new Logger(PostgresDbAdapter.name);
   private readonly pool: Pool;
 
+  /** 在途未收口事务的连接集合：用于归还钩子精准回滚悬挂事务，避免无条件 ROLLBACK 往返。 */
+  private readonly activeTransactionClients = new Set<PoolClient>();
+
   constructor(
     private readonly poolConfig: {
       host: string;
@@ -104,14 +107,17 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       this.logger.error(`PostgreSQL 连接池空闲连接错误：${err.message}`, err.stack);
     });
 
-    // 归还钩子兜底回滚：若连接上仍有未收口事务即被释放（如调用方遗漏
-    // commit/rollback），归还池前强制 ROLLBACK，避免悬挂事务占用连接或
-    // 污染后续借用的请求（DATA-CON-006 污染防护）。
+    // 归还钩子兜底回滚：仅当归还的连接仍挂在在途未收口事务集合中（即调用方遗漏
+    // commit/rollback）才强制 ROLLBACK，避免悬挂事务占用连接或污染后续借用的请求
+    // （DATA-CON-006 污染防护）。正常 commit/rollback 已收口并移出集合，归还时不再
+    // 发起无谓的 ROLLBACK 往返。
     // 注意 pg 的 'release' 事件签名是 (err, client)，err 表示归还前发生的错误。
     this.pool.on('release', (_err: Error | undefined, client: PoolClient) => {
-      void client.query('ROLLBACK').catch(() => {
-        /* 连接即将回收，回滚失败无可挽回，忽略 */
-      });
+      if (this.activeTransactionClients.delete(client)) {
+        void client.query('ROLLBACK').catch(() => {
+          /* 连接即将回收，回滚失败无可挽回，忽略 */
+        });
+      }
     });
   }
 
@@ -124,6 +130,7 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      this.activeTransactionClients.add(client);
       return new PostgresTransactionContext(client, new Date());
     } catch (err) {
       client.release();
@@ -141,6 +148,7 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
     } finally {
       // 无论成败都视为已收口：连接已归还，后续 rollback/clearRlsContext 不得再触碰。
       ctx.settled = true;
+      this.activeTransactionClients.delete(ctx.client);
       ctx.client.release();
     }
   }
@@ -155,6 +163,7 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
     } finally {
       // 无论成败都视为已收口：连接已归还，后续 clearRlsContext 不得再触碰。
       ctx.settled = true;
+      this.activeTransactionClients.delete(ctx.client);
       ctx.client.release();
     }
   }

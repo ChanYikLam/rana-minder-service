@@ -113,25 +113,48 @@ describe('OPS-VER-011 会话吊销版本推进与判定演练', () => {
     const revocation = new PostgresSessionRevocation(db, uow);
 
     await uow.run({ kind: 'single', subjectId: 'user-ops' }, async () => {
+      // 每次吊销 = SELECT ... FOR UPDATE（加锁，空集） + UPDATE（返回新版本）
+      db.enqueueResult([]); // 锁定查询（首次）
       db.enqueueResult([{ revoke_version: '6' }]);
       assert.equal(await revocation.invalidateAllSessions('user-ops'), 6);
 
+      db.enqueueResult([]); // 锁定查询（第二次）
       db.enqueueResult([{ revoke_version: '7' }]);
       assert.equal(await revocation.invalidateAllSessions('user-ops'), 7);
       return undefined as void;
     });
 
-    assert.equal(db.queries.length, 2);
-    for (const q of db.queries) {
-      assert.match(q.sql, /UPDATE auth_sessions/);
+    // 每次吊销含 1 次锁定 SELECT + 1 次 UPDATE，共 4 次查询
+    assert.equal(db.queries.length, 4);
+    const updateQueries = db.queries.filter((q) => /UPDATE auth_sessions/.test(q.sql));
+    assert.equal(updateQueries.length, 2);
+    for (const q of updateQueries) {
       assert.match(q.sql, /MAX\(revoke_version\)/, '新版本取自当前最大吊销版本');
       assert.match(q.sql, /\+\s*1/, '版本号严格 +1 推进');
       assert.match(q.sql, /revoked_at IS NULL/, '已失效会话不得重复卷入');
       assert.deepEqual(q.params, ['user-ops']);
     }
+    // 锁定查询：对该主体全部会话行加 FOR UPDATE，串行化并发吊销的版本计算
+    const lockQueries = db.queries.filter((q) => q.sql.includes('FOR UPDATE'));
+    assert.equal(lockQueries.length, 2, '每次吊销前须对该主体会话行加锁');
+    for (const q of lockQueries) {
+      assert.match(q.sql, /SELECT session_id FROM auth_sessions/);
+      assert.match(q.sql, /WHERE subject_id = \$1/);
+      assert.match(q.sql, /FOR UPDATE/, '须以行锁串行化并发吊销');
+      assert.deepEqual(q.params, ['user-ops']);
+    }
     // 吊销与账号状态同事务收口（IFC-TX-001）：查询发生在 begin 与 commit 之间
     const order = db.eventPrefixes().map((p) => p.split(':')[0]);
-    assert.deepEqual(order, ['begin', 'set-rls', 'query', 'query', 'commit', 'clear-rls']);
+    assert.deepEqual(order, [
+      'begin',
+      'set-rls',
+      'query',
+      'query',
+      'query',
+      'query',
+      'commit',
+      'clear-rls',
+    ]);
     findings.revocationVersionAdvance = true;
   });
 
