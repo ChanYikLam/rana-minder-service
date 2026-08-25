@@ -3,6 +3,7 @@ export * from './casdoor-group.handler';
 export * from './notification-delivery.handler';
 export * from './file-check.handler';
 export * from './export-generation.handler';
+export * from './export-expiry-scan.handler';
 export * from './deadline-task.handler';
 export * from './formal-delete.handler';
 export * from './derived-rebuild.handler';

@@ -8,6 +8,13 @@
  * - 快照冻结（复用 STATISTICS_SPECIFICATION 字段基线 clamp，越权字段剔除）；
  * - 超管全局/指定社团导出须用途 + 实时重新认证 + 特权审计（IFC-ERR-002）。
  * - 任务与快照同事务落库（IFC-TX-001 由仓储一次 save 保证）。
+ *
+ * 5.4.3（EXP-002/EXP-003）：
+ * - 联系方式显式勾选（includeContact）：默认不导出；勾选须经 authorizeContactOptIn
+ *   字段级权限闸门（越权 → IFC-ERR-003），并冻结进快照（includeContact 标志 +
+ *   字段基线并入联系方式列；秘密标识仍永不导出）；
+ * - 附件显式选择（includeFiles）：默认不打包；勾选时经事实源端口解析附件引用并
+ *   冻结进快照 attachmentRefs（内容在生成阶段按 ref 回源），空清单照常创建任务。
  */
 
 import { randomUUID } from 'node:crypto';
@@ -44,6 +51,7 @@ import {
   assertPersonalCopyTargetInScope,
   assertFreshReauth,
   authorizeBatchExportScope,
+  authorizeContactOptIn,
   authorizePersonalCopy,
   convergeJointExportScope,
   SUPER_ADMIN_REAUTH_TTL_MS,
@@ -68,6 +76,12 @@ export interface ExportApplyRequest {
   readonly academicYear?: string;
   readonly timeRange?: { from: string; to: string };
   readonly includeFiles?: boolean;
+  /**
+   * 联系方式（phone/email）显式勾选（5.4.3，EXP-002/EXP-003）。
+   * 默认 false（不导出联系方式）；true 时须通过 authorizeContactOptIn 字段级权限闸门，
+   * 且快照字段基线并入 CONTACT_FIELD_GROUPS[type]（秘密标识仍永不导出）。
+   */
+  readonly includeContact?: boolean;
   /** 超管特权导出用途（必填） */
   readonly purpose?: string;
   /** 超管高风险重新认证凭证时间戳 */
@@ -106,8 +120,13 @@ export interface ExportApplyResult {
  *
  * hashVersion 作为可选入参（缺省用常量），便于测试真正驱动版本递增验证摘要变化，
  * 而非仅靠手动构造差异断言（避免测试自证）。生产调用不传，恒用常量，语义不变。
+ *
+ * v2（5.4.3，EXP-002/EXP-003）：语义摘要并入 includeContact。联系方式显式勾选
+ * 直接改变导出内容语义（快照字段基线是否含 phone/email 列），属不兼容的申请语义
+ * 变更：同 key 下翻转 includeContact 必须视为不同申请内容 → IFC-ERR-009 冲突，
+ * 而非静默回放到勾选状态不一致的历史任务；旧版本 key 的摘要随之显式失效。
  */
-export const APPLY_IDEMPOTENCY_HASH_VERSION = 1;
+export const APPLY_IDEMPOTENCY_HASH_VERSION = 2;
 
 export function applyIdempotencyHash(
   request: ExportApplyRequest,
@@ -125,6 +144,7 @@ export function applyIdempotencyHash(
     academicYear: request.academicYear ?? null,
     timeRange: request.timeRange ?? null,
     includeFiles: request.includeFiles ?? false,
+    includeContact: request.includeContact ?? false,
     purpose: request.purpose ?? null,
     datasets: [...(request.datasets ?? [])].sort().map((d) => d.toLowerCase()),
     fields:
@@ -196,6 +216,11 @@ export class ExportApplyCommand {
       throw exportErrors.safety('导出安全开关已关闭，拒绝申请（GOV-004）');
     }
 
+    // 联系方式显式勾选的字段级权限闸门（EXP-002/EXP-003）：先于幂等预检与作用域
+    // 解析——越权勾选直接以 IFC-ERR-003 拒绝，避免借幂等/作用域分支探测联系方式
+    // 勾选能力；拒绝路径由 execute 的 catch 统一落 denied 审计（deniedAuditEntry）。
+    authorizeContactOptIn(principal, request);
+
     // 幂等冲突预检（IFC-ERR-009）：同 key 已登记且语义不一致 → 立即冲突。
     // 仅做"冲突检测"不做"回放早退"——回放仍须走下方 resolveScope / 超管特权
     // 用途重认证等关键校验，避免回放路径绕过校验；真正原子判定由 claim() 完成。
@@ -221,7 +246,9 @@ export class ExportApplyCommand {
     }
 
     // 快照冻结（字段 clamp 由 STATISTICS_SPECIFICATION 完成，越权/秘密字段剔除；
-    // rejectedFields 一并固化进快照，供幂等回放时原样返回，与实时基线解耦）
+    // includeContact 已通过 authorizeContactOptIn 闸门，冻结进快照供生成阶段按
+    // 勾选语义执行；rejectedFields 一并固化进快照，供幂等回放时原样返回，与实时
+    // 基线解耦）
     const { snapshot, rejectedFields } = ExportSnapshot.freeze({
       spec: this.spec,
       scope: resolution.snapshotScope,
@@ -231,6 +258,7 @@ export class ExportApplyCommand {
       timeRange: request.timeRange,
       includesPersonalCopy: request.kind === 'personal',
       personalTargetUserId: resolution.personalTargetUserId,
+      includeContact: request.includeContact ?? false,
       jointAnnotations: resolution.jointAnnotations,
       attachmentRefs: resolution.attachmentRefs,
       now,
@@ -357,16 +385,11 @@ export class ExportApplyCommand {
         clubId: request.clubId,
         departmentId: request.departmentId,
       });
-      // 对象存储未接入前，includeFiles=true 一律显式拒绝，避免附件开关语义在个人副本
-      // 下被静默忽略。
-      // 顺序说明：越权静态校验（authorizePersonalCopy）先于业务/能力校验（includeFiles），
-      // 与普通批量/联合分支的错误码优先级口径统一——越权（IFC-ERR-003）优先于能力不支持
-      // （IFC-ERR-005），避免越权者以 includeFiles 探测附件功能状态（信息泄露）。
-      if (request.includeFiles) {
-        throw exportErrors.validation(
-          '当前版本暂不支持导出包含附件（includeFiles=true），请去除附件后重试（IFC-ERR-005）',
-        );
-      }
+      // 顺序说明：越权静态校验（authorizePersonalCopy）先于附件/联系方式等能力分支，
+      // 与普通批量/联合分支的错误码优先级口径统一——越权（IFC-ERR-003）优先于其他
+      // 拒绝语义，避免越权者以 includeFiles/includeContact 探测功能状态（信息泄露）。
+      // （5.4.3 起 includeFiles 不再显式拒绝：显式勾选即按下方 resolvePersonalCopyRefs
+      // 冻结附件引用，EXP-003；未勾选默认不打包任何附件，R3 默认关。）
       // 回源校验被代申请人归属（EXP-003 越权边界）：
       // 部门负责人/社团负责人代申请个人副本时，须确认 target 确实在自身作用域内
       // （部门成员 + 进入本部门招新路径的申请人 / 本社团当前成员），否则可为任意
@@ -380,10 +403,11 @@ export class ExportApplyCommand {
         },
         this.facts,
       );
-      // 个人副本材料引用：仅当能同时定位社团与部门时回源；否则（本人副本无部门/社团
-      // 边界）视为无附件引用。
+      // 个人副本材料引用（EXP-003/R3）：仅 includeFiles=true 显式勾选时冻结——
+      // 默认不打包附件；且仅当能同时定位社团与部门时回源；否则（本人副本无
+      // 部门/社团边界）视为无附件引用。
       const refs =
-        pc.clubId && pc.departmentId
+        request.includeFiles === true && pc.clubId && pc.departmentId
           ? await this.facts.resolvePersonalCopyRefs(pc.clubId, pc.targetUserId)
           : [];
       return {
@@ -443,8 +467,14 @@ export class ExportApplyCommand {
         privileged: principal.kind === 'platform_super_admin',
         personalTargetUserId: null,
         jointAnnotations: annotations,
+        // includeFiles=true → 冻结联合作用域附件引用（EXP-003；空数组=无附件照常创建）
         attachmentRefs: request.includeFiles
-          ? this.requireBatchFileRefs('联合导出', request.jointActivityId)
+          ? await this.requireBatchFileRefs({
+              kind: 'joint',
+              clubId: matchedClubId,
+              departmentId: null,
+              jointActivityId: request.jointActivityId,
+            })
           : [],
         auditClubId: matchedClubId ?? null,
       };
@@ -484,7 +514,15 @@ export class ExportApplyCommand {
       privileged: resolved.privileged,
       personalTargetUserId: null,
       jointAnnotations: [],
-      attachmentRefs: request.includeFiles ? this.requireBatchFileRefs(resolved.kind, null) : [],
+      // includeFiles=true → 冻结批量作用域附件引用（EXP-003；空数组=无附件照常创建）
+      attachmentRefs: request.includeFiles
+        ? await this.requireBatchFileRefs({
+            kind: resolved.kind,
+            clubId: resolved.clubId,
+            departmentId: request.departmentId ?? null,
+            jointActivityId: null,
+          })
+        : [],
       auditClubId: resolved.clubId ?? null,
     };
   }
@@ -521,12 +559,19 @@ export class ExportApplyCommand {
   }
 
   /**
-   * 批量/联合导出的附件快照引用（5.4.3 接对象存储后支持）。
-   * 当前对象存储未接入，显式拒绝 includeFiles 以避免附件静默缺失。
+   * 批量/联合导出的附件引用冻结（5.4.3，EXP-002/EXP-003）。
+   *
+   * includeFiles=true 时经事实回源端口解析作用域内的附件引用清单并原样返回
+   * （由调用方固化进 snapshot.attachmentRefs）；生产适配器从对象存储枚举。
+   * 空数组表示该作用域无附件 → 照常创建不含附件的导出任务，不报错（R3：
+   * 显式选择附件而非强制携带；默认关语义由 includeFiles 缺省/false 保证）。
    */
-  private requireBatchFileRefs(_kind: string, _jointActivityId: string | null): readonly string[] {
-    throw exportErrors.validation(
-      `当前版本暂不支持批量导出包含附件（includeFiles=true），请去除附件后重试（IFC-ERR-005）`,
-    );
+  private async requireBatchFileRefs(input: {
+    kind: 'club' | 'department' | 'platform' | 'joint';
+    clubId: string | null;
+    departmentId: string | null;
+    jointActivityId: string | null;
+  }): Promise<readonly string[]> {
+    return this.facts.resolveBatchAttachmentRefs(input);
   }
 }

@@ -4,6 +4,7 @@ import { AdaptersModule } from '../../adapters/adapters.module';
 import { ReadModelModule } from '../read-model/module';
 import { CasdoorModule } from '../casdoor/module';
 import { NotificationModule } from '../../modules/notification';
+import { StatExportModule } from '../../modules/stat-export/module';
 import { TASK_OPS_TELEMETRY_PORT, TASK_PROCESSOR_REGISTRY, TASK_REPOSITORY } from './contracts';
 import { PostgresTaskRepository } from './infrastructure/postgres-task-repository';
 import {
@@ -29,6 +30,7 @@ import {
   DeadlineTaskHandler,
   DerivedRebuildTaskHandler,
   DevelopmentTaskPrecondition,
+  ExportExpiryScanHandler,
   ExportGenerationHandler,
   FileCheckHandler,
   FormalDeleteHandler,
@@ -44,7 +46,7 @@ import { TasksWorker } from './worker-entry';
 
 @Module({
   // forwardRef：NotificationModule↔OrganizationModule↔TasksModule 存在装配环（#68），惰性解析
-  imports: [ReadModelModule, CasdoorModule, AdaptersModule, forwardRef(() => NotificationModule)],
+  imports: [ReadModelModule, CasdoorModule, AdaptersModule, forwardRef(() => NotificationModule), StatExportModule],
   providers: [
     PostgresTaskRepository,
     InMemoryTransactionOutboxStore,
@@ -71,6 +73,7 @@ import { TasksWorker } from './worker-entry';
     NotificationDeliveryHandler,
     FileCheckHandler,
     ExportGenerationHandler,
+    ExportExpiryScanHandler,
     DeadlineTaskHandler,
     FormalDeleteHandler,
     DerivedRebuildTaskHandler,
@@ -88,6 +91,7 @@ import { TasksWorker } from './worker-entry';
         notificationDelivery: NotificationDeliveryHandler,
         fileCheck: FileCheckHandler,
         exportGeneration: ExportGenerationHandler,
+        exportExpiryScan: ExportExpiryScanHandler,
         deadlineTask: DeadlineTaskHandler,
         formalDelete: FormalDeleteHandler,
         derivedRebuild: DerivedRebuildTaskHandler,
@@ -100,6 +104,7 @@ import { TasksWorker } from './worker-entry';
         registry.register(notificationDelivery);
         registry.register(fileCheck);
         registry.register(exportGeneration);
+        registry.register(exportExpiryScan);
         registry.register(deadlineTask);
         registry.register(formalDelete);
         registry.register(derivedRebuild);
@@ -113,6 +118,7 @@ import { TasksWorker } from './worker-entry';
         NotificationDeliveryHandler,
         FileCheckHandler,
         ExportGenerationHandler,
+        ExportExpiryScanHandler,
         DeadlineTaskHandler,
         FormalDeleteHandler,
         DerivedRebuildTaskHandler,

@@ -64,6 +64,7 @@ export interface ExportSafetySwitchState {
 
 export type ExportAuditAction =
   | 'export_apply'
+  | 'export_generate' // 异步生成（5.4.4，EXP-003：成功 allowed / 失败 denied 均留痕）
   | 'export_retry'
   | 'export_delete' // 申请人提前删除
   | 'export_formal_delete_invalidate' // 正式删除清单联动失效（AUD-009）
