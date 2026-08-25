@@ -2,7 +2,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Test } from '@nestjs/testing';
 
-import { OrganizationModule } from './module';
+import { OrganizationModule, assertOrgRealWiring } from './module';
+import {
+  orgCasdoorRealEnabled,
+  orgDbRealEnabled,
+  orgJobsPlatformEnabled,
+  orgNotifyChannelEnabled,
+} from './module';
 import { AdminClubsController } from './interfaces/controllers/admin-clubs.controller';
 import { AdminPermissionTemplatesController } from './interfaces/controllers/admin-permission-templates.controller';
 import { OrgWorkspaceController } from './interfaces/controllers/org-workspace.controller';
@@ -64,5 +70,53 @@ describe('OrganizationModule', () => {
     assert.ok(adminPerm instanceof AdminPermissionTemplatesController);
     assert.ok(orgWorkspace instanceof OrgWorkspaceController);
     await moduleRef.close();
+  });
+
+  it('#68 装配开关：fail-closed 默认全关（显式空 env，不依赖 shell 导出）', () => {
+    // 显式传空 env 而非读 process.env：避免开发者/CI shell 已导出 ORG_*_REAL
+    // 导致用例失真（评审 info 建议）；模块真实走哪条分支由装配冒烟测试另行验证
+    const empty = {} as NodeJS.ProcessEnv;
+    assert.equal(orgDbRealEnabled(empty), false);
+    assert.equal(orgCasdoorRealEnabled(empty), false);
+    assert.equal(orgJobsPlatformEnabled(empty), false);
+    assert.equal(orgNotifyChannelEnabled(empty), false);
+  });
+
+  it('#68 装配开关：显式 =1 才开启真实适配器（与 ADAPTERS_*_REAL 同口径）', () => {
+    const env = { ORG_DB_REAL: '1', ORG_CASDOOR_REAL: '1' } as NodeJS.ProcessEnv;
+    assert.equal(orgDbRealEnabled(env), true);
+    assert.equal(orgCasdoorRealEnabled(env), true);
+    assert.equal(orgJobsPlatformEnabled({} as NodeJS.ProcessEnv), false);
+    assert.equal(orgNotifyChannelEnabled({ ORG_NOTIFY_CHANNEL: '1' } as NodeJS.ProcessEnv), true);
+  });
+
+  it('#68 装配开关：fail-fast 校验 ORG_*_REAL 与 ADAPTERS_*_REAL 耦合', () => {
+    // 正常配对：ORG_DB_REAL=1 且 ADAPTERS_DB_REAL=1，不抛错
+    assert.doesNotThrow(() =>
+      assertOrgRealWiring({ ORG_DB_REAL: '1', ADAPTERS_DB_REAL: '1' } as NodeJS.ProcessEnv),
+    );
+    // ORG_NOTIFY_CHANNEL=1 且 ADAPTERS_NOTIFY_REAL=1，不抛错
+    assert.doesNotThrow(() =>
+      assertOrgRealWiring({
+        ORG_NOTIFY_CHANNEL: '1',
+        ADAPTERS_NOTIFY_REAL: '1',
+      } as NodeJS.ProcessEnv),
+    );
+    // 误配：ORG_DB_REAL=1 但 ADAPTERS_DB_REAL 未开 → 启动即抛错
+    assert.throws(
+      () => assertOrgRealWiring({ ORG_DB_REAL: '1' } as NodeJS.ProcessEnv),
+      /ADAPTERS_DB_REAL/,
+    );
+    assert.throws(
+      () => assertOrgRealWiring({ ORG_DB_REAL: '1', ADAPTERS_DB_REAL: '0' } as NodeJS.ProcessEnv),
+      /ADAPTERS_DB_REAL/,
+    );
+    // 误配：ORG_NOTIFY_CHANNEL=1 但 ADAPTERS_NOTIFY_REAL 未开 → 启动即抛错
+    assert.throws(
+      () => assertOrgRealWiring({ ORG_NOTIFY_CHANNEL: '1' } as NodeJS.ProcessEnv),
+      /ADAPTERS_NOTIFY_REAL/,
+    );
+    // 全关（默认 fail-closed）不抛错
+    assert.doesNotThrow(() => assertOrgRealWiring({} as NodeJS.ProcessEnv));
   });
 });
