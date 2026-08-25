@@ -8,6 +8,7 @@
  */
 
 export interface FaultTarget {
+  readonly clearFault: () => void;
   readonly callCount: () => number;
   readonly isFaulted: () => boolean;
 }
@@ -23,7 +24,7 @@ export function injectFault<T extends (...args: never[]) => Promise<unknown>>(
   original: T,
   error: Error,
   mode: 'failOnce' | 'persistent' = 'persistent',
-): T & { clearFault(): void; isFaulted(): boolean; callCount(): number } {
+): T & FaultTarget {
   let calls = 0;
   let faulted = true;
   const wrapped = async (...args: Parameters<T>): Promise<unknown> => {

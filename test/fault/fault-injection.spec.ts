@@ -75,16 +75,20 @@ describe('L4 故障注入：数据库 commit 失败（FAIL-005）', () => {
     const db = new FakeDbAdapter();
     db.queryError = new Error('read timeout on query');
     const uow = new FormUnitOfWork(db);
-    await assert.rejects(
-      () =>
-        uow.run({ kind: 'unprotected' }, async () => {
-          await db.query(uow.active, 'SELECT 1', []);
-          return 'never reached';
-        }),
-      /read timeout/,
-    );
-    assert.ok(db.events.some((e) => e.startsWith('rollback:')));
-    db.queryError = null;
+    try {
+      await assert.rejects(
+        () =>
+          uow.run({ kind: 'unprotected' }, async () => {
+            await db.query(uow.active, 'SELECT 1', []);
+            return 'never reached';
+          }),
+        /read timeout/,
+      );
+      assert.ok(db.events.some((e) => e.startsWith('rollback:')));
+    } finally {
+      // 确保断言失败时也能清除故障标记，避免污染后续用例（对象仅本地作用，清理以保可读性）
+      db.queryError = null;
+    }
   });
 });
 
