@@ -48,9 +48,9 @@ describe('TaskStatus', () => {
 });
 
 describe('TaskType', () => {
-  it('15 task types have owners', () => {
+  it('16 task types have owners', () => {
     const types = Object.values(TaskType);
-    assert.equal(types.length, 15);
+    assert.equal(types.length, 16);
     for (const t of types) {
       assert.ok(TASK_TYPE_OWNER[t] !== undefined);
       assert.ok(TASK_TYPE_OWNER[t].length > 0);

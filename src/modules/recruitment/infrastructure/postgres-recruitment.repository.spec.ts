@@ -11,7 +11,10 @@ import {
   applicationRowToSnapshot,
   departmentPathRowToSnapshot,
   interviewRowToSnapshot,
+  remedyWindowRowToSnapshot,
+  PostgresRecruitmentRepository,
 } from './postgres-recruitment.repository';
+import { RecruitmentUnitOfWork } from './unit-of-work';
 
 const NOW = new Date('2026-01-01T00:00:00Z');
 
@@ -42,6 +45,7 @@ describe('postgres recruitment repository row mapping', () => {
       status: 'PAUSED',
       open_at: NOW,
       close_at: null,
+      deadline: null,
       min_choices: 1,
       max_choices: 1,
       created_at: NOW,
@@ -87,6 +91,7 @@ describe('postgres recruitment repository row mapping', () => {
       status: 'ADMITTED',
       revision_number: 0,
       allow_transfer: false,
+      published: false,
       decisions:
         '[{"decision":"ADMIT","decidedBy":"m1","decidedAt":"2026-01-01T00:00:00.000Z","note":null}]',
       previous_status_before_suspend: null,
@@ -122,5 +127,128 @@ describe('postgres recruitment repository row mapping', () => {
     assert.strictEqual(snap.roundId, 'r1');
     assert.strictEqual(snap.evaluations.length, 1);
     assert.strictEqual(snap.skipReason, null);
+  });
+
+  it('补救窗口行映射（kind/目标申请数组/截止）', () => {
+    const snap = remedyWindowRowToSnapshot({
+      window_id: 'rw1',
+      activity_id: 'a1',
+      kind: 'PERSONAL_RECOVERY',
+      target_application_ids: '["app1","app2"]',
+      deadline: NOW,
+      reason: '个人恢复',
+      created_by: 'm1',
+      created_at: NOW,
+    });
+    assert.strictEqual(snap.windowId, 'rw1');
+    assert.strictEqual(snap.kind, 'PERSONAL_RECOVERY');
+    assert.deepEqual([...snap.targetApplicationIds], ['app1', 'app2']);
+    assert.strictEqual(snap.deadline, NOW);
+    assert.strictEqual(snap.createdBy, 'm1');
+  });
+});
+
+describe('postgres recruitment repository channel SQL（Critical 2 回归防护）', () => {
+  const makeFakeDb = () => {
+    const calls: { sql: string; params: readonly unknown[] }[] = [];
+    const db = {
+      beginTransaction: async () => ({ tx: 1 }),
+      commit: async () => undefined,
+      rollback: async () => undefined,
+      setRlsContext: async () => undefined,
+      clearRlsContext: async () => undefined,
+      query: async <T>(_tx: unknown, sql: string, params: readonly unknown[]): Promise<T[]> => {
+        calls.push({ sql, params });
+        return [] as T[];
+      },
+    };
+    return { db, calls };
+  };
+
+  const channelSnapshot = (overrides: Partial<{ deadline: Date | null }> = {}) => ({
+    id: 'ch1',
+    activityId: 'a1',
+    clubId: 'c1',
+    status: 'OPEN',
+    openAt: NOW,
+    closeAt: null,
+    deadline: overrides.deadline ?? null,
+    minChoices: 1,
+    maxChoices: 2,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+
+  it('saveChannel：INSERT 列含 deadline 且参数数组带值；EXCLUDED.deadline 引用合法（曾引未提供列）', async () => {
+    const { db, calls } = makeFakeDb();
+    const uow = new RecruitmentUnitOfWork(db as never);
+    const repo = new PostgresRecruitmentRepository(db as never, uow);
+    const deadline = new Date('2026-02-01T00:00:00Z');
+    await uow.run({ kind: 'unprotected' }, () =>
+      repo.saveChannel(channelSnapshot({ deadline }) as never),
+    );
+    const insert = calls.find((c) => c.sql.includes('INSERT INTO application_channels'));
+    assert.ok(insert, 'saveChannel 必须发出 INSERT');
+    // INSERT 列清单必须包含 deadline（EXCLUDED.deadline 的合法性依赖它）
+    assert.match(
+      insert!.sql,
+      /\(id, activity_id, club_id, status, open_at, close_at, deadline, min_choices/,
+    );
+    assert.match(insert!.sql, /deadline = EXCLUDED\.deadline/);
+    // 参数数组长度 = INSERT 列数（11 列），且 deadline 参数存在
+    assert.equal(insert!.params.length, 11);
+    assert.equal(insert!.params[6] as Date, deadline);
+  });
+
+  it('loadChannel：SELECT 列含 deadline（缺列会致 channelRowToSnapshot 读 undefined）', async () => {
+    const { db, calls } = makeFakeDb();
+    const uow = new RecruitmentUnitOfWork(db as never);
+    const repo = new PostgresRecruitmentRepository(db as never, uow);
+    await uow.run({ kind: 'unprotected' }, () => repo.loadChannel('ch1'));
+    const select = calls.find((c) =>
+      c.sql.includes('SELECT id, activity_id, club_id, status, open_at'),
+    );
+    assert.ok(select, 'loadChannel 必须发出 SELECT');
+    assert.match(select!.sql, /open_at, close_at, deadline, min_choices/);
+  });
+
+  it('saveRemedyWindow：INSERT 列齐全且含目标申请数组；EXCLUDED 引用合法', async () => {
+    const { db, calls } = makeFakeDb();
+    const uow = new RecruitmentUnitOfWork(db as never);
+    const repo = new PostgresRecruitmentRepository(db as never, uow);
+    await uow.run({ kind: 'unprotected' }, () =>
+      repo.saveRemedyWindow({
+        windowId: 'rw1',
+        activityId: 'a1',
+        kind: 'PERSONAL_RECOVERY',
+        targetApplicationIds: ['app1', 'app2'],
+        deadline: NOW,
+        reason: '个人恢复',
+        createdBy: 'm1',
+        createdAt: NOW,
+      }),
+    );
+    const insert = calls.find((c) => c.sql.includes('INSERT INTO remedy_windows'));
+    assert.ok(insert, 'saveRemedyWindow 必须发出 INSERT');
+    assert.match(
+      insert!.sql,
+      /\(window_id, activity_id, kind, target_application_ids, deadline, reason, created_by, created_at\)/,
+    );
+    assert.match(insert!.sql, /target_application_ids = EXCLUDED\.target_application_ids/);
+    assert.equal(insert!.params.length, 8);
+    // 目标申请数组以 JSONB 字符串序列化入库
+    assert.equal(insert!.params[3] as string, JSON.stringify(['app1', 'app2']));
+  });
+
+  it('loadRemedyWindow：SELECT 列含 target_application_ids（缺列会致映射读 undefined）', async () => {
+    const { db, calls } = makeFakeDb();
+    const uow = new RecruitmentUnitOfWork(db as never);
+    const repo = new PostgresRecruitmentRepository(db as never, uow);
+    await uow.run({ kind: 'unprotected' }, () => repo.loadRemedyWindow('rw1'));
+    const select = calls.find((c) =>
+      c.sql.includes('SELECT window_id, activity_id, kind, target_application_ids'),
+    );
+    assert.ok(select, 'loadRemedyWindow 必须发出 SELECT');
+    assert.match(select!.sql, /target_application_ids, deadline, reason, created_by, created_at/);
   });
 });

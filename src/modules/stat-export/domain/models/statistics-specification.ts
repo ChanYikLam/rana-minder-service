@@ -13,7 +13,10 @@
  *
  * 导出基线（EXP-001/EXP-002）：
  * - 5.4.2~5.4.4 导出复用本规范的字段范围基线，保证"统计口径 = 导出口径"一致；
- * - 联系方式默认不导出、秘密标识永不导出。
+ * - 联系方式默认不导出、秘密标识永不导出；
+ * - phone/email 仅在申请方显式勾选（includeContact=true）且具备字段级查看权限时
+ *   并入有效基线（权限闸门见 export-authorization.policy 的 authorizeContactOptIn，
+ *   EXP-002/EXP-003）；秘密标识任何情况下都不可导出。
  */
 
 // ---------------------------------------------------------------------------
@@ -238,15 +241,52 @@ export const EXPORT_FIELD_GROUPS: Record<ExportDatasetType, readonly string[]> =
   ],
 };
 
-/** 绝不允许出现在导出中的字段（秘密标识等） */
+/**
+ * 绝不允许出现在导出中的字段（秘密标识等，EXP-002）。
+ *
+ * 与联系方式（CONTACT_FIELDS）分离：密码/密钥/令牌/验证码/内部秘密标识属于
+ * 「任何身份、任何显式勾选都不可导出」的秘密集合（R4），而 phone/email 属于
+ * 「默认不导出、字段级权限内可显式勾选」的联系方式集合（EXP-002/EXP-003）。
+ * 两集合互不重叠，保证 includeContact=true 也绝不放行秘密标识。
+ */
 const NEVER_EXPORT_FIELDS = new Set([
   'idCard',
   'secretFlag',
   'internalNote',
   'secretMark',
-  'phone',
-  'email', // EXP-002：默认不导出联系方式
+  // —— 密码/密钥/令牌/验证码/内部秘密标识（EXP-002：永不导出）——
+  'password',
+  'secret',
+  'token',
+  'accessToken',
+  'refreshToken',
+  'apiKey',
+  'captcha',
+  'verificationCode',
+  'internalSecretId',
 ]);
+
+/**
+ * 联系方式字段（EXP-002）：默认不导出；仅在申请方显式勾选 includeContact=true
+ * 且其具备字段级查看权限时，才并入有效基线（仍受 clamp 越权剔除约束）。
+ */
+export const CONTACT_FIELDS = new Set(['phone', 'email']);
+
+/**
+ * 各数据集可勾选导出的联系方式字段清单（EXP-002/EXP-003）。
+ *
+ * 联系方式只存在于「人员行」数据集：
+ * - current_members / admission_history → ['phone', 'email']；
+ * - 其余数据集（汇总/漏斗/联合结论）为空数组——即使显式勾选 includeContact
+ *   也无联系方式列可放行，请求 phone/email 一律进入 rejected 清单。
+ */
+export const CONTACT_FIELD_GROUPS: Record<ExportDatasetType, readonly string[]> = {
+  club_summary: [],
+  current_members: ['phone', 'email'],
+  admission_history: ['phone', 'email'],
+  recruitment_funnel: [],
+  joint_conclusions: [],
+};
 
 // ---------------------------------------------------------------------------
 // 口径规则
@@ -685,22 +725,35 @@ export class StatisticsSpecification {
 
   /**
    * 返回指定数据集类型可导出的字段清单（统计口径 = 导出口径，EXP-001）。
+   * 缺省返回默认基线（不含联系方式，EXP-002）；includeContact=true 时
+   * 并入该数据集允许的联系方式字段（CONTACT_FIELD_GROUPS，仅人员行数据集非空）。
+   * 秘密标识永不进入任何基线（EXP-002）。
    */
-  exportFieldBaseline(type: ExportDatasetType): readonly string[] {
-    return EXPORT_FIELD_GROUPS[type];
+  exportFieldBaseline(
+    type: ExportDatasetType,
+    opts?: { readonly includeContact?: boolean },
+  ): readonly string[] {
+    const base = EXPORT_FIELD_GROUPS[type];
+    if (opts?.includeContact !== true) return base;
+    return [...base, ...CONTACT_FIELD_GROUPS[type]];
   }
 
   /**
    * 在导出基线基础上 clamp 请求的字段集，返回允许清单与被拒绝清单。
    * - requested 未指定则返回全基线；
-   * - 请求字段不在基线内（越权字段）自动剔除并列入 rejected；
-   * - 绝不在导出中出现的字段（秘密标识、联系方式）即使请求也拒绝（EXP-002）。
+   * - includeContact=true（opts 显式勾选）时有效基线 = 默认基线 + 该数据集的联系方式字段；
+   *   phone/email 未勾选 includeContact 即请求 → 视为越权剔除并列入 rejected（默认不导出，EXP-002）；
+   * - 秘密标识（NEVER_EXPORT_FIELDS）无论是否勾选联系方式一律拒绝（EXP-002：永不导出）；
+   * - 其余不在有效基线内的字段（越权/未知字段）自动剔除并列入 rejected。
+   *
+   * opts 缺省时行为与旧版完全兼容（等价 includeContact=false）。
    */
   clampExportFields(
     type: ExportDatasetType,
     requested?: readonly string[],
+    opts?: { readonly includeContact?: boolean },
   ): { fields: readonly string[]; rejected: readonly string[] } {
-    const baseline = this.exportFieldBaseline(type);
+    const baseline = this.exportFieldBaseline(type, { includeContact: opts?.includeContact });
     const baselineSet = new Set(baseline);
     const rejected: string[] = [];
 
@@ -714,6 +767,7 @@ export class StatisticsSpecification {
         return false;
       }
       if (!baselineSet.has(f)) {
+        // 联系方式未显式勾选（或该数据集无联系方式列）→ 与越权字段同路径剔除（EXP-002）
         rejected.push(f);
         return false;
       }

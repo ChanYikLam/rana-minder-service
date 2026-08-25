@@ -14,6 +14,7 @@ export const TaskType = {
   JOINT_CHANNEL_AUTO_CLOSE: 'joint-channel-auto-close',
   JOINT_FORCE_END_CLEANUP: 'joint-force-end-cleanup',
   JOINT_ARCHIVE_TERMINAL: 'joint-archive-terminal',
+  EXPORT_EXPIRY_SCAN: 'export-expiry-scan',
 } as const;
 
 export type TaskType = (typeof TaskType)[keyof typeof TaskType];
@@ -34,4 +35,5 @@ export const TASK_TYPE_OWNER: Readonly<Record<TaskType, string>> = {
   [TaskType.JOINT_CHANNEL_AUTO_CLOSE]: 'joint',
   [TaskType.JOINT_FORCE_END_CLEANUP]: 'joint',
   [TaskType.JOINT_ARCHIVE_TERMINAL]: 'joint',
+  [TaskType.EXPORT_EXPIRY_SCAN]: 'stat-export',
 } as const;

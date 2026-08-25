@@ -19,6 +19,14 @@ export interface ExportLease {
   readonly until: string; // ISO
 }
 
+/**
+ * 默认导出有效期：24 小时（EXP-003「默认保留 24 小时（期限由超管配置）」）。
+ *
+ * 期限的可配置入口在应用层 EXPORT_RETENTION_CONFIG_PORT（超管配置），
+ * 领域层只固化缺省值；markGenerationSucceeded 以 validityMs 入参接收实际期限。
+ */
+export const DEFAULT_EXPORT_VALIDITY_MS = 24 * 60 * 60 * 1000;
+
 export interface ExportTaskData {
   readonly id: string;
   /** 数据归属方（拥有提前删除权的主体；个人副本 = 被导出人） */
@@ -37,7 +45,7 @@ export interface ExportTaskData {
   readonly fileHash: string | null;
   readonly fileSize: number;
   readonly failureReason: string | null;
-  /** 可下载后的 24h 有效期截止 */
+  /** 可下载后的有效期截止（EXP-003：默认 24h，期限由超管配置） */
   readonly expiresAt: string | null;
   readonly revokedReason: string | null;
   readonly failureReasons: readonly string[];
@@ -116,6 +124,26 @@ export class ExportTaskAggregate {
   get attempts(): number {
     return this.data.attempts;
   }
+  /** 生成结果对象存储引用（生成完成后回填；删除联动清理与过期清理使用） */
+  get fileRef(): string | null {
+    return this.data.fileRef;
+  }
+  /** 生成文件哈希（成功幂等判定与状态视图使用，EXP-003） */
+  get fileHash(): string | null {
+    return this.data.fileHash;
+  }
+  /** 有效期截止（过期扫描 listDueForExpiry 判定使用，EXP-003） */
+  get expiresAt(): string | null {
+    return this.data.expiresAt;
+  }
+  /** 生成租约（单任务租约持有判定；生成中幂等续跑使用） */
+  get lease(): ExportLease | null {
+    return this.data.lease;
+  }
+  /** 最近一次失败原因（失败可重试视图使用） */
+  get failureReason(): string | null {
+    return this.data.failureReason;
+  }
   get isTerminal(): boolean {
     return this.machine.isTerminal(this.data.status);
   }
@@ -153,12 +181,18 @@ export class ExportTaskAggregate {
     );
   }
 
-  /** 生成成功：回填文件并将有效期设为自 now 起 24h */
+  /**
+   * 生成成功：回填文件并将有效期设为自 now 起 validityMs（EXP-003「默认保留 24 小时
+   * （期限由超管配置）」）。validityMs 缺省取 DEFAULT_EXPORT_VALIDITY_MS（24h）；
+   * 实际期限由应用层经 EXPORT_RETENTION_CONFIG_PORT 解析后传入。
+   */
   markGenerationSucceeded(input: {
     fileRef: string;
     fileHash: string;
     fileSize: number;
     now: Date;
+    /** 有效期时长（毫秒）；缺省 24h（EXP-003，超管可配置） */
+    validityMs?: number;
   }): void {
     const next = this.machine.transition(this.data.status, 'generation_succeeded');
     this.mutate(
@@ -168,7 +202,9 @@ export class ExportTaskAggregate {
         fileHash: input.fileHash,
         fileSize: input.fileSize,
         lease: null,
-        expiresAt: new Date(input.now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        expiresAt: new Date(
+          input.now.getTime() + (input.validityMs ?? DEFAULT_EXPORT_VALIDITY_MS),
+        ).toISOString(),
         failureReason: null,
         failureReasons: [],
         updatedAt: input.now.toISOString(),

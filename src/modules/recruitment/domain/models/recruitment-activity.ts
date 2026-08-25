@@ -100,6 +100,25 @@ export class RecruitmentActivity {
     this.snapshot = { ...this.snapshot, paused: false, updatedAt: now };
   }
 
+  /**
+   * 超管强制完成（REC-001）：任意非终态（含暂停/草稿/进行中）直接置 COMPLETED，
+   * 跳过转换表；终态（COMPLETED/CANCELLED）只读不可再改。恢复暂停标志。
+   */
+  forceComplete(now: Date): void {
+    if (
+      this.snapshot.status === RecruitmentActivityStatus.COMPLETED ||
+      this.snapshot.status === RecruitmentActivityStatus.CANCELLED
+    ) {
+      throw new Error('招新活动已处于终态，不可强制完成');
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      status: RecruitmentActivityStatus.COMPLETED,
+      paused: false,
+      updatedAt: now,
+    };
+  }
+
   private transition(
     machine: RecruitmentActivityStateMachine,
     event: RecruitmentActivityEvent,

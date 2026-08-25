@@ -77,6 +77,11 @@ export class DefaultSubmitApplicationUseCase implements SubmitApplicationUseCase
     if (channel.status !== 'OPEN') {
       throw recruitmentErrors.preconditionFailed('报名通道未开放');
     }
+    // 重开新窗口（channel.reopen）设置的截止：通道开放但已过新窗口截止则拒收新报名
+    // （SRS-SM-REC-002：报名按窗口 deadline 校验；首次开放 deadline 为 null 由活动层控截止）
+    if (channel.deadline !== null && input.now.getTime() > channel.deadline.getTime()) {
+      throw recruitmentErrors.preconditionFailed('报名通道当前窗口已截止');
+    }
     if (input.formRef) {
       const result = await this.form.loadSubmission(input.formRef);
       if (result.outcome === 'forbidden') {

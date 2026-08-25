@@ -1,7 +1,7 @@
 /**
  * config 域 PostgreSQL 权威仓储（infrastructure；CFG-001~005）。
  *
- * 与 20260824000000_create-config-tables.ts 逐列对齐（迁移与仓储单源一致）。
+ * 与 20260824100000_create-config-tables.ts 逐列对齐（迁移与仓储单源一致）。
  * 聚合快照整体读写：骨架列固定 + JSONB 承载数组/嵌套结构；读路径做 Date 复原
  * （JSONB 内时刻为 ISO 字符串，聚合与接口层依赖 Date 实例语义）。
  *

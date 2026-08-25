@@ -131,7 +131,7 @@ export const SRS_SM_INVENTORY: readonly SrsStateMachineEntry[] = [
     title: '联合活动',
     machinePath: M('joint/domain/state-machines/joint-activity.state-machine.ts'),
     declaredTransitions: 12,
-    evidence: [],
+    evidence: [M('joint/domain/state-machines/joint-activity.state-machine.spec.ts')],
   },
   {
     id: 'SRS-SM-JNT-002',
@@ -145,14 +145,14 @@ export const SRS_SM_INVENTORY: readonly SrsStateMachineEntry[] = [
     title: '联合申请',
     machinePath: M('joint/domain/state-machines/joint-application.state-machine.ts'),
     declaredTransitions: 7,
-    evidence: [],
+    evidence: [M('joint/domain/state-machines/joint-application.state-machine.spec.ts')],
   },
   {
     id: 'SRS-SM-JNT-004',
     title: '联合面试',
     machinePath: M('joint/domain/state-machines/joint-interview.state-machine.ts'),
     declaredTransitions: 15,
-    evidence: [],
+    evidence: [M('joint/domain/state-machines/joint-interview.state-machine.spec.ts')],
   },
   {
     id: 'SRS-SM-JNT-005',
@@ -166,7 +166,7 @@ export const SRS_SM_INVENTORY: readonly SrsStateMachineEntry[] = [
     title: '联合通道',
     machinePath: M('joint/domain/state-machines/joint-channel.state-machine.ts'),
     declaredTransitions: 9,
-    evidence: [],
+    evidence: [M('joint/domain/state-machines/joint-channel.state-machine.spec.ts')],
   },
   {
     id: 'SRS-SM-INV-001',
@@ -257,9 +257,4 @@ export const SRS_SM_INVENTORY: readonly SrsStateMachineEntry[] = [
 export const SM_FACETS: readonly string[] = ['NOM', 'AUT', 'STA', 'VER', 'CON', 'REV'];
 
 /** 当前允许的"未执行"清单（棘轮：补测后必须同步缩减，禁止新增） */
-export const EXPECTED_SM_PENDING: readonly string[] = [
-  'SRS-SM-JNT-001',
-  'SRS-SM-JNT-003',
-  'SRS-SM-JNT-004',
-  'SRS-SM-JNT-006',
-];
+export const EXPECTED_SM_PENDING: readonly string[] = [];

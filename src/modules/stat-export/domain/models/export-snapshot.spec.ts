@@ -5,6 +5,7 @@
  * 覆盖边界：
  * - 数据集缺省 → 全量 EXPORT_DATASET_TYPES；
  * - clamp 越权/秘密字段剔除（EXP-002：联系方式默认不导出、秘密标识永不导出）；
+ * - 联系方式显式勾选 includeContact 透传进 clamp 并固化进快照（5.4.3，EXP-002/EXP-003）；
  * - 被拒字段清单去重；
  * - 个人副本/联合标注/附件引用透传；
  * - 作用域全种类（club/department/platform/personal/joint）冻结；
@@ -128,6 +129,62 @@ describe('ExportSnapshot.freeze — 字段 clamp', () => {
     // phone 在两个数据集均被拒，应只出现一次
     const phoneCount = rejectedFields.filter((f) => f === 'phone').length;
     assert.equal(phoneCount, 1);
+  });
+
+  it('includeContact 缺省 → 快照固化 includeContact=false，phone/email 被拒（EXP-002 默认关）', () => {
+    const { snapshot, rejectedFields } = ExportSnapshot.freeze({
+      spec: SPEC,
+      scope: makeScope(),
+      datasets: ['current_members'],
+      requestedFields: { current_members: ['userId', 'studentNo', 'phone'] },
+    });
+    assert.equal(snapshot.data.includeContact, false);
+    assert.deepEqual(snapshot.fields('current_members'), ['userId', 'studentNo']);
+    assert.ok(rejectedFields.includes('phone'));
+  });
+
+  it('includeContact=true → 透传进每次 clamp：联系方式保留并固化标志（EXP-002 显式勾选）', () => {
+    const { snapshot, rejectedFields } = ExportSnapshot.freeze({
+      spec: SPEC,
+      scope: makeScope(),
+      datasets: ['current_members', 'club_summary'],
+      requestedFields: {
+        current_members: ['userId', 'studentNo', 'phone', 'email'],
+      },
+      includeContact: true,
+    });
+    assert.equal(snapshot.data.includeContact, true);
+    assert.deepEqual(snapshot.fields('current_members'), ['userId', 'studentNo', 'phone', 'email']);
+    // 非人员行数据集（club_summary）即使勾选也无联系方式列可放行
+    assert.ok(!snapshot.fields('club_summary').includes('phone'));
+    assert.deepEqual(rejectedFields, []);
+  });
+
+  it('includeContact=true 且未指定字段 → 冻结全基线+联系方式（EXP-002 勾选语义）', () => {
+    const { snapshot, rejectedFields } = ExportSnapshot.freeze({
+      spec: SPEC,
+      scope: makeScope(),
+      datasets: ['admission_history'],
+      includeContact: true,
+    });
+    const fields = snapshot.fields('admission_history');
+    assert.ok(fields.includes('phone'));
+    assert.ok(fields.includes('email'));
+    assert.equal(fields.length, SPEC.exportFieldBaseline('admission_history').length + 2);
+    assert.deepEqual(rejectedFields, []);
+  });
+
+  it('includeContact=true 时秘密标识仍被剔除并固化进 rejectedFields（R4 永不导出）', () => {
+    const { snapshot, rejectedFields } = ExportSnapshot.freeze({
+      spec: SPEC,
+      scope: makeScope(),
+      datasets: ['admission_history'],
+      requestedFields: { admission_history: ['userId', 'phone', 'password'] },
+      includeContact: true,
+    });
+    assert.deepEqual(snapshot.fields('admission_history'), ['userId', 'phone']);
+    assert.ok(rejectedFields.includes('password'));
+    assert.equal(snapshot.data.includeContact, true);
   });
 });
 
