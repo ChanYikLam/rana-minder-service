@@ -34,7 +34,10 @@ describe('FileUnitOfWork（文件域原子提交边界）', () => {
       db.events.filter((e) => !e.startsWith('query')),
       ['begin:tx-1', `set-rls:tx-1:${SCOPE.kind}`, 'commit:tx-1', `clear-rls:tx-1`],
     );
-    assert.equal(db.events.some((e) => e.startsWith('rollback')), false);
+    assert.equal(
+      db.events.some((e) => e.startsWith('rollback')),
+      false,
+    );
     // 事务结束后无残留活动事务（fail-closed）
     assert.throws(() => uow.active, /无活动事务/);
   });
@@ -52,7 +55,11 @@ describe('FileUnitOfWork（文件域原子提交边界）', () => {
     assert.ok(db.events.some((e) => e.startsWith('begin:')));
     assert.ok(db.events.some((e) => e.startsWith(`set-rls:`)));
     assert.ok(db.events.some((e) => e.startsWith('rollback:')));
-    assert.equal(db.events.some((e) => e.startsWith('commit:')), false, '失败路径不得 commit');
+    assert.equal(
+      db.events.some((e) => e.startsWith('commit:')),
+      false,
+      '失败路径不得 commit',
+    );
     // finally 清理：current 复位后可立刻开始下一个独立事务
     const second = await uow.run(SCOPE, async () => 'recovered');
     assert.equal(second, 'recovered');
@@ -84,7 +91,10 @@ describe('FileUnitOfWork（文件域原子提交边界）', () => {
       '嵌套调用不得开启第二个事务',
     );
     assert.ok(db.events.some((e) => e.startsWith('rollback:')));
-    assert.equal(db.events.some((e) => e.startsWith('commit:')), false);
+    assert.equal(
+      db.events.some((e) => e.startsWith('commit:')),
+      false,
+    );
 
     // 收口复位后可重新正常使用
     const ok = await uow.run(SCOPE, async () => 'after-nested');
