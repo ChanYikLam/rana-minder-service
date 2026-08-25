@@ -28,6 +28,10 @@ class MutablePermissions implements CurrentPermissionsPort {
     return [...this.perms];
   }
 
+  async effectiveForDepartment(): Promise<string[]> {
+    return [];
+  }
+
   async isPlatformSuperAdmin(): Promise<boolean> {
     return false;
   }

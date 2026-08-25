@@ -162,6 +162,21 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
     file: '20260824150000',
     tables: ['file_records', 'file_access_audit', 'file_delete_confirmations'],
   },
+  {
+    file: '20260825100000',
+    tables: [
+      'notification_facts',
+      'notification_inbox_presentations',
+      'channel_delivery_attempts',
+      'email_templates',
+      'notification_configs',
+      'notification_privileged_audit',
+    ],
+  },
+  {
+    file: '20260826000000',
+    tables: ['profile_field_directory'],
+  },
 ];
 
 /** down 后必须消失的核心新建表（每条建表链取代表，避免双 job_tasks 历史纠缠） */
@@ -180,6 +195,8 @@ const MUST_DROP_AFTER_DOWN: readonly string[] = [
   'remedy_windows',
   // org_group_mapping：dev 组织迁移（20260824000000-org）代表表
   'org_group_mapping',
+  // profile_field_directory：4.1 字段目录配置化（20260826000000），down 后须移除
+  'profile_field_directory',
 ];
 
 let pool: pg.Pool | null = null;

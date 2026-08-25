@@ -610,6 +610,30 @@ export class MemoryCurrentPermissionsPort implements CurrentPermissionsPort {
     return this.config.superAdminUsers.includes(userId);
   }
 
+  async effectiveForDepartment(userId: string, departmentId: string): Promise<string[]> {
+    // 部门受限范围权限（ORG-035）：仅来自 departmentId 匹配的部门职位；
+    // 超管不混入部门工作空间权限（与 effectiveForClub 同立场，ORG-023 跨空间隔离）
+    const memberships = this.config.positionGroupMemberships.get(userId) ?? [];
+    const isSuperAdmin = this.config.superAdminUsers.includes(userId);
+    if (isSuperAdmin) return [];
+    const byPosition = memberships
+      .filter((m) => m.departmentId === departmentId)
+      .flatMap((m) => MemoryCurrentPermissionsPort.departmentPositionPermissions(m.group));
+    return [...new Set<string>(byPosition)];
+  }
+
+  /** 部门职位派生权限（仅开发/单测桩：按 Group 名子串，GOV-007 门禁见类注释） */
+  private static departmentPositionPermissions(group: GroupStableRef): string[] {
+    if (group.name.includes('dept') || group.name.includes('部门负责人')) {
+      return [
+        PermissionCatalog.CLUB_MEMBER_MANAGE,
+        PermissionCatalog.CLUB_INTERVIEW_VIEW,
+        PermissionCatalog.CLUB_INTERVIEW_EVALUATE,
+      ];
+    }
+    return [];
+  }
+
   async primaryRoleAt(userId: string, clubId: string): Promise<string> {
     const memberships = this.config.positionGroupMemberships.get(userId) ?? [];
     const first = memberships.find((m) => m.clubId === clubId);

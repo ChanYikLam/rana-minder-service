@@ -220,6 +220,8 @@ export interface NotificationPort {
 export interface CurrentPermissionsPort {
   /** 主体在某社团的当前有效权限（跨社团隔离；ORG-023） */
   effectiveForClub(userId: string, clubId: string): Promise<readonly string[]>;
+  /** 主体在某部门的当前有效权限（ORG-035 部门受限范围；departmentId 为全局稳定标识） */
+  effectiveForDepartment(userId: string, departmentId: string): Promise<readonly string[]>;
   /** 主体是否平台超级管理员（ORG-029） */
   isPlatformSuperAdmin(userId: string): Promise<boolean>;
   /** 主体在某社团的主角色（职位 Group 名），无则空串（GOV-007：角色由 Group 名派生仅限内存桩） */

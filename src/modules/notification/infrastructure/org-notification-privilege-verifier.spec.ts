@@ -17,6 +17,9 @@ class FakePermissions implements CurrentPermissionsPort {
   async effectiveForClub(userId: string, clubId: string): Promise<string[]> {
     return this.effective.get(`${userId}@${clubId}`) ?? [];
   }
+  async effectiveForDepartment(): Promise<string[]> {
+    return [];
+  }
   async isPlatformSuperAdmin(userId: string): Promise<boolean> {
     return this.superAdmins.has(userId);
   }

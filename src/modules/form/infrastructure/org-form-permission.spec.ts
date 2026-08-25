@@ -3,7 +3,7 @@
  *
  * 用受控的假 CurrentPermissionsPort 固定语义映射与 fail-closed 边界：
  * - recruitment：manage=club:recruitment:manage；submit=非现任成员
- * - form design：platform=仅超管；club=管理类权限任一；department=fail-closed
+ * - form design：platform=仅超管；club=管理类权限任一；department=部门受限权限（ORG-035 契约）
  * - form fill：platform=已认证；club=现任成员；department=fail-closed
  * - notification kill-switch：PLATFORM=仅超管；CLUB=超管或 club:member:manage
  */
@@ -22,10 +22,14 @@ class FakePermissions implements CurrentPermissionsPort {
     private readonly effective: Map<string, string[]> = new Map(),
     private readonly superAdmins: ReadonlySet<string> = new Set(),
     private readonly roles: Map<string, string> = new Map(),
+    private readonly departmentEffective: Map<string, string[]> = new Map(),
   ) {}
 
   async effectiveForClub(userId: string, clubId: string): Promise<string[]> {
     return this.effective.get(`${userId}@${clubId}`) ?? [];
+  }
+  async effectiveForDepartment(userId: string, departmentId: string): Promise<string[]> {
+    return this.departmentEffective.get(`${userId}@${departmentId}`) ?? [];
   }
   async isPlatformSuperAdmin(userId: string): Promise<boolean> {
     return this.superAdmins.has(userId);
@@ -64,10 +68,34 @@ describe('OrgBackedFormDesignPermission（FORM-002 映射）', () => {
     );
   });
 
-  it('department 作用域：fail-closed（ORG-035 契约未落地前不放行）', async () => {
-    const port = new OrgBackedFormDesignPermission(leader);
+  it('department 作用域：持部门受限权限可设计，社团级权限不得放行（ORG-035 契约）', async () => {
+    const deptHead = new FakePermissions(
+      new Map(),
+      new Set(),
+      new Map(),
+      new Map([['u_dept@dept-1', ['club:member:manage']]]),
+    );
     assert.equal(
-      await port.canDesign({ subjectId: 'u_leader' }, formScopeOf('department', 'club-acm')),
+      await new OrgBackedFormDesignPermission(deptHead).canDesign(
+        { subjectId: 'u_dept' },
+        formScopeOf('department', 'dept-1'),
+      ),
+      true,
+    );
+    // 社团级权限（leader）不得放行部门表单（ORG-035 部门受限范围）
+    assert.equal(
+      await new OrgBackedFormDesignPermission(leader).canDesign(
+        { subjectId: 'u_leader' },
+        formScopeOf('department', 'dept-1'),
+      ),
+      false,
+    );
+    // 无部门权限的普通主体拒绝
+    assert.equal(
+      await new OrgBackedFormDesignPermission(plain).canDesign(
+        { subjectId: 'u_x' },
+        formScopeOf('department', 'dept-1'),
+      ),
       false,
     );
   });
