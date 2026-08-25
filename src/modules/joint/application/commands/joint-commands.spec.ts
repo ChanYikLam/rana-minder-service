@@ -190,6 +190,26 @@ describe('InitiateJointActivityUseCase', () => {
     assert.equal(repo.participants.size >= 1, true);
   });
 
+  it('授权拒绝：deny canInitiateJoint → forbidden（守卫行覆盖）', async () => {
+    const repo = makeMemoryRepo();
+    const auth = Object.assign(makeAuthAllAllow(), {
+      canInitiateJoint: async () => false,
+    });
+    const useCase = new DefaultInitiateJointActivityUseCase(repo, auth, tasksStub);
+    await assert.rejects(
+      () =>
+        useCase.execute({
+          title: 't',
+          confirmDeadline: new Date('2026-09-01'),
+          clubIds: ['club-a', 'club-b'],
+          actingClubId: 'club-a',
+          actor: 'u1',
+          now: NOW,
+        }),
+      /授权|forbidden|仅/i,
+    );
+  });
+
   it('至少两个社团：单社团 → validation 错误', async () => {
     const repo = makeMemoryRepo();
     const useCase = new DefaultInitiateJointActivityUseCase(repo, makeAuthAllAllow(), tasksStub);
@@ -286,6 +306,21 @@ describe('ForceEndJointActivityUseCase（授权拒绝冒烟）', () => {
 });
 
 describe('PublishJointActivityUseCase', () => {
+  it('活动不存在 → notFound', async () => {
+    const repo = makeMemoryRepo();
+    const useCase = new DefaultPublishJointActivityUseCase(repo, makeAuthAllAllow());
+    await assert.rejects(
+      () =>
+        useCase.execute({
+          activityId: 'missing-act',
+          actor: 'u1',
+          actingClubId: 'club-a',
+          now: NOW,
+        }),
+      /未找到|联合活动/,
+    );
+  });
+
   it('预置活动 + deny canPublish → forbidden', async () => {
     const repo = makeMemoryRepo();
     seedActivity(repo, 'act-p', JointActivityStatus.ESTABLISHED);
@@ -342,6 +377,29 @@ describe('PublishJointActivityUseCase', () => {
           now: NOW,
         }),
       /确认/,
+    );
+  });
+
+  it('非已成立状态 → precondition 失败（仅已成立的联合活动可公布）', async () => {
+    const repo = makeMemoryRepo();
+    // 状态非 ESTABLISHED（如已 PUBLISHED），即便参与者已确认也会先被状态守卫拦截
+    seedActivity(
+      repo,
+      'act-p4',
+      JointActivityStatus.PUBLISHED,
+      ['club-a', 'club-b'],
+      JointParticipantStatus.CONFIRMED,
+    );
+    const useCase = new DefaultPublishJointActivityUseCase(repo, makeAuthAllAllow());
+    await assert.rejects(
+      () =>
+        useCase.execute({
+          activityId: 'act-p4',
+          actor: 'u1',
+          actingClubId: 'club-a',
+          now: NOW,
+        }),
+      /仅已成立|可公布/,
     );
   });
 });
