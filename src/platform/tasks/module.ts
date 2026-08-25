@@ -46,7 +46,13 @@ import { TasksWorker } from './worker-entry';
 
 @Module({
   // forwardRef：NotificationModule↔OrganizationModule↔TasksModule 存在装配环（#68），惰性解析
-  imports: [ReadModelModule, CasdoorModule, AdaptersModule, forwardRef(() => NotificationModule), StatExportModule],
+  imports: [
+    ReadModelModule,
+    CasdoorModule,
+    AdaptersModule,
+    forwardRef(() => NotificationModule),
+    StatExportModule,
+  ],
   providers: [
     PostgresTaskRepository,
     InMemoryTransactionOutboxStore,
