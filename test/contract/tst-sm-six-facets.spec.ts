@@ -35,6 +35,16 @@ import {
   JointChannelStatus,
 } from '../../src/modules/joint/domain/state-machines/joint-channel.state-machine';
 import {
+  JointParticipantStateMachine,
+  JointParticipantEvent,
+  JointParticipantStatus,
+} from '../../src/modules/joint/domain/state-machines/joint-participant.state-machine';
+import {
+  JointConclusionStateMachine,
+  JointConclusionEvent,
+  JointConclusionStatus,
+} from '../../src/modules/joint/domain/state-machines/joint-conclusion.state-machine';
+import {
   JointInterviewStateMachine,
   JointInterviewEvent,
   JointInterviewStatus,
@@ -228,13 +238,126 @@ describe('TST-SM 六分面矩阵（P0 工作包①）', () => {
     assert.equal(syn.activityId(1), 'act-0001');
   });
 
-  it('枚举规模守恒：4 台机器的状态×事件网格覆盖完整（防漏配）', () => {
-    // JNT-001: 8×7=56 | JNT-003: 3×2=6 | JNT-004: 5×5=25 | JNT-006: 4×6=24
-    const expectedGrids = [56, 6, 25, 24];
+  it('JNT-002 联合参与社团关系：全枚举 NOM+STA+确定性+终态闭合', () => {
+    const matrix = new StateMachineTestMatrix({
+      id: 'JNT-002',
+      machine: new JointParticipantStateMachine(),
+      states: Object.values(JointParticipantStatus),
+      events: Object.values(JointParticipantEvent),
+      // 无真正终态（WITHDRAWN 可 REPROPOSE、EMERGENCY_SUSPENDED 可 RESUME）
+      terminal: [],
+      terminalAllow: [],
+      legal: [
+        {
+          from: JointParticipantStatus.PROPOSED,
+          event: JointParticipantEvent.CONFIRM,
+          to: JointParticipantStatus.CONFIRMED,
+        },
+        {
+          from: JointParticipantStatus.CONFIRMED,
+          event: JointParticipantEvent.STALE,
+          to: JointParticipantStatus.STALE_RECONFIRM,
+        },
+        {
+          from: JointParticipantStatus.STALE_RECONFIRM,
+          event: JointParticipantEvent.RECONFIRM,
+          to: JointParticipantStatus.CONFIRMED,
+        },
+        {
+          from: JointParticipantStatus.CONFIRMED,
+          event: JointParticipantEvent.PARTICIPATE,
+          to: JointParticipantStatus.PARTICIPATING,
+        },
+        {
+          from: JointParticipantStatus.PROPOSED,
+          event: JointParticipantEvent.WITHDRAW,
+          to: JointParticipantStatus.WITHDRAWN,
+        },
+        {
+          from: JointParticipantStatus.WITHDRAWN,
+          event: JointParticipantEvent.REPROPOSE,
+          to: JointParticipantStatus.PROPOSED,
+        },
+        {
+          from: JointParticipantStatus.PARTICIPATING,
+          event: JointParticipantEvent.SUSPEND,
+          to: JointParticipantStatus.EMERGENCY_SUSPENDED,
+        },
+        {
+          from: JointParticipantStatus.EMERGENCY_SUSPENDED,
+          event: JointParticipantEvent.RESUME,
+          to: JointParticipantStatus.PARTICIPATING,
+        },
+      ],
+    });
+    matrix.verifyAll();
+  });
+
+  it('JNT-005 参与社团结论：全枚举 NOM+STA+确定性+终态闭合', () => {
+    // ARCHIVE 对任意状态（含终态 ARCHIVED_LOCKED）幂等允许，故全量纳入 legal + 终态白名单
+    const archiveRows = Object.values(JointConclusionStatus).map((s) => ({
+      from: s,
+      event: JointConclusionEvent.ARCHIVE,
+      to: JointConclusionStatus.ARCHIVED_LOCKED,
+    }));
+    const matrix = new StateMachineTestMatrix({
+      id: 'JNT-005',
+      machine: new JointConclusionStateMachine(),
+      states: Object.values(JointConclusionStatus),
+      events: Object.values(JointConclusionEvent),
+      terminal: [JointConclusionStatus.ARCHIVED_LOCKED],
+      terminalAllow: [JointConclusionEvent.ARCHIVE],
+      legal: [
+        {
+          from: JointConclusionStatus.EDITABLE,
+          event: JointConclusionEvent.SEND_INVITE,
+          to: JointConclusionStatus.INVITE_PENDING,
+        },
+        {
+          from: JointConclusionStatus.INVITE_PENDING,
+          event: JointConclusionEvent.ACCEPT_INVITE,
+          to: JointConclusionStatus.LOCKED_ACCEPTED,
+        },
+        {
+          from: JointConclusionStatus.INVITE_PENDING,
+          event: JointConclusionEvent.REJECT_INVITE,
+          to: JointConclusionStatus.REVIEW_PENDING,
+        },
+        {
+          from: JointConclusionStatus.EDITABLE,
+          event: JointConclusionEvent.TO_REVIEW,
+          to: JointConclusionStatus.REVIEW_PENDING,
+        },
+        {
+          from: JointConclusionStatus.INVITE_PENDING,
+          event: JointConclusionEvent.TO_REVIEW,
+          to: JointConclusionStatus.REVIEW_PENDING,
+        },
+        {
+          from: JointConclusionStatus.INVITE_PENDING,
+          event: JointConclusionEvent.TIMEOUT_INVITE,
+          to: JointConclusionStatus.REVIEW_PENDING,
+        },
+        {
+          from: JointConclusionStatus.REVIEW_PENDING,
+          event: JointConclusionEvent.RESTORE_FROM_REVIEW,
+          to: JointConclusionStatus.INVITE_PENDING,
+        },
+        ...archiveRows,
+      ],
+    });
+    matrix.verifyAll();
+  });
+
+  it('枚举规模守恒：6 台机器的状态×事件网格覆盖完整（防漏配）', () => {
+    // JNT-001: 8×7=56 | JNT-002: 6×8=48 | JNT-003: 3×2=6 | JNT-004: 5×5=25 | JNT-005: 5×7=35 | JNT-006: 4×6=24
+    const expectedGrids = [56, 48, 6, 25, 35, 24];
     const grids = [
       Object.values(JointActivityStatus).length * Object.values(JointActivityEvent).length,
+      Object.values(JointParticipantStatus).length * Object.values(JointParticipantEvent).length,
       Object.values(JointApplicationStatus).length * Object.values(JointApplicationEvent).length,
       Object.values(JointInterviewStatus).length * Object.values(JointInterviewEvent).length,
+      Object.values(JointConclusionStatus).length * Object.values(JointConclusionEvent).length,
       Object.values(JointChannelStatus).length * Object.values(JointChannelEvent).length,
     ];
     assert.deepEqual(grids, expectedGrids);
