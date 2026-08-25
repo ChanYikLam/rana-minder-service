@@ -572,6 +572,10 @@ export class InMemoryRelationCommandAuditStore implements RelationCommandAuditPo
 // 当前权限端口（内存：可配置；默认超管映射为独立 Group，ORG-029）
 // --------------------------------------------------------------------------
 
+/** 部门负责人职位组名（内存桩精确白名单；开发/单测，GOV-007 门禁见类注释）。
+ * 与权限模板 DEPARTMENT_HEAD.name 一致（src/modules/organization/domain/models/permission-template.ts）。 */
+const DEPARTMENT_HEAD_GROUP_NAME = '部门负责人';
+
 export interface MemoryPermissionConfig {
   readonly superAdminUsers: readonly string[];
   readonly clubPermissions: Map<string, string[]>;
@@ -622,9 +626,9 @@ export class MemoryCurrentPermissionsPort implements CurrentPermissionsPort {
     return [...new Set<string>(byPosition)];
   }
 
-  /** 部门职位派生权限（仅开发/单测桩：按 Group 名子串，GOV-007 门禁见类注释） */
+  /** 部门职位派生权限（仅开发/单测桩：按精确组名白名单，GOV-007 门禁见类注释） */
   private static departmentPositionPermissions(group: GroupStableRef): string[] {
-    if (group.name.includes('dept') || group.name.includes('部门负责人')) {
+    if (group.name === DEPARTMENT_HEAD_GROUP_NAME) {
       return [
         PermissionCatalog.CLUB_MEMBER_MANAGE,
         PermissionCatalog.CLUB_INTERVIEW_VIEW,
@@ -652,7 +656,7 @@ export class MemoryCurrentPermissionsPort implements CurrentPermissionsPort {
         out.push({ clubId: m.clubId, permission: PermissionCatalog.CLUB_APPOINTMENT_MANAGE });
         out.push({ clubId: m.clubId, permission: PermissionCatalog.CLUB_MEMBER_MANAGE });
       }
-      if (m.group.name.includes('dept') || m.group.name.includes('部门负责人')) {
+      if (m.group.name === DEPARTMENT_HEAD_GROUP_NAME) {
         out.push({ clubId: m.clubId, permission: PermissionCatalog.CLUB_MEMBER_MANAGE });
       }
     }

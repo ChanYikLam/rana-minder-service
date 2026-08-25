@@ -42,21 +42,47 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
             ($16,$17,$18,$19,$20,now()),($21,$22,$23,$24,$25,now()),($26,$27,$28,$29,$30,now())
      ON CONFLICT (field_id) DO NOTHING`,
     [
-      'email', '邮箱', false, true, 10,
-      'phone', '手机号', false, true, 20,
-      'college', '学院', false, true, 30,
-      'grade', '年级', false, true, 40,
-      'studentId', '学号', true, false, 50,
-      'name', '姓名', true, false, 60,
+      'email',
+      '邮箱',
+      false,
+      true,
+      10,
+      'phone',
+      '手机号',
+      false,
+      true,
+      20,
+      'college',
+      '学院',
+      false,
+      true,
+      30,
+      'grade',
+      '年级',
+      false,
+      true,
+      40,
+      'studentId',
+      '学号',
+      true,
+      false,
+      50,
+      'name',
+      '姓名',
+      true,
+      false,
+      60,
     ],
   );
   await runner.query(`ALTER TABLE public.profile_field_directory ENABLE ROW LEVEL SECURITY`);
   await runner.query(
     `DROP POLICY IF EXISTS p_profile_field_directory_all ON public.profile_field_directory`,
   );
+  // 目录为平台级只读配置（FORM-004 白名单；应用层仅 SELECT）。写侧属平台配置命令，
+  // 随配置版本发布时另行以独立写权限/维护账号收口，不放行通用写（评审建议收紧）。
   await runner.query(`
     CREATE POLICY p_profile_field_directory_all ON public.profile_field_directory
-      FOR ALL TO PUBLIC USING (true) WITH CHECK (true)
+      FOR SELECT TO PUBLIC USING (true)
   `);
 }
 

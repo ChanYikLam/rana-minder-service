@@ -7,8 +7,8 @@
  * 管理侧（平台增删/排序/停用）属平台配置命令，随配置版本发布另行接线。
  */
 
-import { Injectable } from '@nestjs/common';
-import type { DbAdapter } from '../../../shared/db-adapter';
+import { Injectable, Logger } from '@nestjs/common';
+import type { DbAdapter, TransactionContext } from '../../../shared/db-adapter';
 import {
   EditableProfileField,
   AuthoritativeProfileField,
@@ -45,14 +45,19 @@ const DIRECTORY_RLS_SCOPE = { kind: 'unprotected' } as const;
 
 @Injectable()
 export class PostgresProfileFieldDirectory implements ProfileFieldDirectoryPort {
+  private readonly logger = new Logger(PostgresProfileFieldDirectory.name);
+
   constructor(private readonly db: DbAdapter) {}
 
   async listApproved(): Promise<readonly ProfileFieldDirectoryEntry[]> {
     // 自建独立事务：本实现被 form 域跨模块调用（form 跑在 FormUnitOfWork 事务内，
     // 不得读取 IdentityUnitOfWork.active——无 identity 事务时 getter 抛错）。
     // 只读查询独立收口，不参与调用方事务（评审 4.1 Critical：跨模块事务上下文错配）。
-    const tx = await this.db.beginTransaction();
+    let tx: TransactionContext | null = null;
     try {
+      // begin 亦纳入兜底覆盖：连接级故障（begin 本身抛错）时同样降级内置目录，
+      // 保证 FORM-004 自动带入白名单在任意 DB 故障下不失效；此时无事务可回滚。
+      tx = await this.db.beginTransaction();
       await this.db.setRlsContext(tx, DIRECTORY_RLS_SCOPE);
       const rows = await this.db.query<DirectoryRow>(
         tx,
@@ -72,12 +77,21 @@ export class PostgresProfileFieldDirectory implements ProfileFieldDirectoryPort 
         readOnly: r.read_only,
         editable: r.editable,
       }));
-    } catch {
-      // 表不可用（迁移未执行/只读降级）时兜底内置目录，自动带入白名单不失效（FORM-004）
-      await this.db.rollback(tx).catch(() => undefined);
+    } catch (error) {
+      // 目录查询故障（begin/表不可用/commit 失败等）统一兜底内置目录，
+      // 自动带入白名单不失效（FORM-004）；记录告警以便可观测真实 DB 故障。
+      if (tx !== null) {
+        await this.db.rollback(tx).catch(() => undefined);
+      }
+      this.logger.warn({
+        message: '[PostgresProfileFieldDirectory] 目录查询降级内置兜底目录',
+        error: error instanceof Error ? error.message : String(error),
+      });
       return FALLBACK_ENTRIES;
     } finally {
-      await this.db.clearRlsContext(tx).catch(() => undefined);
+      if (tx !== null) {
+        await this.db.clearRlsContext(tx).catch(() => undefined);
+      }
     }
   }
 }

@@ -29,9 +29,7 @@ const CLUB_DESIGN_PERMISSIONS: readonly string[] = [
 ];
 
 /** 部门设计权限（ORG-035：仅部门受限范围；部门负责人唯一管理类权限） */
-const DEPARTMENT_DESIGN_PERMISSIONS: readonly string[] = [
-  PermissionCatalog.CLUB_MEMBER_MANAGE,
-];
+const DEPARTMENT_DESIGN_PERMISSIONS: readonly string[] = [PermissionCatalog.CLUB_MEMBER_MANAGE];
 
 export class OrgBackedFormDesignPermission implements FormDesignPermissionPort {
   constructor(private readonly permissions: CurrentPermissionsPort) {}

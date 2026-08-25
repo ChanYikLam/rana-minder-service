@@ -92,19 +92,31 @@ describe('MemoryCurrentPermissionsPort.effectiveForDepartment（4.1 部门权限
       [
         'u_dept',
         [
-          { group: { owner: 'club-acm', name: '部门负责人组' }, clubId: 'club-acm', departmentId: 'dept-1' },
+          {
+            group: { owner: 'club-acm', name: '部门负责人' },
+            clubId: 'club-acm',
+            departmentId: 'dept-1',
+          },
         ],
       ],
       [
         'u_dept2',
         [
-          { group: { owner: 'club-acm', name: '部门负责人组' }, clubId: 'club-acm', departmentId: 'dept-2' },
+          {
+            group: { owner: 'club-acm', name: '部门负责人' },
+            clubId: 'club-acm',
+            departmentId: 'dept-2',
+          },
         ],
       ],
       [
         'u_leader',
         [
-          { group: { owner: 'club-acm', name: '负责人组' }, clubId: 'club-acm', departmentId: null },
+          {
+            group: { owner: 'club-acm', name: '负责人组' },
+            clubId: 'club-acm',
+            departmentId: null,
+          },
         ],
       ],
     ]),
