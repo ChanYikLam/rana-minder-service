@@ -1,3 +1,4 @@
+// no-spec-required 纯接口端口（无实现逻辑），由基础设施实现（postgres-profile-field-directory.spec.ts）与内存实现实际覆盖验证
 /**
  * 平台批准的基本资料字段目录端口（identity 域；FORM-004、IDN-002）。
  *
