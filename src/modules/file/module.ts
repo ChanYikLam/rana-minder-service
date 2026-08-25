@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { IdentityModule } from '../identity/identity.module';
 import { InitiateUploadCommand } from './application/commands/initiate-upload.command';
 import { CompleteUploadCommand } from './application/commands/complete-upload.command';
 import { AskFileCheckCommand } from './application/commands/ask-file-check.command';
@@ -29,6 +30,7 @@ import { FORMAL_DELETE_CONFIRM_PORT } from './infrastructure/formal-delete-confi
 import { LogOnlyFormalDeleteConfirm } from './infrastructure/formal-delete-confirm-port';
 import { CLEANUP_REFERENCE_GUARD } from './infrastructure/cleanup-reference-guard-port';
 import { LogOnlyCleanupReferenceGuard } from './infrastructure/cleanup-reference-guard-port';
+import { FileNestController } from './interfaces/nest/file.nest.controller';
 
 /**
  * 领域模块：文件（4.2，SRS-SM-FILE-001）。
@@ -45,6 +47,8 @@ import { LogOnlyCleanupReferenceGuard } from './infrastructure/cleanup-reference
  * - 数据库与对象存储不伪装原子事务，部分失败不得返回假成功。
  */
 @Module({
+  imports: [IdentityModule],
+  controllers: [FileNestController],
   providers: [
     // 领域规则（纯规则）
     FileStateMachine,

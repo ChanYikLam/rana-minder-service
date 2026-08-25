@@ -42,6 +42,12 @@ function memoryStore(): {
     async fail(id: string, error: string) {
       state.failed.push({ id, error });
     },
+    async countByStatus() {
+      return { pending: 0, running: 0, done: 0, failed: 0 };
+    },
+    async requeue() {
+      // 测试场景不依赖人工重投，置空实现
+    },
   };
   return { store, ...state };
 }

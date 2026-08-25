@@ -20,6 +20,7 @@ import { JobTaskRunner, type JobTaskHandlerRegistry } from './job-task-runner';
 import { ProfileSyncTaskHandler } from './profile-sync-task.handler';
 import { ProfileNameWriteTaskHandler } from './profile-name-write-task.handler';
 import { JOB_TASK_STORE, JOB_TASK_HANDLERS } from './tokens';
+import { JobNestController } from './interfaces/nest/job.nest.controller';
 import {
   APPLY_PROFILE_SYNC_STEP_USE_CASE,
   APPLY_NAME_CORRECTION_WRITE_USE_CASE,
@@ -28,6 +29,7 @@ import { IdentityUnitOfWork } from '../identity/infrastructure/unit-of-work';
 
 @Module({
   imports: [AdaptersModule, IdentityModule],
+  controllers: [JobNestController],
   providers: [
     {
       provide: JOB_TASK_STORE,

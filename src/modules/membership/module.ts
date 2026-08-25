@@ -1,5 +1,15 @@
 import { Module } from '@nestjs/common';
 
+import { IdentityModule } from '../identity/identity.module';
+import { MembershipNestController } from './interfaces/nest/membership.nest.controller';
+import {
+  SUBMIT_DEPARTMENT_APPLICATION_COMMAND,
+  DECIDE_DEPARTMENT_APPLICATION_COMMAND,
+  EXECUTE_DEPARTMENT_APPLICATION_COMMAND,
+  WITHDRAW_DEPARTMENT_APPLICATION_COMMAND,
+  MEMBER_EXPERIENCE_QUERY,
+  DEPARTMENT_RELATION_QUERY,
+} from './tokens';
 import { EnterMembershipCommand } from './application/commands/enter-membership.command';
 import { ResolveMemberActivationCommand } from './application/commands/resolve-member-activation.command';
 import { CompensateMemberActivationCommand } from './application/commands/compensate-member-activation.command';
@@ -66,7 +76,22 @@ import { MEMBERSHIP_ACCESS_PORT, MEMBERSHIP_NOTIFICATION_PORT } from './applicat
  * - 同步异常只能经人工按 Casdoor 当前值修复收口，禁止一键重放（ORG-030/034）。
  */
 @Module({
+  imports: [IdentityModule],
+  controllers: [MembershipNestController],
   providers: [
+    // ----- 传输层用例 token（复用已有应用层；与类 provider 并存，独立实例）-----
+    { provide: SUBMIT_DEPARTMENT_APPLICATION_COMMAND, useClass: SubmitDepartmentApplicationCommand },
+    { provide: DECIDE_DEPARTMENT_APPLICATION_COMMAND, useClass: DecideDepartmentApplicationCommand },
+    {
+      provide: EXECUTE_DEPARTMENT_APPLICATION_COMMAND,
+      useClass: ExecuteDepartmentApplicationCommand,
+    },
+    {
+      provide: WITHDRAW_DEPARTMENT_APPLICATION_COMMAND,
+      useClass: WithdrawDepartmentApplicationCommand,
+    },
+    { provide: MEMBER_EXPERIENCE_QUERY, useClass: MemberExperienceQuery },
+    { provide: DEPARTMENT_RELATION_QUERY, useClass: DepartmentRelationQuery },
     // 领域规则（纯规则）
     MembershipPeriodStateMachine,
     DepartmentRelationStateMachine,

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { DB_ADAPTER } from '../../adapters/tokens';
+import { IdentityModule } from '../identity/identity.module';
 import { SaveCorrectionDraftCommand } from './application/commands/correction-submit.command';
 import { SubmitCorrectionCommand } from './application/commands/correction-submit.command';
 import { DecideCorrectionCommand } from './application/commands/correction-decide.command';
@@ -36,6 +37,14 @@ import {
 } from './application/commands/retention-cleanup.command';
 import { DeletionChecklistQuery } from './application/queries/deletion-checklist.query';
 import { DeletionPolicy } from './domain/services/deletion-policy';
+import { AuditNestController } from './interfaces/nest/audit.nest.controller';
+import {
+  AUDIT_QUERY,
+  SAVE_CORRECTION_DRAFT_COMMAND,
+  SUBMIT_CORRECTION_COMMAND,
+  DECIDE_CORRECTION_COMMAND,
+  WITHDRAW_CORRECTION_COMMAND,
+} from './tokens';
 import { DELETION_CHECKLIST_REPOSITORY } from './infrastructure/deletion-checklist-repository';
 import { PostgresDeletionChecklistRepository } from './infrastructure/postgres-deletion-checklist-repository';
 
@@ -54,8 +63,15 @@ import { PostgresDeletionChecklistRepository } from './infrastructure/postgres-d
  *   应用内无修改/删除审计入口；删除只留最小审计；不建设匿名化。
  */
 @Module({
-  imports: [AdaptersModule],
+  imports: [AdaptersModule, IdentityModule],
+  controllers: [AuditNestController],
   providers: [
+    { provide: AUDIT_QUERY, useExisting: AuditQuery },
+    { provide: SAVE_CORRECTION_DRAFT_COMMAND, useExisting: SaveCorrectionDraftCommand },
+    { provide: SUBMIT_CORRECTION_COMMAND, useExisting: SubmitCorrectionCommand },
+    { provide: DECIDE_CORRECTION_COMMAND, useExisting: DecideCorrectionCommand },
+    { provide: WITHDRAW_CORRECTION_COMMAND, useExisting: WithdrawCorrectionCommand },
+
     CorrectionStateMachine,
     CorrectionPolicy,
     AuditSanitizer,
@@ -131,6 +147,11 @@ import { PostgresDeletionChecklistRepository } from './infrastructure/postgres-d
     DELETION_STEP_EXECUTOR,
     RETENTION_CLEANUP_EXECUTOR,
     AuditUnitOfWork,
+    AUDIT_QUERY,
+    SAVE_CORRECTION_DRAFT_COMMAND,
+    SUBMIT_CORRECTION_COMMAND,
+    DECIDE_CORRECTION_COMMAND,
+    WITHDRAW_CORRECTION_COMMAND,
   ],
 })
 export class AuditModule {}

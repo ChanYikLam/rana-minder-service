@@ -25,6 +25,8 @@
 
 import type { DbAdapter, RlsScope, TransactionContext } from '../../shared/db-adapter';
 
+export type JobTaskStatus = 'pending' | 'running' | 'done' | 'failed';
+
 export interface ClaimedJobTask {
   readonly id: string;
   readonly type: string;
@@ -39,6 +41,10 @@ export interface JobTaskStore {
   complete(id: string, now: Date): Promise<void>;
   retry(id: string, nextRunAt: Date, now: Date): Promise<void>;
   fail(id: string, error: string, now: Date): Promise<void>;
+  /** 按状态聚合当前积压/完成情况（只读，供运维状态查询） */
+  countByStatus(): Promise<Readonly<Record<JobTaskStatus, number>>>;
+  /** 人工重投：将 failed/pending 任务重置为 pending 并立即可被领取（手动重试入口） */
+  requeue(id: string, nextRunAt: Date, now: Date): Promise<void>;
 }
 
 interface JobTaskRow {
@@ -149,6 +155,41 @@ export class PostgresJobTaskStore implements JobTaskStore {
           SET status = 'failed', error = $2, failed_at = $3, leased_until = NULL
         WHERE id = $1 AND status = 'running'`,
       [id, error, now],
+    );
+  }
+
+  async countByStatus(): Promise<Readonly<Record<JobTaskStatus, number>>> {
+    const session = new JobDbSession(this.db);
+    try {
+      const rows = await session.query<{ status: string; cnt: number }>(
+        `SELECT status, COUNT(*)::int AS cnt FROM job_tasks GROUP BY status`,
+        [],
+      );
+      const counts: Record<JobTaskStatus, number> = {
+        pending: 0,
+        running: 0,
+        done: 0,
+        failed: 0,
+      };
+      for (const row of rows) {
+        if (row.status in counts) {
+          counts[row.status as JobTaskStatus] = row.cnt;
+        }
+      }
+      await session.close(true);
+      return counts;
+    } catch (error) {
+      await session.close(false);
+      throw error;
+    }
+  }
+
+  async requeue(id: string, nextRunAt: Date, now: Date): Promise<void> {
+    await this.mutate(
+      `UPDATE job_tasks
+          SET status = 'pending', next_run_at = $2, leased_until = NULL, last_attempt_at = $3
+        WHERE id = $1 AND status IN ('pending', 'failed')`,
+      [id, nextRunAt, now],
     );
   }
 
