@@ -68,6 +68,8 @@ export function probe(
   };
 }
 
+// 网格 key 用 `|` 连接 state|event，故状态/事件名**不得包含 `|`**（当前全部枚举均无此字符）。
+// 未来新增状态机若采用含 `|` 的名称，需先改此分隔符或改为复合 key，否则 split('|') 会错位。
 export function enumerateAll(cfg: MatrixConfig): Map<string, ProbeResult> {
   const grid = new Map<string, ProbeResult>();
   for (const s of cfg.states) {
@@ -78,6 +80,7 @@ export function enumerateAll(cfg: MatrixConfig): Map<string, ProbeResult> {
   return grid;
 }
 
+// 与 enumerateAll 同一套 `state|event` 复合 key，保持分隔符约定一致（见 enumerateAll 上方注释）。
 function buildLegalIndex(legal: readonly MachineRow[]): Map<string, string> {
   return new Map(legal.map((r) => [`${r.from}|${r.event}`, r.to]));
 }
@@ -95,6 +98,13 @@ export class StateMachineTestMatrix {
       const [from, event] = key.split('|');
       const r = probe(this.cfg, this.cfg.machine, event, from);
       assert.equal(r.allowed, true, `NOM ${key} 应允许`);
+      // 显式区分「允许必有次态」：合法转换若漏配次态（nextState 为 undefined），
+      // 先报「漏配次态」，而非笼统的「次态应为 X」，使失败信息更精准
+      assert.notEqual(
+        r.nextState,
+        undefined,
+        `NOM ${key} 合法转换漏配次态（nextState 为 undefined）`,
+      );
       assert.equal(r.nextState, to, `NOM ${key} 次态应为 ${to}`);
     }
   }
