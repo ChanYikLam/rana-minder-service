@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { IdentityModule } from '../identity/identity.module';
 import { InitiateUploadCommand } from './application/commands/initiate-upload.command';
 import { CompleteUploadCommand } from './application/commands/complete-upload.command';
 import { AskFileCheckCommand } from './application/commands/ask-file-check.command';
@@ -34,6 +35,7 @@ import { DB_ADAPTER } from '../../adapters/tokens';
 import { S3ObjectStoreAdapter } from '../../adapters/storage/s3-object-store.adapter';
 import { ExternalFileCheckAdapter } from '../../adapters/file-check/external-file-check.adapter';
 import { isSecretRef, resolveSecret } from '../../config/secret-ref';
+import { FileNestController } from './interfaces/nest/file.nest.controller';
 
 /**
  * 领域模块：文件（4.2，SRS-SM-FILE-001）。
@@ -129,7 +131,8 @@ export function createObjectStorePort(
 }
 
 @Module({
-  imports: [AdaptersModule],
+  imports: [AdaptersModule, IdentityModule],
+  controllers: [FileNestController],
   providers: [
     // 领域规则（纯规则）
     FileStateMachine,
