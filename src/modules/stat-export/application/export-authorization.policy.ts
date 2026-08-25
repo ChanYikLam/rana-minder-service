@@ -10,6 +10,10 @@
  *
  * 越权/作用域不匹配分别拒绝（IFC-ERR-003 / IFC-ERR-004）；不涉及停用/联合失效判定
  * （该判定依赖事实回源，由 command 层配合上下文完成，见 export-apply.command.ts）。
+ *
+ * 5.4.3 补充（EXP-002/EXP-003）：联系方式（phone/email）显式勾选的字段级权限闸门
+ * authorizeContactOptIn——默认不导出，显式勾选须具备字段级查看权限（社团负责人/人事、
+ * 部门负责人、平台超管；普通成员/申请人仅限本人个人副本；面试官一律禁止）。
  */
 
 import type {
@@ -298,6 +302,65 @@ export function authorizePersonalCopy(
     clubId: scope.clubId ?? null,
     departmentId: scope.departmentId ?? null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 联系方式显式勾选的字段级权限闸门（5.4.3，EXP-002/EXP-003）
+// ---------------------------------------------------------------------------
+
+/**
+ * 联系方式勾选授权的请求形状（结构化最小子集，避免策略层反向依赖命令层类型）。
+ * ExportApplyRequest 天然满足本接口；作用域字段仅为透传兼容（本闸门不校验作用域，
+ * 作用域收敛仍由 authorizeBatchExportScope / authorizePersonalCopy 负责）。
+ */
+export interface ContactOptInRequest {
+  readonly kind: 'club' | 'department' | 'platform' | 'joint' | 'personal';
+  readonly clubId?: string;
+  readonly departmentId?: string;
+  readonly jointActivityId?: string;
+  readonly includeContact?: boolean;
+  readonly targetUserId?: string; // personal 副本目标（缺省 = 本人）
+}
+
+/** 允许显式勾选导出联系方式（phone/email）的身份集合：具备人员行记录级 + 字段级查看权限者 */
+const CONTACT_OPT_IN_ALLOWED_KINDS: readonly ExportPrincipal['kind'][] = [
+  'club_leader_hr',
+  'department_leader',
+  'platform_super_admin',
+];
+
+/**
+ * 联系方式显式勾选的字段级权限闸门（EXP-002/EXP-003，R1/R2）。
+ *
+ * includeContact=true 仅允许：
+ * - club_leader_hr / department_leader / platform_super_admin（对人员行数据本身
+ *   具备记录级查看权限，字段级联系方式在其可见范围内）；
+ * - member_applicant 的「本人个人副本」（target === principal.userId）：本人对自己的
+ *   联系方式天然具备完整查看权；
+ * - interviewer 一律禁止（其本就无批量导出与个人副本权限）；member_applicant 代他人
+ *   或对批量作用域勾选 → 拒绝。
+ *
+ * 未勾选（includeContacts 缺省/false）时直接放行——默认不导出即无需授权（R2 默认关）。
+ * 勾选被拒抛 IFC-ERR-003（IFC-ERR-003 语义：当前无权），由命令层统一走拒绝审计。
+ *
+ * 纯函数、不依赖事实回源；供 export-apply.command 申请路径与后续生成管线共用，
+ * 保证「申请时允许勾选」与「生成时仍可导出」口径一致。
+ */
+export function authorizeContactOptIn(
+  principal: ExportPrincipal,
+  request: ContactOptInRequest,
+): void {
+  if (request.includeContact !== true) return;
+  if (CONTACT_OPT_IN_ALLOWED_KINDS.includes(principal.kind)) return;
+  // 普通成员/申请人：仅本人个人副本可勾选（target 缺省视为本人）
+  if (
+    principal.kind === 'member_applicant' &&
+    request.kind === 'personal' &&
+    (request.targetUserId ?? principal.userId) === principal.userId
+  ) {
+    return;
+  }
+  throw exportErrors.forbidden('当前身份无权勾选导出联系方式（EXP-002/EXP-003）');
 }
 
 // ---------------------------------------------------------------------------

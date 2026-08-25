@@ -12,8 +12,10 @@ import {
   type AdmissionAcceptanceFact,
   type NormalFunnelFact,
   type JointConclusionFact,
+  type ExportDatasetType,
   EXPORT_FIELD_GROUPS,
   EXPORT_DATASET_TYPES,
+  CONTACT_FIELD_GROUPS,
 } from './statistics-specification';
 
 const spec = new StatisticsSpecification();
@@ -520,6 +522,138 @@ describe('StatisticsSpecification — 导出字段基线', () => {
     assert.ok(fields.includes('userId'));
     assert.ok(!fields.includes('secretFlag'));
     assert.ok(rejected.includes('secretFlag'));
+  });
+});
+
+// ===========================================================================
+// 7.1 联系方式显式勾选与秘密标识（5.4.3，EXP-002/EXP-003，R2/R4）
+// ===========================================================================
+
+describe('StatisticsSpecification — 联系方式勾选与秘密标识（EXP-002/EXP-003）', () => {
+  const types = [...EXPORT_DATASET_TYPES];
+  /** 仅人员行数据集存在联系方式列；其余数据集即使勾选也无联系方式可放行 */
+  const PERSON_ROW_DATASETS: ExportDatasetType[] = ['current_members', 'admission_history'];
+
+  it('CONTACT_FIELD_GROUPS：仅 current_members/admission_history 含 phone/email，其余为空', () => {
+    for (const t of types) {
+      if (PERSON_ROW_DATASETS.includes(t)) {
+        assert.deepEqual(CONTACT_FIELD_GROUPS[t], ['phone', 'email']);
+      } else {
+        assert.deepEqual(CONTACT_FIELD_GROUPS[t], [], `${t} 不应有联系方式列`);
+      }
+    }
+  });
+
+  it('默认不导出（R2）：未勾选 includeContact 时请求 phone/email → 剔除并列入 rejected', () => {
+    for (const t of PERSON_ROW_DATASETS) {
+      const { fields, rejected } = spec.clampExportFields(t, [
+        ...EXPORT_FIELD_GROUPS[t].slice(0, 2),
+        'phone',
+        'email',
+      ]);
+      assert.ok(!fields.includes('phone'), `${t}: phone 默认不导出`);
+      assert.ok(!fields.includes('email'), `${t}: email 默认不导出`);
+      assert.ok(rejected.includes('phone'));
+      assert.ok(rejected.includes('email'));
+    }
+  });
+
+  it('默认不导出（R2）：opts 显式传 includeContact=false 与缺省行为一致', () => {
+    const a = spec.clampExportFields('current_members', ['userId', 'phone'], {
+      includeContact: false,
+    });
+    const b = spec.clampExportFields('current_members', ['userId', 'phone']);
+    assert.deepEqual(a, b);
+    assert.ok(a.rejected.includes('phone'));
+  });
+
+  it('显式勾选（R2）：includeContact=true → phone/email 进入有效基线并可被保留', () => {
+    for (const t of PERSON_ROW_DATASETS) {
+      const { fields, rejected } = spec.clampExportFields(
+        t,
+        [...EXPORT_FIELD_GROUPS[t].slice(0, 2), 'phone', 'email'],
+        { includeContact: true },
+      );
+      assert.ok(fields.includes('phone'), `${t}: 勾选后 phone 可导出`);
+      assert.ok(fields.includes('email'), `${t}: 勾选后 email 可导出`);
+      assert.deepEqual(rejected, []);
+    }
+  });
+
+  it('勾选但非人员行数据集：club_summary 请求 phone/email 仍拒绝（无联系方式列）', () => {
+    const { fields, rejected } = spec.clampExportFields('club_summary', ['metric', 'phone'], {
+      includeContact: true,
+    });
+    assert.deepEqual(fields, ['metric']);
+    assert.ok(rejected.includes('phone'));
+  });
+
+  it('requested 缺省 + includeContact=true → 全基线 + 联系方式字段（人员行数据集）', () => {
+    const { fields, rejected } = spec.clampExportFields('current_members', undefined, {
+      includeContact: true,
+    });
+    assert.equal(fields.length, EXPORT_FIELD_GROUPS.current_members.length + 2);
+    assert.ok(fields.includes('phone'));
+    assert.ok(fields.includes('email'));
+    assert.deepEqual(rejected, []);
+    // 未勾选时同参数返回纯默认基线（向后兼容）
+    const plain = spec.clampExportFields('current_members');
+    assert.deepEqual(plain.fields, EXPORT_FIELD_GROUPS.current_members);
+    assert.deepEqual(plain.rejected, []);
+  });
+
+  it('秘密标识永不导出（R4）：password/token/apiKey 等即使勾选联系方式也一律拒绝', () => {
+    const secrets = [
+      'idCard',
+      'secretFlag',
+      'internalNote',
+      'secretMark',
+      'password',
+      'secret',
+      'token',
+      'accessToken',
+      'refreshToken',
+      'apiKey',
+      'captcha',
+      'verificationCode',
+      'internalSecretId',
+    ];
+    for (const opts of [undefined, { includeContact: true }] as const) {
+      const { fields, rejected } = spec.clampExportFields(
+        'current_members',
+        ['userId', ...secrets],
+        opts,
+      );
+      assert.deepEqual(fields, ['userId']);
+      for (const s of secrets) {
+        assert.ok(rejected.includes(s), `秘密标识 ${s} 必须进入拒绝清单（EXP-002）`);
+      }
+    }
+  });
+
+  it('秘密标识不出现在任何有效基线（含勾选联系方式后的全基线）', () => {
+    const forbidden = new Set(['password', 'token', 'apiKey', 'captcha', 'verificationCode']);
+    for (const t of types) {
+      for (const opts of [undefined, { includeContact: true }] as const) {
+        const baseline = spec.exportFieldBaseline(t, opts);
+        for (const f of baseline) {
+          assert.ok(!forbidden.has(f), `${t}: ${f} 不应出现在有效基线`);
+          assert.ok(f !== 'idCard' && f !== 'secretFlag', `${t}: 秘密标识不得入基线`);
+        }
+      }
+    }
+  });
+
+  it('未知字段仍被拒绝（勾选与否均不影响越权字段剔除路径）', () => {
+    const a = spec.clampExportFields('current_members', ['userId', 'unknownField']);
+    const b = spec.clampExportFields('current_members', ['userId', 'unknownField'], {
+      includeContact: true,
+    });
+    assert.ok(a.rejected.includes('unknownField'));
+    assert.ok(b.rejected.includes('unknownField'));
+    // 请求子集模式下未请求 phone/email，勾选与否都不改变保留结果
+    assert.deepEqual(a.fields, ['userId']);
+    assert.deepEqual(b.fields, ['userId']);
   });
 });
 

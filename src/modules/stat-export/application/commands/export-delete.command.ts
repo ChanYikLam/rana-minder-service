@@ -6,9 +6,13 @@
  *   不得因导出快照绕过正式删除）；
  * - invalidateUnexpiredBySuspension（JNT-023）：参与社团被紧急停用后，已有未过期
  *   链接立即失权，使后续不能下载。
+ *
+ * 5.4.4 补充（AUD-009 并清理）：上述三类失效在状态收敛成功后，对已持有 fileRef
+ * 的任务尽力而为删除对象存储文件（EXPORT_DISPOSAL_PORT）——清理失败不阻断失效
+ * （状态已不可下载），但必须留 warn 日志；残留文件由过期扫描/正式删除联动兜底。
  */
 
-import { Inject } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 
 import {
   EXPORT_AUDIT_PORT,
@@ -19,6 +23,7 @@ import {
   type ExportSafetySwitchPort,
 } from '../ports/export-authorization.port';
 import { EXPORT_TASK_REPOSITORY, type ExportTaskRepository } from '../ports/export-repository.port';
+import { EXPORT_DISPOSAL_PORT, type ExportDisposalPort } from '../ports/export-disposal.port';
 import { ExportTaskStatus } from '../../domain/state-machines/export-task.state-machine';
 import type { ExportTaskAggregate } from '../../domain/models/export-task';
 import { exportErrors, ExportError } from '../errors';
@@ -36,10 +41,13 @@ export interface ExportDeleteInput {
 }
 
 export class ExportDeleteCommand {
+  private readonly logger = new Logger(ExportDeleteCommand.name);
+
   constructor(
     @Inject(EXPORT_SAFETY_SWITCH_PORT) private readonly safety: ExportSafetySwitchPort,
     @Inject(EXPORT_AUDIT_PORT) private readonly audit: ExportAuditPort,
     @Inject(EXPORT_TASK_REPOSITORY) private readonly repo: ExportTaskRepository,
+    @Inject(EXPORT_DISPOSAL_PORT) private readonly disposal: ExportDisposalPort,
   ) {}
 
   /** 申请人提前删除（仅本人 / 授权者；超管可代删） */
@@ -120,6 +128,9 @@ export class ExportDeleteCommand {
     task.preDelete(now);
     await this.repo.save(task, { expectedRevision: input.expectedRevision });
 
+    // AUD-009 并清理：提前删除成功后尽力删除对象存储文件（失败不阻断失效）
+    await this.disposeBestEffort(task);
+
     await this.audit.record({
       at: now.toISOString(),
       action: 'export_delete',
@@ -187,6 +198,8 @@ export class ExportDeleteCommand {
       );
       if (invalidated === null) continue;
       count += 1;
+      // AUD-009 并清理：正式删除命中失效成功后尽力删除对象存储文件
+      await this.disposeBestEffort(invalidated);
       await this.recordSystemAudit(
         when,
         'export_formal_delete_invalidate',
@@ -242,6 +255,8 @@ export class ExportDeleteCommand {
       );
       if (invalidated === null) continue;
       count += 1;
+      // JNT-023 并清理：紧急停用失效成功后尽力删除对象存储文件
+      await this.disposeBestEffort(invalidated);
       await this.recordSystemAudit(
         when,
         'export_suspension_invalidate',
@@ -255,6 +270,27 @@ export class ExportDeleteCommand {
   // -------------------------------------------------------------------------
   // 内部
   // -------------------------------------------------------------------------
+
+  /**
+   * 尽力而为删除对象存储文件（5.4.4，AUD-009 并清理）：
+   * - 任务未持有 fileRef（待生成/失败态等）→ 无需清理，直接返回；
+   * - dispose 失败仅留 warn 日志，不阻断失效链路——状态已收敛为不可下载，
+   *   残留文件由过期扫描 / 正式删除联动（includeTerminal 覆盖 EXPIRED/REVOKED）
+   *   兜底清理；但"静默残留无痕"不可接受，故必须落日志。
+   */
+  private async disposeBestEffort(task: ExportTaskAggregate): Promise<void> {
+    const fileRef = task.fileRef;
+    if (!fileRef) return;
+    try {
+      await this.disposal.dispose(fileRef);
+    } catch (err) {
+      this.logger.warn(
+        `导出文件删除联动清理失败（exportId=${task.id}, fileRef=${fileRef}，失效已生效不回滚）：${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
 
   /** 判断是否为乐观并发版本冲突（IFC-ERR-008），用于批量失效时捕获并跳过单条竞争 */
   private isVersionConflict(err: unknown): boolean {

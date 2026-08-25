@@ -95,6 +95,32 @@ export class InMemoryExportTaskRepository implements ExportTaskRepository {
       return true;
     });
   }
+
+  async listDueForExpiry(nowIso: string): Promise<readonly ExportTaskAggregate[]> {
+    // 到期扫描（5.4.4，EXP-003）：仅 DOWNLOADABLE 且已设置有效期且已到期。
+    // 时间比较统一用 Date 毫秒值，避免对 ISO 字符串做字典序比较的隐式依赖。
+    const nowMs = new Date(nowIso).getTime();
+    const detach = (t: ExportTaskAggregate) =>
+      ExportTaskAggregate.fromSnapshot(new ExportTaskStateMachine(), t.toData());
+    return [...this.store.values()].map(detach).filter((t) => {
+      if (t.status !== ExportTaskStatus.DOWNLOADABLE) return false;
+      if (t.expiresAt === null) return false;
+      return new Date(t.expiresAt).getTime() <= nowMs;
+    });
+  }
+
+  async listExpiredLeaseGenerating(nowIso: string): Promise<readonly ExportTaskAggregate[]> {
+    // 生成租约回收（5.4.4，评审⑧）：GENERATING 且 lease.until<=now（worker 崩溃遗留）。
+    const nowMs = new Date(nowIso).getTime();
+    const detach = (t: ExportTaskAggregate) =>
+      ExportTaskAggregate.fromSnapshot(new ExportTaskStateMachine(), t.toData());
+    return [...this.store.values()].map(detach).filter((t) => {
+      if (t.status !== ExportTaskStatus.GENERATING) return false;
+      const until = t.lease?.until;
+      if (until === undefined || until === null) return false;
+      return new Date(until).getTime() <= nowMs;
+    });
+  }
 }
 
 export { EXPORT_TASK_REPOSITORY };
