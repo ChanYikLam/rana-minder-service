@@ -9,7 +9,6 @@
 
 import { Injectable } from '@nestjs/common';
 import type { DbAdapter } from '../../../shared/db-adapter';
-import type { IdentityUnitOfWork } from './unit-of-work';
 import {
   EditableProfileField,
   AuthoritativeProfileField,
@@ -41,23 +40,29 @@ const FALLBACK_ENTRIES: readonly ProfileFieldDirectoryEntry[] = [
   { fieldId: AuthoritativeProfileField.NAME, label: '姓名', readOnly: true, editable: false },
 ];
 
+/** 目录查询独立事务的 RLS 上下文（目录表 policy 放行全部；FORM-004 白名单平台级配置） */
+const DIRECTORY_RLS_SCOPE = { kind: 'unprotected' } as const;
+
 @Injectable()
 export class PostgresProfileFieldDirectory implements ProfileFieldDirectoryPort {
-  constructor(
-    private readonly db: DbAdapter,
-    private readonly uow: IdentityUnitOfWork,
-  ) {}
+  constructor(private readonly db: DbAdapter) {}
 
   async listApproved(): Promise<readonly ProfileFieldDirectoryEntry[]> {
+    // 自建独立事务：本实现被 form 域跨模块调用（form 跑在 FormUnitOfWork 事务内，
+    // 不得读取 IdentityUnitOfWork.active——无 identity 事务时 getter 抛错）。
+    // 只读查询独立收口，不参与调用方事务（评审 4.1 Critical：跨模块事务上下文错配）。
+    const tx = await this.db.beginTransaction();
     try {
+      await this.db.setRlsContext(tx, DIRECTORY_RLS_SCOPE);
       const rows = await this.db.query<DirectoryRow>(
-        this.uow.active,
+        tx,
         `SELECT field_id, label, read_only, editable
            FROM profile_field_directory
           WHERE enabled = true
           ORDER BY sort_order ASC`,
         [],
       );
+      await this.db.commit(tx);
       if (rows.length === 0) {
         return FALLBACK_ENTRIES;
       }
@@ -69,7 +74,10 @@ export class PostgresProfileFieldDirectory implements ProfileFieldDirectoryPort 
       }));
     } catch {
       // 表不可用（迁移未执行/只读降级）时兜底内置目录，自动带入白名单不失效（FORM-004）
+      await this.db.rollback(tx).catch(() => undefined);
       return FALLBACK_ENTRIES;
+    } finally {
+      await this.db.clearRlsContext(tx).catch(() => undefined);
     }
   }
 }

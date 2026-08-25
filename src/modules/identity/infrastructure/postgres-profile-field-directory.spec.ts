@@ -20,15 +20,31 @@ function makeContext(
   fail = false,
 ) {
   const calls: { sql: string; params: readonly unknown[] }[] = [];
+  const txCalls: string[] = [];
   const db = {
+    beginTransaction: async () => {
+      txCalls.push('begin');
+      return { tx: 1 };
+    },
+    commit: async () => {
+      txCalls.push('commit');
+    },
+    rollback: async () => {
+      txCalls.push('rollback');
+    },
+    setRlsContext: async (_tx: unknown, scope: { kind: string }) => {
+      txCalls.push(`rls:${scope.kind}`);
+    },
+    clearRlsContext: async () => {
+      txCalls.push('clear');
+    },
     query: async <T>(_tx: unknown, sql: string, params: readonly unknown[]): Promise<T[]> => {
       calls.push({ sql, params });
       if (fail) throw new Error('db-unavailable');
       return rows as T[];
     },
   };
-  const uow = { active: { tx: 1 } };
-  return { directory: new PostgresProfileFieldDirectory(db as never, uow as never), calls };
+  return { directory: new PostgresProfileFieldDirectory(db as never), calls, txCalls };
 }
 
 describe('PostgresProfileFieldDirectory（4.1 配置化目录）', () => {
@@ -69,5 +85,13 @@ describe('PostgresProfileFieldDirectory（4.1 配置化目录）', () => {
     const { directory } = makeContext([], true);
     const entries = await directory.listApproved();
     assert.equal(entries.length, 6);
+  });
+
+  it('listApproved：自建独立事务（不依赖调用方事务上下文，评审 Critical 防回归）', async () => {
+    const { directory, txCalls } = makeContext([
+      { field_id: 'email', label: '邮箱', read_only: false, editable: true },
+    ]);
+    await directory.listApproved();
+    assert.deepEqual(txCalls, ['begin', 'rls:unprotected', 'commit', 'clear']);
   });
 });

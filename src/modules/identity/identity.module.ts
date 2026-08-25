@@ -199,8 +199,8 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     },
     {
       provide: PROFILE_FIELD_DIRECTORY,
-      useFactory: (db, uow) => new PostgresProfileFieldDirectory(db, uow),
-      inject: [DB_ADAPTER, IdentityUnitOfWork],
+      useFactory: (db) => new PostgresProfileFieldDirectory(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: IDENTITY_AUDIT_PORT,
