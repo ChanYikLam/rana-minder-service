@@ -236,10 +236,8 @@ describe('TST-FAIL 001~013 故障关闭语义', () => {
             readback: { confirmedSteps: [] },
           },
         }),
-      (e: unknown) =>
-        e instanceof OrgDomainError &&
-        e.code === ErrorCode.EXTERNAL_UNKNOWN &&
-        e.code === 'IFC-ERR-013',
+      // 简化为单断言：ErrorCode.EXTERNAL_UNKNOWN 的值即 'IFC-ERR-013'，无需重复核验同一错误码
+      (e: unknown) => e instanceof OrgDomainError && e.code === ErrorCode.EXTERNAL_UNKNOWN,
     );
   });
 
