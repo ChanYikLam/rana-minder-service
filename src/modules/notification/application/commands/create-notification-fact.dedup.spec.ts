@@ -58,7 +58,7 @@ describe('CreateNotificationFactCommand 去重（NTF-003、评审 #5）', () => 
       (await repo.findFactByDedupKey(buildDedupKey('logical-1', 'stu-1')))!.factId,
     );
     assert.equal(snapshots[0].dedupKey, buildDedupKey('logical-1', 'stu-1'));
-    assert.equal(snapshots[0].dedupKey, 'logical-1\u0000stu-1');
+    assert.equal(snapshots[0].dedupKey, 'logical-1:stu-1');
   });
 
   it('同一逻辑事件＋收件人重复创建 → 去重跳过，不产生新事实（NTF-003）', async () => {

@@ -68,7 +68,7 @@ function buildFact(
         factId: '',
         recipientId: 'student-1',
         reason: '本人',
-        dedupKey: logicalEventId + '\u0000student-1',
+        dedupKey: logicalEventId + ':student-1',
         scope: scope ?? { type: 'CLUB', clubId: 'club-1' },
         createdAt: new Date().toISOString(),
       },

@@ -47,21 +47,24 @@ import {
 import { EmailTemplateResolver } from './application/services/email-template-resolver';
 import { NotificationQueryService } from './application/queries';
 import { DefaultRecipientSnapshotResolver } from './domain/services';
+import { InMemoryEmailAdapter } from './infrastructure/in-memory-notification-adapters';
 import {
-  InMemoryNotificationRepository,
-  InMemoryInboxAdapter,
-  InMemoryEmailAdapter,
-  InMemoryChannelDeliveryAttemptRepository,
-  InMemoryTemplateSnapshotService,
-  InMemoryKillSwitchRepository,
-  InMemoryPrivilegedAuditWriter,
-  InMemoryEmailConfigStore,
-  InMemoryNotificationPreferencesStore,
-  AesGcmEmailSecretCipher,
-  InMemoryClubEmailPolicyStore,
-  InMemoryPlatformEmailSuspensionStore,
-  InMemoryEmailTemplateStore,
-} from './infrastructure';
+  PostgresNotificationRepository,
+  PostgresInboxAdapter,
+  PostgresChannelDeliveryAttemptRepository,
+  PostgresEmailTemplateStore,
+  PostgresTemplateSnapshotService,
+  PostgresKillSwitchRepository,
+  PostgresPrivilegedAuditWriter,
+  PostgresEmailConfigStore,
+  PostgresNotificationPreferencesStore,
+  PostgresClubEmailPolicyStore,
+  PostgresPlatformEmailSuspensionStore,
+} from './infrastructure/postgres-notification-adapters';
+import { SmtpEmailAdapter } from './infrastructure/smtp-email.adapter';
+import { AesGcmEmailSecretCipher } from './infrastructure/email-secret-cipher';
+import { AdaptersModule } from '../../adapters/adapters.module';
+import { DB_ADAPTER } from '../../adapters/tokens';
 import { OrgBackedNotificationPrivilegeVerifier } from './infrastructure/org-notification-privilege-verifier';
 import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
 import { OrganizationModule } from '../organization/module';
@@ -89,7 +92,7 @@ import {
 
 @Module({
   // forwardRef：组织模块在 ORG_JOBS_PLATFORM=1 时经 TasksModule 反向引用本模块（#68）
-  imports: [forwardRef(() => OrganizationModule), IdentityModule],
+  imports: [AdaptersModule, forwardRef(() => OrganizationModule), IdentityModule],
   controllers: [NotificationController],
   providers: [
     // 应用命令
@@ -118,60 +121,89 @@ import {
     NotificationQueryService,
     // 接口守卫
     NotificationAuthGuard,
-    // 基础设施（内存桩，生产替换为 PostgreSQL）
+    // ----- 4.3 收口：PostgreSQL 持久化（DB 未连接失败关闭）-----
     {
       provide: NOTIFICATION_REPOSITORY,
-      useClass: InMemoryNotificationRepository,
+      useFactory: (db) => new PostgresNotificationRepository(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: INBOX_ADAPTER,
-      useClass: InMemoryInboxAdapter,
-    },
-    {
-      provide: EMAIL_ADAPTER,
-      useClass: InMemoryEmailAdapter,
+      useFactory: (db) => new PostgresInboxAdapter(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: CHANNEL_DELIVERY_ATTEMPT_REPOSITORY,
-      useClass: InMemoryChannelDeliveryAttemptRepository,
+      useFactory: (db) => new PostgresChannelDeliveryAttemptRepository(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: TEMPLATE_SNAPSHOT_SERVICE,
-      useClass: InMemoryTemplateSnapshotService,
+      useFactory: (db) => new PostgresTemplateSnapshotService(new PostgresEmailTemplateStore(db)),
+      inject: [DB_ADAPTER],
     },
     {
       provide: KILL_SWITCH_REPOSITORY,
-      useClass: InMemoryKillSwitchRepository,
+      useFactory: (db) => new PostgresKillSwitchRepository(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: PRIVILEGED_AUDIT_WRITER,
-      useClass: InMemoryPrivilegedAuditWriter,
+      useFactory: (db) => new PostgresPrivilegedAuditWriter(db),
+      inject: [DB_ADAPTER],
     },
-    // 邮件配置与通知偏好（内存持久化；真实 SMTP/偏好库接入后替换实现）
     {
       provide: EMAIL_CONFIG_STORE,
-      useClass: InMemoryEmailConfigStore,
+      useFactory: (db) => new PostgresEmailConfigStore(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: PREFERENCES_STORE,
-      useClass: InMemoryNotificationPreferencesStore,
-    },
-    // 4.3.3 可选邮件渠道基础设施（密钥加密/策略/模板；生产替换为持久化实现）
-    {
-      provide: EMAIL_SECRET_CIPHER,
-      useClass: AesGcmEmailSecretCipher,
+      useFactory: (db) => new PostgresNotificationPreferencesStore(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: CLUB_EMAIL_POLICY_STORE,
-      useClass: InMemoryClubEmailPolicyStore,
+      useFactory: (db) => new PostgresClubEmailPolicyStore(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: PLATFORM_EMAIL_SUSPENSION_STORE,
-      useClass: InMemoryPlatformEmailSuspensionStore,
+      useFactory: (db) => new PostgresPlatformEmailSuspensionStore(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: EMAIL_TEMPLATE_STORE,
-      useClass: InMemoryEmailTemplateStore,
+      useFactory: (db) => new PostgresEmailTemplateStore(db),
+      inject: [DB_ADAPTER],
+    },
+    // ----- 4.3 收口：真实 SMTP 邮件渠道（SMTP_HOST 配置启用；未配置保留开发占位）-----
+    {
+      provide: EMAIL_ADAPTER,
+      useFactory: () => {
+        const host = process.env.SMTP_HOST;
+        if (host !== undefined && host.trim().length > 0) {
+          return new SmtpEmailAdapter({
+            host,
+            port: Number(process.env.SMTP_PORT ?? '465'),
+            fromAddress: process.env.SMTP_FROM_ADDRESS ?? '',
+            user: process.env.SMTP_USER,
+            password: process.env.SMTP_PASSWORD,
+          });
+        }
+        const nodeEnv = process.env.NODE_ENV ?? 'development';
+        if (nodeEnv !== 'test' && nodeEnv !== 'development') {
+          throw new Error(
+            'EMAIL_ADAPTER: 生产环境必须配置 SMTP_HOST/SMTP_FROM_ADDRESS（fail-closed，禁止内存假发送）',
+          );
+        }
+        return new InMemoryEmailAdapter();
+      },
+    },
+    // 密钥加密（AES-256-GCM；NTF-006）
+    {
+      provide: EMAIL_SECRET_CIPHER,
+      useClass: AesGcmEmailSecretCipher,
     },
     // 站内信紧急关闭特权核验（组织授权接线：PLATFORM 仅超管；CLUB 超管或社团管理员）
     {

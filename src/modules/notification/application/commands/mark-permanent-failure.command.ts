@@ -61,9 +61,11 @@ export class MarkPermanentFailureCommand {
       return;
     }
 
+    // MARK_PERMANENT_FAILURE 转换仅校验渠道状态（currentChannelStatus），
+    // 事实主状态不参与判定，此处占位传值（评审 I4：避免误导）
     const transition = this.stateMachine.evaluate({
       type: 'MARK_PERMANENT_FAILURE',
-      currentStatus: 'CREATED_PENDING_DELIVERY',
+      currentStatus: 'CREATED_PENDING_DELIVERY', // 占位：转换 9 不依赖事实主状态
       currentChannelStatus: attempt.status,
       channel: attempt.channel,
     });
@@ -109,7 +111,8 @@ export class MarkPermanentFailureCommand {
     const snapshots = await this.repository.findSnapshotsByFactId(factId);
 
     // 站内信提示：仅为本次邮件投递永久失败的收件人创建系统事实＋唯一呈现
-    // （NTF-007 只提示受影响收件人，不得误告其他收件人；去重键幂等）
+    // （NTF-007 只提示受影响收件人，不得误告其他收件人；去重键幂等；
+    //   分隔符 ':' 与 buildDedupKey 一致——Postgres text 禁止 NUL 字节）
     const affectedSnapshots =
       failedRecipientId != null
         ? snapshots.filter((s) => s.recipientId === failedRecipientId)
@@ -117,7 +120,7 @@ export class MarkPermanentFailureCommand {
     for (const snapshot of affectedSnapshots) {
       try {
         const now = new Date().toISOString();
-        const noticeDedupKey = 'email-permfail\u0000' + attemptId + '\u0000' + snapshot.recipientId;
+        const noticeDedupKey = 'email-permfail:' + attemptId + ':' + snapshot.recipientId;
         const { fact: noticeFact, snapshots: noticeSnapshots } =
           await this.repository.saveFactWithSnapshots(
             {
