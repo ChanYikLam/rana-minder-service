@@ -424,6 +424,11 @@ export class InMemoryCasdoorPort implements CasdoorGroupPort {
     this.failingRefs.add(`${ref.owner}/${ref.name}`);
   }
 
+  /** 测试辅助：清除指定 Group 的故障标记（恢复写入能力；L4 故障注入恢复验证用） */
+  clearAnomaly(ref: GroupStableRef): void {
+    this.failingRefs.delete(`${ref.owner}/${ref.name}`);
+  }
+
   /** 测试辅助：构造后追加一个 Group（不影响已存在 Group）；按 ref 去重 */
   addGroup(g: MemoryCasdoorSeed['groups'][number]): void {
     const exists = this.groups.some(
