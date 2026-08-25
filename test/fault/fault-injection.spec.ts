@@ -11,6 +11,9 @@ import assert from 'node:assert/strict';
 import { FakeDbAdapter } from '../../src/shared/testing/fake-db-adapter';
 import { FormUnitOfWork } from '../../src/modules/form/infrastructure/unit-of-work';
 import { InMemoryCasdoorPort } from '../../src/modules/organization/infrastructure/in-memory/memory-implementations';
+import { ExternalFileCheckAdapter } from '../../src/adapters/file-check/external-file-check.adapter';
+import { FileCheckOutcome } from '../../src/modules/file/domain/state-machines/file-state-machine';
+import type { FileRecord } from '../../src/modules/file/domain/models/file-model';
 import { injectFault } from './fault-injector';
 
 describe('L4 故障注入：Casdoor Group 写入失败（FAIL-004）', () => {
@@ -89,6 +92,69 @@ describe('L4 故障注入：数据库 commit 失败（FAIL-005）', () => {
       // 确保断言失败时也能清除故障标记，避免污染后续用例（对象仅本地作用，清理以保可读性）
       db.queryError = null;
     }
+  });
+});
+
+describe('L4 故障注入：文件检查服务不可用 fail-closed（FAIL-006）', () => {
+  const stubFile: FileRecord = {
+    fileId: 'file-check-fail006',
+    uploaderId: 'u_x',
+    scope: { kind: 'club', clubId: 'club-acm' },
+    category: 'GENERIC',
+    state: 'CHECKING',
+    target: { objectType: 'application', objectId: 'app-1', fieldKey: 'attachment' },
+    versionNo: 1,
+    versions: [],
+    uploadSession: null,
+    checkRecord: null,
+    cleanupQueue: [],
+    deletionManifest: null,
+    createdAt: '2026-08-01T00:00:00.000Z',
+  };
+
+  it('注入：外部检查服务网络故障 → 返回 FAILED/retryable（不得超时自动放行，GOV-008）', async () => {
+    const adapter = new ExternalFileCheckAdapter({
+      endpoint: 'https://file-check.invalid',
+      timeoutMs: 1000,
+      fetchFn: async () => {
+        throw new Error('file-check service unreachable');
+      },
+    });
+    const result = await adapter.check(stubFile, new Uint8Array([1, 2, 3]), 'application/pdf');
+    // fail-closed：服务不可用一律 FAILED 且可重试，绝不 PASSED
+    assert.equal(result.outcome, FileCheckOutcome.FAILED);
+    assert.equal(result.retryable, true);
+    assert.match(result.sanitizedResult, /service-unavailable/);
+  });
+
+  it('注入：检查服务返回非 2xx → 同样 FAILED 不假成功', async () => {
+    const adapter = new ExternalFileCheckAdapter({
+      endpoint: 'https://file-check.invalid',
+      timeoutMs: 1000,
+      fetchFn: async () =>
+        new Response('internal error', {
+          status: 500,
+          headers: { 'Content-Type': 'text/plain' },
+        }),
+    });
+    const result = await adapter.check(stubFile, new Uint8Array([1]), 'text/plain');
+    assert.equal(result.outcome, FileCheckOutcome.FAILED);
+    assert.equal(result.retryable, true);
+  });
+
+  it('注入：服务可用且返回 PASSED → 正常放行（恢复语义）', async () => {
+    const adapter = new ExternalFileCheckAdapter({
+      endpoint: 'https://file-check.invalid',
+      timeoutMs: 1000,
+      fetchFn: async () =>
+        new Response(JSON.stringify({ verdict: 'PASSED' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    });
+    const result = await adapter.check(stubFile, new Uint8Array([1]), 'text/plain');
+    assert.equal(result.outcome, FileCheckOutcome.PASSED);
+    assert.equal(result.retryable, false);
   });
 });
 
