@@ -36,8 +36,8 @@ const canRun = dockerAvailable();
 const skipReason = !canRun && !CI ? '本地未检测到 docker，跳过 PG18 迁移集成测试' : false;
 
 type Migration = {
-  up: (runner: { query: (sql: string) => Promise<unknown> }) => Promise<void>;
-  down: (runner: { query: (sql: string) => Promise<unknown> }) => Promise<void>;
+  up: (runner: { query: (sql: string, params?: unknown[]) => Promise<unknown> }) => Promise<void>;
+  down: (runner: { query: (sql: string, params?: unknown[]) => Promise<unknown> }) => Promise<void>;
 };
 
 /**
@@ -202,12 +202,12 @@ const MUST_DROP_AFTER_DOWN: readonly string[] = [
 let pool: pg.Pool | null = null;
 let client: pg.PoolClient | null = null;
 
-async function q(sql: string): Promise<unknown> {
+async function q(sql: string, params?: unknown[]): Promise<unknown> {
   assert.ok(client, 'client not ready');
-  return client.query(sql);
+  return params ? client.query(sql, params as never[]) : client.query(sql);
 }
 
-const runner = { query: (sql: string) => q(sql) };
+const runner = { query: (sql: string, params?: unknown[]) => q(sql, params) };
 
 async function tableExists(name: string): Promise<boolean> {
   const r = (await q(`SELECT to_regclass('public.${name}') AS oid`)) as pg.QueryResult;
