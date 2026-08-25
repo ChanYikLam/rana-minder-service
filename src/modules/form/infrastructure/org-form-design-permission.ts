@@ -7,9 +7,10 @@
  * - club 作用域：主体在该社团当前有效权限含任一管理类权限
  *   {recruitment:manage, member:manage, config:manage}，对应端口注释中
  *   "社团负责人/人事管理员可设计本社团报名/成员申请/评价表"。
- * - department 作用域：**保持 fail-closed**。CurrentPermissionsPort 仅提供社团级
- *   聚合，部门级权限解析（ORG-035 部门受限范围）尚无契约支撑；不得因无法核验而
- *   放行（对齐 NotWired 桩的安全立场）。org 暴露部门级查询后替换本分支。
+ * - department 作用域：主体在该部门的当前有效权限（ORG-035 部门受限范围，
+ *   4.1 部门权限契约——effectiveForDepartment）含部门设计权限
+ *   {member:manage}（部门负责人唯一管理类权限，DEPARTMENT_HEAD 模板）。
+ *   部门权限只来自部门职位，不得用社团级权限放行部门表单（ORG-035 范围限制）。
  */
 
 import type { CurrentPermissionsPort } from '../../organization/application/ports';
@@ -27,6 +28,9 @@ const CLUB_DESIGN_PERMISSIONS: readonly string[] = [
   PermissionCatalog.CLUB_CONFIG_MANAGE,
 ];
 
+/** 部门设计权限（ORG-035：仅部门受限范围；部门负责人唯一管理类权限） */
+const DEPARTMENT_DESIGN_PERMISSIONS: readonly string[] = [PermissionCatalog.CLUB_MEMBER_MANAGE];
+
 export class OrgBackedFormDesignPermission implements FormDesignPermissionPort {
   constructor(private readonly permissions: CurrentPermissionsPort) {}
 
@@ -38,8 +42,12 @@ export class OrgBackedFormDesignPermission implements FormDesignPermissionPort {
       return false;
     }
     if (scope.kind === 'department') {
-      // ORG-035：部门级权限解析无契约支撑，fail-closed（不放行、不猜测）。
-      return false;
+      // ORG-035：部门受限范围权限（4.1 部门权限契约）；ownerId 为部门稳定标识
+      const effective = await this.permissions.effectiveForDepartment(
+        actor.subjectId,
+        scope.ownerId,
+      );
+      return effective.some((permission) => DEPARTMENT_DESIGN_PERMISSIONS.includes(permission));
     }
     const effective = await this.permissions.effectiveForClub(actor.subjectId, scope.ownerId);
     return effective.some((permission) => CLUB_DESIGN_PERMISSIONS.includes(permission));

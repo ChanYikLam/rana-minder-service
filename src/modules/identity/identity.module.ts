@@ -29,6 +29,7 @@ import {
   MAIL_VERIFICATION_PORT,
   PROFILE_SYNC_TASK_PORT,
   REQUIRED_FIELD_RULES_PORT,
+  PROFILE_FIELD_DIRECTORY,
   NAME_CORRECTION_REPOSITORY,
   SUPER_ADMIN_VERIFIER,
   REAUTH_EVIDENCE_PORT,
@@ -65,6 +66,7 @@ import { PostgresAccountAccessRepository } from './infrastructure/postgres-accou
 import { PostgresNameCorrectionRepository } from './infrastructure/postgres-name-correction.repository';
 import { PostgresReauthEvidence } from './infrastructure/postgres-reauth-evidence';
 import { PostgresSessionRevocation } from './infrastructure/postgres-session-revocation';
+import { PostgresProfileFieldDirectory } from './infrastructure/postgres-profile-field-directory';
 import { NotWiredSuperAdminVerifier } from './infrastructure/not-wired-super-admin.verifier';
 import { PostgresIdentityAudit } from './infrastructure/postgres-audit';
 import { CasdoorUserAdapter } from './infrastructure/casdoor-user.adapter';
@@ -194,6 +196,11 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
       provide: SESSION_REVOCATION_PORT,
       useFactory: (db, uow) => new PostgresSessionRevocation(db, uow),
       inject: [DB_ADAPTER, IdentityUnitOfWork],
+    },
+    {
+      provide: PROFILE_FIELD_DIRECTORY,
+      useFactory: (db) => new PostgresProfileFieldDirectory(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: IDENTITY_AUDIT_PORT,
@@ -459,6 +466,7 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     SUPER_ADMIN_VERIFIER,
     CASDOOR_AVAILABILITY,
     CASDOOR_USER_PORT,
+    PROFILE_FIELD_DIRECTORY,
   ],
 })
 export class IdentityModule {}
