@@ -16,19 +16,24 @@ import { FileTypeGuard } from './domain/services/file-type-guard';
 import { AccessPolicy } from './domain/services/access-policy';
 import { WatermarkPolicy } from './domain/services/watermark-policy';
 import { FILE_REPOSITORY } from './infrastructure/file-repository';
-import { InMemoryFileRepository } from './infrastructure/in-memory-file-repository';
 import { OBJECT_STORE_PORT } from './infrastructure/object-store-port';
 import { InMemoryObjectStore } from './infrastructure/object-store-port';
+import { PostgresFileRepository } from './infrastructure/postgres-file-repository';
 import { FILE_CHECK_PORT } from './infrastructure/file-check-port';
 import { ApplicationFileCheck } from './infrastructure/file-check-port';
 import { SIGNED_URL_PROVIDER } from './infrastructure/signed-url-provider';
 import { DefaultSignedUrlProvider } from './infrastructure/signed-url-provider';
 import { ACCESS_AUDIT_PORT } from './infrastructure/access-audit-port';
-import { LogOnlyAccessAudit } from './infrastructure/access-audit-port';
+import { PostgresAccessAudit } from './infrastructure/postgres-access-audit';
 import { FORMAL_DELETE_CONFIRM_PORT } from './infrastructure/formal-delete-confirm-port';
-import { LogOnlyFormalDeleteConfirm } from './infrastructure/formal-delete-confirm-port';
+import { PostgresFormalDeleteConfirm } from './infrastructure/postgres-formal-delete-confirm';
 import { CLEANUP_REFERENCE_GUARD } from './infrastructure/cleanup-reference-guard-port';
-import { LogOnlyCleanupReferenceGuard } from './infrastructure/cleanup-reference-guard-port';
+import { PostgresCleanupReferenceGuard } from './infrastructure/postgres-cleanup-reference-guard';
+import { AdaptersModule } from '../../adapters/adapters.module';
+import { DB_ADAPTER } from '../../adapters/tokens';
+import { S3ObjectStoreAdapter } from '../../adapters/storage/s3-object-store.adapter';
+import { ExternalFileCheckAdapter } from '../../adapters/file-check/external-file-check.adapter';
+import { isSecretRef, resolveSecret } from '../../config/secret-ref';
 
 /**
  * 领域模块：文件（4.2，SRS-SM-FILE-001）。
@@ -36,7 +41,8 @@ import { LogOnlyCleanupReferenceGuard } from './infrastructure/cleanup-reference
  * 职责：上传初始化、字节接收、检查收口（晋升/隔离/不可用）、状态查询、
  * 访问授权（实时鉴权/短时地址/水印/审计）；
  * 字节在 S3 兼容对象存储（隔离区/权威原件区/临时派生区，ADR-008），
- * 元数据/检查/引用状态在 PostgreSQL（占位内存实现）。
+ * 元数据/检查/引用状态在 PostgreSQL（4.2 已收口；配置 STORAGE_ENDPOINT 启用真实
+ * 对象存储适配器，未配置保留开发占位；FILE_CHECK_ENDPOINT 启用外部检查服务）。
  *
  * 核心不变量（FORM-007、GOV-008、FORM-008）：
  * - 未检查/检查中/失败/隔离的文件不可预览、下载或正式绑定；
@@ -44,7 +50,86 @@ import { LogOnlyCleanupReferenceGuard } from './infrastructure/cleanup-reference
  * - 每次附件访问实时鉴权，只生成短时最小范围地址并加必要水印；
  * - 数据库与对象存储不伪装原子事务，部分失败不得返回假成功。
  */
+
+/**
+ * 秘密键统一解析（与 config.loader.buildStorage 口径一致）：
+ * 优先读 `*_REF` 键并做 `${env:...}`/`${file:...}` 解引用（ADR-010 外置密钥），
+ * 未配置 `_REF` 时才回退到直接键 `STORAGE_ACCESS_KEY`/`STORAGE_SECRET_KEY`。
+ *
+ * 评审修复（warning）：此前仅读直接键、绕过 config.loader 的 `_REF` 解引用路径，
+ * 导致按 .env.example 用 `STORAGE_ACCESS_KEY_REF=${env:...}`（或 `${file:...}`）
+ * 注入密钥时 module 读不到已解引用的真实值，S3 构造因凭据为空 fail-closed 抛错。
+ */
+export function resolveStorageSecret(
+  env: NodeJS.ProcessEnv,
+  refKey: string,
+  directKey: string,
+): string {
+  const raw = env[refKey];
+  if (raw !== undefined && raw.length > 0) {
+    // 与 config.loader 一致：`${env:VAR}` 从（传入的）env 解引用，便于注入测试；
+    // 其余外置引用（`${file:...}`）交由 resolveSecret 从白名单路径读取。
+    const envMatch = /^\$\{env:([A-Z_][A-Z0-9_]*)\}$/.exec(raw);
+    if (envMatch !== null) {
+      const value = env[envMatch[1]];
+      if (value === undefined) {
+        throw new Error(`resolveStorageSecret: 引用的环境变量未设置: ${envMatch[1]}`);
+      }
+      return value;
+    }
+    return isSecretRef(raw) ? resolveSecret(raw) : raw;
+  }
+  return env[directKey] ?? '';
+}
+
+/**
+ * 构建 OBJECT_STORE_PORT 提供者（4.2 收口；env 注入便于单测）。
+ *
+ * 评审修复（warning）：配置键名与 .env.example/config.example.yaml 文档对齐——
+ * 文档键为 STORAGE_ENDPOINT/STORAGE_REGION/STORAGE_ACCESS_KEY_REF/STORAGE_SECRET_KEY_REF/
+ * STORAGE_BUCKET_*；凭据键复用 config.loader 的 `_REF` 解引用口径（resolveStorageSecret），
+ * 为兼容旧 S3_* 键保留别名回退（S3_* 优先，文档键次之）。
+ * 注：BucketRole 的 OBJECT 角色对应文档"权威原件区" primary bucket（ADR-008 三区）。
+ *
+ * 评审修复（部署风险）：生产/非开发环境未配置 STORAGE_ENDPOINT 时 **fail-closed**——
+ * 静默降级内存对象存储会导致"元数据在 PostgreSQL、字节在内存（重启即失）"，且
+ * InMemory deleteAndVerify 恒成功制造假删除（违反 FORM-009/NFR-003）；仅在
+ * test/development 保留内存占位（单测/本地开发）。
+ */
+export function createObjectStorePort(
+  env: NodeJS.ProcessEnv,
+): S3ObjectStoreAdapter | InMemoryObjectStore {
+  const endpoint = env.S3_ENDPOINT ?? env.STORAGE_ENDPOINT;
+  if (endpoint !== undefined && endpoint.trim().length > 0) {
+    const accessKeyId =
+      env.S3_ACCESS_KEY_ID ??
+      resolveStorageSecret(env, 'STORAGE_ACCESS_KEY_REF', 'STORAGE_ACCESS_KEY');
+    const secretAccessKey =
+      env.S3_SECRET_ACCESS_KEY ??
+      resolveStorageSecret(env, 'STORAGE_SECRET_KEY_REF', 'STORAGE_SECRET_KEY');
+    return new S3ObjectStoreAdapter({
+      endpoint,
+      region: env.S3_REGION ?? env.STORAGE_REGION ?? 'cn-north-1',
+      accessKeyId,
+      secretAccessKey,
+      buckets: {
+        QUARANTINE: env.S3_BUCKET_QUARANTINE ?? env.STORAGE_BUCKET_QUARANTINE ?? '',
+        OBJECT: env.S3_BUCKET_OBJECT ?? env.STORAGE_BUCKET_PRIMARY ?? '',
+        DERIVED: env.S3_BUCKET_DERIVED ?? env.STORAGE_BUCKET_DERIVED ?? '',
+      },
+    });
+  }
+  const envName = env.NODE_ENV ?? 'development';
+  if (envName !== 'test' && envName !== 'development') {
+    throw new Error(
+      'OBJECT_STORE_PORT: 生产环境必须配置 STORAGE_ENDPOINT/STORAGE_ACCESS_KEY_REF 或 STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY_REF 或 STORAGE_SECRET_KEY（fail-closed，禁止内存对象存储假持久化）',
+    );
+  }
+  return new InMemoryObjectStore();
+}
+
 @Module({
+  imports: [AdaptersModule],
   providers: [
     // 领域规则（纯规则）
     FileStateMachine,
@@ -53,13 +138,47 @@ import { LogOnlyCleanupReferenceGuard } from './infrastructure/cleanup-reference
     AccessPolicy,
     WatermarkPolicy,
     // 基础设施端口（生产替换为 PostgreSQL/S3 适配实现）
-    { provide: FILE_REPOSITORY, useClass: InMemoryFileRepository },
-    { provide: OBJECT_STORE_PORT, useClass: InMemoryObjectStore },
-    { provide: FILE_CHECK_PORT, useClass: ApplicationFileCheck },
+    // ----- 4.2 收口：PostgreSQL 元数据/审计/确认/引用复核（DB 未连接失败关闭）-----
+    {
+      provide: FILE_REPOSITORY,
+      useFactory: (db) => new PostgresFileRepository(db),
+      inject: [DB_ADAPTER],
+    },
+    {
+      provide: ACCESS_AUDIT_PORT,
+      useFactory: (db) => new PostgresAccessAudit(db),
+      inject: [DB_ADAPTER],
+    },
+    {
+      provide: FORMAL_DELETE_CONFIRM_PORT,
+      useFactory: (db) => new PostgresFormalDeleteConfirm(db),
+      inject: [DB_ADAPTER],
+    },
+    {
+      provide: CLEANUP_REFERENCE_GUARD,
+      useFactory: (db) => new PostgresCleanupReferenceGuard(db),
+      inject: [DB_ADAPTER],
+    },
+    // ----- 4.2 收口：S3 兼容对象存储（配置 STORAGE_ENDPOINT 启用）-----
+    {
+      provide: OBJECT_STORE_PORT,
+      useFactory: () => createObjectStorePort(process.env),
+    },
+    // ----- 4.2 收口：外部文件检查服务（配置 FILE_CHECK_ENDPOINT 启用；未配置保留应用侧初检）-----
+    {
+      provide: FILE_CHECK_PORT,
+      useFactory: () => {
+        const endpoint = process.env.FILE_CHECK_ENDPOINT;
+        if (endpoint !== undefined && endpoint.trim().length > 0) {
+          return new ExternalFileCheckAdapter({
+            endpoint,
+            token: process.env.FILE_CHECK_TOKEN,
+          });
+        }
+        return new ApplicationFileCheck();
+      },
+    },
     { provide: SIGNED_URL_PROVIDER, useClass: DefaultSignedUrlProvider },
-    { provide: ACCESS_AUDIT_PORT, useClass: LogOnlyAccessAudit },
-    { provide: FORMAL_DELETE_CONFIRM_PORT, useClass: LogOnlyFormalDeleteConfirm },
-    { provide: CLEANUP_REFERENCE_GUARD, useClass: LogOnlyCleanupReferenceGuard },
     // 应用命令与查询
     InitiateUploadCommand,
     CompleteUploadCommand,

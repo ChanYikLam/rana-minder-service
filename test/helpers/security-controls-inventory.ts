@@ -16,7 +16,7 @@ export const TOTAL_THREATS = 26;
 export const TOTAL_CONTROLS = 38;
 
 /** 当前已具可执行证据的控制项基线（棘轮下限） */
-export const BASELINE_CONCRETE_CONTROLS = 12;
+export const BASELINE_CONCRETE_CONTROLS = 22;
 
 export interface SecurityControlEntry {
   /** TST-SEC-CTL-xx */
@@ -91,6 +91,65 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
     id: 'TST-SEC-CTL-12',
     title: '投影作用域隔离：跨社团缓存绝不命中',
     evidence: [R('src/platform/read-model/projection/in-memory-projection-store.spec.ts')],
+  },
+  {
+    id: 'TST-SEC-CTL-13',
+    title: '审计只追加不可篡改：仓储无修改/删除入口，字段完整且敏感不落盘',
+    evidence: [R('src/modules/audit/application/commands/audit-baseline.spec.ts')],
+  },
+  {
+    id: 'TST-SEC-CTL-14',
+    title: '错误码头禁：对外仅 code/message(+field)，不泄漏内部键与堆栈',
+    evidence: [R('src/common/errors/error-formatter.spec.ts')],
+  },
+  {
+    id: 'TST-SEC-CTL-15',
+    title: '契约运行时面守恒：external-result/api-paths/api-error 漂移即失败',
+    evidence: [R('src/common/contracts/contracts-runtime.spec.ts')],
+  },
+  {
+    id: 'TST-SEC-CTL-16',
+    title: '文件未核验不可绑定或访问：上传/检查/绑定 fail-closed 流',
+    evidence: [
+      R('src/modules/file/application/commands/lifecycle.spec.ts'),
+      R('src/modules/file/application/commands/upload-flow.spec.ts'),
+    ],
+  },
+  {
+    id: 'TST-SEC-CTL-17',
+    title: '通知投递失败留痕：转发失败不上抛、保留待重试不静默丢失',
+    evidence: [R('src/platform/tasks/executors/handlers/notification-delivery.handler.spec.ts')],
+  },
+  {
+    id: 'TST-SEC-CTL-18',
+    title: '事务发件箱幂等转发：成功后不再重放（防重复副作用）',
+    evidence: [R('src/platform/tasks/outbox/outbox.spec.ts')],
+  },
+  {
+    id: 'TST-SEC-CTL-19',
+    title: '任务重试策略有界：退避与上限策略化，非无限重试',
+    evidence: [R('src/platform/tasks/retry-policy/retry-policy.spec.ts')],
+  },
+  {
+    id: 'TST-SEC-CTL-20',
+    title: '对账真实检测：Group 删除/失权/移动差异进入领域处置',
+    evidence: [R('src/platform/tasks/executors/handlers/reconciliation.handler.spec.ts')],
+  },
+  {
+    id: 'TST-SEC-CTL-21',
+    title: '权限模板发布单胜者：previewVersion 冲突拒绝部分生效',
+    evidence: [
+      R(
+        'src/modules/organization/interfaces/controllers/admin-permission-templates.controller.spec.ts',
+      ),
+    ],
+  },
+  {
+    id: 'TST-SEC-CTL-22',
+    title: '联合参与名单单向门：首次公布后新增/退出一律拒绝',
+    evidence: [
+      R('src/modules/joint/domain/state-machines/joint-participant.state-machine.spec.ts'),
+    ],
   },
 ];
 

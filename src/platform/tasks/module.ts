@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ReadModelModule } from '../read-model/module';
@@ -45,7 +45,14 @@ import { ManualInterventionService, TaskScheduler } from './scheduler';
 import { TasksWorker } from './worker-entry';
 
 @Module({
-  imports: [ReadModelModule, CasdoorModule, AdaptersModule, NotificationModule, StatExportModule],
+  // forwardRef：NotificationModule↔OrganizationModule↔TasksModule 存在装配环（#68），惰性解析
+  imports: [
+    ReadModelModule,
+    CasdoorModule,
+    AdaptersModule,
+    forwardRef(() => NotificationModule),
+    StatExportModule,
+  ],
   providers: [
     PostgresTaskRepository,
     InMemoryTransactionOutboxStore,

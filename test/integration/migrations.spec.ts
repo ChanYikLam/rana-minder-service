@@ -158,6 +158,10 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
       'config_field_mapping_state',
     ],
   },
+  {
+    file: '20260824150000',
+    tables: ['file_records', 'file_access_audit', 'file_delete_confirmations'],
+  },
 ];
 
 /** down 后必须消失的核心新建表（每条建表链取代表，避免双 job_tasks 历史纠缠） */
