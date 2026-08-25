@@ -18,16 +18,21 @@ import { DefaultBeginEndConfirmUseCase } from './begin-end-confirm.use-case';
 import type { JointRepository } from '../ports/joint-repository.port';
 import type { JointAuthorizationPort } from '../ports/joint-authorization.port';
 import type { JointTaskEnqueuer } from '../../infrastructure/joint-task-enqueuer';
+import type { JointActivitySnapshot } from '../../domain/models/joint-activity';
+import type { JointParticipantSnapshot } from '../../domain/models/joint-participant';
+import type { JointChannelSnapshot } from '../../domain/models/joint-channel';
+import { JointParticipantStatus } from '../../domain/state-machines/joint-participant.state-machine';
+import { JointActivityStatus } from '../../domain/state-machines/joint-activity.state-machine';
 
-// ---- 内存仓储桩 ----
+// ---- 内存仓储桩（完整实现 JointRepository，避免 as never 掩盖接口变更） ----
 function makeMemoryRepo(): JointRepository & {
-  activities: Map<string, unknown>;
-  participants: Map<string, unknown[]>;
-  channels: Map<string, unknown>;
+  activities: Map<string, JointActivitySnapshot>;
+  participants: Map<string, JointParticipantSnapshot[]>;
+  channels: Map<string, JointChannelSnapshot>;
 } {
-  const activities = new Map();
-  const participants = new Map<string, unknown[]>();
-  const channels = new Map();
+  const activities = new Map<string, JointActivitySnapshot>();
+  const participants = new Map<string, JointParticipantSnapshot[]>();
+  const channels = new Map<string, JointChannelSnapshot>();
   return {
     activities,
     participants,
@@ -35,92 +40,93 @@ function makeMemoryRepo(): JointRepository & {
     async loadActivity(id: string) {
       return activities.get(id) ?? null;
     },
-    async saveActivity(snapshot: unknown, _rev: number) {
-      const s = snapshot as { id: string };
-      activities.set(s.id, snapshot);
+    async saveActivity(snapshot: JointActivitySnapshot) {
+      activities.set(snapshot.id, snapshot); // 按 id upsert
     },
-    async loadParticipant(_id: string) {
+    async loadParticipant() {
       return null;
     },
     async loadParticipantsByActivity(activityId: string) {
       return participants.get(activityId) ?? [];
     },
-    async saveParticipant(snapshot: unknown, _rev: number) {
-      const s = snapshot as { activityId: string };
-      const list = participants.get(s.activityId) ?? [];
-      list.push(snapshot);
-      participants.set(s.activityId, list);
+    async saveParticipant(snapshot: JointParticipantSnapshot) {
+      const list = participants.get(snapshot.activityId) ?? [];
+      const idx = list.findIndex((p) => p.id === snapshot.id);
+      if (idx >= 0) {
+        list[idx] = snapshot; // upsert，避免重复追加
+      } else {
+        list.push(snapshot);
+      }
+      participants.set(snapshot.activityId, list);
     },
-    async loadApplication(_id: string) {
+    async loadApplication() {
       return null;
     },
-    async loadApplicationsByActivity(_aid: string) {
+    async loadApplicationsByActivity() {
       return [];
     },
-    async saveApplication(_s: unknown, _r: number) {},
-    async loadInterview(_id: string) {
+    async saveApplication() {},
+    async loadInterview() {
       return null;
     },
-    async loadInterviewByApplication(_aid: string) {
+    async loadInterviewByApplication() {
       return null;
     },
-    async loadInterviewsByActivity(_aid: string) {
+    async loadInterviewsByActivity() {
       return [];
     },
-    async saveInterview(_s: unknown, _r: number) {},
-    async loadConclusion(_id: string) {
+    async saveInterview() {},
+    async loadConclusion() {
       return null;
     },
-    async loadConclusionsByApplication(_aid: string) {
+    async loadConclusionsByApplication() {
       return [];
     },
-    async loadConclusionsByActivity(_aid: string) {
+    async loadConclusionsByActivity() {
       return [];
     },
-    async saveConclusion(_s: unknown, _r: number) {},
+    async saveConclusion() {},
     async loadChannel(id: string) {
       return channels.get(id) ?? null;
     },
-    async saveChannel(snapshot: unknown, _rev: number) {
-      const s = snapshot as { id?: string; jointActivityId?: string };
-      const key = s.jointActivityId ?? s.id ?? '';
-      channels.set(key, snapshot);
+    async saveChannel(snapshot: JointChannelSnapshot) {
+      channels.set(snapshot.jointActivityId, snapshot);
     },
-  } as never;
+  };
 }
 
-/** 授权桩：全部方法放行 */
+/** 授权桩：全部方法放行（完整实现 JointAuthorizationPort，避免 as never） */
 function makeAuthAllAllow(): JointAuthorizationPort {
-  const methods = [
-    'canInitiateJoint',
-    'canConfirmRound',
-    'canPublish',
-    'canManageInvitation',
-    'canCancelOrForceEnd',
-    'canManageParticipation',
-    'canViewList',
-    'canViewJointActivity',
-    'canViewApplication',
-    'canViewInterview',
-    'canViewConclusions',
-    'canViewApplications',
-    'canViewParticipants',
-    'canViewChannel',
-    'canRecordEvaluation',
-    'canEditConclusion',
-    'canRestoreReview',
-  ];
-  return Object.fromEntries(methods.map((m) => [m, async () => true])) as never;
+  return {
+    canInitiateJoint: async () => true,
+    canConfirmRound: async () => true,
+    canPublish: async () => true,
+    canManageInvitation: async () => true,
+    canCancelOrForceEnd: async () => true,
+    canManageParticipation: async () => true,
+    canViewList: async () => true,
+    canViewJointActivity: async () => true,
+    canViewApplication: async () => true,
+    canViewInterview: async () => true,
+    canViewConclusions: async () => true,
+    canViewApplications: async () => true,
+    canViewParticipants: async () => true,
+    canViewChannel: async () => true,
+    canRecordEvaluation: async () => true,
+    canEditConclusion: async () => true,
+    canRestoreReview: async () => true,
+  };
 }
 
 /** 预置一条有效活动快照 + 参与者（使 loadActivity 命中且通过域层作用域校验） */
 function seedActivity(
   repo: ReturnType<typeof makeMemoryRepo>,
   id: string,
-  status = 'ESTABLISHED',
+  status: JointActivityStatus = JointActivityStatus.ESTABLISHED,
   clubIds = ['club-a', 'club-b'],
+  participantStatus: JointParticipantStatus = JointParticipantStatus.PROPOSED,
 ) {
-  (repo.activities as Map<string, unknown>).set(id, {
+  const activity: JointActivitySnapshot = {
     id,
     title: '预置活动',
     description: null,
@@ -135,27 +141,35 @@ function seedActivity(
     createdBy: 'u_admin',
     createdAt: NOW,
     updatedAt: NOW,
-  });
-  const list = (repo.participants as Map<string, unknown[]>).get(id) ?? [];
-  for (const cid of clubIds) {
-    list.push({
-      id: `part-${cid}`,
-      activityId: id,
-      clubId: cid,
-      status: 'PROPOSED',
-      roundId: 1,
-      confirmedAt: null,
-      revisionNumber: 1,
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
-  }
-  (repo.participants as Map<string, unknown[]>).set(id, list);
+  };
+  repo.activities.set(id, activity);
+  const list: JointParticipantSnapshot[] = clubIds.map((cid) => ({
+    id: `part-${cid}`,
+    activityId: id,
+    clubId: cid,
+    status: participantStatus,
+    roundId: 1,
+    decidedBy: null,
+    confirmedAt: null,
+    suspendedAt: null,
+    resumedAt: null,
+    suspendedForMs: 0,
+    revisionNumber: 1,
+    createdAt: NOW,
+    updatedAt: NOW,
+  }));
+  repo.participants.set(id, list);
 }
 
+// JointTaskEnqueuer 为带 private 成员的具体类，无法结构化赋值，故仅实现测试用到的公共 schedule 方法
+// 并通过类型断言补齐（保留方法签名，避免 `as never` 彻底绕过类型）。
 const tasksStub: JointTaskEnqueuer = {
   scheduleConfirmDeadlineScan: async () => undefined,
-} as never;
+  scheduleInvitationTimeout: async () => undefined,
+  scheduleChannelAutoClose: async () => undefined,
+  scheduleForceEndCleanup: async () => undefined,
+  scheduleArchiveTerminal: async () => undefined,
+} as unknown as JointTaskEnqueuer;
 
 const NOW = new Date('2026-08-01T00:00:00Z');
 
@@ -231,11 +245,11 @@ describe('InitiateJointActivityUseCase', () => {
 describe('CancelJointActivityUseCase（授权拒绝冒烟）', () => {
   it('预置活动 + deny canCancelOrForceEnd → forbidden', async () => {
     const repo = makeMemoryRepo();
-    seedActivity(repo, 'act-x', 'DRAFT_CONFIRMING');
+    seedActivity(repo, 'act-x', JointActivityStatus.DRAFT_CONFIRMING);
     const auth = Object.assign(makeAuthAllAllow(), {
       canCancelOrForceEnd: async () => false,
     });
-    const useCase = new DefaultCancelJointActivityUseCase(repo, auth as never, tasksStub as never);
+    const useCase = new DefaultCancelJointActivityUseCase(repo, auth, tasksStub);
     await assert.rejects(
       () =>
         useCase.execute({
@@ -243,7 +257,7 @@ describe('CancelJointActivityUseCase（授权拒绝冒烟）', () => {
           actor: 'u1',
           actingClubId: 'club-a',
           now: NOW,
-        } as never),
+        }),
       /授权|forbidden|仅/i,
     );
   });
@@ -252,15 +266,11 @@ describe('CancelJointActivityUseCase（授权拒绝冒烟）', () => {
 describe('ForceEndJointActivityUseCase（授权拒绝冒烟）', () => {
   it('预置活动 + deny canCancelOrForceEnd → forbidden', async () => {
     const repo = makeMemoryRepo();
-    seedActivity(repo, 'act-y', 'INVITING');
+    seedActivity(repo, 'act-y', JointActivityStatus.INVITING);
     const auth = Object.assign(makeAuthAllAllow(), {
       canCancelOrForceEnd: async () => false,
     });
-    const useCase = new DefaultForceEndJointActivityUseCase(
-      repo,
-      auth as never,
-      tasksStub as never,
-    );
+    const useCase = new DefaultForceEndJointActivityUseCase(repo, auth, tasksStub);
     await assert.rejects(
       () =>
         useCase.execute({
@@ -269,20 +279,20 @@ describe('ForceEndJointActivityUseCase（授权拒绝冒烟）', () => {
           actingClubId: 'club-a',
           reason: '紧急停用',
           now: NOW,
-        } as never),
+        }),
       /授权|forbidden|仅/i,
     );
   });
 });
 
-describe('PublishJointActivityUseCase（授权拒绝冒烟）', () => {
+describe('PublishJointActivityUseCase', () => {
   it('预置活动 + deny canPublish → forbidden', async () => {
     const repo = makeMemoryRepo();
-    seedActivity(repo, 'act-p', 'ESTABLISHED');
+    seedActivity(repo, 'act-p', JointActivityStatus.ESTABLISHED);
     const auth = Object.assign(makeAuthAllAllow(), {
       canPublish: async () => false,
     });
-    const useCase = new DefaultPublishJointActivityUseCase(repo, auth as never);
+    const useCase = new DefaultPublishJointActivityUseCase(repo, auth);
     await assert.rejects(
       () =>
         useCase.execute({
@@ -290,8 +300,48 @@ describe('PublishJointActivityUseCase（授权拒绝冒烟）', () => {
           actor: 'u1',
           actingClubId: 'club-a',
           now: NOW,
-        } as never),
+        }),
       /授权|forbidden|仅/i,
+    );
+  });
+
+  it('正常路径：全体确认且不少于两社团 → 公布成功并固化参与', async () => {
+    const repo = makeMemoryRepo();
+    seedActivity(
+      repo,
+      'act-p2',
+      JointActivityStatus.ESTABLISHED,
+      ['club-a', 'club-b'],
+      JointParticipantStatus.CONFIRMED,
+    );
+    const useCase = new DefaultPublishJointActivityUseCase(repo, makeAuthAllAllow());
+    await useCase.execute({
+      activityId: 'act-p2',
+      actor: 'u1',
+      actingClubId: 'club-a',
+      now: NOW,
+    });
+    const updated = repo.activities.get('act-p2')!;
+    assert.equal(updated.status, 'PUBLISHED');
+    assert.ok(updated.publishedAt !== null);
+    const participants = repo.participants.get('act-p2')!;
+    assert.equal(participants.length, 2);
+    assert.ok(participants.every((p) => p.status === JointParticipantStatus.PARTICIPATING));
+  });
+
+  it('未全部确认 → precondition 失败', async () => {
+    const repo = makeMemoryRepo();
+    seedActivity(repo, 'act-p3', JointActivityStatus.ESTABLISHED, ['club-a', 'club-b']); // 默认 PROPOSED
+    const useCase = new DefaultPublishJointActivityUseCase(repo, makeAuthAllAllow());
+    await assert.rejects(
+      () =>
+        useCase.execute({
+          activityId: 'act-p3',
+          actor: 'u1',
+          actingClubId: 'club-a',
+          now: NOW,
+        }),
+      /确认/,
     );
   });
 });
@@ -299,11 +349,11 @@ describe('PublishJointActivityUseCase（授权拒绝冒烟）', () => {
 describe('EndJointActivityUseCase（授权拒绝冒烟）', () => {
   it('预置活动 + deny canManageInvitation → forbidden（实际检查方法）', async () => {
     const repo = makeMemoryRepo();
-    seedActivity(repo, 'act-e', 'END_CONFIRMING');
+    seedActivity(repo, 'act-e', JointActivityStatus.END_CONFIRMING);
     const auth = Object.assign(makeAuthAllAllow(), {
       canManageInvitation: async () => false,
     });
-    const useCase = new DefaultEndJointActivityUseCase(repo, auth as never, tasksStub);
+    const useCase = new DefaultEndJointActivityUseCase(repo, auth, tasksStub);
     await assert.rejects(
       () =>
         useCase.execute({
@@ -311,7 +361,7 @@ describe('EndJointActivityUseCase（授权拒绝冒烟）', () => {
           actor: 'u1',
           actingClubId: 'club-a',
           now: NOW,
-        } as never),
+        }),
       /授权|forbidden|仅/i,
     );
   });
@@ -320,11 +370,11 @@ describe('EndJointActivityUseCase（授权拒绝冒烟）', () => {
 describe('BeginEndConfirmUseCase（授权拒绝冒烟）', () => {
   it('预置活动 + deny canManageInvitation → forbidden（实际检查方法）', async () => {
     const repo = makeMemoryRepo();
-    seedActivity(repo, 'act-b', 'INVITING');
+    seedActivity(repo, 'act-b', JointActivityStatus.INVITING);
     const auth = Object.assign(makeAuthAllAllow(), {
       canManageInvitation: async () => false,
     });
-    const useCase = new DefaultBeginEndConfirmUseCase(repo, auth as never);
+    const useCase = new DefaultBeginEndConfirmUseCase(repo, auth);
     await assert.rejects(
       () =>
         useCase.execute({
@@ -332,7 +382,7 @@ describe('BeginEndConfirmUseCase（授权拒绝冒烟）', () => {
           actor: 'u1',
           actingClubId: 'club-a',
           now: NOW,
-        } as never),
+        }),
       /授权|forbidden|仅/i,
     );
   });
