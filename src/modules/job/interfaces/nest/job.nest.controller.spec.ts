@@ -56,8 +56,9 @@ describe('JobNestController（运维端点传输层）', () => {
     const result = await controller.getStatus(authedRequest());
 
     assert.equal((result as { code: number }).code, 0);
-    const data = (result as { data: { counts: Record<JobTaskStatus, number>; generatedAt: string } })
-      .data;
+    const data = (
+      result as { data: { counts: Record<JobTaskStatus, number>; generatedAt: string } }
+    ).data;
     assert.deepEqual(data.counts, DEFAULT_COUNTS);
     assert.ok(typeof data.generatedAt === 'string');
   });

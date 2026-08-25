@@ -50,14 +50,22 @@ describe('SEC-CTL-022 幂等键绑定主体、作用域与参数摘要', () => {
   it('SEC-CTL-022：追踪编号与幂等键混同被显式拒绝（XCC-GEN-001）', () => {
     assert.throws(() => assertIdempotencyKeyDistinctFromTrackingNumber('same', 'same'));
     assert.doesNotThrow(() =>
-      assertIdempotencyKeyDistinctFromTrackingNumber('idem-x', 'tr-00000000-0000-0000-0000-000000000000'),
+      assertIdempotencyKeyDistinctFromTrackingNumber(
+        'idem-x',
+        'tr-00000000-0000-0000-0000-000000000000',
+      ),
     );
   });
 
   it('SEC-CTL-022：空键与超长键不合法；平台作用域回退为 platform 段', () => {
     assert.equal(isValidIdempotencyKey(''), false);
     assert.equal(isValidIdempotencyKey('x'.repeat(513)), false);
-    assert.equal(isValidIdempotencyKey(deriveIdempotencyKey('OP', { ...source, scope: { kind: 'PLATFORM' } } as TaskSourceRef)), true);
+    assert.equal(
+      isValidIdempotencyKey(
+        deriveIdempotencyKey('OP', { ...source, scope: { kind: 'PLATFORM' } } as TaskSourceRef),
+      ),
+      true,
+    );
     const platformKey = deriveIdempotencyKey('OP', {
       ...source,
       scope: { kind: 'PLATFORM' },

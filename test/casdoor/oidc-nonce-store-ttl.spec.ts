@@ -39,7 +39,7 @@ describe('OidcNonceStore 一次性消费（CAS-CAP-004 回调单次有效）', (
     });
   });
 
-  it("重放拒绝：同一 nonce 第二次消费返回 false（「我确实签发过」且只允许一次）", () => {
+  it('重放拒绝：同一 nonce 第二次消费返回 false（「我确实签发过」且只允许一次）', () => {
     withFrozenClock(1_000_000, () => {
       const store = new InMemoryOidcNonceStore();
       store.issue('nonce-replay');
@@ -50,7 +50,7 @@ describe('OidcNonceStore 一次性消费（CAS-CAP-004 回调单次有效）', (
     });
   });
 
-  it("未签发的 nonce 拒绝消费（伪造 state / 登录 CSRF）", () => {
+  it('未签发的 nonce 拒绝消费（伪造 state / 登录 CSRF）', () => {
     withFrozenClock(1_000_000, () => {
       const store = new InMemoryOidcNonceStore();
       assert.equal(store.consume('never-issued-by-this-service'), false);

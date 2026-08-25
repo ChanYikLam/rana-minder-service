@@ -22,6 +22,10 @@ class MutablePermissions implements CurrentPermissionsPort {
     return this.perms.get(clubId) ?? [];
   }
 
+  async effectiveForDepartment(): Promise<string[]> {
+    return [];
+  }
+
   async isPlatformSuperAdmin(): Promise<boolean> {
     return false;
   }

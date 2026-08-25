@@ -55,9 +55,7 @@ interface FakeOidcClientInstance {
     readonly expiresAt?: number;
   }>;
   verifyIdToken(idToken: string, nonce: string): Promise<Record<string, unknown>>;
-  fetchAccountState(
-    accessToken: string,
-  ): Promise<'ACTIVE' | 'DISABLED' | 'DELETED' | 'UNKNOWN'>;
+  fetchAccountState(accessToken: string): Promise<'ACTIVE' | 'DISABLED' | 'DELETED' | 'UNKNOWN'>;
 }
 
 type FakeOidcClientCtor = new (config: {
@@ -188,7 +186,12 @@ function installFakeProvider(initialIdToken: string): FakeProviderHandle {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
-    const body = typeof init?.body === 'string' ? init.body : undefined;
+    const body =
+      typeof init?.body === 'string'
+        ? init.body
+        : init?.body instanceof URLSearchParams
+          ? init.body.toString()
+          : undefined;
     requests.push({ url, method: init?.method ?? 'GET', body });
     const result = route(url, init?.method ?? 'GET', body);
     const text =
@@ -238,7 +241,7 @@ function standardClaims(nowSec: number): Record<string, unknown> {
 }
 
 describe('SSO 握手 · jose-free 部分（回调参数校验/state/nonce 匹配语义）', () => {
-  it("state 契约：base64url(JSON{nonce}) 编解码往返一致，且 nonce 由服务端 store 签发后消费成功", () => {
+  it('state 契约：base64url(JSON{nonce}) 编解码往返一致，且 nonce 由服务端 store 签发后消费成功', () => {
     const store = new InMemoryOidcNonceStore();
     const nonce = '11111111-2222-3333-4444-555555555555';
     store.issue(nonce);
@@ -253,7 +256,7 @@ describe('SSO 握手 · jose-free 部分（回调参数校验/state/nonce 匹配
     assert.equal(store.consume(decoded.nonce as string), true);
   });
 
-  it("伪造 state（nonce 非本服务签发）→ consume=false → 回调必须拒绝（登录 CSRF / 会话固定防护）", () => {
+  it('伪造 state（nonce 非本服务签发）→ consume=false → 回调必须拒绝（登录 CSRF / 会话固定防护）', () => {
     const store = new InMemoryOidcNonceStore();
     const attackerState = Buffer.from(JSON.stringify({ nonce: 'forged-by-attacker' })).toString(
       'base64url',
@@ -265,7 +268,7 @@ describe('SSO 握手 · jose-free 部分（回调参数校验/state/nonce 匹配
     assert.equal(store.consume(decoded.nonce as string), false);
   });
 
-  it("重放回调：同一合法 state 二次提交 → consume=false（一次性 nonce）", () => {
+  it('重放回调：同一合法 state 二次提交 → consume=false（一次性 nonce）', () => {
     const store = new InMemoryOidcNonceStore();
     store.issue('nonce-once');
     const stateParam = Buffer.from(JSON.stringify({ nonce: 'nonce-once' })).toString('base64url');
@@ -281,21 +284,25 @@ describe('SSO 握手 · jose-free 部分（回调参数校验/state/nonce 匹配
     assert.equal(store.consume(second.nonce), false);
   });
 
-  it("畸形 state（非法编码/非 JSON）→ 解码抛错 → 控制器映射 400 Invalid state", () => {
-    assert.throws(() => JSON.parse(Buffer.from('%%%not-base64url%%%', 'base64url').toString('utf8')));
+  it('畸形 state（非法编码/非 JSON）→ 解码抛错 → 控制器映射 400 Invalid state', () => {
+    assert.throws(() =>
+      JSON.parse(Buffer.from('%%%not-base64url%%%', 'base64url').toString('utf8')),
+    );
     const notJson = Buffer.from('plain-text-state', 'utf8').toString('base64url');
     assert.throws(() => JSON.parse(Buffer.from(notJson, 'base64url').toString('utf8')));
   });
 
-  it("state 解码成功但缺 nonce 字段（或类型不符）→ 拒绝分支（typeof 校验先行）", () => {
-    const emptyState = Buffer.from(JSON.stringify({ redirectAfter: '/home' })).toString('base64url');
+  it('state 解码成功但缺 nonce 字段（或类型不符）→ 拒绝分支（typeof 校验先行）', () => {
+    const emptyState = Buffer.from(JSON.stringify({ redirectAfter: '/home' })).toString(
+      'base64url',
+    );
     const decoded = JSON.parse(Buffer.from(emptyState, 'base64url').toString('utf8')) as {
       nonce?: unknown;
     };
     assert.equal(typeof decoded.nonce !== 'string' || !decoded.nonce, true);
   });
 
-  it("id_token payload 与 state 的 nonce 不匹配检测是纯相等比较（签名校验之外的第一道门）", () => {
+  it('id_token payload 与 state 的 nonce 不匹配检测是纯相等比较（签名校验之外的第一道门）', () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const claims = { ...standardClaims(nowSec), nonce: 'nonce-from-auth-request' };
     const token = signRs256(claims);
@@ -309,7 +316,7 @@ describe('SSO 握手 · jose-free 部分（回调参数校验/state/nonce 匹配
 });
 
 describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', () => {
-  it("discovery → buildAuthorizationUrl：授权 URL 参数完整且 state 含 nonce（CAS-AUTH-001 出站合同）", async (t) => {
+  it('discovery → buildAuthorizationUrl：授权 URL 参数完整且 state 含 nonce（CAS-AUTH-001 出站合同）', async (t) => {
     if (RealOidcClient === null || jose === null) {
       return t.skip('jose 未安装：CI 安装依赖后自动启用');
     }
@@ -340,7 +347,10 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
 
       // discovery 缓存：第二次构造不再出网
       await client.buildAuthorizationUrl({ nonce: 'n-url-2' });
-      assert.equal(provider.requests.filter((r) => r.url.includes('openid-configuration')).length, 1);
+      assert.equal(
+        provider.requests.filter((r) => r.url.includes('openid-configuration')).length,
+        1,
+      );
     } finally {
       provider.restore();
     }
@@ -386,7 +396,7 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
     }
   });
 
-  it("verifyIdToken：真实 RS256 签名 + JWKS 校验通过并返回主体绑定 claims（CAS-CAP-004）", async (t) => {
+  it('verifyIdToken：真实 RS256 签名 + JWKS 校验通过并返回主体绑定 claims（CAS-CAP-004）', async (t) => {
     if (RealOidcClient === null || jose === null) {
       return t.skip('jose 未安装：CI 安装依赖后自动启用');
     }
@@ -428,7 +438,7 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
     }
   });
 
-  it("verifyIdToken：篡改签名位 → 真实验证路径拒绝（RS256 签名确被校验，非仅解码）", async (t) => {
+  it('verifyIdToken：篡改签名位 → 真实验证路径拒绝（RS256 签名确被校验，非仅解码）', async (t) => {
     if (RealOidcClient === null || jose === null) {
       return t.skip('jose 未安装：CI 安装依赖后自动启用');
     }
@@ -449,7 +459,7 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
     }
   });
 
-  it("verifyIdToken：错误受众/签发方 → 拒绝（CAS-CAP-004 签发方与受众绑定）", async (t) => {
+  it('verifyIdToken：错误受众/签发方 → 拒绝（CAS-CAP-004 签发方与受众绑定）', async (t) => {
     if (RealOidcClient === null || jose === null) {
       return t.skip('jose 未安装：CI 安装依赖后自动启用');
     }
@@ -473,16 +483,12 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
         clientSecret: CLIENT_SECRET,
         redirectUri: REDIRECT_URI,
       });
+      // wrongAud：aud 与 clientId 不符 → 拒绝（CAS-CAP-004 受众绑定）
       await assert.rejects(client.verifyIdToken(wrongAud, 'n-a'));
-      handle.setIssuer('https://evil.example');
-      // 客户端 discovery 已缓存首个 issuer；新实例重新发现以取得被篡改的 issuer
-      const client2 = new RealOidcClient({
-        endpoint: ISSUER,
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
-        redirectUri: REDIRECT_URI,
-      });
-      await assert.rejects(client2.verifyIdToken(wrongIss, 'n-a'));
+      // wrongIss：iss 与真实 discovery issuer（ISSUER）不符 → 拒绝（签发方绑定）。
+      // 注意：不得把 discovery issuer 改为 evil，否则 wrongIss.iss 反而与之一致，
+      // 无法验证「签发方绑定」（历史缺陷：setIssuer(evil) 使 iss 匹配而放行）。
+      await assert.rejects(client.verifyIdToken(wrongIss, 'n-a'));
     } finally {
       handle.restore();
     }

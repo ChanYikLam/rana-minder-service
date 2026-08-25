@@ -16,9 +16,7 @@ import assert from 'node:assert/strict';
 
 import { resolveActorFromHeaders } from '../../src/modules/organization/interfaces/actor';
 import { DenyAllTaskPrecondition } from '../../src/platform/tasks/executors/task-precondition';
-import {
-  DenyAllBatchItemAuthorization,
-} from '../../src/platform/tasks/batch/batch-authorization';
+import { DenyAllBatchItemAuthorization } from '../../src/platform/tasks/batch/batch-authorization';
 import { DenyAllBatchItemExecutor } from '../../src/platform/tasks/batch/batch-item-executor';
 import type { TaskRecord } from '../../src/platform/tasks/contracts';
 import type { BatchItemInput, TaskScope } from '../../src/platform/tasks/contracts';
@@ -103,10 +101,13 @@ describe('SEC-CTL-002 默认拒绝与失败关闭', () => {
       },
     );
     for (const bad of [null, 'str', 42, []]) {
-      assert.throws(() => parseRequestEnvelope(bad), (err: unknown) => {
-        assert.equal((err as IdentityCommandError).code, IdentityErrorCode.BAD_REQUEST);
-        return true;
-      });
+      assert.throws(
+        () => parseRequestEnvelope(bad),
+        (err: unknown) => {
+          assert.equal((err as IdentityCommandError).code, IdentityErrorCode.BAD_REQUEST);
+          return true;
+        },
+      );
     }
     assert.throws(
       () => parseRequestEnvelope({ expectedVersion: 0 }),

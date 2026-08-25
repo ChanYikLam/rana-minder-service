@@ -119,7 +119,10 @@ describe('SEC-CTL-025 登记式新鲜度：未知操作失败关闭、高风险�
   it('SEC-CTL-025：重复登记同一操作被拒绝（目录受控，不可被运行时覆盖）', () => {
     const registry = new FreshnessRegistry();
     assert.throws(() =>
-      registry.register({ operation: OPERATION_HIGH_RISK_COMMAND, level: FreshnessLevel.OBSERVATION }),
+      registry.register({
+        operation: OPERATION_HIGH_RISK_COMMAND,
+        level: FreshnessLevel.OBSERVATION,
+      }),
     );
   });
 });

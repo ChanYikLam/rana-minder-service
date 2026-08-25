@@ -19,7 +19,8 @@ import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { OrganizationModule } from '../organization/module';
 import { IdentityModule } from '../identity/identity.module';
-import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
+import { AUTH_SESSION_PROVIDER, PROFILE_FIELD_DIRECTORY } from '../identity/tokens';
+import type { ProfileFieldDirectoryPort } from '../identity/application/ports/profile-field-directory.port';
 import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
 import { DB_ADAPTER } from '../../adapters/tokens';
@@ -64,7 +65,6 @@ import { PostgresFormIdempotencyStore } from './infrastructure/postgres-form-ide
 import { PostgresFormSubmissionRepository } from './infrastructure/postgres-form-submission.repository';
 import { OrgBackedFormDesignPermission } from './infrastructure/org-form-design-permission';
 import { OrgBackedFormFillPermission } from './infrastructure/org-form-fill-permission';
-import { StaticProfileFieldDirectory } from './infrastructure/static-profile-field-directory';
 
 import { DefaultFormVersionStateMachine } from './domain/state-machines/form-version.state-machine';
 
@@ -129,13 +129,25 @@ import { FormSubmissionNestController } from './interfaces/nest/form-submission.
       useFactory: (db, uow) => new PostgresFormIdempotencyStore(db, uow),
       inject: [DB_ADAPTER, FormUnitOfWork],
     },
-    // ----- 领域适配器（组织授权接线 / 静态资料目录；部门作用域仍 fail-closed，见适配器注释）-----
+    // ----- 领域适配器（组织授权接线 / 配置化字段目录；部门作用域经部门权限契约，见适配器注释）-----
     {
       provide: FORM_DESIGN_PERMISSION,
       useFactory: (permissions) => new OrgBackedFormDesignPermission(permissions),
       inject: [CURRENT_PERMISSIONS_PORT],
     },
-    { provide: FORM_PROFILE_FIELD_DIRECTORY, useClass: StaticProfileFieldDirectory },
+    {
+      provide: FORM_PROFILE_FIELD_DIRECTORY,
+      // 4.1 收口：静态目录 → identity 配置化目录（PostgreSQL；FORM-004 白名单平台可配）
+      useFactory: (directory: ProfileFieldDirectoryPort) => ({
+        listApproved: async () =>
+          (await directory.listApproved()).map(({ fieldId, label, readOnly }) => ({
+            fieldId,
+            label,
+            readOnly,
+          })),
+      }),
+      inject: [PROFILE_FIELD_DIRECTORY],
+    },
     // ----- 状态机与策略（纯规则单例）-----
     { provide: FORM_VERSION_MACHINE, useClass: DefaultFormVersionStateMachine },
     // ----- 应用命令 -----

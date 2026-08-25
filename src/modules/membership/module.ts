@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { IdentityModule } from '../identity/identity.module';
+import { ObservabilityModule } from '../../platform/observability/module';
 import { MembershipNestController } from './interfaces/nest/membership.nest.controller';
 import {
   SUBMIT_DEPARTMENT_APPLICATION_COMMAND,
@@ -76,12 +77,18 @@ import { MEMBERSHIP_ACCESS_PORT, MEMBERSHIP_NOTIFICATION_PORT } from './applicat
  * - 同步异常只能经人工按 Casdoor 当前值修复收口，禁止一键重放（ORG-030/034）。
  */
 @Module({
-  imports: [IdentityModule],
+  imports: [IdentityModule, ObservabilityModule],
   controllers: [MembershipNestController],
   providers: [
     // ----- 传输层用例 token（复用已有应用层；与类 provider 并存，独立实例）-----
-    { provide: SUBMIT_DEPARTMENT_APPLICATION_COMMAND, useClass: SubmitDepartmentApplicationCommand },
-    { provide: DECIDE_DEPARTMENT_APPLICATION_COMMAND, useClass: DecideDepartmentApplicationCommand },
+    {
+      provide: SUBMIT_DEPARTMENT_APPLICATION_COMMAND,
+      useClass: SubmitDepartmentApplicationCommand,
+    },
+    {
+      provide: DECIDE_DEPARTMENT_APPLICATION_COMMAND,
+      useClass: DecideDepartmentApplicationCommand,
+    },
     {
       provide: EXECUTE_DEPARTMENT_APPLICATION_COMMAND,
       useClass: ExecuteDepartmentApplicationCommand,

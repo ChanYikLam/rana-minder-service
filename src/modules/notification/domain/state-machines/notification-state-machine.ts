@@ -343,10 +343,13 @@ export class NotificationStateMachine {
 
   /**
    * 转换 9：明确退信或连续失败 24 小时。
-   * 失败重试 → 永久失败
+   * 失败重试 → 永久失败（PENDING 为重试抢占态，明确退信时同样允许进入永久失败）
    */
   private evaluateMarkPermanentFailure(command: StateTransitionCommand): TransitionResult {
-    if (command.currentChannelStatus === 'FAILED_RETRY') {
+    if (
+      command.currentChannelStatus === 'FAILED_RETRY' ||
+      command.currentChannelStatus === 'PENDING'
+    ) {
       return {
         allowed: true,
         newStatus: null,

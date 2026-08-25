@@ -9,6 +9,8 @@
  *
  * 覆盖函数：
  * - authorizeBatchExportScope（5 类导出者批量导出收敛 + 类型穷尽保护）；
+ * - authorizeContactOptIn（联系方式勾选闸门：3 类身份可勾选、成员仅本人个人副本、
+ *   面试官一律禁止，5.4.3 EXP-002/EXP-003）；
  * - convergeJointExportScope（联合导出参与方边界、显式社团一致性）；
  * - authorizePersonalCopy（个人副本 5 类边界、target 缺省默认本人）；
  * - revalidateExportScope / revalidateExportScopeWithFacts（静态 + 归属回源）；
@@ -26,6 +28,7 @@ import { MemoryExportReauthPort } from '../infrastructure/memory-export-access';
 import { ExportError } from './errors';
 import {
   authorizeBatchExportScope,
+  authorizeContactOptIn,
   convergeJointExportScope,
   authorizePersonalCopy,
   revalidateExportScope,
@@ -346,6 +349,104 @@ describe('authorizePersonalCopy 个人副本收敛（EXP-003）', () => {
         clubId: 'club-1',
         departmentId: 'dept-A',
       },
+    );
+  });
+});
+
+describe('authorizeContactOptIn 联系方式勾选闸门（5.4.3，EXP-002/EXP-003）', () => {
+  it('未勾选（includeContact 缺省/false）→ 任何身份一律放行（默认不导出即无需授权）', () => {
+    for (const principal of [CLUB_LEADER, DEPT_LEADER, INTERVIEWER, MEMBER]) {
+      assert.doesNotThrow(() =>
+        authorizeContactOptIn(principal, { kind: 'club', includeContact: false }),
+      );
+      assert.doesNotThrow(() => authorizeContactOptIn(principal, { kind: 'personal' }));
+    }
+    const admin = platformSuperAdminPrincipal('admin-1');
+    assert.doesNotThrow(() => authorizeContactOptIn(admin, { kind: 'platform' }));
+  });
+
+  it('社团负责人/人事勾选 → 允许（批量与个人副本均可）', () => {
+    assert.doesNotThrow(() =>
+      authorizeContactOptIn(CLUB_LEADER, { kind: 'club', includeContact: true }),
+    );
+    assert.doesNotThrow(() =>
+      authorizeContactOptIn(CLUB_LEADER, {
+        kind: 'personal',
+        targetUserId: 'someone-else',
+        includeContact: true,
+      }),
+    );
+  });
+
+  it('部门负责人勾选 → 允许', () => {
+    assert.doesNotThrow(() =>
+      authorizeContactOptIn(DEPT_LEADER, {
+        kind: 'department',
+        clubId: 'club-1',
+        departmentId: 'dept-A',
+        includeContact: true,
+      }),
+    );
+  });
+
+  it('平台超管勾选 → 允许（特权身份字段级可见）', () => {
+    const admin = platformSuperAdminPrincipal('admin-1');
+    assert.doesNotThrow(() =>
+      authorizeContactOptIn(admin, { kind: 'platform', includeContact: true }),
+    );
+  });
+
+  it('普通面试官：任何形式勾选 → 一律拒绝（IFC-ERR-003，含本人个人副本）', () => {
+    expectErrorCode(
+      () => authorizeContactOptIn(INTERVIEWER, { kind: 'club', includeContact: true }),
+      'IFC-ERR-003',
+    );
+    expectErrorCode(
+      () =>
+        authorizeContactOptIn(INTERVIEWER, {
+          kind: 'personal',
+          targetUserId: INTERVIEWER.userId,
+          includeContact: true,
+        }),
+      'IFC-ERR-003',
+    );
+  });
+
+  it('普通成员/申请人：本人个人副本勾选 → 允许（target 缺省视为本人）', () => {
+    assert.doesNotThrow(() =>
+      authorizeContactOptIn(MEMBER, { kind: 'personal', includeContact: true }),
+    );
+    assert.doesNotThrow(() =>
+      authorizeContactOptIn(MEMBER, {
+        kind: 'personal',
+        targetUserId: MEMBER.userId,
+        includeContact: true,
+      }),
+    );
+  });
+
+  it('普通成员/申请人：代他人个人副本 / 对批量作用域勾选 → 拒绝（IFC-ERR-003）', () => {
+    expectErrorCode(
+      () =>
+        authorizeContactOptIn(MEMBER, {
+          kind: 'personal',
+          targetUserId: 'other-user',
+          includeContact: true,
+        }),
+      'IFC-ERR-003',
+    );
+    expectErrorCode(
+      () => authorizeContactOptIn(MEMBER, { kind: 'club', clubId: 'club-1', includeContact: true }),
+      'IFC-ERR-003',
+    );
+    expectErrorCode(
+      () =>
+        authorizeContactOptIn(MEMBER, {
+          kind: 'joint',
+          jointActivityId: 'J1',
+          includeContact: true,
+        }),
+      'IFC-ERR-003',
     );
   });
 });

@@ -1,3 +1,4 @@
+// no-spec-required 纯接口端口（无实现逻辑），由基础设施实现（postgres-recruitment.repository.spec.ts）与内存实现（recruitment-test-support）实际覆盖验证
 /**
  * 招新仓储端口（recruitment 应用层；聚合持久化边界）。
  *
@@ -9,6 +10,7 @@ import type { ApplicationChannelSnapshot } from '../../domain/models/application
 import type { ApplicationSnapshot } from '../../domain/models/application';
 import type { DepartmentPathSnapshot } from '../../domain/models/department-path';
 import type { InterviewRecordSnapshot } from '../../domain/models/interview-record';
+import type { RemedyWindowSnapshot } from '../../domain/models/remedy-window';
 
 export interface RecruitmentRepository {
   loadActivity(id: string): Promise<RecruitmentActivitySnapshot | null>;
@@ -33,4 +35,7 @@ export interface RecruitmentRepository {
   loadInterview(id: string): Promise<InterviewRecordSnapshot | null>;
   saveInterview(snapshot: InterviewRecordSnapshot, expectedRevision: number): Promise<void>;
   loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]>;
+
+  saveRemedyWindow(snapshot: RemedyWindowSnapshot): Promise<void>;
+  loadRemedyWindow(windowId: string): Promise<RemedyWindowSnapshot | null>;
 }

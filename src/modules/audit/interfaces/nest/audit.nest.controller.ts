@@ -9,7 +9,17 @@
  * （CLUB_LEADER/HR_ADMIN/SUPER_ADMIN），真实鉴权以接入后的会话提供方为准�? * 未映射端点：GET /api/org/:clubId/corrections（列表）——应用层无列举用�?仓储
  * 枚举方法，且 CorrectionStatusQuery 仅返回状态视图、不足以构造完�?CorrectionRecord�? */
 
-import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards, HttpException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+  HttpException,
+} from '@nestjs/common';
 
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 import type {
@@ -106,9 +116,7 @@ export class AuditNestController {
 
   /** 平台级审计日志：仅超管（AUD-004�?*/
   @Get('admin/audit/logs')
-  async listPlatformLogs(
-    @Req() request: Record<string, unknown>,
-  ): Promise<ApiSuccess<unknown>> {
+  async listPlatformLogs(@Req() request: Record<string, unknown>): Promise<ApiSuccess<unknown>> {
     const subjectId = sessionFromRequest(request).subjectId;
     return this.run(async () => {
       const events = await this.auditQuery.search(

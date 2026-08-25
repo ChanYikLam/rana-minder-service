@@ -18,6 +18,8 @@ export interface ApplicationChannelSnapshot {
   readonly status: ApplicationChannelStatus;
   readonly openAt: Date | null;
   readonly closeAt: Date | null;
+  /** 当前窗口报名截止（重开新窗口时设置；首次开放为 null，截止由活动层控制） */
+  readonly deadline: Date | null;
   readonly minChoices: number;
   readonly maxChoices: number;
   readonly createdAt: Date;
@@ -46,6 +48,7 @@ export class ApplicationChannel {
       status: ApplicationChannelStatus.NOT_STARTED,
       openAt: null,
       closeAt: null,
+      deadline: null,
       minChoices: input.minChoices ?? 1,
       maxChoices: input.maxChoices ?? 1,
       createdAt: input.now,
@@ -116,6 +119,28 @@ export class ApplicationChannel {
       this.snapshot = { ...this.snapshot, closeAt: now };
     }
     return ok;
+  }
+
+  /**
+   * 重开新窗口（SRS-SM-REC-002）：CLOSED → OPEN，须携新截止且严格晚于当前；
+   * 新截止持久化到 deadline（报名用例按窗口截止校验）。
+   */
+  reopen(machine: ApplicationChannelStateMachine, newDeadline: Date, now: Date): boolean {
+    // 防御纵深：截止守卫收口到聚合（SRS-SM-REC-002 拒绝条件
+    // 「新截止缺失/越界/不晚于重开时刻」）。状态机仅校验 CLOSED→OPEN 必须携带
+    // 重开标志，此处直接校验新截止严格晚于重开时刻，杜绝调用方绕过命令层校验。
+    if (newDeadline.getTime() <= now.getTime()) {
+      return false;
+    }
+    if (
+      !this.transition(machine, ApplicationChannelEvent.OPEN, now, {
+        newDeadlineStrictlyAfterNow: true,
+      })
+    ) {
+      return false;
+    }
+    this.snapshot = { ...this.snapshot, deadline: newDeadline, updatedAt: now };
+    return true;
   }
 
   private transition(

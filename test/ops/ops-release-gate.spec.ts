@@ -17,7 +17,15 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -91,8 +99,7 @@ describe('OPS-VER-024 开源发布秘密、学校信息、许可证和文档门�
       );
       assert.throws(
         () => loadConfig({ configFilePath: file }),
-        (e: unknown) =>
-          e instanceof ConfigLoadError && /placeholder not replaced/i.test(e.message),
+        (e: unknown) => e instanceof ConfigLoadError && /placeholder not replaced/i.test(e.message),
         '未改写占位符必须阻断启动（ADR-010）',
       );
     } finally {

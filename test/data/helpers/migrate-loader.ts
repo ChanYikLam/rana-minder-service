@@ -70,7 +70,9 @@ export function loadMigrate(): MigrateModule | null {
     return null;
   }
   ModuleCtor._resolveFilename = function (request, parent, isMain, options) {
-    return request === 'pg' ? stubPath : original.call(ModuleCtor, request, parent, isMain, options);
+    return request === 'pg'
+      ? stubPath
+      : original.call(ModuleCtor, request, parent, isMain, options);
   };
 
   interface TranspileService {
@@ -89,11 +91,16 @@ export function loadMigrate(): MigrateModule | null {
     (ModuleCtor as unknown as { _extensions: ExtensionsBag })._extensions;
   const previousTsHandler = extensionBag['.ts'];
   try {
-    const tsNode = req('ts-node') as { create(options: { transpileOnly: boolean }): TranspileService };
+    const tsNode = req('ts-node') as {
+      create(options: { transpileOnly: boolean }): TranspileService;
+    };
     const service = tsNode.create({ transpileOnly: true });
     extensionBag['.ts'] = (targetModule, filePath) => {
       const fsMod = req('node:fs') as typeof import('node:fs');
-      targetModule._compile(service.compile(fsMod.readFileSync(filePath, 'utf8'), filePath), filePath);
+      targetModule._compile(
+        service.compile(fsMod.readFileSync(filePath, 'utf8'), filePath),
+        filePath,
+      );
     };
     return req(MIGRATE_REL) as MigrateModule;
   } catch {

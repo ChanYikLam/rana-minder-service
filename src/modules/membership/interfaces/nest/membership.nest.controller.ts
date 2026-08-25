@@ -31,10 +31,7 @@ import {
 } from '@nestjs/common';
 
 import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
-import {
-  AuthGuard,
-  sessionFromRequest,
-} from '../../../identity/interfaces/nest/auth.guard';
+import { AuthGuard, sessionFromRequest } from '../../../identity/interfaces/nest/auth.guard';
 import { toApiError } from '../http/membership-error-http';
 
 import {
@@ -102,9 +99,7 @@ export class MembershipNestController {
   ) {}
 
   /** 统一执行：领域错误统一脱敏映射为 HttpException */
-  private async run(
-    op: Promise<unknown> | (() => Promise<unknown>),
-  ): Promise<ApiSuccess<unknown>> {
+  private async run(op: Promise<unknown> | (() => Promise<unknown>)): Promise<ApiSuccess<unknown>> {
     try {
       const value = await (typeof op === 'function' ? op() : op);
       return { code: 0, data: value };

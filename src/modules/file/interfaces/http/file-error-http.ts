@@ -13,15 +13,7 @@ import { IFC_ERROR_HTTP_STATUS } from '../../../../common/contracts/api-error';
 import type { ApiErrorBody, ApiErrorCode } from '../../../../common/contracts/api-error';
 import { generateTraceId } from '../../../../platform/observability/domain/services/trace-id.generator';
 
-import { FileAccessDeniedError } from '../../domain/services/access-policy';
 import { ShortLivedAccessRejectedError } from '../../application/queries/file-access.query';
-import { InitiateUploadError } from '../../application/commands/initiate-upload.command';
-import { CompleteUploadError } from '../../application/commands/complete-upload.command';
-import { FileStatusQueryError } from '../../application/queries/file-status.query';
-import { IllegalFileTransitionError } from '../../domain/state-machines/file-state-machine';
-import { UploadLimitExceededError } from '../../domain/services/upload-policy';
-import { ForbiddenFileTypeError } from '../../domain/services/file-type-guard';
-import { PromoteFileError } from '../../application/commands/promote-file.command';
 
 export interface ApiErrorResult {
   readonly ok: false;

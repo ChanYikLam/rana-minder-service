@@ -1,7 +1,7 @@
 /**
  * 迁移：配置平台表（config 域，5.5 CFG-001~005）
  *
- * 版本：20260824000000
+ * 版本：20260824100000
  * 归属模块：config（ADR-002 §2.1；5.5）
  * 权威来源：src/modules/config/domain 各聚合快照；与
  * postgres.repositories.ts 逐列对齐（迁移与仓储单源一致）。

@@ -36,8 +36,8 @@ const canRun = dockerAvailable();
 const skipReason = !canRun && !CI ? '本地未检测到 docker，跳过 PG18 迁移集成测试' : false;
 
 type Migration = {
-  up: (runner: { query: (sql: string) => Promise<unknown> }) => Promise<void>;
-  down: (runner: { query: (sql: string) => Promise<unknown> }) => Promise<void>;
+  up: (runner: { query: (sql: string, params?: unknown[]) => Promise<unknown> }) => Promise<void>;
+  down: (runner: { query: (sql: string, params?: unknown[]) => Promise<unknown> }) => Promise<void>;
 };
 
 /**
@@ -132,8 +132,11 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
       'joint_channels',
     ],
   },
+  { file: '20260824000001', tables: [] },
+  { file: '20260824000002', tables: ['remedy_windows'] },
+  { file: '20260824000003', tables: [] },
   {
-    file: '20260824000001-org',
+    file: '20260824000004-org',
     tables: [
       'org_club_space',
       'org_relation_command',
@@ -142,6 +145,37 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
       'org_position_template_binding',
       'org_group_mapping',
     ],
+  },
+  {
+    file: '20260824100000',
+    tables: [
+      'config_club_profiles',
+      'config_scoped_policy_table',
+      'config_academic_year_settings',
+      'config_club_cohorts',
+      'config_roots',
+      'config_versions',
+      'config_field_mapping_state',
+    ],
+  },
+  {
+    file: '20260824150000',
+    tables: ['file_records', 'file_access_audit', 'file_delete_confirmations'],
+  },
+  {
+    file: '20260825100000',
+    tables: [
+      'notification_facts',
+      'notification_inbox_presentations',
+      'channel_delivery_attempts',
+      'email_templates',
+      'notification_configs',
+      'notification_privileged_audit',
+    ],
+  },
+  {
+    file: '20260826000000',
+    tables: ['profile_field_directory'],
   },
 ];
 
@@ -157,18 +191,23 @@ const MUST_DROP_AFTER_DOWN: readonly string[] = [
   // job_tasks：本次幂等化改造影响最大的表（20130000 无操作、22120000 接管），
   // down/恢复行为必须显式断言（评审 info）
   'job_tasks',
+  // remedy_windows：本 PR 新增补救窗口表（20260824000002），down 后须移除
+  'remedy_windows',
+  // org_group_mapping：dev 组织迁移（20260824000000-org）代表表
   'org_group_mapping',
+  // profile_field_directory：4.1 字段目录配置化（20260826000000），down 后须移除
+  'profile_field_directory',
 ];
 
 let pool: pg.Pool | null = null;
 let client: pg.PoolClient | null = null;
 
-async function q(sql: string): Promise<unknown> {
+async function q(sql: string, params?: unknown[]): Promise<unknown> {
   assert.ok(client, 'client not ready');
-  return client.query(sql);
+  return params ? client.query(sql, params as never[]) : client.query(sql);
 }
 
-const runner = { query: (sql: string) => q(sql) };
+const runner = { query: (sql: string, params?: unknown[]) => q(sql, params) };
 
 async function tableExists(name: string): Promise<boolean> {
   const r = (await q(`SELECT to_regclass('public.${name}') AS oid`)) as pg.QueryResult;

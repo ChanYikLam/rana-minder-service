@@ -18,12 +18,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { FIXED_NOW } from './nfr-support';
-import {
-  DefaultStatusSummaryQueryService,
-} from '../../src/platform/observability/status-page/status-summary-query.service';
-import {
-  DefaultStaleUnknownRule,
-} from '../../src/platform/observability/status-page/stale-unknown';
+import { DefaultStatusSummaryQueryService } from '../../src/platform/observability/status-page/status-summary-query.service';
+import { DefaultStaleUnknownRule } from '../../src/platform/observability/status-page/stale-unknown';
 import { DefaultHealthSummaryService } from '../../src/platform/observability/health-summary/health-summary';
 import type {
   StatusSummaryQueryService,
@@ -40,16 +36,17 @@ import {
 } from '../../src/platform/observability/domain/services/redaction.rules';
 import { DefaultLogSanitizer } from '../../src/platform/observability/logging/sanitizer';
 import { AuditSanitizer } from '../../src/modules/audit/domain/services/audit-sanitizer';
-import {
-  NestSecurityLogger,
-} from '../../src/platform/observability/logging/security-log';
+import { NestSecurityLogger } from '../../src/platform/observability/logging/security-log';
 import {
   generateTraceId,
   isTraceId,
   TRACE_PREFIX,
 } from '../../src/platform/observability/domain/services/trace-id.generator';
 import { toApiError } from '../../src/modules/identity/interfaces/http/error-http';
-import { IdentityCommandError, IdentityErrorCode } from '../../src/modules/identity/application/errors';
+import {
+  IdentityCommandError,
+  IdentityErrorCode,
+} from '../../src/modules/identity/application/errors';
 import {
   RejectAllStatusPageAuthorizer,
   IdentityStatusPageAuthorizer,
@@ -108,7 +105,11 @@ describe('TST-NFR-014 可见降级与内置异常提示', () => {
       ...view,
       deps: { ...view.deps, mail: { state: 'unknown' } },
     };
-    const query: StatusSummaryQueryService = { async execute() { return withMailUnknown; } };
+    const query: StatusSummaryQueryService = {
+      async execute() {
+        return withMailUnknown;
+      },
+    };
     const summary = await new DefaultHealthSummaryService(query).execute(NOW);
     assert.equal(summary.overall, 'degraded');
     assert.equal(summary.subsystems.find((s) => s.name === 'mail')!.state, 'unknown');
@@ -160,7 +161,11 @@ describe('TST-NFR-024 业务审计与运行日志分离', () => {
 
 describe('TST-NFR-025 分层日志保留与敏感内容排除', () => {
   it('TST-NFR-025: 普通日志 30 在线+60 归档=90 天；网络/安全日志 180 天（≥6 个月下限）', () => {
-    assert.deepEqual(DEFAULT_RETENTION_POLICIES.normal, { onlineDays: 30, archiveDays: 60, totalDays: 90 });
+    assert.deepEqual(DEFAULT_RETENTION_POLICIES.normal, {
+      onlineDays: 30,
+      archiveDays: 60,
+      totalDays: 90,
+    });
     for (const tier of ['network', 'security'] as const) {
       const policy = resolveRetention(tier);
       // ADR-011 §2.1 基线：30 天在线 + 150 天归档 = 180 天，不低于 6 个月下限
@@ -262,11 +267,17 @@ describe('TST-NFR-027 内置最小运维状态与只读授权', () => {
 
   it('TST-NFR-027: 状态页默认拒绝所有访问（fail-closed）；真实授权器核验失败同样拒绝', async () => {
     const strict = new RejectAllStatusPageAuthorizer();
-    assert.throws(() => strict.assertSuperAdmin({ userId: 'u1', roles: ['SUPER_ADMIN'] }), StatusPageForbiddenError);
+    assert.throws(
+      () => strict.assertSuperAdmin({ userId: 'u1', roles: ['SUPER_ADMIN'] }),
+      StatusPageForbiddenError,
+    );
     const identity = new IdentityStatusPageAuthorizer({
       isSuperAdmin: async () => false,
     });
-    await assert.rejects(() => identity.assertSuperAdminAsync({ userId: 'u2' }), StatusPageForbiddenError);
+    await assert.rejects(
+      () => identity.assertSuperAdminAsync({ userId: 'u2' }),
+      StatusPageForbiddenError,
+    );
     // 未认证主体直接拒绝
     await assert.rejects(() => identity.assertSuperAdminAsync(undefined), StatusPageForbiddenError);
     // 核验器抛错（不可用）→ 失败关闭拒绝，不向状态页泄露内部错误
@@ -275,7 +286,10 @@ describe('TST-NFR-027 内置最小运维状态与只读授权', () => {
         throw new Error('internal verifier failure');
       },
     });
-    await assert.rejects(() => broken.assertSuperAdminAsync({ userId: 'u3' }), StatusPageForbiddenError);
+    await assert.rejects(
+      () => broken.assertSuperAdminAsync({ userId: 'u3' }),
+      StatusPageForbiddenError,
+    );
     // 有效超管放行（只读页面入口）
     const okVerifier = new IdentityStatusPageAuthorizer({ isSuperAdmin: async () => true });
     await okVerifier.assertSuperAdminAsync({ userId: 'admin-1' });
@@ -340,7 +354,8 @@ describe('TST-NFR-029 观测事实与业务结论分离', () => {
       attemptId: 'att-1',
       timestamp: NOW,
     };
-    const baseSend = async (): Promise<ExternalResult<{ externalMessageId: string }>> => successResult;
+    const baseSend = async (): Promise<ExternalResult<{ externalMessageId: string }>> =>
+      successResult;
     const wrapped = trackNotify({ send: baseSend } as never, recorder as never);
     const result = await wrapped.send({
       channel: 'external',

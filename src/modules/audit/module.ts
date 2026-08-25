@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { DB_ADAPTER } from '../../adapters/tokens';
 import { IdentityModule } from '../identity/identity.module';
+import { ObservabilityModule } from '../../platform/observability/module';
 import { SaveCorrectionDraftCommand } from './application/commands/correction-submit.command';
 import { SubmitCorrectionCommand } from './application/commands/correction-submit.command';
 import { DecideCorrectionCommand } from './application/commands/correction-decide.command';
@@ -63,7 +64,7 @@ import { PostgresDeletionChecklistRepository } from './infrastructure/postgres-d
  *   应用内无修改/删除审计入口；删除只留最小审计；不建设匿名化。
  */
 @Module({
-  imports: [AdaptersModule, IdentityModule],
+  imports: [AdaptersModule, IdentityModule, ObservabilityModule],
   controllers: [AuditNestController],
   providers: [
     { provide: AUDIT_QUERY, useExisting: AuditQuery },

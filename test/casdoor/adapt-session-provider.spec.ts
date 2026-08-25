@@ -57,7 +57,9 @@ describe('adaptSessionProvider 映射（AuthSession → 模块最小会话）', 
 
   it('now 为同一 Date 实例引用透传（服务端时间单一来源，不被适配层重造）', async () => {
     const now = new Date('2026-08-25T00:00:00.000Z');
-    const adapted = adaptSessionProvider<StubModuleSession>(identityProvider({ subjectId: 's', now }));
+    const adapted = adaptSessionProvider<StubModuleSession>(
+      identityProvider({ subjectId: 's', now }),
+    );
     const session = await adapted.resolveSession(null);
     assert.equal(session?.now, now);
   });

@@ -83,7 +83,10 @@ export function percentile(sortedAsc: readonly number[], p: number): number {
   if (sortedAsc.length === 0) {
     throw new Error('percentile：空样本');
   }
-  const idx = Math.min(sortedAsc.length - 1, Math.max(0, Math.ceil((p / 100) * sortedAsc.length) - 1));
+  const idx = Math.min(
+    sortedAsc.length - 1,
+    Math.max(0, Math.ceil((p / 100) * sortedAsc.length) - 1),
+  );
   return sortedAsc[idx];
 }
 

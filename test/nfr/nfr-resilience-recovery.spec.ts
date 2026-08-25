@@ -26,17 +26,16 @@ import type {
 } from '../../src/platform/observability/backup-report/backup-report';
 import { ExternalBackupAdapter } from '../../src/adapters/backup/external-backup.adapter';
 import { DefaultHealthSummaryService } from '../../src/platform/observability/health-summary/health-summary';
-import type { StatusSummaryQueryService, StatusSummaryView } from '../../src/platform/observability/status-page/status-summary-query.service';
+import type {
+  StatusSummaryQueryService,
+  StatusSummaryView,
+} from '../../src/platform/observability/status-page/status-summary-query.service';
 import {
   ExecuteDeletionChecklistCommand,
   type DeletionStepExecutorPort,
 } from '../../src/modules/audit/application/commands/execute-deletion-checklist.command';
-import {
-  RetentionCleanupCommand,
-} from '../../src/modules/audit/application/commands/retention-cleanup.command';
-import type {
-  RetentionCleanupExecutorPort,
-} from '../../src/modules/audit/application/commands/retention-cleanup.command';
+import { RetentionCleanupCommand } from '../../src/modules/audit/application/commands/retention-cleanup.command';
+import type { RetentionCleanupExecutorPort } from '../../src/modules/audit/application/commands/retention-cleanup.command';
 import {
   DeletionStepStatus,
   MAX_STEP_RETRY_COUNT,
@@ -45,12 +44,8 @@ import {
 } from '../../src/modules/audit/domain/models/deletion';
 import { AuditWriter } from '../../src/modules/audit/application/commands/audit-writer';
 import { AuditSanitizer } from '../../src/modules/audit/domain/services/audit-sanitizer';
-import {
-  InMemoryAuditRepository,
-} from '../../src/modules/audit/infrastructure/audit-repository';
-import {
-  InMemoryDeletionChecklistRepository,
-} from '../../src/modules/audit/infrastructure/deletion-checklist-repository';
+import { InMemoryAuditRepository } from '../../src/modules/audit/infrastructure/audit-repository';
+import { InMemoryDeletionChecklistRepository } from '../../src/modules/audit/infrastructure/deletion-checklist-repository';
 import { AccessPolicy } from '../../src/modules/file/domain/services/access-policy';
 import {
   FileStateMachine,
@@ -83,8 +78,20 @@ function makeChecklist(overrides: Partial<DeletionChecklist> = {}): DeletionChec
     affectedObjects: ['obj-1'],
     businessRelationsEnded: true,
     steps: [
-      { stepId: 's1', kind: 'ONLINE_DB', targetRef: 'db://u1', status: DeletionStepStatus.PENDING, retryCount: 0 },
-      { stepId: 's2', kind: 'ATTACHMENT_STORE', targetRef: 'obj://u1', status: DeletionStepStatus.PENDING, retryCount: 0 },
+      {
+        stepId: 's1',
+        kind: 'ONLINE_DB',
+        targetRef: 'db://u1',
+        status: DeletionStepStatus.PENDING,
+        retryCount: 0,
+      },
+      {
+        stepId: 's2',
+        kind: 'ATTACHMENT_STORE',
+        targetRef: 'obj://u1',
+        status: DeletionStepStatus.PENDING,
+        retryCount: 0,
+      },
     ],
     completed: false,
     replayCount: 0,
@@ -306,7 +313,10 @@ describe('TST-NFR-011 恢复后重放与收敛门', () => {
       auditCommitted: true,
       replayCount: 0,
       version: 7,
-      steps: makeChecklist().steps.map((s) => ({ ...s, status: DeletionStepStatus.VERIFIED_DELETED })),
+      steps: makeChecklist().steps.map((s) => ({
+        ...s,
+        status: DeletionStepStatus.VERIFIED_DELETED,
+      })),
     });
     const repo = await makeChecklistRepo(doneAudited);
     const executor = scriptedExecutor([true, true]);
@@ -327,7 +337,11 @@ describe('TST-NFR-011 恢复后重放与收敛门', () => {
   });
 
   it('TST-NFR-011: 重放次数达到上限后拒绝再次重放（由运维介入评估）', async () => {
-    const exhausted = makeChecklist({ replayCount: MAX_REPLAY_COUNT, completed: true, auditCommitted: true });
+    const exhausted = makeChecklist({
+      replayCount: MAX_REPLAY_COUNT,
+      completed: true,
+      auditCommitted: true,
+    });
     const repo = await makeChecklistRepo(exhausted);
     const command = new ExecuteDeletionChecklistCommand(
       repo,
@@ -443,10 +457,30 @@ describe('TST-NFR-053 清理撤权优先与失败收敛', () => {
     const command = new RetentionCleanupCommand(executor, makeAuditWriter(makeAuditRepo()));
     const result = await command.execute({
       items: [
-        { itemId: 'item-ok', kind: 'TEMPORARY_EXPORT', retentionExpired: true, hasValidReference: false },
-        { itemId: 'item-ref', kind: 'TEMPORARY_EXPORT', retentionExpired: true, hasValidReference: true },
-        { itemId: 'item-young', kind: 'UNSUBMITTED_DRAFT', retentionExpired: false, hasValidReference: false },
-        { itemId: 'item-flaky', kind: 'SCAN_FAILED', retentionExpired: true, hasValidReference: false },
+        {
+          itemId: 'item-ok',
+          kind: 'TEMPORARY_EXPORT',
+          retentionExpired: true,
+          hasValidReference: false,
+        },
+        {
+          itemId: 'item-ref',
+          kind: 'TEMPORARY_EXPORT',
+          retentionExpired: true,
+          hasValidReference: true,
+        },
+        {
+          itemId: 'item-young',
+          kind: 'UNSUBMITTED_DRAFT',
+          retentionExpired: false,
+          hasValidReference: false,
+        },
+        {
+          itemId: 'item-flaky',
+          kind: 'SCAN_FAILED',
+          retentionExpired: true,
+          hasValidReference: false,
+        },
       ],
     });
     // 有效引用或未到期 → 跳过（正式数据不被误清）

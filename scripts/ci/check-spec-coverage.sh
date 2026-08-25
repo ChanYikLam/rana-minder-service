@@ -5,6 +5,9 @@
 # 职责（P1-A 可选项落地）：本次变更新增/修改的 src/**/*.ts 生产代码文件，
 # 必须存在同名 *.spec.ts（同目录）或在文件内标注豁免标记：
 #   // no-spec-required <原因>
+# 或该文件已被其他测试实际覆盖（coverage-summary.json 中 lines.covered 达
+# MIN_COVERED_LINES 门槛，默认 5 行，如 test/notification-module-di.spec.ts
+# 引导的 src 模块：notification.module 207 行 / tasks.module 143 行 / config 31 行，评审 P2-4）。
 # 且同名 spec 不得是"陈旧 spec"——若 CI 阶段 4 已产出 coverage/coverage-summary.json，
 # 还须校验该文件在覆盖率报告中 lines.covered>0（即对应用例实际执行到了本次改动，
 # 否则存在同名 spec 却从未覆盖到该文件，判定陈旧 → MISS，评审 warning）。
@@ -27,7 +30,9 @@
 # ============================================================
 set -u
 
-root="$(cd "$(dirname "$0")/../.." && pwd)"
+# pwd -P 解析物理路径，避免 $root 残留 symlink/./ 未规范化，导致下方与 c8
+# coverage-summary.json 中规范化绝对路径 key 拼接/相对化时错位（评审 warning）。
+root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 cd "$root"
 
 base="${1:-}"
@@ -125,6 +130,63 @@ checked=0
 COVERAGE_SUMMARY="$root/coverage/coverage-summary.json"
 have_coverage=0
 [ -f "$COVERAGE_SUMMARY" ] && have_coverage=1
+
+# DI 豁免的最小覆盖行数门槛（评审 info：covered>0 门槛偏低，会被仅"import 捎带加载"
+# 1 行的文件蒙混，如 index.ts 桶文件的 re-export）。实测被 DI 引导测试实际覆盖的
+# src 模块覆盖行数均远高于此（notification.module 207 行、platform/tasks/module
+# 143 行、configuration.module 31 行），故默认 5 行足以挡住捎带加载、不误伤真覆盖。
+# 可通过环境变量 MIN_COVERED_LINES 覆盖。
+MIN_COVERED_LINES="${MIN_COVERED_LINES:-5}"
+
+# P2-4 覆盖率集合（评审 info：性能优化）——一次性解析 coverage-summary.json 生成
+# 两个已覆盖文件集合到临时目录，避免 while 循环内对每个 changed 文件重复
+# node -e + JSON.parse 整个报告：
+#   any —— lines.covered>0（用于陈旧 spec 判定：同名 spec 却未覆盖本次改动）；
+#   sub —— lines.covered>=MIN_COVERED_LINES（用于无同名 spec 但被其他测试
+#         实际覆盖的豁免，如 test/notification-module-di.spec.ts 引导的 src 模块）。
+# coverage-summary.json 的 key 为 c8 输出的绝对路径；这里在 node 内统一用
+# path.relative(root,key) 转成相对路径并统一为 '/' 分隔后入集合（评审 warning：
+# 不再以字符串拼接 $root/$f 去对 key，规避 symlink/./ 规范化错位；同时兼容
+# Windows 下 c8 用反斜杠分隔的 key，统一 '/' 后与 git 相对路径一致，本地测量场景
+# 下 DI 豁免同样生效）。
+cov_tmp=""
+if [ "$have_coverage" = "1" ]; then
+  cov_tmp="$(mktemp -d)"
+  if node -e "
+    const fs=require('fs');
+    const path=require('path');
+    const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
+    const root=process.argv[3];
+    const min=Number(process.argv[4]||0);
+    // key 相对 root 化并统一分隔符为 '/'，兼容 Windows 反斜杠与 Linux 正斜杠。
+    const rel=k=>path.relative(root,k).split(path.sep).join('/');
+    let a='',b='';
+    for (const k of Object.keys(s)) {
+      if (k==='total') continue;
+      const d=s[k];
+      const c=(d&&d.lines&&d.lines.covered)||0;
+      if (c>0) { a+=rel(k)+'\n'; if (c>=min) b+=rel(k)+'\n'; }
+    }
+    fs.writeFileSync(process.argv[2]+'/any',a);
+    fs.writeFileSync(process.argv[2]+'/sub',b);
+  " "$COVERAGE_SUMMARY" "$cov_tmp" "$root" "$MIN_COVERED_LINES"; then
+    # 仅在成功解析后注册清理 trap，避免失败分支 exit 时执行 rm -rf ""（评审 info）。
+    trap 'rm -rf "$cov_tmp"' EXIT
+  else
+    echo "WARN check-spec-coverage: 解析 coverage-summary.json 失败，退化为仅查 spec 存在" >&2
+    have_coverage=0
+    rm -rf "$cov_tmp"
+    cov_tmp=""
+  fi
+fi
+
+# 查询辅助：$1=集合名(any|sub) $2=文件相对路径（git 输出，'/' 分隔）→ 0 表示该文件
+# 在集合内（已覆盖）。集合内为相对化且统一 '/' 的路径，直接与 $2 匹配（评审 warning：
+# 不再拼接 $root 以免规范化错位）。无覆盖率产物时恒返回 1（退化为仅查 spec 存在）。
+covered_in() {
+  [ "$have_coverage" = "1" ] || return 1
+  grep -Fqx "$2" "$cov_tmp/$1"
+}
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   checked=$((checked + 1))
@@ -133,19 +195,19 @@ while IFS= read -r f; do
     # 同名 spec 存在：进一步防"陈旧 spec"——该文件须在覆盖率报告中被实际执行（lines.covered>0）。
     # 若 coverage-summary.json 无该文件记录或其 lines.covered==0，说明 spec 从未覆盖到本次改动
     #（陈旧/空壳 spec 蒙混），判定 MISS（评审 warning）。无覆盖率产物时退化为仅查存在性。
-    if [ "$have_coverage" = "1" ]; then
-      if ! node -e "
-        const fs=require('fs');
-        const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
-        const key=require('path').resolve(process.argv[2]);
-        const d=s[key];
-        if (!d || !d.lines || (d.lines.covered||0)===0) process.exit(1);
-      " "$COVERAGE_SUMMARY" "$f"; then
-        echo "MISS  $f -> $spec 存在但未覆盖该文件（陈旧 spec），请更新用例以覆盖本次改动"
-        fail=1
-        continue
-      fi
+    if ! covered_in any "$f"; then
+      echo "MISS  $f -> $spec 存在但未覆盖该文件（陈旧 spec），请更新用例以覆盖本次改动"
+      fail=1
+      continue
     fi
+    continue
+  fi
+  # P2-4：无同名 spec 但已被其他测试实际覆盖（如 test/notification-module-di.spec.ts
+  # 引导的 src 模块：notification.module / config / tasks.module 等）→ 豁免，不判 MISS，
+  # 避免未来改动这些文件误报（评审 P2-4）。covered 须达 MIN_COVERED_LINES，排除仅
+  # import 捎带加载 1 行的蒙混（评审 info：阈值优化）。
+  if covered_in sub "$f"; then
+    echo "COVERED  $f (由其他测试覆盖>=${MIN_COVERED_LINES}行，如 DI 引导测试；评审 P2-4)"
     continue
   fi
   # 同目录无同名 spec：全文件查豁免标记（评审 info：仅前 40 行会超行误报）

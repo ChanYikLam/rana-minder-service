@@ -19,6 +19,7 @@ import {
   assertMemoryStubAllowed,
 } from './memory-implementations';
 import { OrgDomainError } from '../../domain/types';
+import { PermissionCatalog } from '../../domain/models/permission-template';
 
 describe('内存桩生产装配防护（GOV-007）', () => {
   function withProdEnv(fn: () => void): void {
@@ -77,5 +78,62 @@ describe('内存桩生产装配防护（GOV-007）', () => {
     for (const construct of constructEach()) {
       assert.doesNotThrow(() => construct());
     }
+  });
+});
+
+describe('MemoryCurrentPermissionsPort.effectiveForDepartment（4.1 部门权限契约桩）', () => {
+  const deptHeadConfig = () => ({
+    superAdminUsers: [],
+    clubPermissions: new Map(),
+    positionGroupMemberships: new Map<
+      string,
+      Array<{ group: { owner: string; name: string }; clubId: string; departmentId: string | null }>
+    >([
+      [
+        'u_dept',
+        [
+          {
+            group: { owner: 'club-acm', name: '部门负责人' },
+            clubId: 'club-acm',
+            departmentId: 'dept-1',
+          },
+        ],
+      ],
+      [
+        'u_dept2',
+        [
+          {
+            group: { owner: 'club-acm', name: '部门负责人' },
+            clubId: 'club-acm',
+            departmentId: 'dept-2',
+          },
+        ],
+      ],
+      [
+        'u_leader',
+        [
+          {
+            group: { owner: 'club-acm', name: '负责人组' },
+            clubId: 'club-acm',
+            departmentId: null,
+          },
+        ],
+      ],
+    ]),
+  });
+
+  it('部门负责人：仅获得本部门受限权限，不跨部门', async () => {
+    const port = new MemoryCurrentPermissionsPort(deptHeadConfig());
+    assert.deepEqual(await port.effectiveForDepartment('u_dept', 'dept-1'), [
+      PermissionCatalog.CLUB_MEMBER_MANAGE,
+      PermissionCatalog.CLUB_INTERVIEW_VIEW,
+      PermissionCatalog.CLUB_INTERVIEW_EVALUATE,
+    ]);
+    assert.deepEqual(await port.effectiveForDepartment('u_dept', 'dept-2'), []);
+  });
+
+  it('社团负责人（无部门职位）不获得部门权限（ORG-035 部门受限）', async () => {
+    const port = new MemoryCurrentPermissionsPort(deptHeadConfig());
+    assert.deepEqual(await port.effectiveForDepartment('u_leader', 'dept-1'), []);
   });
 });

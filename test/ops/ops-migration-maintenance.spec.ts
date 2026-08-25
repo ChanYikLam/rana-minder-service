@@ -73,13 +73,10 @@ class MigrationBookkeeping {
 
   private runner: MigrationQueryRunner;
 
-
   constructor() {
     this.runner = {
       query: async (sql: string) => {
-        this.sqlLog.push(
-          `[${this.phase}] ${sql.replace(/\s+/g, ' ').trim().slice(0, 70)}`,
-        );
+        this.sqlLog.push(`[${this.phase}] ${sql.replace(/\s+/g, ' ').trim().slice(0, 70)}`);
         return undefined;
       },
     };
@@ -127,7 +124,10 @@ describe('OPS-VER-022 升级、迁移失败与回滚路径演练', () => {
 
     assert.deepEqual([...book.applied].sort(), prefixesSorted(), '全新库全量 up 必须入满账');
     assert.equal(appliedNow.length, MIGRATION_FILES.length);
-    assert.ok(book.sqlLog.some((l) => /CREATE TABLE/.test(l)), '建表 SQL 必须经过记录器');
+    assert.ok(
+      book.sqlLog.some((l) => /CREATE TABLE/.test(l)),
+      '建表 SQL 必须经过记录器',
+    );
     findings.fullUpBookkeeping = true;
   });
 

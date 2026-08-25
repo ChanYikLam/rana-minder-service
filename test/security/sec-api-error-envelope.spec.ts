@@ -80,13 +80,11 @@ describe('SEC-CTL-016 错误传输中立分类与披露允许清单', () => {
         internalHint: 'db-row-42',
       }),
     );
-    assert.deepEqual(Object.keys(withFields.body), [
-      'code',
-      'message',
-      'supportId',
-      'fieldErrors',
-    ]);
-    assert.equal((withFields.body as unknown as Record<string, unknown>)['internalHint'], undefined);
+    assert.deepEqual(Object.keys(withFields.body), ['code', 'message', 'supportId', 'fieldErrors']);
+    assert.equal(
+      (withFields.body as unknown as Record<string, unknown>)['internalHint'],
+      undefined,
+    );
     assert.deepEqual(withFields.body.fieldErrors, { age: ['必须是数字'] });
   });
 
@@ -107,9 +105,7 @@ describe('SEC-CTL-016 错误传输中立分类与披露允许清单', () => {
     const supportId = toApiError(new Error('x')).body.supportId;
     assert.ok(isTraceId(supportId));
     // 追踪编号不得替代业务幂等键（XCC-GEN-001）：二者混同必须被拒绝
-    assert.throws(() =>
-      assertIdempotencyKeyDistinctFromTrackingNumber(supportId, supportId),
-    );
+    assert.throws(() => assertIdempotencyKeyDistinctFromTrackingNumber(supportId, supportId));
     assert.doesNotThrow(() =>
       assertIdempotencyKeyDistinctFromTrackingNumber('idem-key-1', supportId),
     );

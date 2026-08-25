@@ -109,7 +109,12 @@ describe('OPS-VER-009 任务租约、至少一次、旧租约拒绝和幂等演�
     assert.equal(first.claimed, true);
 
     // 未到期：不重投
-    const during = await leases.tryClaim(task.taskId, 'w2', LEASE_MS, new Date(T0.getTime() + 1000));
+    const during = await leases.tryClaim(
+      task.taskId,
+      'w2',
+      LEASE_MS,
+      new Date(T0.getTime() + 1000),
+    );
     assert.equal(during.claimed, false);
 
     // 到期清单包含该任务；新 worker 在到期后成功接手（版本推进到 2）
@@ -154,11 +159,10 @@ describe('OPS-VER-009 任务租约、至少一次、旧租约拒绝和幂等演�
     assert.equal(late?.resultRef, null, '迟到结果不得落库');
 
     // 仓储层兜底：按旧租约版本的 updateAfterExecution 返回 null（写冲突）
-    const staleWrite = await repo.updateAfterExecution(
-      task.taskId,
-      1,
-      { status: TaskStatus.COMPLETED, resultRef: 'stale' },
-    );
+    const staleWrite = await repo.updateAfterExecution(task.taskId, 1, {
+      status: TaskStatus.COMPLETED,
+      resultRef: 'stale',
+    });
     assert.equal(staleWrite, null);
     findings.staleCommitRejected = true;
   });

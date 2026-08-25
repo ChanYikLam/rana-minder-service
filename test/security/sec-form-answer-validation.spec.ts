@@ -46,7 +46,10 @@ function expectFieldError(fn: () => void, fieldKey: string): string[] {
   } catch (err) {
     const details = (err as { details?: { fieldErrors?: Record<string, string[]> } })['details'];
     const errors = details?.fieldErrors ?? {};
-    assert.ok(errors[fieldKey] !== undefined, `缺少 fieldErrors.${fieldKey}：${JSON.stringify(errors)}`);
+    assert.ok(
+      errors[fieldKey] !== undefined,
+      `缺少 fieldErrors.${fieldKey}：${JSON.stringify(errors)}`,
+    );
     return errors[fieldKey];
   }
 }
@@ -117,10 +120,7 @@ describe('SEC-CTL-021 隐藏字段由服务端重算，客户端回传值不入�
 
   it('SEC-CTL-021：子表行内 hidden 字段同样剔除，普通字段保留', () => {
     const cleaned = stripHiddenFieldValues(withHidden, {
-      experiences: [
-        { org: '社团A', row_note: '注入的隐藏行值' },
-        { org: '社团B' },
-      ],
+      experiences: [{ org: '社团A', row_note: '注入的隐藏行值' }, { org: '社团B' }],
     }) as { experiences: Array<Record<string, unknown>> };
     assert.equal(cleaned.experiences[0]['row_note'], undefined);
     assert.equal(cleaned.experiences[0]['org'], '社团A');

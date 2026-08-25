@@ -17,9 +17,7 @@ import {
   isExportError,
   type RequestedExportScope,
 } from '../../src/modules/stat-export/application/export-authorization.policy';
-import type {
-  ExportPrincipal,
-} from '../../src/modules/stat-export/application/ports/export-authorization.port';
+import type { ExportPrincipal } from '../../src/modules/stat-export/application/ports/export-authorization.port';
 
 const clubLeaderOfC1: ExportPrincipal = {
   userId: 'u-leader',
@@ -73,7 +71,8 @@ describe('SEC-CTL-005 每请求按当前身份与作用域重算授权', () => {
       'IFC-ERR-003',
     );
     expectExportError(
-      () => authorizeBatchExportScope({ userId: 'u-i', kind: 'interviewer', clubScopes: [] }, request),
+      () =>
+        authorizeBatchExportScope({ userId: 'u-i', kind: 'interviewer', clubScopes: [] }, request),
       'IFC-ERR-003',
     );
   });
@@ -132,7 +131,10 @@ describe('SEC-CTL-014 联合协作域以锁定参与关系收敛', () => {
       () => convergeJointExportScope(clubLeaderOfC1, ['c9'], undefined),
       'IFC-ERR-003',
     );
-    expectExportError(() => convergeJointExportScope(deptLeaderOfC1D1, ['c1'], 'c1'), 'IFC-ERR-003');
+    expectExportError(
+      () => convergeJointExportScope(deptLeaderOfC1D1, ['c1'], 'c1'),
+      'IFC-ERR-003',
+    );
   });
 
   it('SEC-CTL-014：平台超管联合导出为特权路径（privileged=true，须特权审计）', () => {

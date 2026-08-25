@@ -103,7 +103,7 @@ describe('ApplyKillSwitchCommand（SRS-FAIL-009：紧急关闭）', () => {
       recipientId,
       reason: '本人',
       scope: { type: clubId ? 'CLUB' : 'PLATFORM', clubId },
-      dedupKey: `logical-${clubId}-${eventTime}-${seq}\u0000${recipientId}`,
+      dedupKey: `logical-${clubId}-${eventTime}-${seq}:${recipientId}`,
       createdAt: '',
     };
     const result = await repo.saveFactWithSnapshots(input, [snapshot]);
@@ -426,7 +426,7 @@ describe('ResumeKillSwitchCommand（IFC-NTF-001：恢复补投）', () => {
       recipientId,
       reason: '本人',
       scope: { type: clubId ? 'CLUB' : 'PLATFORM', clubId },
-      dedupKey: `logical-${clubId}-${eventTime}-${seq}\u0000${recipientId}`,
+      dedupKey: `logical-${clubId}-${eventTime}-${seq}:${recipientId}`,
       createdAt: '',
     };
     const result = await repo.saveFactWithSnapshots(input, [snapshot]);

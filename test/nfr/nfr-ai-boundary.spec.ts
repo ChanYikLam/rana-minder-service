@@ -57,7 +57,9 @@ describe('TST-NFR-046 AI 默认关闭且核心独立', () => {
     const offenders = SRC_FILES.filter((f) => AI_SIGNATURE.test(fs.readFileSync(f, 'utf8')));
     assert.deepEqual(offenders, [], `源码出现 AI 引用: ${offenders.join(', ')}`);
     // 不存在任何 ai 相关目录或模块文件
-    const aiFiles = SRC_FILES.filter((f) => /(^|[\\/])ai([\\/]|-)/i.test(path.relative(REPO_ROOT, f)));
+    const aiFiles = SRC_FILES.filter((f) =>
+      /(^|[\\/])ai([\\/]|-)/i.test(path.relative(REPO_ROOT, f)),
+    );
     assert.deepEqual(aiFiles, []);
   });
 
@@ -127,7 +129,8 @@ describe('TST-NFR-047 永久禁止 AI 自动业务决定', () => {
   });
 
   it('TST-NFR-047: 任务执行器注册表中无 AI 类型任务——后台编排不能被模型输出触发', async () => {
-    const { TaskType, TASK_TYPE_OWNER } = await import('../../src/platform/tasks/contracts/task-type');
+    const { TaskType, TASK_TYPE_OWNER } =
+      await import('../../src/platform/tasks/contracts/task-type');
     for (const type of Object.values(TaskType)) {
       assert.ok(!/ai|model|llm/i.test(type), `任务类型 ${type} 涉及 AI`);
       assert.ok(TASK_TYPE_OWNER[type] !== undefined);
@@ -196,18 +199,25 @@ describe('TST-NFR-050 新用途非追溯与 AI 故障隔离', () => {
     const offenders = SRC_FILES.filter((f) => AI_SIGNATURE.test(fs.readFileSync(f, 'utf8')));
     assert.deepEqual(offenders, []);
     // 重试收敛不改写业务结果：失败记录重试放行但已完成意图永远返回原结果
-    const { InMemoryIdempotencyStore } = await import(
-      '../../src/platform/tasks/idempotency/in-memory-idempotency-store'
-    );
+    const { InMemoryIdempotencyStore } =
+      await import('../../src/platform/tasks/idempotency/in-memory-idempotency-store');
     const store = new InMemoryIdempotencyStore();
-    const begun = await store.begin('k-iso', 'i-iso', new Date(NOW_BASE.getTime() + 60_000).toISOString());
+    const begun = await store.begin(
+      'k-iso',
+      'i-iso',
+      new Date(NOW_BASE.getTime() + 60_000).toISOString(),
+    );
     assert.equal(begun, true);
     await store.complete('k-iso', 'i-iso', 'result:final');
     const record = await store.find('k-iso');
     assert.equal(record!.status, 'COMPLETED');
     assert.equal(record!.resultRef, 'result:final');
     // 同键再次 begin 被拒绝（重试不会生成第二份业务结果）
-    const again = await store.begin('k-iso', 'i-iso-2', new Date(NOW_BASE.getTime() + 120_000).toISOString());
+    const again = await store.begin(
+      'k-iso',
+      'i-iso-2',
+      new Date(NOW_BASE.getTime() + 120_000).toISOString(),
+    );
     assert.equal(again, false);
   });
 });

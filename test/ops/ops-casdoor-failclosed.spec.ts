@@ -163,10 +163,7 @@ type ReadbackReq = Parameters<CasdoorWritePort['readbackGroupMembers']>[0];
 class ScriptedWritePort implements CasdoorWritePort {
   readonly calls: string[] = [];
   members = new Set<string>();
-  mode:
-    | 'third-value'
-    | 'dependency-unavailable'
-    | 'target' = 'third-value';
+  mode: 'third-value' | 'dependency-unavailable' | 'target' = 'third-value';
 
   private evidence(attemptId: string) {
     return {
@@ -255,7 +252,11 @@ function taskOf(payload: Record<string, unknown>): TaskRecord {
   } as unknown as TaskRecord;
 }
 
-function groupPayload(original: string[], target: string[], deadline?: string): Record<string, unknown> {
+function groupPayload(
+  original: string[],
+  target: string[],
+  deadline?: string,
+): Record<string, unknown> {
   return {
     commandId: 'cmd-ops-012',
     idempotencyKey: 'idem-ops-012',
@@ -276,12 +277,10 @@ describe('OPS-VER-012 写后读回、全量对账和高风险实时读回演练'
       new CasdoorWriteService(port, fixedClock(new Date('2026-08-24T10:00:00Z'))),
     );
 
-    const err = (await handler
-      .handle(taskOf(groupPayload(['u-old'], ['u-new'])))
-      .then(
-        () => null,
-        (e: unknown) => e,
-      )) as TaskExecutionError;
+    const err = (await handler.handle(taskOf(groupPayload(['u-old'], ['u-new']))).then(
+      () => null,
+      (e: unknown) => e,
+    )) as TaskExecutionError;
 
     assert.ok(err instanceof TaskExecutionError, '非确认结论必须上抛');
     assert.equal(err.failureKind, 'MANUAL_INTERVENTION_REQUIRED');
@@ -301,12 +300,10 @@ describe('OPS-VER-012 写后读回、全量对账和高风险实时读回演练'
       new CasdoorWriteService(port, fixedClock(new Date('2026-08-24T10:00:00Z'))),
     );
 
-    const err = (await handler
-      .handle(taskOf(groupPayload(['u-old'], ['u-new'])))
-      .then(
-        () => null,
-        (e: unknown) => e,
-      )) as TaskExecutionError;
+    const err = (await handler.handle(taskOf(groupPayload(['u-old'], ['u-new']))).then(
+      () => null,
+      (e: unknown) => e,
+    )) as TaskExecutionError;
 
     assert.ok(err instanceof TaskExecutionError);
     assert.equal(err.failureKind, 'EXTERNAL_UNCERTAIN', '依赖不可用归类为可重试外部故障');

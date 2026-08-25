@@ -16,9 +16,7 @@ import assert from 'node:assert/strict';
 import type { RlsScope, TransactionContext } from '../../src/shared/db-adapter';
 import { NotWiredDbAdapter, DbUnavailableError } from '../../src/adapters/db/not-wired-db.adapter';
 import { IdentityUnitOfWork } from '../../src/modules/identity/infrastructure/unit-of-work';
-import {
-  PostgresSessionRevocation,
-} from '../../src/modules/identity/infrastructure/postgres-session-revocation';
+import { PostgresSessionRevocation } from '../../src/modules/identity/infrastructure/postgres-session-revocation';
 
 /** 记录 setRlsContext 收到的完整 scope 对象（验证最小上下文内容）。 */
 class ScopeRecordingDb {
@@ -71,10 +69,7 @@ describe('SEC-CTL-009 数据库最小作用域上下文（应用授权与结构�
       { kind: 'collection-readonly', scopeKey: 'frozen-set-1' },
       { kind: 'unprotected' },
     ]);
-    assert.ok(
-      !db.scopes.some((s) => s.kind === 'single'),
-      '集合只读路径不得携带单目标写上下文',
-    );
+    assert.ok(!db.scopes.some((s) => s.kind === 'single'), '集合只读路径不得携带单目标写上下文');
   });
 });
 

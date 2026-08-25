@@ -15,9 +15,7 @@ import {
   HIGH_RISK_REAUTH_WINDOW_MS,
   HighRiskCommandGuard,
 } from '../../src/modules/identity/application/services/high-risk-command.guard';
-import type {
-  ReauthEvidencePort,
-} from '../../src/modules/identity/application/ports/reauth-evidence.port';
+import type { ReauthEvidencePort } from '../../src/modules/identity/application/ports/reauth-evidence.port';
 
 /** 按主体记录最近重认证时刻的假证据源（只存时间戳与会话引用，不存令牌）。 */
 function fakeEvidence(records: Record<string, Date | null>): ReauthEvidencePort & {

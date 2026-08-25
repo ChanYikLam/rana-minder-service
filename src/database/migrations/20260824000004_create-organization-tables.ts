@@ -1,7 +1,7 @@
 /**
  * 迁移：组织与授权（organization）聚合表族（#68 / ORG-001~004 接 PG）
  *
- * 版本：20260824000001
+ * 版本：20260824000004
  * 归属模块：organization
  * 权威来源：ADR-014（单数据库统一应用业务 Schema）、ADR-005（RLS）、
  * SRS-SM-ORG-001~004、docs/specification/数据模型与约束-v1.0.md。

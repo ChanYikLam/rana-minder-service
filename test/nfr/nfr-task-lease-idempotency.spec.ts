@@ -17,12 +17,8 @@ import assert from 'node:assert/strict';
 import { opsManual, FIXED_NOW } from './nfr-support';
 import { TaskIntentOutbox } from '../../src/platform/tasks/outbox/task-intent-outbox';
 import { InMemoryTransactionOutboxStore } from '../../src/platform/tasks/outbox/in-memory-transactional-outbox';
-import {
-  InMemoryIdempotencyStore,
-} from '../../src/platform/tasks/idempotency/in-memory-idempotency-store';
-import {
-  RecoveryReplayConvergence,
-} from '../../src/platform/tasks/idempotency/recovery-replay';
+import { InMemoryIdempotencyStore } from '../../src/platform/tasks/idempotency/in-memory-idempotency-store';
+import { RecoveryReplayConvergence } from '../../src/platform/tasks/idempotency/recovery-replay';
 import { LogOnlyExternalCallAdapter } from '../../src/platform/tasks/executors/external-call.adapter';
 import { InMemoryTaskRepository } from '../../src/platform/tasks/in-memory-task-repository';
 import { LeaseManager } from '../../src/platform/tasks/lease/lease-manager';
@@ -49,7 +45,12 @@ function makeIntent(intentId: string): TaskIntent {
 }
 
 /** 构造带租约的任务记录（用于收敛/释放探针） */
-function makeLeasedTask(repo: InMemoryTaskRepository, intentId: string, leaseMs: number, workerId: string): Promise<TaskRecord> {
+function makeLeasedTask(
+  repo: InMemoryTaskRepository,
+  intentId: string,
+  leaseMs: number,
+  workerId: string,
+): Promise<TaskRecord> {
   const claim = repo.tryClaim(
     `task:${TaskType.NOTIFICATION_DELIVERY}:${intentId}`,
     workerId,
@@ -124,7 +125,11 @@ describe('TST-NFR-005 500 并发负载下的无丢失与单胜者', () => {
     const idempotency = new InMemoryIdempotencyStore();
     const results = await Promise.all(
       Array.from({ length: 500 }, (_, i) =>
-        idempotency.begin('same-key', `intent-${i}`, new Date(NOW.getTime() + 30_000).toISOString()),
+        idempotency.begin(
+          'same-key',
+          `intent-${i}`,
+          new Date(NOW.getTime() + 30_000).toISOString(),
+        ),
       ),
     );
     const winners = results.filter((r) => r === true);
@@ -164,7 +169,11 @@ describe('TST-NFR-005 500 并发负载下的无丢失与单胜者', () => {
       },
     };
     // 直接复用真实查询类：limit 封顶语义由服务端 clamp 强制
-    const query = new ClubStatisticsQuery(source, { async record() {} }, new StatisticsSpecification());
+    const query = new ClubStatisticsQuery(
+      source,
+      { async record() {} },
+      new StatisticsSpecification(),
+    );
     const view = await query.drilldown({
       principal: {
         userId: 'syn-owner',
@@ -257,7 +266,11 @@ describe('TST-NFR-054 任务业务结果保留与备份保留窗口', () => {
     const manager = new LeaseManager(repo);
     await manager.release(
       task,
-      { status: TaskStatus.COMPLETED, resultRef: 'result:business-final', updatedAt: NOW.toISOString() },
+      {
+        status: TaskStatus.COMPLETED,
+        resultRef: 'result:business-final',
+        updatedAt: NOW.toISOString(),
+      },
       NOW,
     );
     const done = await repo.findById(task.taskId);

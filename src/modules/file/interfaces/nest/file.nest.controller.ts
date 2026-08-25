@@ -105,8 +105,7 @@ export class FileNestController {
         category: body.category,
         declaredSizeBytes: body.size,
         declaredType: body.mimeType,
-        target:
-          body.target ?? { objectType: 'GENERIC', objectId: subjectId, fieldKey: 'generic' },
+        target: body.target ?? { objectType: 'GENERIC', objectId: subjectId, fieldKey: 'generic' },
         sessionTtlMinutes: body.sessionTtlMinutes,
       });
       const completed = await this.completeUpload.execute({

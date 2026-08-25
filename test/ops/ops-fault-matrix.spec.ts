@@ -23,11 +23,12 @@ import type { RanaMinderConfig } from '../../src/config';
 import { TaskStatus, TaskType } from '../../src/platform/tasks/contracts';
 import type { TaskHandler, TaskIntent, TaskRecord } from '../../src/platform/tasks/contracts';
 import { TaskScopeKind } from '../../src/platform/tasks/contracts';
-import {
-  DenyAllBatchItemAuthorization,
-} from '../../src/platform/tasks/batch/batch-authorization';
+import { DenyAllBatchItemAuthorization } from '../../src/platform/tasks/batch/batch-authorization';
 import { DenyAllBatchItemExecutor } from '../../src/platform/tasks/batch/batch-item-executor';
-import { DenyAllTaskPrecondition, DevelopmentTaskPrecondition } from '../../src/platform/tasks/executors/task-precondition';
+import {
+  DenyAllTaskPrecondition,
+  DevelopmentTaskPrecondition,
+} from '../../src/platform/tasks/executors/task-precondition';
 import type { BatchItemInput, TaskScope } from '../../src/platform/tasks/contracts';
 import { InMemoryTaskRepository } from '../../src/platform/tasks/in-memory-task-repository';
 import { LeaseManager } from '../../src/platform/tasks/lease';
@@ -117,7 +118,10 @@ describe('OPS-VER-019 故障矩阵失败关闭演练', () => {
       'utf8',
     );
     assert.match(moduleSrc, /\(process\.env\.TASKS_DEV_STUB \?\? '0'\) === '1'/);
-    assert.match(moduleSrc, /allowDevStubs \? DevelopmentTaskPrecondition : DenyAllTaskPrecondition/);
+    assert.match(
+      moduleSrc,
+      /allowDevStubs \? DevelopmentTaskPrecondition : DenyAllTaskPrecondition/,
+    );
     findings.denyAllTrio = true;
   });
 
@@ -197,7 +201,11 @@ describe('OPS-VER-019 故障矩阵失败关闭演练', () => {
 
     // 经任务管道：重试耗尽（maxAttempts=5）后转 MANUAL_INTERVENTION
     for (let attempt = 1; attempt <= 5; attempt += 1) {
-      await pipeline.execute(inserted.taskId, 'w1', new Date(T0.getTime() + attempt * (LEASE_MS + 1)));
+      await pipeline.execute(
+        inserted.taskId,
+        'w1',
+        new Date(T0.getTime() + attempt * (LEASE_MS + 1)),
+      );
     }
 
     const after = await repository.findById(inserted.taskId);

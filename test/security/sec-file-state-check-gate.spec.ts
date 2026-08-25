@@ -53,13 +53,19 @@ describe('SEC-CTL-017 未完成可信检查不得绑定或访问', () => {
     const still = machine.onCheckUnavailable(FileState.CHECKING);
     assert.equal(still, FileState.CHECKING);
     assert.equal(machine.isUnsafe(still), true);
-    assert.throws(() => machine.onCheckUnavailable(FileState.AVAILABLE), IllegalFileTransitionError);
+    assert.throws(
+      () => machine.onCheckUnavailable(FileState.AVAILABLE),
+      IllegalFileTransitionError,
+    );
   });
 
   it('SEC-CTL-017：隔离失败文件不得人工标可用——QUARANTINED_FAILED 仅能进入待清理', () => {
     assert.equal(machine.canTransition(FileState.QUARANTINED_FAILED, FileState.AVAILABLE), false);
     assert.equal(machine.canTransition(FileState.QUARANTINED_FAILED, FileState.CHECKING), false);
-    assert.equal(machine.canTransition(FileState.QUARANTINED_FAILED, FileState.PENDING_CLEANUP), true);
+    assert.equal(
+      machine.canTransition(FileState.QUARANTINED_FAILED, FileState.PENDING_CLEANUP),
+      true,
+    );
   });
 });
 
@@ -85,9 +91,14 @@ describe('SEC-CTL-019 撤权先行与删除终态不可复活', () => {
   const machine = new FileStateMachine();
 
   it('SEC-CTL-019：正式删除经 PENDING_CLEANUP 推进至 FORMALLY_DELETED 终态', () => {
-    assert.equal(machine.canTransition(FileState.BOUND_TO_SUBMISSION, FileState.PENDING_CLEANUP), true);
-    assert.equal(machine.transition(FileState.PENDING_CLEANUP, FileState.FORMALLY_DELETED),
-      FileState.FORMALLY_DELETED);
+    assert.equal(
+      machine.canTransition(FileState.BOUND_TO_SUBMISSION, FileState.PENDING_CLEANUP),
+      true,
+    );
+    assert.equal(
+      machine.transition(FileState.PENDING_CLEANUP, FileState.FORMALLY_DELETED),
+      FileState.FORMALLY_DELETED,
+    );
   });
 
   it('SEC-CTL-019：已清理/已正式删除为终态，任何复活转换均非法', () => {
