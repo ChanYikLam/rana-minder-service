@@ -23,16 +23,24 @@ describe('FileUnitOfWork（文件域原子提交边界）', () => {
   it('正常 run：begin/setRls/commit/clearRls 全链路，回调结果透传', async () => {
     const db = new FakeDbAdapter();
     const uow = new FileUnitOfWork(db);
+    let activeTxId: string | null = null;
     const result = await uow.run(SCOPE, async () => {
       // 事务内 active 可用（返回当前事务上下文）
       assert.ok(uow.active);
+      activeTxId = uow.active.id;
       return 'ok';
     });
     assert.equal(result, 'ok');
-    // 生命周期顺序：begin → set-rls → … → commit → clear-rls
+    // 生命周期顺序：begin → set-rls → … → commit → clear-rls（事务 id 取自运行时，避免硬编码耦合）
+    assert.ok(activeTxId !== null);
     assert.deepEqual(
       db.events.filter((e) => !e.startsWith('query')),
-      ['begin:tx-1', `set-rls:tx-1:${SCOPE.kind}`, 'commit:tx-1', `clear-rls:tx-1`],
+      [
+        `begin:${activeTxId}`,
+        `set-rls:${activeTxId}:${SCOPE.kind}`,
+        `commit:${activeTxId}`,
+        `clear-rls:${activeTxId}`,
+      ],
     );
     assert.equal(
       db.events.some((e) => e.startsWith('rollback')),
@@ -104,9 +112,12 @@ describe('FileUnitOfWork（文件域原子提交边界）', () => {
   it('setRlsContext 收到声明的 RLS scope（unprotected）', async () => {
     const db = new FakeDbAdapter();
     const uow = new FileUnitOfWork(db);
+    // 内联对象字面量会被 TS 拓宽为 {kind:string,…}，需显式断言为 RlsScope 以匹配签名
     await uow.run({ kind: 'single', subjectId: 'u1' } as RlsScope, async () => undefined);
+    // 事务 id 取自运行时事件，避免硬编码耦合；此处为首个事务故取 events[0] 的 begin 前缀
+    const txId = db.events[0].slice('begin:'.length);
     assert.ok(
-      db.events.some((e) => e === 'set-rls:tx-1:single'),
+      db.events.some((e) => e === `set-rls:${txId}:single`),
       'RLS 上下文应按声明 scope 建立',
     );
   });
