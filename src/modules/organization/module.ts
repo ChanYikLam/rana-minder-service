@@ -330,11 +330,6 @@ const OrgUnitOfWorkProvider = {
           },
           { provide: GROUP_MAPPING_REGISTRY, useFactory: () => new InMemoryGroupMappingRegistry() },
         ]),
-    // ---- 关系命令审计（RelationCommandAuditPort：暂无 PG 实现，内存态无条件装配）----
-    {
-      provide: RELATION_COMMAND_AUDIT_PORT,
-      useFactory: () => new InMemoryRelationCommandAuditStore(),
-    },
     // ---- 对账（真实检测逻辑，跑在任意 CasdoorGroupPort 上）----
     {
       provide: RECONCILE_PORT,
