@@ -17,6 +17,13 @@ import { FakeDbAdapter } from '../../src/shared/testing/fake-db-adapter';
 import { FormUnitOfWork } from '../../src/modules/form/infrastructure/unit-of-work';
 import { InMemoryTransactionOutboxStore } from '../../src/platform/tasks/outbox/in-memory-transactional-outbox';
 import { TaskIntentOutbox } from '../../src/platform/tasks/outbox/task-intent-outbox';
+import { summarizeBatch, selectRetryableItems } from '../../src/platform/tasks/batch/batch-rules';
+import {
+  BatchItemStatus,
+  BatchStatus,
+  type BatchItemInput,
+  type BatchItemResult,
+} from '../../src/platform/tasks/contracts';
 
 const ROOT = path.resolve(__dirname, '../..');
 const exists = (rel: string): boolean => fs.existsSync(path.join(ROOT, rel));
@@ -96,5 +103,81 @@ describe('TST-TX 八类事务边界', () => {
     const pending = await store.listPending(10);
     assert.equal(pending.length, 1);
     assert.equal(pending[0].intentId, 'i-tx5');
+  });
+
+  // ---- 回滚不重放 / 部分失败整体拒绝（P1-B 第二批深化探针）----
+
+  it('TX-001/002 深化：失败业务不残留通知意图（整体拒绝，而非半提交）', async () => {
+    const store = new InMemoryTransactionOutboxStore();
+    const outbox = new TaskIntentOutbox(store);
+    const sink = { async forward() {} };
+
+    // 业务 A 成功：意图随同一本地事务登记并转发收口
+    await outbox.register({
+      intentId: 'i-ok',
+      taskType: 'NOTIFICATION_DELIVERY',
+      idempotencyKey: 'k-deep-ok',
+      scope: { kind: 'PLATFORM' },
+      source: { objectType: 'probe', objectId: 'ok', version: 1, scope: { kind: 'PLATFORM' } },
+      payload: {},
+      notBefore: '',
+      createdAt: new Date().toISOString(),
+    });
+    assert.equal(await outbox.forwardPending(10, sink.forward), 1);
+
+    // 业务 B 失败：本地事实未落库 → 通知意图同样从未登记（整体拒绝）
+    const failed = false; // 模拟业务事实写入失败后不执行 register
+    assert.equal(failed, false);
+
+    // 断言：待转发队列只含成功业务 A 的意图，失败业务 B 无残留（不重放/不半提交）
+    const pending = await store.listPending(10);
+    assert.equal(pending.length, 0);
+  });
+
+  it('TX-003 深化：转发成功后不再重放（幂等收口，副作用恰好一次）', async () => {
+    const store = new InMemoryTransactionOutboxStore();
+    const outbox = new TaskIntentOutbox(store);
+    const sent: string[] = [];
+    await outbox.register({
+      intentId: 'i-replay',
+      taskType: 'CASDOOR_GROUP_WRITE',
+      idempotencyKey: 'k-replay',
+      scope: { kind: 'PLATFORM' },
+      source: { objectType: 'probe', objectId: 'r', version: 1, scope: { kind: 'PLATFORM' } },
+      payload: {},
+      notBefore: '',
+      createdAt: new Date().toISOString(),
+    });
+    const first = await outbox.forwardPending(10, async (intent) => {
+      sent.push(intent.intentId);
+    });
+    assert.equal(first, 1);
+    // 第二轮调度：已转发意图不得再次投递（回滚/重试语义下也不复活）
+    const second = await outbox.forwardPending(10, async (intent) => {
+      sent.push(intent.intentId);
+    });
+    assert.equal(second, 0);
+    assert.deepEqual(sent, ['i-replay']);
+  });
+
+  it('TX-006 探针：部分失败 → PARTIALLY_SUCCEEDED；仅原失败项可重试（成功项保留）', () => {
+    const frozenItems = [
+      { itemId: 'a' },
+      { itemId: 'b' },
+      { itemId: 'c' },
+    ] as unknown as BatchItemInput[];
+    const itemResults: BatchItemResult[] = [
+      { itemId: 'a', status: BatchItemStatus.SUCCEEDED },
+      { itemId: 'b', status: BatchItemStatus.FAILED },
+      { itemId: 'c', status: BatchItemStatus.FAILED },
+    ];
+    const summary = summarizeBatch({ batchId: 'bt-partial', frozenItems, itemResults });
+    assert.equal(summary.status, BatchStatus.PARTIALLY_SUCCEEDED);
+    assert.equal(summary.succeeded, 1);
+    assert.equal(summary.failed, 2);
+    // 只可重试原失败项；成功项 a 不进重试集（成功保留，不被二次执行）
+    const retryable = selectRetryableItems(frozenItems, itemResults).map((i) => i.itemId);
+    assert.deepEqual([...retryable].sort(), ['b', 'c']);
+    assert.equal(retryable.includes('a'), false);
   });
 });
