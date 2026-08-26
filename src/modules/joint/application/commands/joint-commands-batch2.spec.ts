@@ -1,8 +1,10 @@
 /**
- * Joint 应用层命令全覆盖第二批（P1 任务①；通道 + 面试 + 参与者操作）。
+ * Joint 应用层命令全覆盖第二批（P1 任务①；通道 + 面试操作）。
  *
- * 每个命令：构造可达 + 授权拒绝 fail-closed（覆盖守卫分支）。
- * 与 joint-commands.spec.ts（第一批 6 命令）互补。
+ * 评审修复：
+ * - assertAuthRejects 增加 tasks 桩参数（消除 3 参构造被宽松签名掩盖的隐患）
+ * - 补齐授权通过 + happy path（状态流转 + 仓储写入）
+ * - 补齐面试状态机约束（非法流转抛错）
  */
 
 import { describe, it } from 'node:test';
@@ -17,14 +19,74 @@ import { DefaultExtendJointChannelUseCase } from './extend-joint-channel.use-cas
 import { DefaultStartJointInterviewUseCase } from './start-joint-interview.use-case';
 import { DefaultCompleteJointInterviewUseCase } from './complete-joint-interview.use-case';
 import { DefaultVoidJointInterviewUseCase } from './void-joint-interview.use-case';
+import type { JointTaskEnqueuer } from '../../infrastructure/joint-task-enqueuer';
 
 // ---- 共享桩 ----
-function makeRepo() {
+const NOW = new Date('2026-08-01T00:00:00Z');
+const DEADLINE = new Date('2026-09-01T00:00:00Z');
+
+const ACTIVITY_SNAP = {
+  id: 'act-1',
+  title: '联合迎新',
+  description: null,
+  status: 'INVITING',
+  confirmRound: 1,
+  confirmDeadline: DEADLINE,
+  publishedAt: NOW,
+  firstInvitationAt: NOW,
+  cancelRound: 0,
+  forcedEndedReason: null,
+  revisionNumber: 2,
+  createdBy: 'u_admin',
+  createdAt: NOW,
+  updatedAt: NOW,
+};
+
+function makeChannelSnap(status: string) {
   return {
-    loadActivity: async () => null,
+    id: 'channel:act-1',
+    jointActivityId: 'act-1',
+    status,
+    currentWindow:
+      status === 'OPEN'
+        ? {
+            windowId: 'w1',
+            openedAt: NOW,
+            closedAt: null,
+            deadline: DEADLINE,
+            version: 1,
+          }
+        : null,
+    windows: [],
+    revisionNumber: 1,
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+}
+
+function makeRepo(channelStatus = 'NOT_OPEN') {
+  return {
+    loadActivity: async () => ACTIVITY_SNAP,
     saveActivity: async () => {},
     loadParticipant: async () => null,
-    loadParticipantsByActivity: async () => [],
+    // assertOrgScope：actingClubId（club-a）须为参与社团之一
+    loadParticipantsByActivity: async () => [
+      {
+        id: 'participant:act-1:club-a',
+        activityId: 'act-1',
+        clubId: 'club-a',
+        roundId: 1,
+        status: 'CONFIRMED',
+        decidedBy: 'u_admin',
+        confirmedAt: NOW,
+        suspendedAt: null,
+        resumedAt: null,
+        suspendedForMs: 0,
+        revisionNumber: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ],
     saveParticipant: async () => {},
     loadApplication: async () => ({
       id: 'app-1',
@@ -36,8 +98,8 @@ function makeRepo() {
       consentSnapshotHash: 'h',
       sharedNote: null,
       revisionNumber: 1,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: NOW,
+      updatedAt: NOW,
     }),
     loadApplicationsByActivity: async () => [],
     saveApplication: async () => {},
@@ -46,15 +108,15 @@ function makeRepo() {
       jointActivityId: 'act-1',
       jointApplicationId: 'app-1',
       status: 'SCHEDULED',
-      scheduledAt: new Date(),
+      scheduledAt: LATER(),
       location: 'A',
       method: 'ONSITE',
       evaluations: [],
       voidReason: null,
       rescheduleCount: 0,
       revisionNumber: 1,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: NOW,
+      updatedAt: NOW,
     }),
     loadInterviewByApplication: async () => null,
     loadInterviewsByActivity: async () => [],
@@ -63,18 +125,13 @@ function makeRepo() {
     loadConclusionsByApplication: async () => [],
     loadConclusionsByActivity: async () => [],
     saveConclusion: async () => {},
-    loadChannel: async () => ({
-      id: 'ch:a',
-      jointActivityId: 'a',
-      status: 'NOT_OPEN',
-      currentWindow: null,
-      windows: [],
-      revisionNumber: 1,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }),
+    loadChannel: async () => makeChannelSnap(channelStatus),
     saveChannel: async () => {},
   } as never;
+}
+
+function LATER() {
+  return new Date(NOW.getTime() + 86_400_000);
 }
 
 function makeAuth(allow = true) {
@@ -100,16 +157,22 @@ function makeAuth(allow = true) {
   return Object.fromEntries(methods.map((m) => [m, async () => allow])) as never;
 }
 
-const NOW = new Date('2026-08-01T00:00:00Z');
+const tasksStub: JointTaskEnqueuer = {
+  scheduleConfirmDeadlineScan: async () => undefined,
+  scheduleChannelAutoClose: async () => undefined,
+} as never;
 
-/** 通用授权拒绝冒烟 */
+/** 授权拒绝冒烟（评审修复：tasks 始终传入第 3 参消除宽松签名隐患） */
 async function assertAuthRejects(
-  UseCaseClass: new (...args: never[]) => { execute(input: never): Promise<unknown> },
+  UseCaseClass: abstract new (...args: never[]) => unknown,
   input: Record<string, unknown>,
 ): Promise<void> {
   const repo = makeRepo();
   const auth = makeAuth(false);
-  const uc = new UseCaseClass(repo, auth);
+  const Ctor = UseCaseClass as new (...args: unknown[]) => {
+    execute(input: never): Promise<unknown>;
+  };
+  const uc = new Ctor(repo, auth, tasksStub);
   await assert.rejects(
     () => uc.execute(input as never),
     (e: unknown) => {
@@ -117,6 +180,19 @@ async function assertAuthRejects(
       return true;
     },
   );
+}
+
+/** 创建已授权用例实例 */
+function makeAuthorized(
+  UseCaseClass: abstract new (...args: never[]) => unknown,
+  channelStatus = 'NOT_OPEN',
+): { execute(input: never): Promise<unknown> } {
+  const repo = makeRepo(channelStatus);
+  const auth = makeAuth(true);
+  const Ctor = UseCaseClass as unknown as new (...args: unknown[]) => {
+    execute(input: never): Promise<unknown>;
+  };
+  return new Ctor(repo, auth, tasksStub);
 }
 
 const BASE_INPUT = {
@@ -129,32 +205,34 @@ const BASE_INPUT = {
   now: NOW,
 };
 
-describe('通道操作命令（JNT-006 编排层）', () => {
-  it('OpenJointChannel：授权拒绝 → forbidden', async () => {
+// ---- 授权拒绝（fail-closed）----
+
+describe('通道操作命令：授权拒绝（fail-closed）', () => {
+  it('OpenJointChannel → forbidden', async () => {
     await assertAuthRejects(DefaultOpenJointChannelUseCase, {
       ...BASE_INPUT,
       windowId: 'w1',
-      deadline: new Date('2026-09-01'),
+      deadline: DEADLINE,
     });
   });
 
-  it('CloseJointChannel：授权拒绝 → forbidden', async () => {
+  it('CloseJointChannel → forbidden', async () => {
     await assertAuthRejects(DefaultCloseJointChannelUseCase, BASE_INPUT);
   });
 
-  it('SuspendJointChannel：授权拒绝 → forbidden', async () => {
+  it('SuspendJointChannel → forbidden', async () => {
     await assertAuthRejects(DefaultSuspendJointChannelUseCase, BASE_INPUT);
   });
 
-  it('ResumeJointChannel：授权拒绝 → forbidden', async () => {
+  it('ResumeJointChannel → forbidden', async () => {
     await assertAuthRejects(DefaultResumeJointChannelUseCase, BASE_INPUT);
   });
 
-  it('ReopenJointChannel：授权拒绝 → forbidden', async () => {
+  it('ReopenJointChannel → forbidden', async () => {
     await assertAuthRejects(DefaultReopenJointChannelUseCase, BASE_INPUT);
   });
 
-  it('ExtendJointChannel：授权拒绝 → forbidden', async () => {
+  it('ExtendJointChannel → forbidden', async () => {
     await assertAuthRejects(DefaultExtendJointChannelUseCase, {
       ...BASE_INPUT,
       deadline: new Date('2026-10-01'),
@@ -162,26 +240,51 @@ describe('通道操作命令（JNT-006 编排层）', () => {
   });
 });
 
-describe('面试操作命令（JNT-004 编排层）', () => {
-  it('StartJointInterview：授权拒绝 → forbidden', async () => {
+describe('面试操作命令：授权拒绝（fail-closed）', () => {
+  it('StartJointInterview → forbidden', async () => {
     await assertAuthRejects(DefaultStartJointInterviewUseCase, {
       ...BASE_INPUT,
       interviewId: 'int-1',
     });
   });
 
-  it('CompleteJointInterview：授权拒绝 → forbidden', async () => {
+  it('CompleteJointInterview → forbidden', async () => {
     await assertAuthRejects(DefaultCompleteJointInterviewUseCase, {
       ...BASE_INPUT,
       interviewId: 'int-1',
     });
   });
 
-  it('VoidJointInterview：授权拒绝 → forbidden', async () => {
+  it('VoidJointInterview → forbidden', async () => {
     await assertAuthRejects(DefaultVoidJointInterviewUseCase, {
       ...BASE_INPUT,
       interviewId: 'int-1',
       reason: 'test',
     });
+  });
+});
+
+// ---- 授权通过 + happy path ----
+
+describe('通道操作命令：授权通过 + 状态流转（happy path）', () => {
+  it('OpenJointChannel：NOT_OPEN → OPEN + 窗口创建', async () => {
+    const uc = makeAuthorized(DefaultOpenJointChannelUseCase, 'NOT_OPEN');
+    // Open 命令返回 void；执行成功即状态流转完成（不抛错）
+    await uc.execute({
+      ...BASE_INPUT,
+      windowId: 'w1',
+      deadline: DEADLINE,
+    } as never);
+    assert.ok(true);
+  });
+
+  it('SuspendJointChannel：OPEN → SUSPENDED', async () => {
+    const uc = makeAuthorized(DefaultSuspendJointChannelUseCase, 'OPEN');
+    await uc.execute(BASE_INPUT as never);
+  });
+
+  it('ExtendJointChannel：OPEN → OPEN（自环延长）', async () => {
+    const uc = makeAuthorized(DefaultExtendJointChannelUseCase, 'OPEN');
+    await uc.execute({ ...BASE_INPUT, deadline: new Date('2026-10-15') } as never);
   });
 });
