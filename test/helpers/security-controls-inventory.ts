@@ -269,6 +269,29 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   },
 ];
 
+// ---- 流程证据（SEC-CTL-001；路径 2 轻量版：账目分通道）----
+
+/** 流程证据条目（非代码测试，由可审计文档承载） */
+export interface ProcessEvidenceEntry {
+  readonly id: string;
+  readonly title: string;
+  /** 流程证据文档路径（必须存在，fs.existsSync 校验） */
+  readonly evidenceDoc: string;
+}
+
+/**
+ * SEC-CTL-001（事实追溯）为流程审计控制——其证据是需求追踪矩阵的
+ * "逐事实全链路追踪"与"无来源映射=0"，而非代码单测。
+ * 登记为 kind:'process' 以与代码证据分通道记账（路径 2 轻量方案）。
+ */
+export const PROCESS_CONTROLS: readonly ProcessEvidenceEntry[] = [
+  {
+    id: 'TST-SEC-CTL-001',
+    title: '事实追溯：所有放行可追溯到产品事实/SRS，无来源行为为零',
+    evidenceDoc: R('docs/specification/需求追踪矩阵-v1.0.md'),
+  },
+];
+
 /**
  * 威胁桩位：按权威威胁模型文档的 SEC-THR 编号逐项生成，状态一律"未执行"。
  *

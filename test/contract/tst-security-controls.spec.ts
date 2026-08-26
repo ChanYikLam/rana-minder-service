@@ -3,10 +3,11 @@
  *
  * 语义（防虚报）：
  * - 威胁侧：26 个 THR 桩位全部 status=未执行（逐项故障注入落地前不得宣称通过）；
- * - 控制侧：仅登记当前仓库已有可执行证据的条目，evidence 文件必须存在；
- *   未登记缺口 = TOTAL_CONTROLS - concrete.length，显式留白；
- * - 棘轮：concrete 数量 ≥ BASELINE_CONCRETE_CONTROLS 且只许上调
- *   （新增条目必须携带真实存在的 evidence 路径，否则本套件失败）。
+ * - 控制侧分两通道记账：
+ *   · codeControls = CONCRETE_CONTROLS（37 项，每项有可执行测试证据文件）
+ *   · processControls = PROCESS_CONTROLS（1 项 SEC-CTL-001，流程证据文档承载）
+ *   codeControls + processControls === TOTAL_CONTROLS (38)
+ * - 棘轮：codeControls ≥ BASELINE 且只许上调
  */
 
 import { describe, it } from 'node:test';
@@ -17,6 +18,7 @@ import path from 'node:path';
 import {
   BASELINE_CONCRETE_CONTROLS,
   CONCRETE_CONTROLS,
+  PROCESS_CONTROLS,
   threatStubs,
   TOTAL_CONTROLS,
   TOTAL_THREATS,
@@ -40,7 +42,6 @@ describe('TST-SEC 安全控制证据', () => {
     }
     const ids = new Set(threats.map((t) => t.id));
     assert.equal(ids.size, TOTAL_THREATS);
-    // 桩位编号必须与权威威胁模型文档的 SEC-THR 目录一一对应（防文档增删而静默通过）
     const docThreatIds = resolveThreatIdsFromDoc();
     assert.equal(
       docThreatIds.length,
@@ -55,15 +56,21 @@ describe('TST-SEC 安全控制证据', () => {
     );
   });
 
-  it('控制面总量守恒：38 个控制目标，登记数 + 显式留白 = 总额', () => {
+  it('控制面总量守恒（路径 2 轻量）：code(37) + process(1) = 总额 38', () => {
     assert.equal(TOTAL_CONTROLS, 38);
-    const gap = TOTAL_CONTROLS - CONCRETE_CONTROLS.length;
-    // 守恒等式名副其实：登记数 + 留白必须恰好等于总额，
-    // 任何一方改到与 TOTAL_CONTROLS 不一致都会在此显式失败，杜绝“账目对不上”而静默通过。
-    assert.equal(CONCRETE_CONTROLS.length + gap, TOTAL_CONTROLS, '登记数 + 显式留白应等于控制总额');
-    // 留白不得为负：允许逐步补满 38 项（届时 gap=0 亦为合法完成态，
-    // 不应因“做对事”而让构建失败）；若仍处于缺口期，缺口数量必须显式可见。
-    assert.ok(gap >= 0, '登记数不得超过控制总额');
+    const codeCount = CONCRETE_CONTROLS.length;
+    const processCount = PROCESS_CONTROLS.length;
+    // 两通道守恒：代码证据 + 流程证据 = 控制总额
+    assert.equal(
+      codeCount + processCount,
+      TOTAL_CONTROLS,
+      `code(${codeCount}) + process(${processCount}) 应等于 ${TOTAL_CONTROLS}`,
+    );
+    // 通道内不得有重叠 ID（同一控制项不可同时登记为代码+流程）
+    const codeIds = new Set(CONCRETE_CONTROLS.map((c) => c.id));
+    for (const p of PROCESS_CONTROLS) {
+      assert.ok(!codeIds.has(p.id), `${p.id} 不应同时出现在 code 与 process 通道`);
+    }
   });
 
   it(`棘轮下限：已具可执行证据的控制 ≥ ${BASELINE_CONCRETE_CONTROLS}`, () => {
@@ -73,7 +80,7 @@ describe('TST-SEC 安全控制证据', () => {
     );
   });
 
-  it('每条控制项的证据文件真实存在', () => {
+  it('每条代码控制项的证据文件真实存在', () => {
     const problems: string[] = [];
     for (const c of CONCRETE_CONTROLS) {
       if (c.evidence.length === 0) problems.push(`${c.id}: 无证据`);
@@ -82,6 +89,12 @@ describe('TST-SEC 安全控制证据', () => {
       }
     }
     assert.deepEqual(problems, []);
+  });
+
+  it('每条流程控制项的证据文档真实存在', () => {
+    for (const p of PROCESS_CONTROLS) {
+      assert.ok(exists(p.evidenceDoc), `${p.id}: 流程证据文档不存在 ${p.evidenceDoc}`);
+    }
   });
 
   it('控制项编号唯一', () => {
