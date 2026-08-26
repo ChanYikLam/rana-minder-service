@@ -1,4 +1,4 @@
-// no-spec-required 持久化仓储依赖真实 PG 集成测试覆盖（postgres-joint.repository 逻辑经集成 L2 验证）
+// spec 覆盖：postgres-joint.repository.spec.ts（MR #179）；本豁免已移除
 /**
  * PostgreSQL 联合仓储（infrastructure；5.1 JNT-001~006 持久化）。
  *
