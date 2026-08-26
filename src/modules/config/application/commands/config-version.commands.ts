@@ -27,6 +27,16 @@ import type {
 import type { ConfigNotificationPort } from '../../infrastructure/not-wired.config-ports';
 import { cfgErrors } from '../errors';
 
+/** 平台超管门禁（基类与只读查询共用；fail-closed，ORG-029） */
+export async function requirePlatformAdmin(
+  authorization: PolicyAuthorizationPort,
+  subjectId: string,
+): Promise<void> {
+  if (!(await authorization.canManagePlatform(subjectId))) {
+    throw cfgErrors.forbidden('仅平台超管可操作配置版本');
+  }
+}
+
 /** 版本线操作基座：超管门禁 + 事务包裹 + 根加载/新建（rootId 约定 `<kind小写>[:<限定名>]`） */
 export class ConfigVersionOperationBase {
   constructor(
@@ -37,9 +47,7 @@ export class ConfigVersionOperationBase {
   ) {}
 
   protected async requirePlatformAdmin(subjectId: string): Promise<void> {
-    if (!(await this.authorization.canManagePlatform(subjectId))) {
-      throw cfgErrors.forbidden('仅平台超管可操作配置版本');
-    }
+    return requirePlatformAdmin(this.authorization, subjectId);
   }
 
   /**
@@ -239,9 +247,7 @@ export class GetConfigRootQuery {
   ) {}
 
   async execute(input: { rootId: string; subjectId: string }) {
-    if (!(await this.authorization.canManagePlatform(input.subjectId))) {
-      throw cfgErrors.forbidden('仅平台超管可操作配置版本');
-    }
+    await requirePlatformAdmin(this.authorization, input.subjectId);
     const snapshot = await this.repository.find(input.rootId);
     if (snapshot === null) {
       throw cfgErrors.notFound('配置根');

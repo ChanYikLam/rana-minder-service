@@ -118,8 +118,10 @@ export interface ConfigRootRepositoryPort {
   /**
    * 加锁读根（CFG-005 并发发布保护）：在活动事务内对根行加行锁，串行化
    * 「读-改-写」窗口内的并发建草稿/发布/回滚，防止版本号竞态与指针覆盖。
-   * 事务外调用退化为普通读（无锁语义）；根不存在返回 null（并发首建的
-   * 竞态由 root_id 唯一约束兜底）。
+   * 事务外调用退化为普通读（无锁语义）；根不存在返回 null。
+   * 并发首建（根缺失）说明：save 为 ON CONFLICT DO UPDATE（upsert），不抛唯一
+   * 约束；首建是一次性引导操作、两路 v1 等价时结果收敛，聚合级 lost-update
+   * 窗口实际风险低（评审 info）。
    */
   findForUpdate(
     rootId: string,
