@@ -89,4 +89,38 @@ describe('JointActivity（领域模型）', () => {
     a.bumpConfirmRound(NOW, new Date('2026-10-01'));
     assert.equal(a.toSnapshot().confirmRound, before + 1);
   });
+
+  it('markFirstInvitation：并发单胜者幂等（PUBLISHED → INVITING）', () => {
+    const a = makeDraft();
+    a.confirmAll(machine, NOW);
+    a.publish(machine, NOW);
+    // 首次调用成功
+    assert.equal(a.markFirstInvitation(machine, NOW), true);
+    assert.equal(a.toSnapshot().status, JointActivityStatus.INVITING);
+    assert.ok(a.toSnapshot().firstInvitationAt);
+    // 幂等：并发只有一份胜出，重复调用返回 false 且不改状态
+    assert.equal(a.markFirstInvitation(machine, LATER), false);
+    assert.equal(a.toSnapshot().status, JointActivityStatus.INVITING);
+    // 首邀后名单永久锁定：禁止 bumpConfirmRound 调整名单
+    assert.throws(
+      () => a.bumpConfirmRound(LATER, new Date('2026-10-01')),
+      (err: unknown) =>
+        err instanceof Error &&
+        'code' in err &&
+        (err as { code: string }).code === 'JNT_ACT_LOCKED',
+    );
+  });
+
+  it('beginEndConfirm → end：INVITING → END_CONFIRMING → ENDED 主链', () => {
+    const a = makeDraft();
+    a.confirmAll(machine, NOW);
+    a.publish(machine, NOW);
+    a.markFirstInvitation(machine, NOW);
+    assert.equal(a.beginEndConfirm(machine, NOW), true);
+    assert.equal(a.toSnapshot().status, JointActivityStatus.END_CONFIRMING);
+    assert.equal(a.end(machine, LATER), true);
+    assert.equal(a.toSnapshot().status, JointActivityStatus.ENDED);
+    // ENDED 为终态，普通业务写命令被拒绝
+    assert.throws(() => a.assertNotTerminal(), /终态/);
+  });
 });

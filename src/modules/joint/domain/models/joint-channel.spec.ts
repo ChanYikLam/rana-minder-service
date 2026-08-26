@@ -42,10 +42,7 @@ describe('JointChannel（领域模型）', () => {
     c.open(machine, { windowId: 'w1', deadline: DEADLINE, now: NOW });
     assert.equal(c.status, JointChannelStatus.OPEN);
     assert.ok(c.currentWindow);
-    assert.equal(
-      c.isOpen(DEADLINE.getTime() - 1 > NOW.getTime() ? new Date(NOW.getTime() + 1000) : NOW),
-      true,
-    );
+    assert.equal(c.isOpen(new Date(NOW.getTime() + 1000)), true);
   });
 
   it('suspend/resume：OPEN → SUSPENDED → OPEN（新窗口）', () => {

@@ -165,7 +165,8 @@ describe('GetJointActivityUseCase', () => {
     const uc = new DefaultGetJointActivityUseCase(makeRepo(seed) as never, auth as never);
     await assert.rejects(
       () => uc.execute({ activityId: 'act-001', subjectId: 'u1', clubId: 'c' }),
-      /授权|查看|仅/i,
+      (err: unknown) =>
+        err instanceof Error && 'code' in err && (err as { code: string }).code === 'JNT_FORBIDDEN',
     );
   });
 });
@@ -207,7 +208,8 @@ describe('GetJointApplicationUseCase', () => {
     const uc = new DefaultGetJointApplicationUseCase(makeRepo(seed) as never, auth as never);
     await assert.rejects(
       () => uc.execute({ applicationId: 'app-001', subjectId: 'u_student' }),
-      /授权|无权|仅/i,
+      (err: unknown) =>
+        err instanceof Error && 'code' in err && (err as { code: string }).code === 'JNT_FORBIDDEN',
     );
   });
 });
