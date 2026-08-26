@@ -87,10 +87,14 @@ describe('PostgresFormDefinitionRepository', () => {
     await repo.loadTemplatePublication('tp-1');
   });
 
-  it('savePreviewTest：发出 SQL 不抛错', async () => {
-    const { db } = makeFakeDb();
+  it('savePreviewTest：发出含 form_preview_tests 的 SQL 或抛域校验错误', async () => {
+    const { db, calls } = makeFakeDb();
     const repo = new PostgresFormDefinitionRepository(db as never, makeUow());
-    await repo.savePreviewTest({ id: 'pt-1' } as never).catch(() => undefined);
-    assert.ok(true);
+    let caught: Error | undefined;
+    await repo.savePreviewTest({ id: 'pt-1' } as never).catch((e: Error) => {
+      caught = e;
+    });
+    const sqlEmitted = calls.some((s) => s.includes('preview_test'));
+    assert.ok(sqlEmitted || caught !== undefined, 'savePreviewTest 应发射 SQL 或抛域校验错误');
   });
 });

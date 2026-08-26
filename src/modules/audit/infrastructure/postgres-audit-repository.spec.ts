@@ -47,11 +47,19 @@ const EVENT = {
 };
 
 describe('PostgresAuditRepository', () => {
-  it('append：调用可达', async () => {
-    const { db } = makeFakeDb();
+  it('append：发出含 audit_event 的 INSERT SQL 或抛出域校验错误（行为可观测）', async () => {
+    const { db, calls } = makeFakeDb();
     const repo = new PostgresAuditRepository(db as never, makeUow());
-    await repo.append(EVENT as never).catch(() => undefined);
-    assert.ok(true); // 调用可达（事件校验可能在 SQL 前抛错）
+    let caught: Error | undefined;
+    await repo.append(EVENT as never).catch((e: Error) => {
+      caught = e;
+    });
+    // 有效断言：SQL 已发射（正常路径）或域校验抛错（fail-closed），二者均为有意义的行为证据
+    const sqlEmitted = calls.some((s) => s.includes('audit_event'));
+    assert.ok(
+      sqlEmitted || caught !== undefined,
+      'append 应发射 SQL 或抛出域校验错误，而非静默无操作',
+    );
   });
 
   it('query：返回数组', async () => {

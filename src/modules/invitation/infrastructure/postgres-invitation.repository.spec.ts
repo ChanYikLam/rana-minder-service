@@ -31,11 +31,14 @@ function makeFakeDb(seed: Record<string, unknown[]> = {}) {
 }
 
 describe('PostgresInvitationRepository', () => {
-  it('load：调用可达（域重建可容忍行数据不全）', async () => {
+  it('load：SQL 已发射（命中或域重建抛错均为有效行为证据）', async () => {
     const hit = makeFakeDb({ invitation: [{ id: 'inv-001' }] });
     const repoHit = new PostgresInvitationRepository(hit.db as never);
     await repoHit.load('inv-001').catch(() => undefined);
-    assert.ok(true);
+    assert.ok(
+      hit.calls.some((s) => s.includes('invitations')),
+      'load 应发出 SELECT 查询',
+    );
     const miss = makeFakeDb();
     const r = await new PostgresInvitationRepository(miss.db as never).load('x').catch(() => null);
     assert.equal(r, null);

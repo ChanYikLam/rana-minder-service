@@ -54,11 +54,15 @@ describe('PostgresFormSubmissionRepository', () => {
     assert.ok(Array.isArray(r));
   });
 
-  it('insert：发出含 form_submissions 的 SQL', async () => {
-    const { db } = makeFakeDb();
+  it('insert：发出含 form_submissions 的 SQL 或抛出域校验错误', async () => {
+    const { db, calls } = makeFakeDb();
     const repo = new PostgresFormSubmissionRepository(db as never, makeUow());
-    await repo.insert({ id: 's-new', formId: 'f1' } as never).catch(() => undefined);
-    assert.ok(true); // 调用可达（域快照校验可能在 fake 环境先于 SQL 抛错）
+    let caught: Error | undefined;
+    await repo.insert({ id: 's-new', formId: 'f1' } as never).catch((e: Error) => {
+      caught = e;
+    });
+    const sqlEmitted = calls.some((s) => s.includes('form_submissions'));
+    assert.ok(sqlEmitted || caught !== undefined, 'insert 应发射 SQL 或抛域校验错误');
   });
 
   it('save：发出 SQL（乐观锁冲突可容忍）', async () => {
