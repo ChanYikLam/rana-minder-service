@@ -5,7 +5,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-
 describe('NotificationAuthGuard（已有 spec 补充：RejectAll 会话）', () => {
   it('通知认证会话类型存在且 RejectAll 返回 null', async () => {
     const mod = await import('./notification/interfaces/notification-auth-session');
