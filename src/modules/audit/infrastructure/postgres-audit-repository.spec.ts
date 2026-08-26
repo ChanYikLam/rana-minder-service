@@ -31,12 +31,19 @@ function makeFakeDb(seed: Record<string, unknown[]> = {}) {
 }
 
 const EVENT = {
-  auditId: 'a-001', eventType: 'MEMBERSHIP', actorId: 'u1',
-  actorRoles: ['HR'], scope: { kind: 'CLUB', clubId: 'c1' },
-  occurredAt: '2026-08-01T00:00:00Z', source: { channel: 'WEB', ip: '10.0.0.1' },
+  auditId: 'a-001',
+  eventType: 'MEMBERSHIP',
+  actorId: 'u1',
+  actorRoles: ['HR'],
+  scope: { kind: 'CLUB', clubId: 'c1' },
+  occurredAt: '2026-08-01T00:00:00Z',
+  source: { channel: 'WEB', ip: '10.0.0.1' },
   target: { objectType: 'MEMBERSHIP', objectId: 'm1' },
-  oldValue: null, newValue: null, outcome: 'SUCCESS',
-  failureReason: null, requestId: 'r1',
+  oldValue: null,
+  newValue: null,
+  outcome: 'SUCCESS',
+  failureReason: null,
+  requestId: 'r1',
 };
 
 describe('PostgresAuditRepository', () => {
