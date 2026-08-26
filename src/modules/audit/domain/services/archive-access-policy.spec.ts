@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ArchiveAccessPolicy, ArchiveContentKind } from './archive-access-policy';
+import { ArchiveAccessPolicy } from './archive-access-policy';
 
 const policy = new ArchiveAccessPolicy();
 
