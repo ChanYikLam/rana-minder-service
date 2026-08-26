@@ -43,6 +43,11 @@ describe('字段映射命令（CFG-004）', () => {
   let roots: InMemoryConfigRootRepository;
   let auth: StubPolicyAuthorization;
   let notify: RecordingConfigNotification;
+  /** 命令层事务包装桩（无外层事务时直接执行回调；事务窗口验证见 config-version spec） */
+  const uow = {
+    active: null,
+    runShared: async <T>(_scope: unknown, fn: () => Promise<T>): Promise<T> => fn(),
+  };
 
   beforeEach(() => {
     states = new InMemoryFieldMappingStateRepository();
@@ -65,7 +70,7 @@ describe('字段映射命令（CFG-004）', () => {
     );
     await assert.rejects(
       () =>
-        new PublishFieldMappingCommand(states, roots, auth, notify).execute({
+        new PublishFieldMappingCommand(states, roots, auth, notify, uow).execute({
           subjectId: SA,
           now: NOW,
           testResultRef: 't',
@@ -124,7 +129,7 @@ describe('字段映射命令（CFG-004）', () => {
 
   it('发布链路：门禁缺一不可 → 版本线 PUBLISHED + 对账标记 + 历史完整', async () => {
     const save = new SaveFieldMappingDraftCommand(states, auth);
-    const publish = new PublishFieldMappingCommand(states, roots, auth, notify);
+    const publish = new PublishFieldMappingCommand(states, roots, auth, notify, uow);
 
     await save.execute({ subjectId: SA, now: NOW, entries: entries() });
 
@@ -207,7 +212,7 @@ describe('字段映射命令（CFG-004）', () => {
   it('草稿不存在时发布拒绝（CFG_PRECONDITION）', async () => {
     await assert.rejects(
       () =>
-        new PublishFieldMappingCommand(states, roots, auth, notify).execute({
+        new PublishFieldMappingCommand(states, roots, auth, notify, uow).execute({
           subjectId: SA,
           now: NOW,
           testResultRef: 't',

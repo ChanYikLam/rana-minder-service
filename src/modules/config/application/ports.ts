@@ -15,6 +15,16 @@
  */
 
 import type { ClubProfileSnapshot } from '../domain/models/club-profile';
+import type { RlsScope } from '../../../shared/db-adapter';
+
+/**
+ * 命令层事务包装端口（CFG-005 并发保护）：配置版本线写命令在单一事务窗口内
+ * 执行「加锁读→改聚合→save」，findForUpdate 行锁须持至整个窗口结束。
+ * 实现注入 ConfigUnitOfWork（已有外层事务则复用，否则自开并在命令完成后提交）。
+ */
+export interface CommandTransactionPort {
+  runShared<T>(scope: RlsScope, fn: () => Promise<T>): Promise<T>;
+}
 
 /** 展示资料仓储端口：按社团 ID 存取聚合快照 */
 export interface ClubProfileRepositoryPort {

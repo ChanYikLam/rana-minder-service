@@ -402,41 +402,20 @@ export class PostgresConfigRootRepository implements ConfigRootRepositoryPort {
   ) {}
 
   async find(rootId: string): Promise<ConfigRootSnapshot | null> {
-    return this.uow.runShared({ kind: 'unprotected' }, async () => {
-      const rootRows = await this.db.query<Row>(
-        this.uow.active,
-        `SELECT kind, current_published_version_number FROM public.config_roots WHERE root_id = $1`,
-        [rootId],
-      );
-      if (rootRows.length === 0) {
-        return null;
-      }
-      const versionRows = await this.db.query<Row>(
-        this.uow.active,
-        `SELECT * FROM public.config_versions WHERE root_id = $1 ORDER BY version_number ASC`,
-        [rootId],
-      );
-      return {
-        rootId,
-        kind: rootRows[0].kind as ConfigRootSnapshot['kind'],
-        versions: versionRows.map(versionFromRow),
-        currentPublishedVersionNumber:
-          rootRows[0].current_published_version_number === null
-            ? null
-            : num(rootRows[0].current_published_version_number),
-      };
-    });
+    return this.loadRoot(rootId, false);
   }
 
   async findForUpdate(rootId: string): Promise<ConfigRootSnapshot | null> {
+    return this.loadRoot(rootId, true);
+  }
+
+  /** 根加载共用路径：forUpdate=true 时对根行加 FOR UPDATE 行锁（CFG-005 并发保护） */
+  private async loadRoot(rootId: string, forUpdate: boolean): Promise<ConfigRootSnapshot | null> {
     return this.uow.runShared({ kind: 'unprotected' }, async () => {
-      // 行锁根行（CFG-005 并发发布保护）：并发建草稿/发布/回滚在事务内串行化，
-      // 防止版本号竞态（同 max+1）与当前指针覆盖。版本行随根行锁联动读取。
       const rootRows = await this.db.query<Row>(
         this.uow.active,
         `SELECT kind, current_published_version_number FROM public.config_roots
-          WHERE root_id = $1
-          FOR UPDATE`,
+          WHERE root_id = $1${forUpdate ? '\n          FOR UPDATE' : ''}`,
         [rootId],
       );
       if (rootRows.length === 0) {
