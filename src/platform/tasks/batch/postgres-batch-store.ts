@@ -57,7 +57,7 @@ export class PostgresBatchStore implements BatchStore {
               (batch_id, parent_batch_id, preview_version, version, status, scope, operation_type, business_type, frozen_items, item_results, created_at, confirmed_at, completed_at)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
           ON CONFLICT (batch_id) DO UPDATE SET
-              version = EXCLUDED.version + 1,
+              version = EXCLUDED.version,
               preview_version = EXCLUDED.preview_version,
               status = EXCLUDED.status,
               scope = EXCLUDED.scope,
