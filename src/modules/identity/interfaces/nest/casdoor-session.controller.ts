@@ -17,12 +17,14 @@
 import { Controller, Delete, Get, HttpCode, HttpException, Inject } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { type Request as ExpressRequest, type Response } from 'express';
+import { jwtVerify } from 'jose';
 import {
   RANA_MINDER_CONFIG,
   isSecretRef,
   resolveSecret,
   type RanaMinderConfig,
 } from '../../../../config';
+import { IdentityUnitOfWork } from '../../infrastructure/unit-of-work';
 import { CasdoorOidcClient } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import type {
   CasdoorOidcConfig,
@@ -32,7 +34,8 @@ import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-prov
 import { deriveSessionSecret } from './session-secret';
 import { CasdoorAvailability } from './casdoor-availability';
 import { InMemoryOidcNonceStore } from './oidc-nonce-store';
-import { CASDOOR_AVAILABILITY } from '../../tokens';
+import { CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT } from '../../tokens';
+import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
 
 /** Casdoor 账号状态（与 CasdoorOidcClient.fetchAccountState 返回值一致）。 */
 type AccountState = 'ACTIVE' | 'DISABLED' | 'DELETED' | 'UNKNOWN';
@@ -65,6 +68,8 @@ export class CasdoorSessionController {
   constructor(
     @Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig,
     @Inject(CASDOOR_AVAILABILITY) private readonly availability: CasdoorAvailability,
+    @Inject(IdentityUnitOfWork) private readonly uow: IdentityUnitOfWork,
+    @Inject(SESSION_REVOCATION_PORT) private readonly revocationPort?: SessionRevocationPort,
   ) {}
 
   /** GET /api/auth/casdoor/login-url */
@@ -195,6 +200,21 @@ export class CasdoorSessionController {
   @Delete('logout')
   @HttpCode(200)
   async logout(req: ExpressRequest, res: Response): Promise<{ ok: boolean }> {
+    // BUG-007：登出时主动吊销该主体全部会话（不只清 Cookie）。
+    // 必须验签通过后才取 sub（防未鉴权伪造任意主体吊销），并在身份域工作单元
+    // 事务内写入吊销记录（SEC-CTL-004：禁止脱离事务读写）。
+    if (this.revocationPort) {
+      const sub = await this.extractVerifiedSubject(req);
+      if (sub) {
+        try {
+          await this.uow.run({ kind: 'single', subjectId: sub }, async () => {
+            await this.revocationPort!.invalidateAllSessions(sub);
+          });
+        } catch {
+          // 吊销失败不阻断 Cookie 清除（客户端已不可信）
+        }
+      }
+    }
     // 清 cookie 时使用与写入一致的 Path/HttpOnly/SameSite/Secure 属性，确保真正清除。
     const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
     const secureAttr = secure ? '; Secure' : '';
@@ -203,6 +223,50 @@ export class CasdoorSessionController {
       `session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureAttr}`,
     );
     return { ok: true };
+  }
+
+  /**
+   * 提取并验签当前请求携带的会话 JWT，返回其 sub（用于登出吊销）。
+   * 验签失败 / 无有效令牌返回 null（不吊销任何主体）。
+   */
+  private async extractVerifiedSubject(req: ExpressRequest): Promise<string | null> {
+    const secret = this.sessionSecretBytes();
+    if (!secret) return null;
+    const token = this.extractToken(req);
+    if (token === null) return null;
+    try {
+      const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] });
+      return typeof payload['sub'] === 'string' ? payload['sub'] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 从请求头提取会话 JWT（Bearer 或 session cookie）。 */
+  private extractToken(req: ExpressRequest): string | null {
+    const auth = req.headers['authorization'];
+    if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+      return auth.slice(7);
+    }
+    const cookie = req.headers['cookie'];
+    if (typeof cookie === 'string') {
+      const match = cookie.match(/(?:^|;\s*)session_token=([^;]+)/);
+      if (match) return match[1];
+    }
+    return null;
+  }
+
+  /** 解析会话签名密钥（与签发方 deriveSessionSecret 保持一致）。 */
+  private sessionSecretBytes(): Uint8Array | null {
+    if (this.sessionSecret) return this.sessionSecret;
+    const c = this.config.casdoor;
+    if (!c?.clientSecretRef) return null;
+    try {
+      this.sessionSecret = deriveSessionSecret(this.resolveClientSecret(c.clientSecretRef));
+      return this.sessionSecret;
+    } catch {
+      return null;
+    }
   }
 
   // ----- 内部 -----

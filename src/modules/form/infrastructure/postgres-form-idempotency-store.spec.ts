@@ -1,116 +1,81 @@
 /**
- * Form PostgreSQL IdempotencyStore 测试（P3 覆盖补齐）。
+ * Form PostgreSQL IdempotencyStore 测试（P3 覆盖补齐；FakeDbAdapter 全链路断言）。
+ *
+ * 相对 form-repositories.spec.ts 的全链路用例，本 spec 侧重独立验证
+ * claim 占位 / 重放比对 / readResult 回读 / release 清理 的关键分支，断言真实行为。
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { FormUnitOfWork } from './unit-of-work';
+import { FakeDbAdapter } from '../../../shared/testing/fake-db-adapter';
 import { PostgresFormIdempotencyStore } from './postgres-form-idempotency-store';
 
-function makeFakeDb(
-  seed: Record<string, unknown[]> = {},
-  opts: { insertReturnsRow?: boolean } = {},
-) {
-  const calls: string[] = [];
-  const db = {
-    beginTransaction: async () => ({ tx: 1 }),
-    commit: async () => undefined,
-    rollback: async () => undefined,
-    setRlsContext: async () => undefined,
-    clearRlsContext: async () => undefined,
-    query: async <T>(_tx: unknown, sql: string): Promise<T[]> => {
-      calls.push(sql);
-      if (sql.includes('FROM form_idempotency') && sql.includes('SELECT'))
-        return (seed['idempotency'] ?? []) as T[];
-      if (sql.includes('INSERT INTO form_idempotency') && opts.insertReturnsRow)
-        return [{ scope_key: 'x' }] as T[];
-      return [] as T[];
-    },
-  };
-  return { db, calls };
+async function inTx<T>(uow: FormUnitOfWork, fn: () => Promise<T>): Promise<T> {
+  return uow.run({ kind: 'single', subjectId: 'leader-1' }, fn);
 }
 
-function makeUow() {
-  return {
-    active: { tx: 1 },
-    run: async (_s: unknown, fn: () => Promise<unknown>) => fn(),
-  };
-}
+const scopeKey = 'create-draft:club:club-1';
 
 describe('PostgresFormIdempotencyStore', () => {
-  it('claim：新占位返回 inserted=true', async () => {
-    const { db } = makeFakeDb({}, { insertReturnsRow: true });
-    const store = new PostgresFormIdempotencyStore(db as never, makeUow() as never);
-    const out = await store.claim({
-      scopeKey: 'form',
-      idempotencyKey: 'key-1',
-      semanticHash: 'hash-1',
-    });
-    assert.equal(out.inserted, true);
-    assert.equal(out.existingHash, null);
+  it('claim：新键占位成功返回 inserted，重放命中既有摘要', async () => {
+    const db = new FakeDbAdapter();
+    const uow = new FormUnitOfWork(db);
+    const store = new PostgresFormIdempotencyStore(db, uow);
+
+    const first = await inTx(uow, () =>
+      store.claim({ scopeKey, idempotencyKey: 'key-1', semanticHash: 'hash-a' }),
+    );
+    assert.equal(first.inserted, true);
+    assert.equal(first.existingHash, null);
+
+    db.seed('form_idempotency', [
+      { scope_key: scopeKey, idempotency_key: 'key-1', semantic_hash: 'hash-a', result: null },
+    ]);
+    const replayed = await inTx(uow, () =>
+      store.claim({ scopeKey, idempotencyKey: 'key-1', semanticHash: 'hash-a' }),
+    );
+    assert.equal(replayed.inserted, false);
+    assert.equal(replayed.existingHash, 'hash-a');
   });
 
-  it('claim：命中既有记录返回 inserted=false 及既有摘要', async () => {
-    const { db } = makeFakeDb({
-      idempotency: [
-        {
-          scope_key: 'form',
-          idempotency_key: 'key-1',
-          semantic_hash: 'hash-existing',
-          result: { ok: true },
-        },
-      ],
-    });
-    const store = new PostgresFormIdempotencyStore(db as never, makeUow() as never);
-    const out = await store.claim({
-      scopeKey: 'form',
-      idempotencyKey: 'key-1',
-      semanticHash: 'hash-new',
-    });
-    assert.equal(out.inserted, false);
-    assert.equal(out.existingHash, 'hash-existing');
+  it('complete 回填后 readResult 命中返回结果', async () => {
+    const db = new FakeDbAdapter();
+    const uow = new FormUnitOfWork(db);
+    const store = new PostgresFormIdempotencyStore(db, uow);
+    db.seed('form_idempotency', [
+      { scope_key: scopeKey, idempotency_key: 'key-2', semantic_hash: 'hash-b', result: null },
+    ]);
+
+    await inTx(uow, () =>
+      store.complete({
+        scopeKey,
+        idempotencyKey: 'key-2',
+        semanticHash: 'hash-b',
+        result: { ok: true },
+      }),
+    );
+    const result = await inTx(uow, () => store.readResult(scopeKey, 'key-2'));
+    assert.deepEqual(result, { ok: true });
   });
 
   it('readResult：未命中返回 null', async () => {
-    const { db } = makeFakeDb();
-    const store = new PostgresFormIdempotencyStore(db as never, makeUow() as never);
-    const r = await store.readResult('scope', 'ghost-key').catch(() => null);
-    assert.equal(r, null);
+    const db = new FakeDbAdapter();
+    const uow = new FormUnitOfWork(db);
+    const store = new PostgresFormIdempotencyStore(db, uow);
+    assert.equal(await inTx(uow, () => store.readResult(scopeKey, 'ghost-key')), null);
   });
 
-  it('readResult：命中回填结果返回该结果', async () => {
-    const { db } = makeFakeDb({
-      idempotency: [
-        {
-          scope_key: 's',
-          idempotency_key: 'k',
-          semantic_hash: 'hash-x',
-          result: { ok: true },
-        },
-      ],
-    });
-    const store = new PostgresFormIdempotencyStore(db as never, makeUow() as never);
-    const r = await store.readResult('s', 'k');
-    assert.deepEqual(r, { ok: true });
-  });
+  it('release：删除幂等行（DELETE FROM form_idempotency）', async () => {
+    const db = new FakeDbAdapter();
+    const uow = new FormUnitOfWork(db);
+    const store = new PostgresFormIdempotencyStore(db, uow);
 
-  it('complete / release：不抛错且发射 UPDATE/DELETE SQL', async () => {
-    const { db, calls } = makeFakeDb();
-    const store = new PostgresFormIdempotencyStore(db as never, makeUow() as never);
-    await store.complete({
-      scopeKey: 's',
-      idempotencyKey: 'k',
-      semanticHash: 'hash-1',
-      result: { ok: true },
-    });
-    await store.release('s', 'k');
-    assert.ok(
-      calls.some((s) => s.includes('UPDATE form_idempotency')),
-      'complete 应发射 UPDATE SQL',
-    );
-    assert.ok(
-      calls.some((s) => s.includes('DELETE FROM form_idempotency')),
-      'release 应发射 DELETE SQL',
-    );
+    await inTx(uow, () => store.release(scopeKey, 'key-3'));
+    const del = db.queries.find((q) => /DELETE FROM form_idempotency/i.test(q.sql));
+    assert.ok(del, '应执行 DELETE FROM form_idempotency');
+    assert.equal(del.params[0], scopeKey);
+    assert.equal(del.params[1], 'key-3');
   });
 });
