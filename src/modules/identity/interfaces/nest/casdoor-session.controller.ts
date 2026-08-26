@@ -34,6 +34,7 @@ import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-prov
 import { deriveSessionSecret } from './session-secret';
 import { CasdoorAvailability } from './casdoor-availability';
 import { InMemoryOidcNonceStore } from './oidc-nonce-store';
+import { secureFromRequest } from './secure-request';
 import { CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT, OIDC_NONCE_STORE } from '../../tokens';
 import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
 
@@ -83,13 +84,6 @@ export class CasdoorSessionController {
     return this.nonceStoreOverride ?? this.defaultNonceStore;
   }
   private defaultNonceStore = new InMemoryOidcNonceStore();
-
-  /** BUG-016：Cookie Secure 由配置驱动而非信任客户端请求头 */
-  private isSecureRequest(req: ExpressRequest): boolean {
-    // 生产环境始终 Secure（HTTPS 终止于反向代理，应用层无法可靠判定）
-    if (process.env['NODE_ENV'] === 'production') return true;
-    return req.secure;
-  }
 
   /** GET /api/auth/casdoor/login-url */
   @Get('casdoor/login-url')
@@ -187,7 +181,7 @@ export class CasdoorSessionController {
     );
 
     // Set-Cookie：HttpOnly + SameSite=Lax 强制；Secure 在 HTTPS 下启用（防明文截获）。
-    const secure = this.isSecureRequest(req);
+    const secure = secureFromRequest(req);
     const secureAttr = secure ? '; Secure' : '';
     res.setHeader(
       'Set-Cookie',
@@ -235,7 +229,7 @@ export class CasdoorSessionController {
       }
     }
     // 清 cookie 时使用与写入一致的 Path/HttpOnly/SameSite/Secure 属性，确保真正清除。
-    const secure = this.isSecureRequest(req);
+    const secure = secureFromRequest(req);
     const secureAttr = secure ? '; Secure' : '';
     res.setHeader(
       'Set-Cookie',

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 import { InMemoryOidcNonceStore, type OidcNonceStore } from './oidc-nonce-store';
 import { deriveSessionSecret } from './session-secret';
+import { isSecureRequest } from './secure-request';
 
 describe('BUG-008：nonce 存储可注入（多实例共享）', () => {
   it('OidcNonceStore 接口契约：issue + consume（一次性）', () => {
@@ -35,20 +36,27 @@ describe('BUG-008：nonce 存储可注入（多实例共享）', () => {
 });
 
 describe('BUG-016：Cookie Secure 由配置驱动', () => {
-  it('生产环境始终返回 Secure=true（不信任客户端头）', () => {
-    // 通过 isSecureRequest 的逻辑验证：NODE_ENV=production → 始终 true
-    const originalEnv = process.env['NODE_ENV'];
-    process.env['NODE_ENV'] = 'production';
-    // isSecureRequest 是 controller 的 private 方法；此处直接验证其逻辑
-    const secureInProd = process.env['NODE_ENV'] === 'production';
-    assert.equal(secureInProd, true);
-    process.env['NODE_ENV'] = originalEnv;
+  it('生产环境始终返回 Secure=true（不信任 req.secure / 请求头）', () => {
+    // 生产下无论 req.secure 真假都返回 true，绝不信任客户端可伪造的请求头
+    assert.equal(isSecureRequest('production', false), true, '生产 + req.secure=false 也应 Secure');
+    assert.equal(isSecureRequest('production', true), true, '生产 + req.secure=true 应为 Secure');
+    assert.equal(isSecureRequest('production', undefined as unknown as boolean), true);
   });
 
-  it('非生产环境：req.secure 决定（不信任 x-forwarded-proto）', () => {
-    process.env['NODE_ENV'] = 'development';
-    // 非生产下仅依赖 Express 的 req.secure（trust proxy 正确配置时才为 true）
-    assert.equal(process.env['NODE_ENV'] !== 'production', true);
+  it('非生产环境：仅由 req.secure 决定（不信任 x-forwarded-proto）', () => {
+    // 非生产下不再读取 x-forwarded-proto，仅依赖 Express 的 req.secure
+    assert.equal(isSecureRequest('development', true), true, 'dev + req.secure=true → Secure');
+    assert.equal(
+      isSecureRequest('development', false),
+      false,
+      'dev + req.secure=false → 非 Secure',
+    );
+    assert.equal(
+      isSecureRequest(undefined, false),
+      false,
+      '无 NODE_ENV + req.secure=false → 非 Secure',
+    );
+    assert.equal(isSecureRequest('test', false), false, 'test + req.secure=false → 非 Secure');
   });
 });
 
