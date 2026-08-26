@@ -23,7 +23,18 @@ import type {
 } from '../../application/queries/get-account-access.query';
 import { IdentityCommandError, IdentityErrorCode } from '../../application/errors';
 import type { IdentityUnitOfWork } from '../../infrastructure/unit-of-work';
+import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
 import type { RlsScope } from '../../../../shared/db-adapter';
+
+const sessionRevocationStub: SessionRevocationPort = {
+  async invalidateSessions() {},
+  async getRevocation() {
+    return null;
+  },
+  async invalidateAllSessions() {
+    return 0;
+  },
+};
 
 const uowStub = {
   run: async <T>(_scope: RlsScope, fn: () => Promise<T>) => fn(),
@@ -106,7 +117,7 @@ function createController(overrides?: {
       return access(overrides?.access);
     },
   };
-  return new AccountAccessController(fakeProfile, fakeAccess, uowStub);
+  return new AccountAccessController(fakeProfile, fakeAccess, uowStub, sessionRevocationStub);
 }
 
 describe('AccountAccessController.getSession（GET /api/auth/session）', () => {

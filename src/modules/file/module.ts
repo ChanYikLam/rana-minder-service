@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { IdentityModule } from '../identity/identity.module';
 import { InitiateUploadCommand } from './application/commands/initiate-upload.command';
 import { CompleteUploadCommand } from './application/commands/complete-upload.command';
 import { AskFileCheckCommand } from './application/commands/ask-file-check.command';
@@ -29,6 +30,7 @@ import { FORMAL_DELETE_CONFIRM_PORT } from './infrastructure/formal-delete-confi
 import { PostgresFormalDeleteConfirm } from './infrastructure/postgres-formal-delete-confirm';
 import { CLEANUP_REFERENCE_GUARD } from './infrastructure/cleanup-reference-guard-port';
 import { PostgresCleanupReferenceGuard } from './infrastructure/postgres-cleanup-reference-guard';
+import { FileNestController } from './interfaces/nest/file.nest.controller';
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { DB_ADAPTER } from '../../adapters/tokens';
 import { S3ObjectStoreAdapter } from '../../adapters/storage/s3-object-store.adapter';
@@ -129,7 +131,10 @@ export function createObjectStorePort(
 }
 
 @Module({
-  imports: [AdaptersModule],
+  // IdentityModule 提供 FileNestController 依赖的 AuthGuard（文件访问实时鉴权）；
+  // AdaptersModule 为 @Global，提供 DB_ADAPTER/S3 对象存储/外部文件检查等共享适配器。
+  imports: [IdentityModule, AdaptersModule],
+  controllers: [FileNestController],
   providers: [
     // 领域规则（纯规则）
     FileStateMachine,

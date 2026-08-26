@@ -6,7 +6,7 @@
  * 独立端点，不注册路由（未登记路径拒绝，API-EP-002）。
  */
 
-import { Controller, Get, Inject, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Inject, Post, Req, UseGuards } from '@nestjs/common';
 
 import { TRACE_CONTEXT } from '../../../../platform/observability/tracing/tokens';
 import type { TraceContextAdapter } from '../../../../platform/observability/infrastructure/trace-context.adapter';
@@ -32,6 +32,13 @@ export class AccountAccessNestController {
   @Get('session')
   async getSession(@Req() request: Record<string, unknown>): Promise<ApiSuccess<SessionResponse>> {
     return toHttpResponse(await this.controller.getSession(this.actor(request)));
+  }
+
+  @Post('logout')
+  async logout(
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<{ ok: true; revokedVersion: number }>> {
+    return toHttpResponse(await this.controller.logout(this.actor(request)));
   }
 
   private actor(request: Record<string, unknown>) {

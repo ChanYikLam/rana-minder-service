@@ -56,6 +56,7 @@ import { AuditModule } from './modules/audit/module';
 import { StatExportModule } from './modules/stat-export/module';
 import { RecruitmentModule } from './modules/recruitment/recruitment.module';
 import { ConfigModule } from './modules/config/module';
+import { JobCoreModule } from './modules/job/job-core.module';
 import { DB_STATUS_PORT, TASK_SUMMARY_PORT } from './platform/observability/status-page/tokens';
 import {
   NestOpsTelemetry,
@@ -88,6 +89,7 @@ import type { TaskRepository } from './platform/tasks/contracts';
     StatExportModule,
     RecruitmentModule,
     ConfigModule,
+    JobCoreModule,
   ],
   controllers: [],
   providers: [

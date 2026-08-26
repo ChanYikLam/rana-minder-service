@@ -8,7 +8,7 @@ import {
   isValidIdempotencyKey,
   assertIdempotencyKeyDistinctFromTrackingNumber,
 } from './idempotency-key';
-import type { TaskRepository, TaskRecord } from '../contracts';
+import type { TaskRecord } from '../contracts';
 import { TaskStatus, TaskType } from '../contracts';
 
 function makeTask(overrides: Partial<TaskRecord> = {}): TaskRecord {
@@ -107,139 +107,92 @@ describe('assertIdempotencyKeyDistinctFromTrackingNumber', () => {
 describe('InMemoryIdempotencyStore', () => {
   it('begin first true', async () => {
     const store = new InMemoryIdempotencyStore();
-    assert.equal(await store.begin('k1', 'intent-1'), true);
+    assert.equal(
+      await store.begin('k1', 'intent-1', new Date(Date.now() - 1000).toISOString()),
+      true,
+    );
     const r = await store.find('k1');
     assert.equal(r?.status, IdempotencyRecordStatus.EXECUTING);
   });
   it('begin duplicate false', async () => {
     const store = new InMemoryIdempotencyStore();
-    await store.begin('k1', 'intent-1');
-    assert.equal(await store.begin('k1', 'intent-2'), false);
+    await store.begin('k1', 'intent-1', new Date(Date.now() - 1000).toISOString());
+    assert.equal(
+      await store.begin('k1', 'intent-2', new Date(Date.now() - 1000).toISOString()),
+      false,
+    );
   });
   it('find nonexistent null', async () => {
     assert.equal(await new InMemoryIdempotencyStore().find('x'), null);
   });
   it('complete', async () => {
     const store = new InMemoryIdempotencyStore();
-    await store.begin('k1', 'intent-1');
+    await store.begin('k1', 'intent-1', new Date(Date.now() - 1000).toISOString());
     await store.complete('k1', 'intent-1', 'ref://r');
     assert.equal((await store.find('k1'))?.status, IdempotencyRecordStatus.COMPLETED);
   });
   it('fail', async () => {
     const store = new InMemoryIdempotencyStore();
-    await store.begin('k1', 'intent-1');
+    await store.begin('k1', 'intent-1', new Date(Date.now() - 1000).toISOString());
     await store.fail('k1', 'intent-1');
     assert.equal((await store.find('k1'))?.status, IdempotencyRecordStatus.FAILED);
   });
 });
 
 describe('RecoveryReplayConvergence', () => {
-  function makeRepo(
-    findByIntentIdFn: TaskRepository['findByIntentId'] = async () => null,
-  ): TaskRepository {
-    return {
-      insert: async () => makeTask(),
-      findById: async () => null,
-      findByIntentId: findByIntentIdFn,
-      findByIdempotencyKey: async () => null,
-      tryClaim: async () => ({ claimed: true, task: makeTask() }),
-      updateAfterExecution: async () => makeTask(),
-      listDueTaskIds: async () => [],
-      listDeadlineTaskIds: async () => [],
-      listExpiredLeaseTaskIds: async () => [],
-      backlogSummary: async () => ({
-        pending: 0,
-        leased: 0,
-        retryableFailed: 0,
-        uncertain: 0,
-        manualIntervention: 0,
-        completed: 0,
-        perType: {} as Record<TaskType, number>,
-      }),
-    } as TaskRepository;
-  }
-
   it('no record -> allowed true', async () => {
     const store = new InMemoryIdempotencyStore();
-    const c = new RecoveryReplayConvergence(makeRepo(), store);
+    const c = new RecoveryReplayConvergence(store);
     const r = await c.convergeBeforeExecution(makeTask({ idempotencyKey: 'ik:1' }), new Date());
     assert.equal(r.allowed, true);
   });
   it('COMPLETED -> allowed false + resultRef', async () => {
     const store = new InMemoryIdempotencyStore();
-    const c = new RecoveryReplayConvergence(makeRepo(), store);
+    const c = new RecoveryReplayConvergence(store);
     const task = makeTask({ idempotencyKey: 'ik:1' });
-    await store.begin('ik:1', task.intentId);
+    await store.begin('ik:1', task.intentId, new Date(Date.now() - 1000).toISOString());
     await store.complete('ik:1', task.intentId, 'ref://done');
     const r = await c.convergeBeforeExecution(task, new Date());
     assert.equal(r.allowed, false);
     assert.equal(r.resultRef, 'ref://done');
   });
-  it('EXECUTING valid lease -> allowed false', async () => {
+  it('EXECUTING 且执行任期未过期 -> allowed false（另一 worker 仍在执行）', async () => {
     const store = new InMemoryIdempotencyStore();
-    const future = new Date(Date.now() + 60000).toISOString();
-    const fresh = makeTask({
-      taskId: 't1',
-      intentId: 'intent-1',
-      idempotencyKey: 'ik:1',
-      lease: {
-        workerId: 'w1',
-        leaseVersion: 1,
-        leaseUntil: future,
-        leasedAt: new Date().toISOString(),
-      },
-    });
-    const c = new RecoveryReplayConvergence(
-      makeRepo(async () => fresh),
-      store,
-    );
+    const c = new RecoveryReplayConvergence(store);
     const task = makeTask({ idempotencyKey: 'ik:1', intentId: 'intent-1' });
-    await store.begin('ik:1', task.intentId);
+    // 记录声明执行中的任期仍在未来 → 视为活跃，禁止重放
+    await store.begin('ik:1', task.intentId, new Date(Date.now() + 60000).toISOString());
     assert.equal((await c.convergeBeforeExecution(task, new Date())).allowed, false);
   });
-  it('EXECUTING expired lease -> allowed true', async () => {
+  it('EXECUTING 但执行任期已超时 -> allowed true（崩溃后恢复重放，BUG-004）', async () => {
     const store = new InMemoryIdempotencyStore();
-    const past = new Date(Date.now() - 10000).toISOString();
-    const expired = makeTask({
-      taskId: 't1',
-      intentId: 'intent-1',
-      idempotencyKey: 'ik:1',
-      lease: {
-        workerId: 'w1',
-        leaseVersion: 1,
-        leaseUntil: past,
-        leasedAt: new Date(Date.now() - 20000).toISOString(),
-      },
-    });
-    const c = new RecoveryReplayConvergence(
-      makeRepo(async () => expired),
-      store,
-    );
+    const c = new RecoveryReplayConvergence(store);
     const task = makeTask({ idempotencyKey: 'ik:1', intentId: 'intent-1' });
-    await store.begin('ik:1', task.intentId);
+    // 记录声明执行中的任期已过去 → 崩溃恢复，允许重放（不再取任务表当前行新租约）
+    await store.begin('ik:1', task.intentId, new Date(Date.now() - 10000).toISOString());
     assert.equal((await c.convergeBeforeExecution(task, new Date())).allowed, true);
   });
   it('FAILED -> allowed true', async () => {
     const store = new InMemoryIdempotencyStore();
-    const c = new RecoveryReplayConvergence(makeRepo(), store);
+    const c = new RecoveryReplayConvergence(store);
     const task = makeTask({ idempotencyKey: 'ik:1', intentId: 'intent-1' });
-    await store.begin('ik:1', task.intentId);
+    await store.begin('ik:1', task.intentId, new Date(Date.now() - 1000).toISOString());
     await store.fail('ik:1', task.intentId);
     assert.equal((await c.convergeBeforeExecution(task, new Date())).allowed, true);
   });
   it('convergeAfterSuccess', async () => {
     const store = new InMemoryIdempotencyStore();
-    const c = new RecoveryReplayConvergence(makeRepo(), store);
+    const c = new RecoveryReplayConvergence(store);
     const task = makeTask({ idempotencyKey: 'ik:1', intentId: 'intent-1' });
-    await store.begin('ik:1', task.intentId);
+    await store.begin('ik:1', task.intentId, new Date(Date.now() - 1000).toISOString());
     await c.convergeAfterSuccess(task, 'ref://r');
     assert.equal((await store.find('ik:1'))?.status, IdempotencyRecordStatus.COMPLETED);
   });
   it('convergeAfterFailure', async () => {
     const store = new InMemoryIdempotencyStore();
-    const c = new RecoveryReplayConvergence(makeRepo(), store);
+    const c = new RecoveryReplayConvergence(store);
     const task = makeTask({ idempotencyKey: 'ik:1', intentId: 'intent-1' });
-    await store.begin('ik:1', task.intentId);
+    await store.begin('ik:1', task.intentId, new Date(Date.now() - 1000).toISOString());
     await c.convergeAfterFailure(task);
     assert.equal((await store.find('ik:1'))?.status, IdempotencyRecordStatus.FAILED);
   });

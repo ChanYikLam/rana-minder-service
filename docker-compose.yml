@@ -53,6 +53,9 @@ x-app-common: &app-common
       condition: service_healthy
     casdoor:
       condition: service_healthy
+    # 数据库迁移先于应用/worker 启动完成（BUG-002：补齐迁移执行路径）
+    migrate:
+      condition: service_completed_successfully
 
 services:
   # ---- HTTP 应用入口（node dist/main.js）----
@@ -70,6 +73,22 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # ---- 数据库迁移（一次性的幂等执行器；node dist/database/migrate.js）----
+  # 在 PostgreSQL 健康后、应用/worker 之前完成（service_completed_successfully）。
+  # 迁移执行器为一次性进程，正常退出即 `restart: "no"`（恢复手册 §13）。
+  migrate:
+    <<: *app-common
+    container_name: ranaminder-migrate
+    restart: "no"
+    # 仅依赖数据库；迁移执行器自身读取同一份只读配置（ADR-010）
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["node", "dist/database/migrate.js"]
+    # 一次性任务无需存活探针
+    healthcheck:
+      disable: true
 
   # ---- 后台任务入口（node dist/main.worker.js）----
   worker:
