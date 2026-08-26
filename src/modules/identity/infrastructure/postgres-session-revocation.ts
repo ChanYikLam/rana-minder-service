@@ -38,8 +38,12 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
       const rows = await this.db.query<{
         revoke_version: string | null;
         revoked_at: Date | null;
-      }>(tx, `SELECT MAX(revoke_version) AS revoke_version, MAX(revoked_at) AS revoked_at
-           FROM auth_sessions WHERE subject_id = $1`, [subjectId]);
+      }>(
+        tx,
+        `SELECT MAX(revoke_version) AS revoke_version, MAX(revoked_at) AS revoked_at
+           FROM auth_sessions WHERE subject_id = $1`,
+        [subjectId],
+      );
       await this.db.commit(tx);
       const row = rows[0];
       if (!row || row.revoke_version === null) {
