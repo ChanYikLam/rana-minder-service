@@ -30,10 +30,18 @@ function buildController(stubs: {
   relation?: AnyStub;
 }): MembershipNestController {
   return new MembershipNestController(
-    (stubs.submit ?? { execute: async () => ({}) }) as unknown as SubmitDepartmentApplicationCommand,
-    (stubs.decide ?? { execute: async () => ({}) }) as unknown as DecideDepartmentApplicationCommand,
-    (stubs.execute ?? { execute: async () => ({}) }) as unknown as ExecuteDepartmentApplicationCommand,
-    (stubs.withdraw ?? { execute: async () => ({}) }) as unknown as WithdrawDepartmentApplicationCommand,
+    (stubs.submit ?? {
+      execute: async () => ({}),
+    }) as unknown as SubmitDepartmentApplicationCommand,
+    (stubs.decide ?? {
+      execute: async () => ({}),
+    }) as unknown as DecideDepartmentApplicationCommand,
+    (stubs.execute ?? {
+      execute: async () => ({}),
+    }) as unknown as ExecuteDepartmentApplicationCommand,
+    (stubs.withdraw ?? {
+      execute: async () => ({}),
+    }) as unknown as WithdrawDepartmentApplicationCommand,
     (stubs.experience ?? { currentPeriod: async () => null }) as unknown as MemberExperienceQuery,
     (stubs.relation ?? { listCurrentValid: async () => [] }) as unknown as DepartmentRelationQuery,
   );
@@ -48,11 +56,9 @@ test('提交部门申请成功返回 { code: 0, data }', async () => {
   const controller = buildController({
     submit: { execute: async () => created },
   });
-  const result = await controller.submitDepartmentApply(
-    'club-1',
-    authedRequest,
-    { input: { type: 'join', targetDeptId: 'dept-1', reason: 'want' } },
-  );
+  const result = await controller.submitDepartmentApply('club-1', authedRequest, {
+    input: { type: 'join', targetDeptId: 'dept-1', reason: 'want' },
+  });
   assert.equal(result.code, 0);
   assert.deepEqual(result.data, created);
 });
@@ -125,8 +131,7 @@ test('未知错误兜底为 IFC-ERR-016 / 500', async () => {
     },
   });
   await assert.rejects(
-    async () =>
-      controller.withdrawDepartmentApply('app-1', authedRequest, { input: {} }),
+    async () => controller.withdrawDepartmentApply('app-1', authedRequest, { input: {} }),
     (err: unknown) => {
       const http = err as HttpException;
       assert.equal(http.getStatus(), 500);

@@ -15,6 +15,7 @@ import {
   StubRecruitmentAuthorization,
   StubRecruitmentForm,
 } from './testing/recruitment-test-support';
+import type { InvitationPort } from './ports/invitation.port';
 import { RecruitmentActivity } from '../domain/models/recruitment-activity';
 import { DefaultRecruitmentActivityStateMachine } from '../domain/state-machines/recruitment-activity.state-machine';
 import { DefaultCreateRecruitmentActivityUseCase } from './commands/create-recruitment-activity.use-case';
@@ -30,6 +31,17 @@ const CLUB_ID = 'club-1';
 const MANAGER = 'manager-1';
 const APPLICANT = 'applicant-1';
 const NOW = new Date('2026-06-01T09:00:00Z');
+
+/** 录取邀请端口桩：记录调用，不真正创建邀请 */
+function stubInvitationPort(): InvitationPort & { calls: { count: number } } {
+  const calls = { count: 0 };
+  return {
+    calls,
+    createAdmissionInvitation: async () => {
+      calls.count += 1;
+    },
+  };
+}
 
 describe('admission invitation & acceptance (REC-043 / REC-044)', () => {
   let repo: InMemoryRecruitmentRepository;
@@ -86,7 +98,7 @@ describe('admission invitation & acceptance (REC-043 / REC-044)', () => {
     });
   });
 
-  it('部门 ADMIT 后发邀请并接受到 ACCEPTED', async () => {
+  it('部门 ADMIT 后发邀请并接受到 ACCEPTED（并创建跨模块邀请）', async () => {
     await new DefaultRecordDepartmentDecisionUseCase(repo, auth).execute({
       applicationId,
       departmentId: 'dept-a',
@@ -96,9 +108,12 @@ describe('admission invitation & acceptance (REC-043 / REC-044)', () => {
       now: NOW,
     });
 
-    const send = new SendAdmissionInvitationUseCase(repo, auth);
+    const invite = stubInvitationPort();
+    const send = new SendAdmissionInvitationUseCase(repo, auth, invite);
     const sent = await send.execute({ applicationId, actor: MANAGER, now: NOW });
     assert.strictEqual(sent.status, 'ADMITTED');
+    // 4.4b 收口：发送录取后应委托邀请端口创建跨模块邀请对象
+    assert.equal(invite.calls.count, 1);
 
     const accept = new AcceptAdmissionInvitationUseCase(repo, auth);
     const accepted = await accept.execute({ applicationId, actor: APPLICANT, now: NOW });

@@ -67,7 +67,7 @@ describe('deriveSessionSecret 区分度（异客户端密钥派生不同）', ()
 });
 
 describe('isSecretRef 分支语义（identity.module.ts:142-144 装配契约的纯函数级验证）', () => {
-  it("引用形态（${env:...} 前缀）→ isSecretRef=true，必须先解析再派生", () => {
+  it('引用形态（${env:...} 前缀）→ isSecretRef=true，必须先解析再派生', () => {
     process.env['RANAMINDER_TEST_CASDOOR_SECRET'] = 'live-real-secret-from-env';
     try {
       const ref = '${env:RANAMINDER_TEST_CASDOOR_SECRET}';

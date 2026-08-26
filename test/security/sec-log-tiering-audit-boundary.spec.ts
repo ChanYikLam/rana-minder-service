@@ -17,7 +17,10 @@ import {
   AuditBoundaryViolation,
   DefaultAuditBoundaryAssert,
 } from '../../src/platform/observability/audit-link/audit-boundary';
-import { decide, redactRecord } from '../../src/platform/observability/domain/services/redaction.rules';
+import {
+  decide,
+  redactRecord,
+} from '../../src/platform/observability/domain/services/redaction.rules';
 import { DefaultLogSanitizer } from '../../src/platform/observability/logging/sanitizer';
 
 describe('SEC-CTL-030 审计边界：审计/权限/决策字段禁止进入运行日志层', () => {

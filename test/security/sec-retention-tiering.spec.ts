@@ -23,9 +23,10 @@ describe('SEC-CTL-038 日志保留期分层基线', () => {
     assert.equal(policy.onlineDays, 30);
     assert.equal(policy.archiveDays, 60);
     assert.equal(policy.totalDays, 90);
-    assert.equal(DEFAULT_RETENTION_POLICIES.normal.onlineDays +
-      DEFAULT_RETENTION_POLICIES.normal.archiveDays,
-    DEFAULT_RETENTION_POLICIES.normal.totalDays);
+    assert.equal(
+      DEFAULT_RETENTION_POLICIES.normal.onlineDays + DEFAULT_RETENTION_POLICIES.normal.archiveDays,
+      DEFAULT_RETENTION_POLICIES.normal.totalDays,
+    );
   });
 
   it('SEC-CTL-038：网络与安全事件日志不低于 6 个月且在线+归档自洽', () => {
@@ -34,10 +35,7 @@ describe('SEC-CTL-038 日志保留期分层基线', () => {
       assert.ok(policy.totalDays >= 180, `${tier} 总保留 ${policy.totalDays} 天`);
       assert.equal(policy.onlineDays + policy.archiveDays, policy.totalDays, tier);
     }
-    assert.deepEqual(
-      resolveRetention('security'),
-      DEFAULT_RETENTION_POLICIES.security,
-    );
+    assert.deepEqual(resolveRetention('security'), DEFAULT_RETENTION_POLICIES.security);
   });
 
   it('SEC-CTL-038：未知类别按 normal 兜底且 isLogTier 判别三类合法层级', () => {

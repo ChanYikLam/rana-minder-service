@@ -130,7 +130,9 @@ export class AccountAccessController {
    * 注：本地吊销写入已落地；令牌的"服务端强制失效"依赖认证链路会话解析
    * （当前为 RejectAllAuthSessionProvider 桩，待认证基建接入后闭环）。
    */
-  async logout(actor: ActorContext): Promise<AccountAccessControllerResult<{ ok: true; revokedVersion: number }>> {
+  async logout(
+    actor: ActorContext,
+  ): Promise<AccountAccessControllerResult<{ ok: true; revokedVersion: number }>> {
     return this.run(actor, async () => {
       try {
         const revokedVersion = await this.sessionRevocation.invalidateAllSessions(actor.subjectId);

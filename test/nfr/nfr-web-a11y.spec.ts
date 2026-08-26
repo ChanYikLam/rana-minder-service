@@ -20,10 +20,11 @@ import assert from 'node:assert/strict';
 
 import { readRepo } from './nfr-support';
 import { toApiError } from '../../src/modules/identity/interfaces/http/error-http';
-import { IdentityCommandError, IdentityErrorCode } from '../../src/modules/identity/application/errors';
 import {
-  IFC_ERROR_CODES,
-} from '../../src/common/contracts/api-error';
+  IdentityCommandError,
+  IdentityErrorCode,
+} from '../../src/modules/identity/application/errors';
+import { IFC_ERROR_CODES } from '../../src/common/contracts/api-error';
 
 const uiuxSpec = (): string => readRepo('docs/frontend/前端UIUX设计规范-v1.0.md');
 const srsDoc = (): string => readRepo('docs/specification/SRS-v1.0.md');
@@ -36,7 +37,10 @@ const testSpec = (): string => readRepo('docs/specification/测试规格与验�
 describe('TST-NFR-040 电脑与手机业务能力一致', () => {
   it('TST-NFR-040: 响应式双端能力一致为已确认约束，且不承诺原生 App', () => {
     const uiux = uiuxSpec();
-    assert.match(uiux, /响应式一致 \| 电脑与手机业务能力一致；布局可不同，关键操作、结果和授权不得只在电脑端存在/);
+    assert.match(
+      uiux,
+      /响应式一致 \| 电脑与手机业务能力一致；布局可不同，关键操作、结果和授权不得只在电脑端存在/,
+    );
     // 首期不要求原生 App：技术栈约束显式声明"响应式 Web，无原生 App"
     assert.match(uiux, /响应式 Web，无原生 App/);
     // 上游验收合同同样声明布局可不同、授权不得只在电脑端存在
@@ -54,7 +58,10 @@ describe('TST-NFR-041 正式支持浏览器矩阵', () => {
     for (const browser of ['Chrome', 'Edge', 'Safari']) {
       assert.ok(srs.includes(browser), `浏览器矩阵缺少 ${browser}`);
     }
-    assert.match(testSpec(), /Chrome、Edge、Safari、Android Chrome 和 iPhone Safari 当时近期两个主要版本/);
+    assert.match(
+      testSpec(),
+      /Chrome、Edge、Safari、Android Chrome 和 iPhone Safari 当时近期两个主要版本/,
+    );
     // 版本随发布日滚动，不永久绑定编写时版本号
     assert.match(testSpec(), /“近期两个主要版本”随发布日滚动，不永久绑定编写 SRS 时的版本号/);
   });
@@ -79,7 +86,9 @@ describe('TST-NFR-043 简体中文与国际化结构', () => {
     // 后端结构基础：17 类稳定错误码只增不改；message 为安全可披露最小原因
     assert.equal(IFC_ERROR_CODES.length, 17);
     assert.deepEqual(IFC_ERROR_CODES.slice(0, 3), ['IFC-ERR-001', 'IFC-ERR-002', 'IFC-ERR-003']);
-    const result = toApiError(new IdentityCommandError(IdentityErrorCode.UNAUTHENTICATED, '未认证'));
+    const result = toApiError(
+      new IdentityCommandError(IdentityErrorCode.UNAUTHENTICATED, '未认证'),
+    );
     assert.equal(result.body.code, 'IFC-ERR-001');
     assert.equal(typeof result.body.message, 'string');
     // 文案资源与国际化结构要求冻结在前端技术设计：首期只交付简体中文，保留资源层
@@ -94,7 +103,10 @@ describe('TST-NFR-043 简体中文与国际化结构', () => {
     const samples = [
       new IdentityCommandError(IdentityErrorCode.UNAUTHENTICATED, '未认证').message,
       new IdentityCommandError(IdentityErrorCode.FORBIDDEN, '无权限').message,
-      new IdentityCommandError(IdentityErrorCode.REAUTH_REQUIRED, '高风险操作要求最近 10 分钟内重新认证').message,
+      new IdentityCommandError(
+        IdentityErrorCode.REAUTH_REQUIRED,
+        '高风险操作要求最近 10 分钟内重新认证',
+      ).message,
     ];
     for (const message of samples) {
       assert.match(message, /[\u4e00-\u9fa5]/, `用户可见消息应提供中文：${message}`);
@@ -113,7 +125,10 @@ describe('TST-NFR-044 键盘、标签与非纯颜色提示', () => {
     assert.match(uiux, /状态、错误和权限结果不得仅用颜色表达；核心流程必须可由键盘完成/);
     // 上游合同同样独立于颜色表达
     const contract = readRepo('docs/specification/测试规格与验收追踪-v1.0.md');
-    assert.match(contract, /核心操作可通过键盘完成且不会陷入无法退出的交互；控件有可理解标签；错误和状态不只靠颜色表达/);
+    assert.match(
+      contract,
+      /核心操作可通过键盘完成且不会陷入无法退出的交互；控件有可理解标签；错误和状态不只靠颜色表达/,
+    );
   });
 });
 
@@ -121,9 +136,15 @@ describe('TST-NFR-045 对比度数值门槛', () => {
   it('TST-NFR-045: WCAG 数值门槛冻结且设计令牌携带实测对比度（≥4.5:1 与 ≥3:1）', () => {
     const contract = readRepo('docs/specification/测试规格与验收追踪-v1.0.md');
     // 普通文字 ≥4.5:1；大号文字与非文本组件 ≥3:1
-    assert.match(contract, /普通文字对比度至少 4\.5:1，大号文字至少 3:1，必要的非文本界面组件和状态图形至少 3:1/);
+    assert.match(
+      contract,
+      /普通文字对比度至少 4\.5:1，大号文字至少 3:1，必要的非文本界面组件和状态图形至少 3:1/,
+    );
     // 达到阈值不宣称完整 AA 认证（边界同样冻结）
-    assert.match(uiuxSpec(), /达到 WCAG 2\.2 对应 AA 数值（对比度、键盘、非纯颜色提示），不扩大为完整 AA 认证/);
+    assert.match(
+      uiuxSpec(),
+      /达到 WCAG 2\.2 对应 AA 数值（对比度、键盘、非纯颜色提示），不扩大为完整 AA 认证/,
+    );
     // 设计令牌已给出实测数值样例（如 8.14:1 / 4.80:1），证明测量口径可重复
     const uiux = uiuxSpec();
     assert.match(uiux, /8\.14:1/);

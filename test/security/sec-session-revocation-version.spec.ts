@@ -20,26 +20,18 @@ import {
   DefaultHandleAccountStatusEventUseCase,
   type HandleAccountStatusEventInput,
 } from '../../src/modules/identity/application/commands/handle-account-status-event.use-case';
-import type {
-  AccountAccessRepository,
-} from '../../src/modules/identity/application/ports/account-access-repository.port';
+import type { AccountAccessRepository } from '../../src/modules/identity/application/ports/account-access-repository.port';
 import type {
   IdentityAuditFact,
   IdentityAuditPort,
 } from '../../src/modules/identity/application/ports/identity-audit.port';
-import type {
-  SessionRevocationPort,
-} from '../../src/modules/identity/application/ports/session-revocation.port';
+import type { SessionRevocationPort } from '../../src/modules/identity/application/ports/session-revocation.port';
 import {
   AccountAccessState,
   DefaultAccountAccessStateMachine,
 } from '../../src/modules/identity/domain/state-machines/account-access.state-machine';
-import type {
-  AccountAccessSnapshot,
-} from '../../src/modules/identity/domain/models/account-access';
-import {
-  PostgresSessionRevocation,
-} from '../../src/modules/identity/infrastructure/postgres-session-revocation';
+import type { AccountAccessSnapshot } from '../../src/modules/identity/domain/models/account-access';
+import { PostgresSessionRevocation } from '../../src/modules/identity/infrastructure/postgres-session-revocation';
 import { IdentityUnitOfWork } from '../../src/modules/identity/infrastructure/unit-of-work';
 
 function snapshotOf(
@@ -127,7 +119,12 @@ class AuthSessionsFakeDb implements DbAdapter {
 
   /** 模拟重新登录：新增一条未失效会话 */
   addSession(sessionId: string, subjectId: string): void {
-    this.rows.push({ session_id: sessionId, subject_id: subjectId, revoke_version: 0, revoked_at: null });
+    this.rows.push({
+      session_id: sessionId,
+      subject_id: subjectId,
+      revoke_version: 0,
+      revoked_at: null,
+    });
   }
 
   async beginTransaction(): Promise<TransactionContext> {
@@ -147,11 +144,7 @@ class AuthSessionsFakeDb implements DbAdapter {
   async clearRlsContext(tx: TransactionContext): Promise<void> {
     this.events.push(`clear-rls:${tx.id}`);
   }
-  async query<T>(
-    _tx: TransactionContext,
-    sql: string,
-    params: readonly unknown[],
-  ): Promise<T[]> {
+  async query<T>(_tx: TransactionContext, sql: string, params: readonly unknown[]): Promise<T[]> {
     if (/UPDATE\s+auth_sessions/i.test(sql)) {
       const subjectId = params[0] as string;
       // 与真实 SQL 对齐：COALESCE((SELECT MAX(revoke_version) … WHERE subject_id=$1),0)+1
@@ -159,9 +152,7 @@ class AuthSessionsFakeDb implements DbAdapter {
         this.rows
           .filter((r) => r.subject_id === subjectId)
           .reduce((m, r) => Math.max(m, r.revoke_version), 0) + 1;
-      const targets = this.rows.filter(
-        (r) => r.subject_id === subjectId && r.revoked_at === null,
-      );
+      const targets = this.rows.filter((r) => r.subject_id === subjectId && r.revoked_at === null);
       for (const row of targets) {
         row.revoke_version = next;
         row.revoked_at = new Date('2026-08-24T09:00:00Z');
@@ -212,13 +203,10 @@ describe('SEC-CTL-004 会话撤销绑定账号事件与恢复边界', () => {
 
   it('SEC-CTL-004：删除后不得猜测禁用——非法跃迁拒绝且零副作用', async () => {
     const h = makeHarness(snapshotOf(AccountAccessState.DELETED, 2, 1));
-    await assert.rejects(
-      h.useCase.execute(inputOf({ type: 'DISABLED' })),
-      (err: unknown) => {
-        assert.equal((err as { code?: string })['code'], 'IFC-ERR-006');
-        return true;
-      },
-    );
+    await assert.rejects(h.useCase.execute(inputOf({ type: 'DISABLED' })), (err: unknown) => {
+      assert.equal((err as { code?: string })['code'], 'IFC-ERR-006');
+      return true;
+    });
     assert.deepEqual(h.saved, []);
     assert.deepEqual(h.revocations, []);
     assert.deepEqual(h.auditFacts, []);
@@ -257,7 +245,10 @@ describe('SEC-CTL-004 invalidateAllSessions 撤销版本单调推进（假 uow/d
     assert.equal(s3?.revoke_version, 0, '其他主体会话不受影响');
     assert.equal(s3?.revoked_at, null);
     assert.ok(finalRows.filter((r) => r.subject_id === 'u1').every((r) => r.revoked_at !== null));
-    assert.ok(db.events.some((e) => e.endsWith(':single')), '须在单目标 RLS 上下文内执行');
+    assert.ok(
+      db.events.some((e) => e.endsWith(':single')),
+      '须在单目标 RLS 上下文内执行',
+    );
   });
 
   it('SEC-CTL-004：脱离工作单元事务调用吊销被拒绝（无活动事务禁止读写）', async () => {

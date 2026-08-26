@@ -4,6 +4,9 @@
  * 表：batch_records。以真实持久化替代内存实现，保证批次状态跨进程一致。
  * 语义与 InMemoryBatchStore 对齐：save 在冲突时按输入版本 +1 递增（非乐观）；
  * saveIfVersion 执行乐观写（仅当当前版本 == expectedVersion）。
+ * 注意：save 的 INSERT VALUES 已把 version 写成 $4 = batch.version + 1，故
+ * ON CONFLICT DO UPDATE 直接采用 EXCLUDED.version（=输入版本+1），不再二次自增，
+ * 避免版本号跳 2（历史缺陷：version = EXCLUDED.version + 1 导致 +2，破坏乐观并发校验）。
  */
 
 import { Inject, Injectable } from '@nestjs/common';

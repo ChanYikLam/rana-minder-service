@@ -24,12 +24,21 @@ import { CompleteUploadCommand } from '../../src/modules/file/application/comman
 import { AskFileCheckCommand } from '../../src/modules/file/application/commands/ask-file-check.command';
 import { PromoteFileCommand } from '../../src/modules/file/application/commands/promote-file.command';
 import { FileStatusQuery } from '../../src/modules/file/application/queries/file-status.query';
-import { FileState, FileStateMachine } from '../../src/modules/file/domain/state-machines/file-state-machine';
+import {
+  FileState,
+  FileStateMachine,
+} from '../../src/modules/file/domain/state-machines/file-state-machine';
 import { UploadPolicy } from '../../src/modules/file/domain/services/upload-policy';
 import { FileTypeGuard } from '../../src/modules/file/domain/services/file-type-guard';
 
-import type { FileAccessContext, FileAccessRequest } from '../../src/modules/file/domain/services/access-policy';
-import { AccessPolicy, FileAccessAction } from '../../src/modules/file/domain/services/access-policy';
+import type {
+  FileAccessContext,
+  FileAccessRequest,
+} from '../../src/modules/file/domain/services/access-policy';
+import {
+  AccessPolicy,
+  FileAccessAction,
+} from '../../src/modules/file/domain/services/access-policy';
 import { WatermarkPolicy } from '../../src/modules/file/domain/services/watermark-policy';
 import { DefaultSignedUrlProvider } from '../../src/modules/file/infrastructure/signed-url-provider';
 import {
@@ -124,10 +133,7 @@ describe('OPS-VER-014 三私有 Bucket、只写一次与检查/晋升演练', ()
     const originalBytes = await flow.store.read(loc);
     assert.ok(originalBytes !== null);
 
-    const again = await flow.store.putQuarantine(
-      loc,
-      new Uint8Array([0xde, 0xad, 0xbe, 0xef]),
-    );
+    const again = await flow.store.putQuarantine(loc, new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
     assert.equal(again.ok, false, '同键重复写入必须被拒绝');
     assert.match(again.reason ?? '', /只写一次|已存在/);
     assert.deepEqual(await flow.store.read(loc), originalBytes, '原字节不得被覆盖');

@@ -120,7 +120,11 @@ describe('FileNestController 传输层', () => {
 
   it('upload 抛 InitiateUploadError → 422 IFC-ERR-006（而非 500）', async () => {
     const controller = makeController({
-      initiate: { execute: async () => { throw new InitiateUploadError('字段附件数量已达上限'); } },
+      initiate: {
+        execute: async () => {
+          throw new InitiateUploadError('字段附件数量已达上限');
+        },
+      },
     });
     let caught: HttpException | undefined;
     try {
@@ -140,7 +144,11 @@ describe('FileNestController 传输层', () => {
 
   it('未知错误 → 500 IFC-ERR-016 兜底', async () => {
     const controller = makeController({
-      initiate: { execute: async () => { throw new Error('boom'); } },
+      initiate: {
+        execute: async () => {
+          throw new Error('boom');
+        },
+      },
     });
     let caught: HttpException | undefined;
     try {

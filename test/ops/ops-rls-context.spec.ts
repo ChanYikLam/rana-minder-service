@@ -73,7 +73,10 @@ describe('OPS-VER-008 RLS 连接上下文全部结束路径无残留演练', () 
     db.commitError = new Error('connection-reset-during-commit');
     const uow = new IdentityUnitOfWork(db);
 
-    await assert.rejects(uow.run(SCOPE, async () => undefined), /connection-reset/);
+    await assert.rejects(
+      uow.run(SCOPE, async () => undefined),
+      /connection-reset/,
+    );
 
     const prefixes = db.events.map((e) => e.split(':')[0]);
     assert.deepEqual(prefixes, ['begin', 'set-rls', 'commit', 'rollback', 'clear-rls']);

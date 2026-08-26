@@ -15,10 +15,7 @@
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  collectSql,
-  loadManifest,
-} from './helpers/migration-manifest';
+import { collectSql, loadManifest } from './helpers/migration-manifest';
 import { canResolvePg, loadMigrate } from './helpers/migrate-loader';
 import {
   MigrateRecordingDb,
@@ -52,55 +49,51 @@ before(async () => {
 });
 
 describe('DATA-MIG-book 迁移执行器簿记（SQL 记录器假适配器 × 真实 runMigrations）', () => {
-  it(
-    'DATA-MIG-book-01: 全新库→按序全部应用且每条恰一次',
-    { skip: loaderSkip },
-    () => {
-      assert.ok(migrate && db && dry);
-      // 返回值 = 全部版本、严格按清单顺序
-      assert.deepEqual(appliedAll, VERSIONS);
+  it('DATA-MIG-book-01: 全新库→按序全部应用且每条恰一次', { skip: loaderSkip }, () => {
+    assert.ok(migrate && db && dry);
+    // 返回值 = 全部版本、严格按清单顺序
+    assert.deepEqual(appliedAll, VERSIONS);
 
-      // 簿记入账：每版本恰一次 INSERT，顺序与清单一致
-      const inserts = db.statements.filter((s) =>
-        /^INSERT INTO schema_migrations\b/i.test(normalizeSql(s.sql)),
-      );
+    // 簿记入账：每版本恰一次 INSERT，顺序与清单一致
+    const inserts = db.statements.filter((s) =>
+      /^INSERT INTO schema_migrations\b/i.test(normalizeSql(s.sql)),
+    );
+    assert.deepEqual(
+      inserts.map((s) => String(s.params[0])),
+      VERSIONS,
+      'schema_migrations 入账序列应等于迁移清单全序',
+    );
+
+    // 每个 up(runner) 恰被执行一次，且各版本块非空（20130000 无操作版除外）
+    for (const version of VERSIONS) {
+      const block = dry.blocks.get(version);
+      assert.ok(block, `版本 ${version} 未产生语句块`);
+      assert.equal(block.insertCount, 1, `版本 ${version} 应恰入账一次`);
+    }
+    // 无操作迁移（20260820130000）仅允许 OPS-UPG-002 升级防线的
+    // information_schema 探测 SELECT，不允许任何 DDL（SELECT 不计入 DDL 口径）
+    const nonDdlSqls = (sqls: string[]): string[] =>
+      sqls.filter((s) => !/^\s*(SELECT|INSERT|UPDATE|DELETE)\b/i.test(normalizeSql(s)));
+    assert.ok(NO_OP_STEM.startsWith('2026'), '无操作迁移版本未在清单中找到');
+    for (const noOp of [NO_OP_STEM]) {
       assert.deepEqual(
-        inserts.map((s) => String(s.params[0])),
-        VERSIONS,
-        'schema_migrations 入账序列应等于迁移清单全序',
+        nonDdlSqls(dry.blocks.get(noOp)?.sqls ?? ['missing']),
+        [],
+        '无操作迁移不应发出 DDL（升级防线探测 SELECT 不计入）',
       );
+    }
 
-      // 每个 up(runner) 恰被执行一次，且各版本块非空（20130000 无操作版除外）
-      for (const version of VERSIONS) {
-        const block = dry.blocks.get(version);
-        assert.ok(block, `版本 ${version} 未产生语句块`);
-        assert.equal(block.insertCount, 1, `版本 ${version} 应恰入账一次`);
-      }
-      // 无操作迁移（20260820130000）仅允许 OPS-UPG-002 升级防线的
-      // information_schema 探测 SELECT，不允许任何 DDL（SELECT 不计入 DDL 口径）
-      const nonDdlSqls = (sqls: string[]): string[] =>
-        sqls.filter((s) => !/^\s*(SELECT|INSERT|UPDATE|DELETE)\b/i.test(normalizeSql(s)));
-      assert.ok(NO_OP_STEM.startsWith('2026'), '无操作迁移版本未在清单中找到');
-      for (const noOp of [NO_OP_STEM]) {
-        assert.deepEqual(
-          nonDdlSqls(dry.blocks.get(noOp)?.sqls ?? ['missing']),
-          [],
-          '无操作迁移不应发出 DDL（升级防线探测 SELECT 不计入）',
-        );
-      }
-
-      // 事务生命周期：1 个建表探测事务 + N 个迁移事务；全部 commit、零 rollback
-      const txCount = VERSIONS.length + 1;
-      assert.equal(db.events.filter((e) => e.startsWith('begin:')).length, txCount);
-      assert.equal(db.events.filter((e) => e.startsWith('commit:')).length, txCount);
-      assert.equal(db.events.filter((e) => e.startsWith('rollback:')).length, 0);
-      // 每个事务内建立 unprotected RLS 最小上下文（migrate.ts withMigrationTx）
-      assert.equal(
-        db.events.filter((e) => e.startsWith('set-rls:') && e.endsWith(':unprotected')).length,
-        txCount,
-      );
-    },
-  );
+    // 事务生命周期：1 个建表探测事务 + N 个迁移事务；全部 commit、零 rollback
+    const txCount = VERSIONS.length + 1;
+    assert.equal(db.events.filter((e) => e.startsWith('begin:')).length, txCount);
+    assert.equal(db.events.filter((e) => e.startsWith('commit:')).length, txCount);
+    assert.equal(db.events.filter((e) => e.startsWith('rollback:')).length, 0);
+    // 每个事务内建立 unprotected RLS 最小上下文（migrate.ts withMigrationTx）
+    assert.equal(
+      db.events.filter((e) => e.startsWith('set-rls:') && e.endsWith(':unprotected')).length,
+      txCount,
+    );
+  });
 
   it('DATA-MIG-book-02: 重跑→零应用、零 up SQL（幂等可重入）', { skip: loaderSkip }, async () => {
     assert.ok(migrate && db);
@@ -119,9 +112,7 @@ describe('DATA-MIG-book 迁移执行器簿记（SQL 记录器假适配器 × 真
       assert.doesNotMatch(sql, /CREATE TABLE IF NOT EXISTS (?!schema_migrations)/i);
     }
     // 零迁移事务：无新增 begin（簿记探测自身占用一个事务）
-    const newTxs = db.events
-      .slice(eventsBefore)
-      .filter((e) => e.startsWith('begin:')).length;
+    const newTxs = db.events.slice(eventsBefore).filter((e) => e.startsWith('begin:')).length;
     assert.equal(newTxs, 1, '重跑仅允许一个簿记探测事务');
   });
 
@@ -159,7 +150,9 @@ describe('DATA-MIG-book 迁移执行器簿记（SQL 记录器假适配器 × 真
       const droppedTablesOf = (downSqls: readonly string[]): Set<string> =>
         new Set(
           downSqls
-            .map((s) => /^\s*DROP TABLE (?:IF EXISTS\s+)?public\.(\w+)/i.exec(s)?.[1]?.toLowerCase())
+            .map((s) =>
+              /^\s*DROP TABLE (?:IF EXISTS\s+)?public\.(\w+)/i.exec(s)?.[1]?.toLowerCase(),
+            )
             .filter((n): n is string => Boolean(n)),
         );
 
@@ -167,7 +160,9 @@ describe('DATA-MIG-book 迁移执行器簿记（SQL 记录器假适配器 × 真
         const map = new Map<string, string>();
         for (const s of upSqls) {
           const m =
-            /^\s*CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS\s+)?(\w+)\s+ON (?:public\.)?(\w+)/i.exec(s);
+            /^\s*CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS\s+)?(\w+)\s+ON (?:public\.)?(\w+)/i.exec(
+              s,
+            );
           if (m) map.set(m[1].toLowerCase(), m[2].toLowerCase());
         }
         return map;
@@ -306,7 +301,10 @@ describe('DATA-MIG-book 迁移执行器簿记（SQL 记录器假适配器 × 真
 
       // 该版本不入账、前序版本保留
       const ledger = failDb.ledgerSnapshot();
-      assert.ok(!ledger.includes(VERSIONS[targetIndex]), `失败版本 ${VERSIONS[targetIndex]} 不得入账`);
+      assert.ok(
+        !ledger.includes(VERSIONS[targetIndex]),
+        `失败版本 ${VERSIONS[targetIndex]} 不得入账`,
+      );
       assert.deepEqual(ledger, VERSIONS.slice(0, targetIndex), '失败前的版本应全部保留');
       assert.ok(!failDb.statements.some((s) => normalizeSql(s.sql) === targetSql));
 
@@ -422,7 +420,9 @@ it(
   async () => {
     assert.ok(migrate && realReady);
     const req = eval('require') as NodeRequire;
-    const pg = req('pg') as { Pool: new (c: object) => { connect(): Promise<RealClient>; end(): Promise<void> } };
+    const pg = req('pg') as {
+      Pool: new (c: object) => { connect(): Promise<RealClient>; end(): Promise<void> };
+    };
     const pool = new pg.Pool({ connectionString: REAL_URL, connectionTimeoutMillis: 10_000 });
     const client = await pool.connect();
     try {
@@ -483,7 +483,11 @@ it(
       }
       for (const table of CORE_TABLES) {
         const exists = await client.query(`SELECT to_regclass('public.${table}') AS oid`);
-        assert.equal((exists.rows[0] as { oid: string | null }).oid, null, `down 后 public.${table} 应不存在`);
+        assert.equal(
+          (exists.rows[0] as { oid: string | null }).oid,
+          null,
+          `down 后 public.${table} 应不存在`,
+        );
       }
       // 操作员收尾：清理簿记表，不留演练残留
       await client.query('DROP TABLE IF EXISTS schema_migrations');

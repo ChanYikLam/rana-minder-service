@@ -23,11 +23,14 @@ describe('SEC-CTL-027 秘密引用解析失败关闭', () => {
     const previous = process.env[ENV_VAR];
     delete process.env[ENV_VAR];
     try {
-      assert.throws(() => resolveSecret(REF), (err: unknown) => {
-        assert.ok(err instanceof SecretRefError);
-        assert.match(err.message, /not set/);
-        return true;
-      });
+      assert.throws(
+        () => resolveSecret(REF),
+        (err: unknown) => {
+          assert.ok(err instanceof SecretRefError);
+          assert.match(err.message, /not set/);
+          return true;
+        },
+      );
     } finally {
       if (previous !== undefined) process.env[ENV_VAR] = previous;
     }

@@ -107,14 +107,20 @@ describe('assertIdempotencyKeyDistinctFromTrackingNumber', () => {
 describe('InMemoryIdempotencyStore', () => {
   it('begin first true', async () => {
     const store = new InMemoryIdempotencyStore();
-    assert.equal(await store.begin('k1', 'intent-1', new Date(Date.now() - 1000).toISOString()), true);
+    assert.equal(
+      await store.begin('k1', 'intent-1', new Date(Date.now() - 1000).toISOString()),
+      true,
+    );
     const r = await store.find('k1');
     assert.equal(r?.status, IdempotencyRecordStatus.EXECUTING);
   });
   it('begin duplicate false', async () => {
     const store = new InMemoryIdempotencyStore();
     await store.begin('k1', 'intent-1', new Date(Date.now() - 1000).toISOString());
-    assert.equal(await store.begin('k1', 'intent-2', new Date(Date.now() - 1000).toISOString()), false);
+    assert.equal(
+      await store.begin('k1', 'intent-2', new Date(Date.now() - 1000).toISOString()),
+      false,
+    );
   });
   it('find nonexistent null', async () => {
     assert.equal(await new InMemoryIdempotencyStore().find('x'), null);

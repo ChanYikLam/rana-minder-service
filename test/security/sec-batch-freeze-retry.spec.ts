@@ -16,10 +16,7 @@ import {
   summarizeBatch,
   validateRetryBatch,
 } from '../../src/platform/tasks/batch/batch-rules';
-import {
-  BatchItemStatus,
-  BatchStatus,
-} from '../../src/platform/tasks/contracts';
+import { BatchItemStatus, BatchStatus } from '../../src/platform/tasks/contracts';
 import type {
   BatchItemInput,
   BatchItemResult,
@@ -59,13 +56,7 @@ describe('SEC-CTL-023 批量重试仅包含原失败项且冻结语义不扩散'
       { items: [item('zz-new')], reason: /新对象/ },
       { items: [item('b'), item('b')], reason: /重复/ },
     ]) {
-      const verdict = validateRetryBatch(
-        ORIGINAL,
-        bad.items,
-        'INVITE_BATCH',
-        'club',
-        'CLUB',
-      );
+      const verdict = validateRetryBatch(ORIGINAL, bad.items, 'INVITE_BATCH', 'club', 'CLUB');
       assert.equal(verdict.ok, false, JSON.stringify(bad.items));
       assert.match(verdict.reason ?? '', bad.reason);
     }
@@ -73,13 +64,22 @@ describe('SEC-CTL-023 批量重试仅包含原失败项且冻结语义不扩散'
 
   it('SEC-CTL-023：操作类型/业务类型/作用域与原批次不一致拒绝（冻结不可改写）', () => {
     assert.equal(validateRetryBatch(ORIGINAL, [item('b')], 'OTHER_OP', 'club', 'CLUB').ok, false);
-    assert.equal(validateRetryBatch(ORIGINAL, [item('b')], 'INVITE_BATCH', 'joint', 'CLUB').ok, false);
-    assert.equal(validateRetryBatch(ORIGINAL, [item('b')], 'INVITE_BATCH', 'club', 'PLATFORM').ok, false);
+    assert.equal(
+      validateRetryBatch(ORIGINAL, [item('b')], 'INVITE_BATCH', 'joint', 'CLUB').ok,
+      false,
+    );
+    assert.equal(
+      validateRetryBatch(ORIGINAL, [item('b')], 'INVITE_BATCH', 'club', 'PLATFORM').ok,
+      false,
+    );
   });
 
   it('SEC-CTL-023：selectRetryableItems 只挑出失败项；部分成功汇总保留成功项', () => {
     const retryable = selectRetryableItems(ORIGINAL.frozenItems, ORIGINAL.itemResults);
-    assert.deepEqual(retryable.map((i) => i.itemId), ['b', 'c']);
+    assert.deepEqual(
+      retryable.map((i) => i.itemId),
+      ['b', 'c'],
+    );
 
     const summary = summarizeBatch({
       batchId: 'batch-1',

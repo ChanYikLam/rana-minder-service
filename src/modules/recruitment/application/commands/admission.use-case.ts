@@ -8,6 +8,8 @@
 import { Application } from '../../domain/models/application';
 import type { RecruitmentRepository } from '../ports/recruitment-repository.port';
 import type { RecruitmentAuthorizationPort } from '../ports/recruitment-authorization.port';
+import type { InvitationPort } from '../ports/invitation.port';
+import { NotWiredInvitationPort } from '../ports/invitation.port';
 import { recruitmentErrors } from '../errors';
 
 export interface SendInvitationInput {
@@ -15,6 +17,8 @@ export interface SendInvitationInput {
   readonly actor: string;
   readonly now: Date;
   readonly expectedVersion?: number;
+  /** 邀请有效期（ISO 时间；缺省由邀请端口默认值补足） */
+  readonly expiresAt?: string;
 }
 export interface AcceptInvitationInput {
   readonly applicationId: string;
@@ -30,6 +34,7 @@ export class SendAdmissionInvitationUseCase {
   constructor(
     private readonly repository: RecruitmentRepository,
     private readonly authorization: RecruitmentAuthorizationPort,
+    private readonly invitationPort: InvitationPort = new NotWiredInvitationPort(),
   ) {}
 
   async execute(input: SendInvitationInput): Promise<AdmissionResult> {
@@ -50,7 +55,8 @@ export class SendAdmissionInvitationUseCase {
       throw recruitmentErrors.conflict('申请版本冲突，请刷新后重试');
     }
     const paths = await this.repository.loadDepartmentPathsByApplication(input.applicationId);
-    if (!paths.some((path) => path.status === 'ADMITTED')) {
+    const admitted = paths.find((path) => path.status === 'ADMITTED');
+    if (admitted === undefined) {
       throw recruitmentErrors.preconditionFailed('发送录取邀请前须存在部门 ADMITTED 的考察结论');
     }
     const application = Application.fromSnapshot(snapshot);
@@ -58,6 +64,16 @@ export class SendAdmissionInvitationUseCase {
       throw recruitmentErrors.preconditionFailed('发送录取邀请失败');
     }
     await this.repository.saveApplication(application.toSnapshot(), snapshot.revisionNumber);
+    // 4.4b 收口：把录取收敛为邀请模块真实 INV-001 邀请对象（REC-024/REC-045），
+    // 打通“录取→邀请→接受→成员激活”核心链路。邀请失败须上抛，不得静默伪造成功。
+    await this.invitationPort.createAdmissionInvitation({
+      issuerId: input.actor,
+      issuerClubId: snapshot.clubId,
+      inviteeId: snapshot.applicantId,
+      clubId: snapshot.clubId,
+      decisionRef: admitted.id,
+      expiresAt: input.expiresAt ?? '',
+    });
     return { status: application.status };
   }
 }

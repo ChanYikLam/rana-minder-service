@@ -16,7 +16,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Request } from 'express';
 
-import { AuthGuard, sessionFromRequest } from '../../src/modules/identity/interfaces/nest/auth.guard';
+import {
+  AuthGuard,
+  sessionFromRequest,
+} from '../../src/modules/identity/interfaces/nest/auth.guard';
 import {
   RejectAllAuthSessionProvider,
   type AuthSession,
@@ -53,29 +56,26 @@ describe('AuthGuard 未认证 → 401 IFC-ERR-001（体形状 API-GEN-005）', (
 
   it('401 错误体恰为 {code, message, supportId} 三字段，code=IFC-ERR-001', async () => {
     const guard = new AuthGuard(new RejectAllAuthSessionProvider(), createTraceContextAdapter());
-    await assert.rejects(
-      guard.canActivate(fakeExecutionContext({})),
-      (error: unknown) => {
-        if (
-          error === null ||
-          typeof error !== 'object' ||
-          !('getStatus' in error) ||
-          typeof (error as { getStatus: unknown }).getStatus !== 'function'
-        ) {
-          return false;
-        }
-        const httpError = error as { getStatus(): number; getResponse(): unknown };
-        const body = httpError.getResponse() as Record<string, unknown>;
-        return (
-          httpError.getStatus() === 401 &&
-          body['code'] === 'IFC-ERR-001' &&
-          typeof body['message'] === 'string' &&
-          body['message'].length > 0 &&
-          typeof body['supportId'] === 'string' &&
-          Object.keys(body).length === 3
-        );
-      },
-    );
+    await assert.rejects(guard.canActivate(fakeExecutionContext({})), (error: unknown) => {
+      if (
+        error === null ||
+        typeof error !== 'object' ||
+        !('getStatus' in error) ||
+        typeof (error as { getStatus: unknown }).getStatus !== 'function'
+      ) {
+        return false;
+      }
+      const httpError = error as { getStatus(): number; getResponse(): unknown };
+      const body = httpError.getResponse() as Record<string, unknown>;
+      return (
+        httpError.getStatus() === 401 &&
+        body['code'] === 'IFC-ERR-001' &&
+        typeof body['message'] === 'string' &&
+        body['message'].length > 0 &&
+        typeof body['supportId'] === 'string' &&
+        Object.keys(body).length === 3
+      );
+    });
   });
 
   it('无活跃追踪上下文 → supportId 回退为新生成 traceId（tr_ 前缀格式合法）', async () => {
@@ -86,7 +86,7 @@ describe('AuthGuard 未认证 → 401 IFC-ERR-001（体形状 API-GEN-005）', (
     });
   });
 
-  it("supportId 复用当前追踪上下文的 traceId（与 X-Trace-Id 一致；CAS-SEC-004 最少关联追踪编号）", async () => {
+  it('supportId 复用当前追踪上下文的 traceId（与 X-Trace-Id 一致；CAS-SEC-004 最少关联追踪编号）', async () => {
     const trace = createTraceContextAdapter();
     const guard = new AuthGuard(new RejectAllAuthSessionProvider(), trace);
     // 校验必须在 ALS 上下文内取样：assert.rejects 的验证函数运行于上下文之外，
@@ -96,9 +96,9 @@ describe('AuthGuard 未认证 → 401 IFC-ERR-001（体形状 API-GEN-005）', (
       try {
         await guard.canActivate(fakeExecutionContext({}));
       } catch (error) {
-        observed.supportId = (
-          error as { getResponse(): Record<string, unknown> }
-        ).getResponse()['supportId'];
+        observed.supportId = (error as { getResponse(): Record<string, unknown> }).getResponse()[
+          'supportId'
+        ];
         observed.ctxTraceId = trace.current()?.traceId;
       }
       throw new Error('guard-rejection-recorded');
@@ -137,7 +137,7 @@ describe('AuthGuard 已认证 → 放行并挂载 request.authSession', () => {
     assert.equal(mounted.now.getTime(), Date.parse('2026-08-25T08:00:00.000Z'));
   });
 
-  it("AUT 分面：请求方自报身份头不被采纳——挂载值只来自会话源", async () => {
+  it('AUT 分面：请求方自报身份头不被采纳——挂载值只来自会话源', async () => {
     const guard = new AuthGuard(stubSessionProvider(session), createTraceContextAdapter());
     // 攻击者伪造 x-subjected-user 头试图冒充他人
     const request: Record<string, unknown> = { headers: { 'x-subjected-user': 'victim' } };

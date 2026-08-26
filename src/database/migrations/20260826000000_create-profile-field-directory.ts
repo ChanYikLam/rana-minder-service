@@ -87,5 +87,10 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
 }
 
 export async function down(runner: MigrationQueryRunner): Promise<void> {
+  // 与 up 侧对称：先删策略、再关 RLS、最后删表（避免遗留 policy/RLS 漂移）。
+  await runner.query(
+    `DROP POLICY IF EXISTS p_profile_field_directory_all ON public.profile_field_directory`,
+  );
+  await runner.query(`ALTER TABLE public.profile_field_directory DISABLE ROW LEVEL SECURITY`);
   await runner.query(`DROP TABLE IF EXISTS public.profile_field_directory`);
 }

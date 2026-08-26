@@ -46,11 +46,7 @@ interface Row {
 class FakeBackupTarget {
   readonly snapshots = new Map<string, { rows: Map<string, Row[]>; manifest: Row }>();
 
-  createBackup(
-    backupId: string,
-    tables: Record<string, Row[]>,
-    completedAt: Date,
-  ): Row {
+  createBackup(backupId: string, tables: Record<string, Row[]>, completedAt: Date): Row {
     const rows = new Map<string, Row[]>();
     let sizeBytes = 0;
     for (const [table, tableRows] of Object.entries(tables)) {
@@ -91,10 +87,7 @@ class FakeBackupTarget {
 
 /** 恢复门核验项 */
 type GateCheck =
-  | 'restoreVerified'
-  | 'deletionReplayConverged'
-  | 'attachmentConsistent'
-  | 'casdoorReconciled';
+  'restoreVerified' | 'deletionReplayConverged' | 'attachmentConsistent' | 'casdoorReconciled';
 
 /** 恢复门：普通写入门控，四项核验全部收口才开放 */
 class RecoveryGate {
@@ -151,7 +144,10 @@ describe('OPS-VER-020 备份覆盖、保护、保留和可读性演练', () => {
       fetchFn: fakeFetchFor(target),
     });
     const recentOnly = await adapter.recentBackups(1);
-    assert.deepEqual(recentOnly.map((r) => r.backupId), ['bk-new']);
+    assert.deepEqual(
+      recentOnly.map((r) => r.backupId),
+      ['bk-new'],
+    );
     assert.equal((await adapter.lastBackup())?.backupId, 'bk-new');
   });
 
@@ -214,14 +210,17 @@ describe('OPS-VER-021 全量恢复 RPO/RTO 与恢复门演练', () => {
     // ④ 一致性断言：恢复后行集与灾前基线逐表深比较
     for (const [table, expectedRows] of Object.entries(baseline)) {
       assert.deepEqual(restored.get(table), expectedRows, `表 ${table} 恢复后必须与基线一致`);
-      assert.notDeepEqual(live.get(table), restored.get(table), `表 ${table} 的灾难现场不得被误认为恢复结果`);
+      assert.notDeepEqual(
+        live.get(table),
+        restored.get(table),
+        `表 ${table} 的灾难现场不得被误认为恢复结果`,
+      );
     }
     findings.restoreConsistency = true;
   });
 
   it('RPO ≤ 15 分钟：灾难时刻与最近备份完成的差值在预算内（越界则判失败）', () => {
-    const rpoMinutes =
-      (T.disaster.getTime() - T.backupDone.getTime()) / 60_000;
+    const rpoMinutes = (T.disaster.getTime() - T.backupDone.getTime()) / 60_000;
     assert.ok(rpoMinutes <= 15, `RPO ${rpoMinutes} 分钟超出 15 分钟预算`);
     // 负向对照：若灾难晚于备份 16 分钟，同口径必须判失败
     const lateDisaster = new Date(T.backupDone.getTime() + 16 * 60_000);

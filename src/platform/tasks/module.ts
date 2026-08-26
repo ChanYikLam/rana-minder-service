@@ -14,7 +14,12 @@ import {
   RecoveryReplayConvergence,
 } from './idempotency';
 import { LeaseManager } from './lease';
-import { InMemoryTransactionOutboxStore, TASK_OUTBOX_STORE, TaskIntentOutbox, PostgresTransactionOutboxStore } from './outbox';
+import {
+  InMemoryTransactionOutboxStore,
+  TASK_OUTBOX_STORE,
+  TaskIntentOutbox,
+  PostgresTransactionOutboxStore,
+} from './outbox';
 import {
   BATCH_ITEM_AUTHORIZATION_PORT,
   BATCH_ITEM_EXECUTOR_PORT,
@@ -33,8 +38,8 @@ import {
   CasdoorSyncHandler,
   DeadlineTaskHandler,
   DerivedRebuildTaskHandler,
-  DenyAllTaskPrecondition,
   DevelopmentTaskPrecondition,
+  DenyAllTaskPrecondition,
   ExportExpiryScanHandler,
   ExportGenerationHandler,
   FileCheckHandler,
@@ -82,11 +87,15 @@ const allowDevStubs = isTest || (process.env.TASKS_DEV_STUB ?? '0') === '1';
     PostgresTaskRepository,
     ...storeProviders,
     { provide: TASK_REPOSITORY, useExisting: PostgresTaskRepository },
-    // store 单侧实例化：具体类经 storeProviders 注册，token 用 useExisting 复用同一实例
-    // （评审改进：此前 useClass 会二次实例化同一种 store）
-    { provide: TASK_OUTBOX_STORE, useExisting: useInMemoryStores ? InMemoryTransactionOutboxStore : PostgresTransactionOutboxStore },
-    { provide: IDEMPOTENCY_STORE, useExisting: useInMemoryStores ? InMemoryIdempotencyStore : PostgresIdempotencyStore },
-    { provide: BATCH_STORE, useExisting: useInMemoryStores ? InMemoryBatchStore : PostgresBatchStore },
+    {
+      provide: TASK_OUTBOX_STORE,
+      useClass: useInMemoryStores ? InMemoryTransactionOutboxStore : PostgresTransactionOutboxStore,
+    },
+    {
+      provide: IDEMPOTENCY_STORE,
+      useClass: useInMemoryStores ? InMemoryIdempotencyStore : PostgresIdempotencyStore,
+    },
+    { provide: BATCH_STORE, useClass: useInMemoryStores ? InMemoryBatchStore : PostgresBatchStore },
     { provide: TASK_OPS_TELEMETRY_PORT, useExisting: LogOnlyTaskOpsTelemetry },
     {
       provide: TASK_PRECONDITION_PORT,

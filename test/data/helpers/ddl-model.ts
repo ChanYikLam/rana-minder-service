@@ -99,7 +99,12 @@ function splitColumns(raw: string): string[] {
     .replace(/^[\s(]+/, '')
     .replace(/[\s)]+$/, '')
     .split(',')
-    .map((c) => c.trim().replace(/^["`]+|["`]+$/g, '').toLowerCase())
+    .map((c) =>
+      c
+        .trim()
+        .replace(/^["`]+|["`]+$/g, '')
+        .toLowerCase(),
+    )
     .filter((c) => c.length > 0);
 }
 
@@ -108,11 +113,7 @@ function splitColumns(raw: string): string[] {
  * 再把剩余内容逐行归类为列定义／表级主键／匿名 UNIQUE。具名 CHECK 事件经
  * onCheck 回调挂到所属表的有序事件流。
  */
-function parseInto(
-  body: string,
-  tm: TableModel,
-  onCheck: (event: CheckEvent) => void,
-): void {
+function parseInto(body: string, tm: TableModel, onCheck: (event: CheckEvent) => void): void {
   const namedRe = /CONSTRAINT\s+(\w+)\s+(CHECK|UNIQUE|PRIMARY KEY)\s*\(/gi;
   let stripped = '';
   let cursor = 0;
@@ -208,13 +209,16 @@ export async function buildDdlModel(entries: readonly MigrationEntry[]): Promise
           if (!tm) throw new Error(`ADD COLUMN 目标表不存在：${alterCol[1]}（${entry.file}）`);
           const def = alterCol[2].trim();
           const col = (/^([A-Za-z_]\w*)/.exec(def)?.[1] ?? '').toLowerCase();
-          if (!col) throw new Error(`ADD COLUMN 无法解析列名（${entry.file}）：${def.slice(0, 60)}`);
+          if (!col)
+            throw new Error(`ADD COLUMN 无法解析列名（${entry.file}）：${def.slice(0, 60)}`);
           const defs = tm.columns.get(col) ?? [];
           defs.push(def);
           tm.columns.set(col, defs);
         } else {
           const addCon =
-            /^\s*ALTER TABLE public\.(\w+)\s+ADD CONSTRAINT (\w+)\s+(CHECK|UNIQUE|PRIMARY KEY)\s*\(/i.exec(sql);
+            /^\s*ALTER TABLE public\.(\w+)\s+ADD CONSTRAINT (\w+)\s+(CHECK|UNIQUE|PRIMARY KEY)\s*\(/i.exec(
+              sql,
+            );
           if (addCon) {
             const tm = tables.get(addCon[1].toLowerCase());
             if (!tm) throw new Error(`ADD CONSTRAINT 目标表不存在：${addCon[1]}（${entry.file}）`);
@@ -243,7 +247,9 @@ export async function buildDdlModel(entries: readonly MigrationEntry[]): Promise
         }
 
         const idxM =
-          /^\s*CREATE (UNIQUE\s+)?INDEX (?:IF NOT EXISTS\s+)?(\w+)\s+ON (?:public\.)?(\w+)\s*\(/i.exec(sql);
+          /^\s*CREATE (UNIQUE\s+)?INDEX (?:IF NOT EXISTS\s+)?(\w+)\s+ON (?:public\.)?(\w+)\s*\(/i.exec(
+            sql,
+          );
         if (idxM) {
           const openIdx = idxM.index + idxM[0].length - 1;
           const bal = sliceBalanced(sql, openIdx);

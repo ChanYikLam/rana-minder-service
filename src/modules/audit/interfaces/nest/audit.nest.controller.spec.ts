@@ -97,16 +97,19 @@ describe('AuditNestController 审计日志', () => {
     const result = await controller.listOrgLogs('club-1', request);
     assert.deepEqual(result, {
       code: 0,
-      data: { items: [fakeAuditEvent()].map(() => ({
-        id: 'evt-1',
-        actorName: 'actor-1',
-        action: 'MEMBERSHIP',
-        targetType: 'MEMBER',
-        targetId: 'm-1',
-        detail: '',
-        createdAt: '2026-08-20T10:00:00.000Z',
-        scope: 'org',
-      })), nextCursor: null },
+      data: {
+        items: [fakeAuditEvent()].map(() => ({
+          id: 'evt-1',
+          actorName: 'actor-1',
+          action: 'MEMBERSHIP',
+          targetType: 'MEMBER',
+          targetId: 'm-1',
+          detail: '',
+          createdAt: '2026-08-20T10:00:00.000Z',
+          scope: 'org',
+        })),
+        nextCursor: null,
+      },
     });
   });
 
@@ -137,10 +140,7 @@ describe('AuditNestController 审计日志', () => {
     });
     const result = await controller.listPlatformLogs(request);
     assert.equal((result as { code: number }).code, 0);
-    assert.equal(
-      (result as { data: { items: unknown[] } }).data.items.length,
-      1,
-    );
+    assert.equal((result as { data: { items: unknown[] } }).data.items.length, 1);
   });
 });
 
@@ -189,7 +189,9 @@ describe('AuditNestController 事实纠错', () => {
         },
       },
     });
-    const body = { input: { decision: 'approve', reason: '确认', oldValue: '张三', newValue: '李四' } };
+    const body = {
+      input: { decision: 'approve', reason: '确认', oldValue: '张三', newValue: '李四' },
+    };
     const result = await controller.decideCorrection('club-1', 'corr-1', request, body);
     const data = (result as { data: CorrectionRecord }).data;
     assert.equal(data.status, 'approved');
@@ -214,14 +216,27 @@ describe('AuditNestController 事实纠错', () => {
           throw new Error('IFC-ERR-005: 无效的处理期限');
         },
       },
-      submit: { async execute() { return fakeCorrection(CorrectionStatus.PENDING); } },
+      submit: {
+        async execute() {
+          return fakeCorrection(CorrectionStatus.PENDING);
+        },
+      },
     });
     await assert.rejects(
-      controller.createCorrection('club-1', request, { input: {
-        targetType: 'PROFILE', targetId: 'obj-1', reason: 'x', evidence: 'e',
-        authorId: 'a', fieldKey: 'k', recordVersion: 1, objectiveErrorType: 'WRONG_NAME',
-        expectedCorrection: 'y', deadlineAt: '',
-      } }),
+      controller.createCorrection('club-1', request, {
+        input: {
+          targetType: 'PROFILE',
+          targetId: 'obj-1',
+          reason: 'x',
+          evidence: 'e',
+          authorId: 'a',
+          fieldKey: 'k',
+          recordVersion: 1,
+          objectiveErrorType: 'WRONG_NAME',
+          expectedCorrection: 'y',
+          deadlineAt: '',
+        },
+      }),
       (error: unknown) =>
         error instanceof HttpException &&
         error.getStatus() === 422 &&
@@ -238,7 +253,9 @@ describe('AuditNestController 事实纠错', () => {
       },
     });
     await assert.rejects(
-      controller.decideCorrection('club-1', 'corr-1', request, { input: { decision: 'approve', reason: 'r' } }),
+      controller.decideCorrection('club-1', 'corr-1', request, {
+        input: { decision: 'approve', reason: 'r' },
+      }),
       (error: unknown) =>
         error instanceof HttpException &&
         error.getStatus() === 409 &&

@@ -18,7 +18,15 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -147,8 +155,7 @@ describe('OPS-VER-004 外置单配置只读挂载与无学校硬编码演练', (
       );
       assert.throws(
         () => loadConfig({ env: SMOKE_ENV, configFilePath: file }),
-        (e: unknown) =>
-          e instanceof ConfigLoadError && /placeholder not replaced/i.test(e.message),
+        (e: unknown) => e instanceof ConfigLoadError && /placeholder not replaced/i.test(e.message),
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -187,7 +194,11 @@ describe('OPS-VER-004 外置单配置只读挂载与无学校硬编码演练', (
 
   it('无学校硬编码：src 全量 URL 主机均为示例域/本地域（无真实院校端点）', () => {
     const offenders = scanSrcForRealHosts();
-    assert.deepEqual(offenders, [], `发现疑似硬编码外部主机（须为示例/本地域）：\n${offenders.join('\n')}`);
+    assert.deepEqual(
+      offenders,
+      [],
+      `发现疑似硬编码外部主机（须为示例/本地域）：\n${offenders.join('\n')}`,
+    );
   });
 
   it('示例配置零真实端点：.env.example 与 config.example.yaml 仅示例域/本地域', () => {
@@ -195,10 +206,7 @@ describe('OPS-VER-004 外置单配置只读挂载与无学校硬编码演练', (
       assert.ok(exists(rel), `${rel} 必须随仓库提供`);
       const text = read(rel);
       for (const m of text.matchAll(/https?:\/\/([A-Za-z0-9.-]+)/g)) {
-        assert.ok(
-          isExampleHost(m[1]),
-          `${rel} 出现非示例主机 ${m[0]}（学校真实信息不得进入仓库）`,
-        );
+        assert.ok(isExampleHost(m[1]), `${rel} 出现非示例主机 ${m[0]}（学校真实信息不得进入仓库）`);
       }
     }
   });
@@ -358,4 +366,3 @@ function listFiles(dir: string, ext: string): string[] {
   }
   return out.sort();
 }
-

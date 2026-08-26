@@ -17,11 +17,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 
-import {
-  srsNfrDefinition,
-  tstNfrContract,
-  percentile,
-} from './nfr-support';
+import { srsNfrDefinition, tstNfrContract, percentile } from './nfr-support';
 import {
   POLICY_REGISTRY,
   POLICY_KEYS,
@@ -31,9 +27,18 @@ import {
 import { ConfigDomainError } from '../../src/modules/config/domain/errors';
 import { ClubStatisticsQuery } from '../../src/modules/stat-export/application/queries/club-statistics.query';
 import { StatisticsSpecification } from '../../src/modules/stat-export/domain/models/statistics-specification';
-import type { StatisticsSourcePort, ClubStatProfile } from '../../src/modules/stat-export/application/ports/statistics-source.port';
-import type { StatisticsAuditPort, StatisticsPrincipal } from '../../src/modules/stat-export/application/ports/statistics-authorization.port';
-import type { MembershipFact, AdmissionAcceptanceFact } from '../../src/modules/stat-export/domain/models/statistics-specification';
+import type {
+  StatisticsSourcePort,
+  ClubStatProfile,
+} from '../../src/modules/stat-export/application/ports/statistics-source.port';
+import type {
+  StatisticsAuditPort,
+  StatisticsPrincipal,
+} from '../../src/modules/stat-export/application/ports/statistics-authorization.port';
+import type {
+  MembershipFact,
+  AdmissionAcceptanceFact,
+} from '../../src/modules/stat-export/domain/models/statistics-specification';
 import {
   ExportTaskStateMachine,
   ExportTaskStatus,
@@ -84,8 +89,14 @@ describe('TST-NFR-001 单校标准规模基线', () => {
     assert.equal(baseline.jointClubs, 20);
 
     // 确定性数据集生成（纯内存，无随机源；同输入恒同输出）
-    const clubIds = Array.from({ length: baseline.clubs }, (_, i) => `SYN-CLUB-${String(i + 1).padStart(4, '0')}`);
-    const studentIds = Array.from({ length: baseline.students }, (_, i) => `SYN-STU-${String(i + 1).padStart(6, '0')}`);
+    const clubIds = Array.from(
+      { length: baseline.clubs },
+      (_, i) => `SYN-CLUB-${String(i + 1).padStart(4, '0')}`,
+    );
+    const studentIds = Array.from(
+      { length: baseline.students },
+      (_, i) => `SYN-STU-${String(i + 1).padStart(6, '0')}`,
+    );
     const applications = Array.from({ length: baseline.applications }, (_, i) => ({
       applicationId: `SYN-APP-${String(i + 1).padStart(6, '0')}`,
       clubId: clubIds[0],
@@ -121,31 +132,25 @@ interface FakeSourceOptions {
 /** 确定性事实源：按给定数量生成不可变投影事实 */
 function makeFakeSource(opts: FakeSourceOptions): StatisticsSourcePort {
   const profile: ClubStatProfile = { clubId: 'SYN-CLUB-0001', forcedSuspension: false };
-  const memberships: MembershipFact[] = Array.from(
-    { length: opts.membershipCount },
-    (_, i) => ({
-      userId: `SYN-STU-${String(i + 1).padStart(6, '0')}`,
-      studentNo: `2024${String(i + 1).padStart(6, '0')}`,
-      departmentId: `dep-${i % 8}`,
-      departmentName: `部门${i % 8}`,
-      positionId: null,
-      academicYear: i % 2 === 0 ? '2025-2026' : '2024-2025',
-    }),
-  );
-  const history: AdmissionAcceptanceFact[] = Array.from(
-    { length: opts.historyCount },
-    (_, i) => ({
-      userId: `SYN-STU-${String((i % 40000) + 1).padStart(6, '0')}`,
-      studentNo: `2024${String((i % 40000) + 1).padStart(6, '0')}`,
-      recruitmentActivityId: 'SYN-ACT-0001',
-      activityName: '合成招新活动',
-      scope: 'normal' as const,
-      acceptedAt: new Date(NOW.getTime() - i * 1000).toISOString(),
-      departmentId: `dep-${i % 8}`,
-      departmentName: `部门${i % 8}`,
-      academicYear: '2025-2026',
-    }),
-  );
+  const memberships: MembershipFact[] = Array.from({ length: opts.membershipCount }, (_, i) => ({
+    userId: `SYN-STU-${String(i + 1).padStart(6, '0')}`,
+    studentNo: `2024${String(i + 1).padStart(6, '0')}`,
+    departmentId: `dep-${i % 8}`,
+    departmentName: `部门${i % 8}`,
+    positionId: null,
+    academicYear: i % 2 === 0 ? '2025-2026' : '2024-2025',
+  }));
+  const history: AdmissionAcceptanceFact[] = Array.from({ length: opts.historyCount }, (_, i) => ({
+    userId: `SYN-STU-${String((i % 40000) + 1).padStart(6, '0')}`,
+    studentNo: `2024${String((i % 40000) + 1).padStart(6, '0')}`,
+    recruitmentActivityId: 'SYN-ACT-0001',
+    activityName: '合成招新活动',
+    scope: 'normal' as const,
+    acceptedAt: new Date(NOW.getTime() - i * 1000).toISOString(),
+    departmentId: `dep-${i % 8}`,
+    departmentName: `部门${i % 8}`,
+    academicYear: '2025-2026',
+  }));
   return {
     async loadClubProfile() {
       return profile;
@@ -246,11 +251,17 @@ describe('TST-NFR-003 复杂统计与搜索响应时间预算与异步边界', (
     // 申请即进入可追踪异步处理状态（非模糊成功）
     assert.equal(sm.transition(ExportTaskStatus.NEW, 'apply'), ExportTaskStatus.PENDING_GENERATION);
     // 异步失败可查询且可重试（沿用原快照），不伪造成功
-    assert.equal(sm.transition(ExportTaskStatus.GENERATING, 'generation_failed'), ExportTaskStatus.FAILED);
+    assert.equal(
+      sm.transition(ExportTaskStatus.GENERATING, 'generation_failed'),
+      ExportTaskStatus.FAILED,
+    );
     assert.equal(sm.canApply(ExportTaskStatus.FAILED, 'retry_generation'), true);
     // 未生成成功不得可下载（禁止假成功）；下载每次实时重验
     assert.equal(sm.canDownload(ExportTaskStatus.GENERATING), false);
-    assert.equal(sm.transition(ExportTaskStatus.GENERATING, 'generation_succeeded'), ExportTaskStatus.DOWNLOADABLE);
+    assert.equal(
+      sm.transition(ExportTaskStatus.GENERATING, 'generation_succeeded'),
+      ExportTaskStatus.DOWNLOADABLE,
+    );
     assert.equal(sm.canDownload(ExportTaskStatus.DOWNLOADABLE), true);
   });
 });
@@ -285,7 +296,10 @@ describe('TST-NFR-051 保留策略范围校验与高风险重认证窗口', () =
     );
     // 拒绝后无任何副作用（留痕与条目均未变化）
     const after = table.toSnapshot();
-    assert.deepEqual(after.platform.EXPORT_FILE_RETENTION_DAYS, before.platform.EXPORT_FILE_RETENTION_DAYS);
+    assert.deepEqual(
+      after.platform.EXPORT_FILE_RETENTION_DAYS,
+      before.platform.EXPORT_FILE_RETENTION_DAYS,
+    );
     assert.equal(after.changes.length, before.changes.length);
   });
 
@@ -356,12 +370,12 @@ describe('TST-NFR-052 临时数据保留期与快照计时起点', () => {
     assert.equal(snapshot.values.EXPORT_FILE_RETENTION_DAYS, 30);
 
     // 受控修订只在业务状态允许时生效并追加留痕；版本递增
-    const amended = amendActivitySnapshot(
-      snapshot,
-      'EXPORT_FILE_RETENTION_DAYS',
-      15,
-      { by: 'syn-owner', now: NOW, businessAllows: true, platformRange: { min: 1, max: 90 } },
-    );
+    const amended = amendActivitySnapshot(snapshot, 'EXPORT_FILE_RETENTION_DAYS', 15, {
+      by: 'syn-owner',
+      now: NOW,
+      businessAllows: true,
+      platformRange: { min: 1, max: 90 },
+    });
     assert.equal(amended.values.EXPORT_FILE_RETENTION_DAYS, 15);
     assert.equal(amended.revisionNumber, 2);
     assert.equal(amended.amendments.length, 1);

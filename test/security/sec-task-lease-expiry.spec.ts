@@ -46,11 +46,7 @@ describe('SEC-CTL-012 任务租约互斥与旧租约提交拒绝', () => {
   it('SEC-CTL-012：迟到提交按租约版本校验——旧 worker 版本不匹配必须失败', () => {
     const current = lease(5, computeLeaseUntil(NOW, 60_000));
     assert.equal(assertLeaseVersion(current, 5), true, '当前租约持有者可提交');
-    assert.equal(
-      assertLeaseVersion(current, 4),
-      false,
-      '被取代的旧租约（版本落后）不得覆盖新结果',
-    );
+    assert.equal(assertLeaseVersion(current, 4), false, '被取代的旧租约（版本落后）不得覆盖新结果');
     assert.equal(assertLeaseVersion(null, 0), false, '无租约不得提交');
   });
 

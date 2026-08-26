@@ -86,7 +86,12 @@ describe('TST-NFR-019 容量结论证据门', () => {
 
 describe('TST-NFR-030 官方容器化单机部署', () => {
   it('TST-NFR-030: 单机方案由 Dockerfile + compose + 示例配置构成，不依赖 Kubernetes', () => {
-    for (const file of ['Dockerfile', 'docker-compose.yml', '.dockerignore', 'config.example.yaml']) {
+    for (const file of [
+      'Dockerfile',
+      'docker-compose.yml',
+      '.dockerignore',
+      'config.example.yaml',
+    ]) {
       assert.ok(exists(file), `缺少单机部署文件: ${file}`);
     }
     const compose = readRepo('docker-compose.yml');

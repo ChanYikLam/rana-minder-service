@@ -22,9 +22,15 @@ import {
   decide,
   DEFAULT_TRUNCATE_MAX,
 } from '../../src/platform/observability/domain/services/redaction.rules';
-import { resolveRetention, isLogTier } from '../../src/platform/observability/domain/services/retention.rules';
+import {
+  resolveRetention,
+  isLogTier,
+} from '../../src/platform/observability/domain/services/retention.rules';
 import { createTraceContextAdapter } from '../../src/platform/observability/infrastructure/trace-context.adapter';
-import { generateTraceId, isTraceId } from '../../src/platform/observability/domain/services/trace-id.generator';
+import {
+  generateTraceId,
+  isTraceId,
+} from '../../src/platform/observability/domain/services/trace-id.generator';
 import { DefaultCorrelation } from '../../src/platform/observability/tracing/correlation';
 
 const findings = {
@@ -90,7 +96,11 @@ describe('OPS-VER-017 日志分层、保留、脱敏和追踪父子关系演练'
     const DAY = 24 * 60 * 60 * 1000;
 
     // 普通运行日志：30 在线 + 60 归档 = 90 总期；网络/安全日志 ≥6 个月（180）
-    assert.deepEqual(resolveRetention('normal'), { onlineDays: 30, archiveDays: 60, totalDays: 90 });
+    assert.deepEqual(resolveRetention('normal'), {
+      onlineDays: 30,
+      archiveDays: 60,
+      totalDays: 90,
+    });
     for (const tier of ['network', 'security'] as const) {
       assert.equal(resolveRetention(tier).totalDays >= 180, true, `${tier} 日志至少 6 个月`);
     }

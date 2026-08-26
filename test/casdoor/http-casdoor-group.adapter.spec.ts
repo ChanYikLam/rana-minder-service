@@ -32,10 +32,7 @@ interface RecordedCall {
   readonly body: string | undefined;
 }
 
-type RouteResult =
-  | { status: number; body: unknown }
-  | { boom: Error }
-  | { hang: true };
+type RouteResult = { status: number; body: unknown } | { boom: Error } | { hang: true };
 
 type AdapterOptions = ConstructorParameters<typeof HttpCasdoorGroupAdapter>[0];
 
@@ -136,7 +133,7 @@ describe('HttpCasdoorGroupAdapter 成功路径（请求形状 + 映射）', () =
     assert.deepEqual([...groups[0].memberIds], ['u_1001', 'u_1002']);
   });
 
-  it("writeMembership add：写后定向读回确认成员已入 → success（CAS-WR-007：读回收口而非 2xx 收口）", async () => {
+  it('writeMembership add：写后定向读回确认成员已入 → success（CAS-WR-007：读回收口而非 2xx 收口）', async () => {
     let step = 0;
     const { adapter, calls } = makeAdapter((call) => {
       step += 1;

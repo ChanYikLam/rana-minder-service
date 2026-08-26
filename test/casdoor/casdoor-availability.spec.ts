@@ -24,9 +24,7 @@ describe('CasdoorAvailability 初值语义（CAS-FAIL-001：初值由 endpoint �
   it('endpoint 已配置 → 初值 available=true（controller 可签发，等待真实调用证据下调）', () => {
     // 复刻 identity.module CASDOOR_AVAILABILITY 工厂的判定分支
     const configuredEndpoint = 'https://casdoor.school.edu.cn';
-    const availability = new CasdoorAvailability(
-      (configuredEndpoint?.length ?? 0) > 0,
-    );
+    const availability = new CasdoorAvailability((configuredEndpoint?.length ?? 0) > 0);
     assert.equal(availability.available, true);
   });
 
@@ -56,7 +54,7 @@ describe('CasdoorAvailability 运行时下调/上调（CAS-FAIL-001 降级窗口
     assert.equal(availability.available, true);
   });
 
-  it("CAS-FAIL-001「无法确认时继续降级」：恢复后再次失败 → 重新下调（状态可反复切换）", () => {
+  it('CAS-FAIL-001「无法确认时继续降级」：恢复后再次失败 → 重新下调（状态可反复切换）', () => {
     const availability = new CasdoorAvailability(true);
     // 第一轮故障 → 恢复
     availability.markUnavailable();

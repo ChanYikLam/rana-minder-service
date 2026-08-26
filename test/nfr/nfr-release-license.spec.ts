@@ -47,7 +47,10 @@ describe('TST-NFR-021 使用权限、再分发义务与已知取舍', () => {
     const requirementDoc = readRepo('docs/requirements/13-非功能运维与开源复用需求发现记录.md');
     assert.match(requirementDoc, /再分发必须保留 MIT 版权和许可证声明/);
     // 已知取舍：MIT 没有 Apache-2.0 同等明确的专利授权条款
-    assert.match(requirementDoc, /没有 Apache-2\.0 同等明确的专利授权条款.*已知取舍接受|MIT 没有 Apache-2\.0 同等明确的专利授权条款/);
+    assert.match(
+      requirementDoc,
+      /没有 Apache-2\.0 同等明确的专利授权条款.*已知取舍接受|MIT 没有 Apache-2\.0 同等明确的专利授权条款/,
+    );
   });
 });
 
@@ -65,10 +68,7 @@ describe('TST-NFR-022 第三方依赖清单可追溯', () => {
     });
     assert.ok(directDeps.length > 0);
     for (const dep of directDeps) {
-      assert.ok(
-        registry.includes(dep),
-        `依赖 [${dep}] 未在依赖与版本基线中登记（DEP-003）`,
-      );
+      assert.ok(registry.includes(dep), `依赖 [${dep}] 未在依赖与版本基线中登记（DEP-003）`);
     }
   });
 });
@@ -110,7 +110,8 @@ describe('TST-NFR-035 发布面真实数据与秘密清零', () => {
             DATABASE_PASSWORD: 'CHANGE_ME-not-replaced',
           },
         }),
-      (err: unknown) => err instanceof ConfigLoadError && /placeholder not replaced/.test(err.message),
+      (err: unknown) =>
+        err instanceof ConfigLoadError && /placeholder not replaced/.test(err.message),
     );
   });
 

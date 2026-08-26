@@ -132,8 +132,11 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
       'joint_channels',
     ],
   },
+  { file: '20260824000001', tables: [] },
+  { file: '20260824000002', tables: ['remedy_windows'] },
+  { file: '20260824000003', tables: [] },
   {
-    file: '20260824000000-org',
+    file: '20260824000004-org',
     tables: [
       'org_club_space',
       'org_relation_command',
@@ -143,9 +146,6 @@ const EXPECTED_TABLES: ReadonlyArray<{ file: string; tables: readonly string[] }
       'org_group_mapping',
     ],
   },
-  { file: '20260824000001', tables: [] },
-  { file: '20260824000002', tables: ['remedy_windows'] },
-  { file: '20260824000003', tables: [] },
   {
     file: '20260824100000',
     tables: [

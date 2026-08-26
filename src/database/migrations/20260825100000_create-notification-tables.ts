@@ -199,6 +199,29 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
 }
 
 export async function down(runner: MigrationQueryRunner): Promise<void> {
+  // 与 up 侧对称：先删策略、再关 RLS，最后删表（避免遗留 policy/RLS 漂移）。
+  await runner.query(
+    `DROP POLICY IF EXISTS p_notification_privileged_audit_all ON public.notification_privileged_audit`,
+  );
+  await runner.query(`ALTER TABLE public.notification_privileged_audit DISABLE ROW LEVEL SECURITY`);
+  await runner.query(
+    `DROP POLICY IF EXISTS p_notification_configs_all ON public.notification_configs`,
+  );
+  await runner.query(`ALTER TABLE public.notification_configs DISABLE ROW LEVEL SECURITY`);
+  await runner.query(`DROP POLICY IF EXISTS p_email_templates_all ON public.email_templates`);
+  await runner.query(`ALTER TABLE public.email_templates DISABLE ROW LEVEL SECURITY`);
+  await runner.query(
+    `DROP POLICY IF EXISTS p_channel_delivery_attempts_all ON public.channel_delivery_attempts`,
+  );
+  await runner.query(`ALTER TABLE public.channel_delivery_attempts DISABLE ROW LEVEL SECURITY`);
+  await runner.query(
+    `DROP POLICY IF EXISTS p_notification_inbox_presentations_all ON public.notification_inbox_presentations`,
+  );
+  await runner.query(
+    `ALTER TABLE public.notification_inbox_presentations DISABLE ROW LEVEL SECURITY`,
+  );
+  await runner.query(`DROP POLICY IF EXISTS p_notification_facts_all ON public.notification_facts`);
+  await runner.query(`ALTER TABLE public.notification_facts DISABLE ROW LEVEL SECURITY`);
   await runner.query(`DROP TABLE IF EXISTS public.notification_privileged_audit`);
   await runner.query(`DROP TABLE IF EXISTS public.notification_configs`);
   await runner.query(`DROP TABLE IF EXISTS public.email_templates`);

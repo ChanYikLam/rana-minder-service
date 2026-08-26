@@ -138,11 +138,7 @@ interface UniquenessRow {
   readonly verify: (m: DdlModel) => void;
 }
 
-const namedUniqueOf = (
-  m: DdlModel,
-  table: string,
-  constraint: string,
-): string[] => {
+const namedUniqueOf = (m: DdlModel, table: string, constraint: string): string[] => {
   const tm = m.tables.get(table);
   assert.ok(tm, `缺表 ${table}`);
   const cols = tm.namedUnique.get(constraint);
@@ -156,10 +152,10 @@ const DATA_CON_002_ROWS: readonly UniquenessRow[] = [
     clause: '主体与 Casdoor 账号绑定唯一',
     status: 'DDL',
     verify: (m) => {
-      assert.deepEqual(
-        namedUniqueOf(m, 'users', 'uq_users_casdoor_binding'),
-        ['casdoor_org', 'casdoor_name'],
-      );
+      assert.deepEqual(namedUniqueOf(m, 'users', 'uq_users_casdoor_binding'), [
+        'casdoor_org',
+        'casdoor_name',
+      ]);
       assert.deepEqual(namedUniqueOf(m, 'users', 'uq_users_student_id'), ['student_id']);
     },
   },
@@ -179,13 +175,15 @@ const DATA_CON_002_ROWS: readonly UniquenessRow[] = [
     clause: '普通申请唯一（通道粒度在场；活动粒度经 channel→activity FK 锚定，无独立活动粒度键）',
     status: 'PARTIAL',
     verify: (m) => {
-      assert.deepEqual(
-        namedUniqueOf(m, 'applications', 'uq_applications_applicant_channel'),
-        ['applicant_id', 'channel_id'],
-      );
+      assert.deepEqual(namedUniqueOf(m, 'applications', 'uq_applications_applicant_channel'), [
+        'applicant_id',
+        'channel_id',
+      ]);
       assert.ok(isNonNull(m, 'application_channels', 'activity_id'));
       assert.ok(
-        m.fkRefs.some((f) => f.table === 'application_channels' && f.refTable === 'recruitment_activities'),
+        m.fkRefs.some(
+          (f) => f.table === 'application_channels' && f.refTable === 'recruitment_activities',
+        ),
         'channel→activity FK 缺失，活动粒度锚定不成立',
       );
     },
@@ -243,10 +241,9 @@ const DATA_CON_002_ROWS: readonly UniquenessRow[] = [
         namedUniqueOf(m, 'interview_records', 'uq_interview_records_application_round'),
         ['application_id', 'round_id'],
       );
-      assert.deepEqual(
-        namedUniqueOf(m, 'joint_interviews', 'uq_joint_interviews_application'),
-        ['joint_application_id'],
-      );
+      assert.deepEqual(namedUniqueOf(m, 'joint_interviews', 'uq_joint_interviews_application'), [
+        'joint_application_id',
+      ]);
     },
   },
   {
@@ -267,8 +264,14 @@ const DATA_CON_002_ROWS: readonly UniquenessRow[] = [
       assert.ok(fact, 'invitations_pending_unique 部分唯一索引不在场');
       assert.deepEqual(fact.columns, ['club_id', 'invitee_id']);
       assert.equal(fact.partialWhere, "status = 'PENDING'");
-      const routinePending = m.uniqueIndexes.filter((u) => u.table === 'routine_invitations' && u.partialWhere);
-      assert.deepEqual(routinePending, [], 'routine_invitations 出现待处理唯一索引但本行仍标 PARTIAL');
+      const routinePending = m.uniqueIndexes.filter(
+        (u) => u.table === 'routine_invitations' && u.partialWhere,
+      );
+      assert.deepEqual(
+        routinePending,
+        [],
+        'routine_invitations 出现待处理唯一索引但本行仍标 PARTIAL',
+      );
     },
   },
   {
@@ -276,12 +279,15 @@ const DATA_CON_002_ROWS: readonly UniquenessRow[] = [
     clause: '表单版本内稳定字段标识唯一——字段在 JSONB 规范化层（DATA-Q-007），版本号唯一在场',
     status: 'PARTIAL',
     verify: (m) => {
-      assert.deepEqual(
-        namedUniqueOf(m, 'form_versions', 'uq_form_versions_form_number'),
-        ['form_id', 'version_number'],
-      );
+      assert.deepEqual(namedUniqueOf(m, 'form_versions', 'uq_form_versions_form_number'), [
+        'form_id',
+        'version_number',
+      ]);
       const defs = m.tables.get('form_versions')?.columns.get('fields') ?? [];
-      assert.ok(defs.some((d) => /\bjsonb\b/i.test(d)), 'form_versions.fields 应为 JSONB 单列承载');
+      assert.ok(
+        defs.some((d) => /\bjsonb\b/i.test(d)),
+        'form_versions.fields 应为 JSONB 单列承载',
+      );
     },
   },
   {
@@ -335,7 +341,10 @@ const DATA_CON_002_ROWS: readonly UniquenessRow[] = [
       const formIdem = m.tables.get('form_idempotency');
       assert.ok(formIdem);
       assert.deepEqual(formIdem.tablePk, ['scope_key', 'idempotency_key']);
-      assert.ok(isNonNull(m, 'form_idempotency', 'semantic_hash'), '同键不同摘要拒绝复用的落点缺失');
+      assert.ok(
+        isNonNull(m, 'form_idempotency', 'semantic_hash'),
+        '同键不同摘要拒绝复用的落点缺失',
+      );
       const intent = uniqueIndexOf(m, 'uq_job_tasks_intent_id');
       assert.ok(intent);
       assert.deepEqual(intent.columns, ['intent_id']);
@@ -352,7 +361,8 @@ const DATA_CON_002_ROWS: readonly UniquenessRow[] = [
   },
   {
     row: 15,
-    clause: '首邀事件唯一（时刻列在场，DB 级唯一未建）；发布指针每根至多一个（root 主键＋单指针列）',
+    clause:
+      '首邀事件唯一（时刻列在场，DB 级唯一未建）；发布指针每根至多一个（root 主键＋单指针列）',
     status: 'PARTIAL',
     verify: (m) => {
       const joint = m.tables.get('joint_activities');
@@ -544,7 +554,10 @@ test('SYN-DATA-FK-05（DATA-CON-001 引用与作用域）: 被引用表先于引
       const pi = drops.indexOf(edge.refTable);
       assert.notEqual(ci, -1, `${version} down 未删除子表 ${edge.table}`);
       assert.notEqual(pi, -1, `${version} down 未删除父表 ${edge.refTable}`);
-      assert.ok(ci < pi, `${version} down 删除顺序违反拓扑：${edge.table} 必须先于 ${edge.refTable}`);
+      assert.ok(
+        ci < pi,
+        `${version} down 删除顺序违反拓扑：${edge.table} 必须先于 ${edge.refTable}`,
+      );
     }
   }
 });

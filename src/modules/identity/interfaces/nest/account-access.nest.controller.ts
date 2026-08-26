@@ -35,7 +35,9 @@ export class AccountAccessNestController {
   }
 
   @Post('logout')
-  async logout(@Req() request: Record<string, unknown>): Promise<ApiSuccess<{ ok: true; revokedVersion: number }>> {
+  async logout(
+    @Req() request: Record<string, unknown>,
+  ): Promise<ApiSuccess<{ ok: true; revokedVersion: number }>> {
     return toHttpResponse(await this.controller.logout(this.actor(request)));
   }
 

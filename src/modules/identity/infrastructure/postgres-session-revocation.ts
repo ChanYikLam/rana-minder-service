@@ -27,7 +27,9 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
     );
   }
 
-  async getRevocation(subjectId: string): Promise<{ revokeVersion: number; revokedAt: string | null } | null> {
+  async getRevocation(
+    subjectId: string,
+  ): Promise<{ revokeVersion: number; revokedAt: string | null } | null> {
     const tx = await this.db.beginTransaction();
     try {
       await this.db.setRlsContext(tx, { kind: 'unprotected' });
@@ -55,6 +57,15 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
   }
 
   async invalidateAllSessions(subjectId: string): Promise<number> {
+    // 先对该主体的全部会话行加行锁（FOR UPDATE），串行化同一主体的并发吊销：
+    // 否则 UPDATE 内的 MAX 子查询不锁定行，两个并发事务可能读到相同的最大版本、
+    // 同时推进到同一版本号，导致撤销版本不单调/回退（并发竞态）。加锁后第二个事务
+    // 的 FOR UPDATE 会阻塞直至第一个事务提交，再基于最新数据计算下一版本。
+    await this.db.query(
+      this.uow.active,
+      `SELECT session_id FROM auth_sessions WHERE subject_id = $1 FOR UPDATE`,
+      [subjectId],
+    );
     const rows = await this.db.query<{ revoke_version: string }>(
       this.uow.active,
       `UPDATE auth_sessions

@@ -113,17 +113,31 @@ describe('OPS-VER-011 会话吊销版本推进与判定演练', () => {
     const revocation = new PostgresSessionRevocation(db, uow);
 
     await uow.run({ kind: 'single', subjectId: 'user-ops' }, async () => {
+      // FOR UPDATE 前置行锁查询（并发吊销串行化；仅锁行，不关心返回）
+      db.enqueueResult([]);
       db.enqueueResult([{ revoke_version: '6' }]);
       assert.equal(await revocation.invalidateAllSessions('user-ops'), 6);
 
+      db.enqueueResult([]);
       db.enqueueResult([{ revoke_version: '7' }]);
       assert.equal(await revocation.invalidateAllSessions('user-ops'), 7);
       return undefined as void;
     });
 
-    assert.equal(db.queries.length, 2);
-    for (const q of db.queries) {
-      assert.match(q.sql, /UPDATE auth_sessions/);
+    // 每次吊销 = 1 条 FOR UPDATE 行锁 + 1 条 UPDATE；两次共 4 条查询
+    assert.equal(db.queries.length, 4);
+    // 并发吊销串行化前置：先对主体全部会话行加行锁
+    const lockQueries = db.queries.filter((q) => /FOR UPDATE/i.test(q.sql));
+    assert.equal(lockQueries.length, 2);
+    assert.match(
+      lockQueries[0].sql,
+      /SELECT session_id FROM auth_sessions WHERE subject_id = \$1 FOR UPDATE/i,
+    );
+    assert.deepEqual(lockQueries[0].params, ['user-ops']);
+    // 版本推进 UPDATE 语句（仅针对 UPDATE，排除前置 FOR UPDATE）
+    const updateQueries = db.queries.filter((q) => /UPDATE auth_sessions/i.test(q.sql));
+    assert.equal(updateQueries.length, 2);
+    for (const q of updateQueries) {
       assert.match(q.sql, /MAX\(revoke_version\)/, '新版本取自当前最大吊销版本');
       assert.match(q.sql, /\+\s*1/, '版本号严格 +1 推进');
       assert.match(q.sql, /revoked_at IS NULL/, '已失效会话不得重复卷入');
@@ -131,7 +145,16 @@ describe('OPS-VER-011 会话吊销版本推进与判定演练', () => {
     }
     // 吊销与账号状态同事务收口（IFC-TX-001）：查询发生在 begin 与 commit 之间
     const order = db.eventPrefixes().map((p) => p.split(':')[0]);
-    assert.deepEqual(order, ['begin', 'set-rls', 'query', 'query', 'commit', 'clear-rls']);
+    assert.deepEqual(order, [
+      'begin',
+      'set-rls',
+      'query',
+      'query',
+      'query',
+      'query',
+      'commit',
+      'clear-rls',
+    ]);
     findings.revocationVersionAdvance = true;
   });
 
@@ -163,10 +186,7 @@ type ReadbackReq = Parameters<CasdoorWritePort['readbackGroupMembers']>[0];
 class ScriptedWritePort implements CasdoorWritePort {
   readonly calls: string[] = [];
   members = new Set<string>();
-  mode:
-    | 'third-value'
-    | 'dependency-unavailable'
-    | 'target' = 'third-value';
+  mode: 'third-value' | 'dependency-unavailable' | 'target' = 'third-value';
 
   private evidence(attemptId: string) {
     return {
@@ -255,7 +275,11 @@ function taskOf(payload: Record<string, unknown>): TaskRecord {
   } as unknown as TaskRecord;
 }
 
-function groupPayload(original: string[], target: string[], deadline?: string): Record<string, unknown> {
+function groupPayload(
+  original: string[],
+  target: string[],
+  deadline?: string,
+): Record<string, unknown> {
   return {
     commandId: 'cmd-ops-012',
     idempotencyKey: 'idem-ops-012',
@@ -276,12 +300,10 @@ describe('OPS-VER-012 写后读回、全量对账和高风险实时读回演练'
       new CasdoorWriteService(port, fixedClock(new Date('2026-08-24T10:00:00Z'))),
     );
 
-    const err = (await handler
-      .handle(taskOf(groupPayload(['u-old'], ['u-new'])))
-      .then(
-        () => null,
-        (e: unknown) => e,
-      )) as TaskExecutionError;
+    const err = (await handler.handle(taskOf(groupPayload(['u-old'], ['u-new']))).then(
+      () => null,
+      (e: unknown) => e,
+    )) as TaskExecutionError;
 
     assert.ok(err instanceof TaskExecutionError, '非确认结论必须上抛');
     assert.equal(err.failureKind, 'MANUAL_INTERVENTION_REQUIRED');
@@ -301,12 +323,10 @@ describe('OPS-VER-012 写后读回、全量对账和高风险实时读回演练'
       new CasdoorWriteService(port, fixedClock(new Date('2026-08-24T10:00:00Z'))),
     );
 
-    const err = (await handler
-      .handle(taskOf(groupPayload(['u-old'], ['u-new'])))
-      .then(
-        () => null,
-        (e: unknown) => e,
-      )) as TaskExecutionError;
+    const err = (await handler.handle(taskOf(groupPayload(['u-old'], ['u-new']))).then(
+      () => null,
+      (e: unknown) => e,
+    )) as TaskExecutionError;
 
     assert.ok(err instanceof TaskExecutionError);
     assert.equal(err.failureKind, 'EXTERNAL_UNCERTAIN', '依赖不可用归类为可重试外部故障');

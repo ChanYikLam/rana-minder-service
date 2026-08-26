@@ -15,10 +15,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 describe('PostgresBatchStore.save 版本语义（评审回归）', () => {
-  const sql = readFileSync(
-    join(__dirname, 'postgres-batch-store.ts'),
-    'utf8',
-  );
+  const sql = readFileSync(join(__dirname, 'postgres-batch-store.ts'), 'utf8');
 
   it('save 的 VALUES 插入值即 batch.version + 1（$4）', () => {
     assert.match(sql, /batch\.version \+ 1,/);

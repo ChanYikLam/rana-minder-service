@@ -60,14 +60,20 @@ describe('TST-NFR-005 服务端资源预算硬上限', () => {
     assert.equal(policy.maxSizeFor('VIDEO'), 200 * 1024 * 1024);
     assert.equal(policy.maxSizeFor('GENERIC'), 20 * 1024 * 1024);
     // 超上限声明 → 拒绝（IFC-ERR-006）
-    assert.throws(() => policy.assertDeclaredSizeWithinLimit('PHOTO', 10 * 1024 * 1024 + 1), UploadLimitExceededError);
+    assert.throws(
+      () => policy.assertDeclaredSizeWithinLimit('PHOTO', 10 * 1024 * 1024 + 1),
+      UploadLimitExceededError,
+    );
     assert.doesNotThrow(() => policy.assertDeclaredSizeWithinLimit('PHOTO', 10 * 1024 * 1024));
     // 字段附件数量不得超过平台硬上限 10
     assert.equal(DEFAULT_PLATFORM_UPLOAD_LIMITS.maxFilesPerField, 10);
     assert.throws(() => policy.assertCountWithinLimit(11), UploadLimitExceededError);
     assert.doesNotThrow(() => policy.assertCountWithinLimit(10));
     // 非正数同样拒绝
-    assert.throws(() => policy.assertDeclaredSizeWithinLimit('GENERIC', 0), UploadLimitExceededError);
+    assert.throws(
+      () => policy.assertDeclaredSizeWithinLimit('GENERIC', 0),
+      UploadLimitExceededError,
+    );
   });
 
   it('TST-NFR-005: 上传会话有效期存在默认值与平台硬上限（不可传极大值近似无限期）', () => {
@@ -116,17 +122,35 @@ describe('TST-NFR-005 服务端资源预算硬上限', () => {
 /** SRS-FAIL-001..013 的实现锚点（相对仓库根；缺失即漂移） */
 const FAIL_RULE_ANCHORS: ReadonlyArray<{ rule: string; anchors: readonly string[] }> = [
   { rule: 'SRS-FAIL-001', anchors: ['src/modules/identity/domain/services/degradation.policy.ts'] },
-  { rule: 'SRS-FAIL-002', anchors: ['src/modules/identity/domain/state-machines/account-access.state-machine.ts'] },
+  {
+    rule: 'SRS-FAIL-002',
+    anchors: ['src/modules/identity/domain/state-machines/account-access.state-machine.ts'],
+  },
   { rule: 'SRS-FAIL-003', anchors: ['src/modules/identity/domain/models/profile.ts'] },
   { rule: 'SRS-FAIL-004', anchors: ['src/platform/casdoor/application/casdoor-write.service.ts'] },
   { rule: 'SRS-FAIL-005', anchors: ['src/shared/db-adapter.ts'] },
   { rule: 'SRS-FAIL-006', anchors: ['src/modules/file/domain/services/access-policy.ts'] },
   { rule: 'SRS-FAIL-007', anchors: ['src/adapters/mail/smtp-mail.adapter.ts'] },
-  { rule: 'SRS-FAIL-008', anchors: ['src/modules/notification/application/commands/create-notification-fact.command.ts'] },
-  { rule: 'SRS-FAIL-009', anchors: ['src/modules/notification/application/commands/apply-kill-switch.command.ts'] },
-  { rule: 'SRS-FAIL-010', anchors: ['src/platform/tasks/executors/handlers/export-generation.handler.ts'] },
-  { rule: 'SRS-FAIL-011', anchors: ['src/modules/audit/application/commands/execute-deletion-checklist.command.ts'] },
-  { rule: 'SRS-FAIL-012', anchors: ['src/modules/audit/application/commands/retention-cleanup.command.ts'] },
+  {
+    rule: 'SRS-FAIL-008',
+    anchors: ['src/modules/notification/application/commands/create-notification-fact.command.ts'],
+  },
+  {
+    rule: 'SRS-FAIL-009',
+    anchors: ['src/modules/notification/application/commands/apply-kill-switch.command.ts'],
+  },
+  {
+    rule: 'SRS-FAIL-010',
+    anchors: ['src/platform/tasks/executors/handlers/export-generation.handler.ts'],
+  },
+  {
+    rule: 'SRS-FAIL-011',
+    anchors: ['src/modules/audit/application/commands/execute-deletion-checklist.command.ts'],
+  },
+  {
+    rule: 'SRS-FAIL-012',
+    anchors: ['src/modules/audit/application/commands/retention-cleanup.command.ts'],
+  },
   { rule: 'SRS-FAIL-013', anchors: ['src/config/config.loader.ts'] },
 ];
 
@@ -170,9 +194,15 @@ describe('TST-NFR-012 故障矩阵完整性', () => {
     assert.match(closed.reason, /CAS-EVT-001/);
     assert.equal(closed.envelope, null);
     // 启用但伪造签名 → 拒绝
-    assert.equal(decideWebhookHandling({ ...base, enabled: true, secretHeaderMatches: false }).allowed, false);
+    assert.equal(
+      decideWebhookHandling({ ...base, enabled: true, secretHeaderMatches: false }).allowed,
+      false,
+    );
     // 缺限流保护 → 拒绝
-    assert.equal(decideWebhookHandling({ ...base, enabled: true, rateLimitAvailable: false }).allowed, false);
+    assert.equal(
+      decideWebhookHandling({ ...base, enabled: true, rateLimitAvailable: false }).allowed,
+      false,
+    );
     // 重复事件去重 → 拒绝且不重复触发
     assert.equal(decideWebhookHandling({ ...base, enabled: true, dedupSeen: true }).allowed, false);
     // 合法启用路径仅允许非权威刷新提示
@@ -199,21 +229,36 @@ describe('TST-NFR-013 降级范围与禁止伪成功', () => {
     };
     // 白名单：公开页面、本人基础资料只读、编辑既有草稿非附件字段
     assert.equal(policy.evaluate({ ...sessionOk, category: 'PUBLIC_PAGE' }).allowed, true);
-    assert.equal(policy.evaluate({ ...sessionOk, category: 'OWN_BASIC_PROFILE_READ' }).allowed, true);
-    assert.equal(policy.evaluate({ ...sessionOk, category: 'OWN_EXISTING_DRAFT_EDIT' }).allowed, true);
+    assert.equal(
+      policy.evaluate({ ...sessionOk, category: 'OWN_BASIC_PROFILE_READ' }).allowed,
+      true,
+    );
+    assert.equal(
+      policy.evaluate({ ...sessionOk, category: 'OWN_EXISTING_DRAFT_EDIT' }).allowed,
+      true,
+    );
     // 受保护业务在窗内也拒绝
     assert.equal(policy.evaluate({ ...sessionOk, category: 'PROTECTED_BUSINESS' }).allowed, false);
     // 故障前未可信登录的会话不授予白名单
     assert.equal(
-      policy.evaluate({ ...sessionOk, sessionAuthenticatedBeforeFailure: false, category: 'OWN_BASIC_PROFILE_READ' })
-        .allowed,
+      policy.evaluate({
+        ...sessionOk,
+        sessionAuthenticatedBeforeFailure: false,
+        category: 'OWN_BASIC_PROFILE_READ',
+      }).allowed,
       false,
     );
     // 超 15 分钟：除公开页面外全部关闭
     const afterWindow = { degradedSince, now: within(16), sessionAuthenticatedBeforeFailure: true };
     assert.equal(policy.evaluate({ ...afterWindow, category: 'PUBLIC_PAGE' }).allowed, true);
-    assert.equal(policy.evaluate({ ...afterWindow, category: 'OWN_BASIC_PROFILE_READ' }).allowed, false);
-    assert.equal(policy.evaluate({ ...afterWindow, category: 'PROTECTED_BUSINESS' }).allowed, false);
+    assert.equal(
+      policy.evaluate({ ...afterWindow, category: 'OWN_BASIC_PROFILE_READ' }).allowed,
+      false,
+    );
+    assert.equal(
+      policy.evaluate({ ...afterWindow, category: 'PROTECTED_BUSINESS' }).allowed,
+      false,
+    );
   });
 
   it('TST-NFR-013: 数据库写入事实失败时整体失败关闭——回滚收口、绝不提交假成功', async () => {
@@ -227,7 +272,10 @@ describe('TST-NFR-013 降级范围与禁止伪成功', () => {
       /database unwritable/,
     );
     assert.ok(db.events.some((e) => e.startsWith('rollback:')));
-    assert.equal(db.events.some((e) => e.startsWith('commit:')), false);
+    assert.equal(
+      db.events.some((e) => e.startsWith('commit:')),
+      false,
+    );
   });
 
   it('TST-NFR-013: 外部渠道失败只保留待重试证据，不改变业务结论也不伪造成功', async () => {
