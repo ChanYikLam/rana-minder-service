@@ -31,20 +31,20 @@ function makeFakeDb(seed: Record<string, unknown[]> = {}) {
 }
 
 describe('PostgresFormSubmissionRepository', () => {
-  it('load：命中 / 未命中返回 null', async () => {
+  it('load：SELECT 已发射 + 未命中返回 null', async () => {
     const hit = makeFakeDb({ submissions: [{ id: 'fs-001' }] });
+    await new PostgresFormSubmissionRepository(hit.db as never, makeUow())
+      .load('fs-001')
+      .catch(() => null);
     assert.ok(
-      (await new PostgresFormSubmissionRepository(hit.db as never, makeUow())
-        .load('fs-001')
-        .catch(() => null)) !== undefined || true,
+      hit.calls.some((s) => s.includes('form_submissions')),
+      '命中路径应发出 SELECT 查询',
     );
     const miss = makeFakeDb();
-    assert.equal(
-      await new PostgresFormSubmissionRepository(miss.db as never, makeUow())
-        .load('x')
-        .catch(() => null),
-      null,
-    );
+    const r = await new PostgresFormSubmissionRepository(miss.db as never, makeUow())
+      .load('x')
+      .catch(() => null);
+    assert.equal(r, null);
   });
 
   it('listByScope：返回数组', async () => {

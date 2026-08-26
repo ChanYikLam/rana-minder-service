@@ -239,11 +239,15 @@ describe('PostgresJointRepository', () => {
     assert.equal(await repo.loadInterview('ghost'), null);
   });
 
-  it('loadInterviewByApplication：调用可达', async () => {
-    const { db } = makeFakeDb();
-    const repo = new PostgresJointRepository(db as never, makeUow());
-    await repo.loadInterviewByApplication('app-ghost').catch(() => undefined);
-    assert.ok(true); // 调用路径可达
+  it('loadInterviewByApplication：SQL 已发射且未命中返回 null', async () => {
+    const miss = makeFakeDb();
+    const repo = new PostgresJointRepository(miss.db as never, makeUow());
+    const r = await repo.loadInterviewByApplication('app-ghost').catch(() => null);
+    assert.equal(r, null, '未命中应返回 null');
+    assert.ok(
+      miss.calls.some((s) => s.includes('joint_interviews')),
+      '应发出 SELECT 查询',
+    );
   });
 
   it('loadInterviewsByActivity：返回数组', async () => {
