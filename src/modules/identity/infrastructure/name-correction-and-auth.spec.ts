@@ -148,7 +148,11 @@ describe('PostgresSessionRevocation（IDN-008）', () => {
       await revocation.invalidateSessions('user-1', 3);
     });
 
-    const update = db.queries[0];
+    // 先加行锁串行化并发吊销，再 UPDATE 既有未失效会话行（空表时无行可更新）。
+    const lock = db.queries[0];
+    assert.equal(lock.sql.includes('SELECT session_id FROM auth_sessions'), true);
+    assert.equal(lock.sql.includes('FOR UPDATE'), true);
+    const update = db.queries[1];
     assert.equal(update.sql.includes('UPDATE auth_sessions'), true);
     assert.equal(update.sql.includes('revoked_at IS NULL'), true);
     assert.deepEqual(update.params, ['user-1', 3]);

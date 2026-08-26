@@ -66,6 +66,7 @@ import { PostgresAccountAccessRepository } from './infrastructure/postgres-accou
 import { PostgresNameCorrectionRepository } from './infrastructure/postgres-name-correction.repository';
 import { PostgresReauthEvidence } from './infrastructure/postgres-reauth-evidence';
 import { PostgresSessionRevocation } from './infrastructure/postgres-session-revocation';
+import type { SessionRevocationPort } from './application/ports/session-revocation.port';
 import { PostgresProfileFieldDirectory } from './infrastructure/postgres-profile-field-directory';
 import { NotWiredSuperAdminVerifier } from './infrastructure/not-wired-super-admin.verifier';
 import { PostgresIdentityAudit } from './infrastructure/postgres-audit';
@@ -134,7 +135,11 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     },
     {
       provide: AUTH_SESSION_PROVIDER,
-      useFactory: (config: RanaMinderConfig, availability: CasdoorAvailability) => {
+      useFactory: (
+        config: RanaMinderConfig,
+        availability: CasdoorAvailability,
+        sessionRevocation: SessionRevocationPort,
+      ) => {
         if (
           config.casdoor?.endpoint &&
           config.casdoor?.clientId &&
@@ -148,11 +153,19 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
             sessionSecret: deriveSessionSecret(clientSecret),
             // 运行时共享状态：Casdoor 不可用时降级窗口生效（CAS-FAIL-001）
             casdoorAvailable: availability,
+            // BUG-003 读侧接线：吊销后旧令牌立即失效
+            revocationReader: async (subjectId: string) => {
+              try {
+                return await sessionRevocation.getRevocation(subjectId);
+              } catch {
+                return null; // 读取失败不阻断认证（可用性优先）
+              }
+            },
           });
         }
         return new RejectAllAuthSessionProvider();
       },
-      inject: [RANA_MINDER_CONFIG, CASDOOR_AVAILABILITY],
+      inject: [RANA_MINDER_CONFIG, CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT],
     },
     AuthGuard,
     // ----- 工作单元（ambient 事务 + RLS 单目标上下文）-----
