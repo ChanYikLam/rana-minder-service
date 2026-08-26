@@ -63,14 +63,32 @@ export interface SessionResponse {
 export class CasdoorSessionController {
   private oidcClient?: CasdoorOidcClient;
   private sessionSecret?: Uint8Array;
-  private readonly nonceStore = new InMemoryOidcNonceStore();
 
   constructor(
     @Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig,
     @Inject(CASDOOR_AVAILABILITY) private readonly availability: CasdoorAvailability,
     @Inject(IdentityUnitOfWork) private readonly uow: IdentityUnitOfWork,
     @Inject(SESSION_REVOCATION_PORT) private readonly revocationPort?: SessionRevocationPort,
+    /**
+     * BUG-008：nonce 存储可注入（多实例部署时替换为 Redis 等共享存储）。
+     * 未注入时回退到进程内实现（单实例基线）。
+     */
+    @Inject('OIDC_NONCE_STORE')
+    private readonly nonceStoreOverride?: import('./oidc-nonce-store').OidcNonceStore,
   ) {}
+
+  /** nonceStore：优先使用注入的共享存储，否则回退内存桩（单实例基线） */
+  private get nonceStore(): import('./oidc-nonce-store').OidcNonceStore {
+    return this.nonceStoreOverride ?? this.defaultNonceStore;
+  }
+  private defaultNonceStore = new InMemoryOidcNonceStore();
+
+  /** BUG-016：Cookie Secure 由配置驱动而非信任客户端请求头 */
+  private isSecureRequest(req: ExpressRequest): boolean {
+    // 生产环境始终 Secure（HTTPS 终止于反向代理，应用层无法可靠判定）
+    if (process.env['NODE_ENV'] === 'production') return true;
+    return req.secure;
+  }
 
   /** GET /api/auth/casdoor/login-url */
   @Get('casdoor/login-url')
@@ -168,7 +186,7 @@ export class CasdoorSessionController {
     );
 
     // Set-Cookie：HttpOnly + SameSite=Lax 强制；Secure 在 HTTPS 下启用（防明文截获）。
-    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    const secure = this.isSecureRequest(req);
     const secureAttr = secure ? '; Secure' : '';
     res.setHeader(
       'Set-Cookie',
@@ -216,7 +234,7 @@ export class CasdoorSessionController {
       }
     }
     // 清 cookie 时使用与写入一致的 Path/HttpOnly/SameSite/Secure 属性，确保真正清除。
-    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    const secure = this.isSecureRequest(req);
     const secureAttr = secure ? '; Secure' : '';
     res.setHeader(
       'Set-Cookie',
