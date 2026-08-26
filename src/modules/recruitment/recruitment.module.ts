@@ -116,7 +116,14 @@ import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.
 import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-recruitment.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule, FormModule, InvitationModule],
+  imports: [
+    AdaptersModule,
+    ObservabilityModule,
+    OrganizationModule,
+    IdentityModule,
+    FormModule,
+    InvitationModule,
+  ],
   controllers: [OrgRecruitmentNestController, ApplicantRecruitmentNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----

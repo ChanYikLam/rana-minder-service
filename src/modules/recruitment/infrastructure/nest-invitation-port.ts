@@ -12,7 +12,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { CreateInvitationCommand } from '../../invitation/application/commands/create-invitation.command';
-import type { InvitationPort, CreateAdmissionInvitationInput } from '../application/ports/invitation.port';
+import type {
+  InvitationPort,
+  CreateAdmissionInvitationInput,
+} from '../application/ports/invitation.port';
 
 /** 邀请默认有效期（毫秒）：7 天 */
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
