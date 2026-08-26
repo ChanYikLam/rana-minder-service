@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { IdentityModule } from '../identity/identity.module';
+import { ObservabilityModule } from '../../platform/observability/module';
 import { InitiateUploadCommand } from './application/commands/initiate-upload.command';
 import { CompleteUploadCommand } from './application/commands/complete-upload.command';
 import { AskFileCheckCommand } from './application/commands/ask-file-check.command';
@@ -133,7 +134,8 @@ export function createObjectStorePort(
 @Module({
   // IdentityModule 提供 FileNestController 依赖的 AuthGuard（文件访问实时鉴权）；
   // AdaptersModule 为 @Global，提供 DB_ADAPTER/S3 对象存储/外部文件检查等共享适配器。
-  imports: [IdentityModule, AdaptersModule],
+  // ObservabilityModule 提供 AuthGuard 依赖的 TRACE_CONTEXT（OBSERVABILITY_TRACE_CONTEXT）。
+  imports: [IdentityModule, AdaptersModule, ObservabilityModule],
   controllers: [FileNestController],
   providers: [
     // 领域规则（纯规则）

@@ -14,6 +14,7 @@ import { AdaptersModule } from '../../adapters/adapters.module';
 import { DB_ADAPTER } from '../../adapters/tokens';
 import { RANA_MINDER_CONFIG } from '../../config';
 import { IdentityModule } from '../identity/identity.module';
+import { ObservabilityModule } from '../../platform/observability/module';
 
 import { PostgresJobTaskStore, type JobTaskStore } from './job-task.store';
 import { JobTaskRunner, type JobTaskHandlerRegistry } from './job-task-runner';
@@ -28,7 +29,7 @@ import {
 import { IdentityUnitOfWork } from '../identity/infrastructure/unit-of-work';
 
 @Module({
-  imports: [AdaptersModule, IdentityModule],
+  imports: [AdaptersModule, IdentityModule, ObservabilityModule],
   controllers: [JobNestController],
   providers: [
     {

@@ -23,6 +23,7 @@ import { ObservabilityModule } from '../../platform/observability/module';
 import { OrganizationModule } from '../organization/module';
 import { FormModule } from '../form/form.module';
 import { IdentityModule } from '../identity/identity.module';
+import { InvitationModule } from '../invitation/module';
 import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
 import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
@@ -33,6 +34,7 @@ import {
   RECRUITMENT_REPOSITORY,
   RECRUITMENT_AUTHORIZATION,
   RECRUITMENT_FORM_PORT,
+  INVITATION_PORT,
   RECRUITMENT_AUTH_SESSION_PROVIDER,
   RECRUITMENT_CONTROLLER,
   CREATE_RECRUITMENT_ACTIVITY_USE_CASE,
@@ -67,6 +69,7 @@ import { RecruitmentUnitOfWork } from './infrastructure/unit-of-work';
 import { PostgresRecruitmentRepository } from './infrastructure/postgres-recruitment.repository';
 import { OrgBackedRecruitmentAuthorization } from './infrastructure/org-recruitment-authorization';
 import { FormBackedRecruitmentForm } from './infrastructure/form-backed-recruitment-form';
+import { NestInvitationPort } from './infrastructure/nest-invitation-port';
 
 import { DefaultCreateRecruitmentActivityUseCase } from './application/commands/create-recruitment-activity.use-case';
 import { DefaultPublishRecruitmentActivityUseCase } from './application/commands/publish-recruitment-activity.use-case';
@@ -105,13 +108,15 @@ import { DefaultListActivitiesQuery } from './application/queries/list-activitie
 import { DefaultListApplicationsQuery } from './application/queries/list-applications.query';
 import { DefaultListInterviewsQuery } from './application/queries/list-interviews.query';
 
+import { CreateInvitationCommand } from '../invitation/application/commands/create-invitation.command';
+
 import { RecruitmentController } from './interfaces/controllers/recruitment.controller';
 import { RecruitmentAuthGuard } from './interfaces/nest/recruitment-auth.guard';
 import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.nest.controller';
 import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-recruitment.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule, FormModule],
+  imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule, FormModule, InvitationModule],
   controllers: [OrgRecruitmentNestController, ApplicantRecruitmentNestController],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
@@ -144,6 +149,12 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
       provide: RECRUITMENT_FORM_PORT,
       useFactory: (submissions) => new FormBackedRecruitmentForm(submissions),
       inject: [FORM_SUBMISSION_REPOSITORY],
+    },
+    // ----- 录取邀请跨模块端口（4.4b 收口：打通 recruitment → invitation 核心链路）-----
+    {
+      provide: INVITATION_PORT,
+      useFactory: (create) => new NestInvitationPort(create),
+      inject: [CreateInvitationCommand],
     },
     // ----- 应用命令 -----
     {
@@ -269,8 +280,8 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
     },
     {
       provide: SEND_ADMISSION_INVITATION_USE_CASE,
-      useFactory: (repo, auth) => new SendAdmissionInvitationUseCase(repo, auth),
-      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
+      useFactory: (repo, auth, invite) => new SendAdmissionInvitationUseCase(repo, auth, invite),
+      inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION, INVITATION_PORT],
     },
     {
       provide: ACCEPT_ADMISSION_INVITATION_USE_CASE,

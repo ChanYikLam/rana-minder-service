@@ -31,6 +31,7 @@ import { OrganizationModule } from '../organization/module';
 import { GROUP_MAPPING_REGISTRY } from '../organization/application/ports';
 import { CasdoorModule } from '../../platform/casdoor/module';
 import { IdentityModule } from '../identity/identity.module';
+import { ObservabilityModule } from '../../platform/observability/module';
 import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
 import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import { INVITATION_AUTH_SESSION_PROVIDER } from './interfaces/nest/invitation-auth-session';
@@ -52,7 +53,7 @@ import { CASDOOR_WRITE_PORT } from '../../platform/casdoor/contracts/ports';
  * - 重发 = 全新邀请对象，旧邀请不修改保留；接受和退出历史不得删除。
  */
 @Module({
-  imports: [OrganizationModule, CasdoorModule, IdentityModule],
+  imports: [OrganizationModule, CasdoorModule, IdentityModule, ObservabilityModule],
   controllers: [InvitationNestController],
   providers: [
     // 领域规则（纯规则）
