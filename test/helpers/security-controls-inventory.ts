@@ -242,7 +242,10 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   {
     id: 'TST-SEC-CTL-37',
     title: '到期清理先撤权并最终收敛：保留期清理命令实现',
-    evidence: [R('src/modules/audit/application/commands/retention-cleanup.command.ts')],
+    evidence: [
+      R('src/modules/audit/application/commands/deletion.spec.ts'),
+      R('src/modules/audit/application/commands/retention-cleanup.command.ts'),
+    ],
   },
 ];
 
