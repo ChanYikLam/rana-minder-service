@@ -297,8 +297,14 @@ function isExampleHost(host: string): boolean {
   return /(^|\.)(example|invalid|local|test)(\.[a-z]{2,})?$/.test(h) || h.endsWith('.example');
 }
 
-/** 已知无害测试夹具主机白名单（src 中出现的非示例两点域名） */
-const EXTRA_ALLOWED_HOSTS = new Set(['x.com']);
+/** 已知无害主机白名单（src 中出现的非示例两点域名） */
+const EXTRA_ALLOWED_HOSTS = new Set([
+  'x.com',
+  // OOXML/W3C/RDF 标准命名空间常量（xmlns 字符串，非网络端点）：xlsx 导出所必需
+  'schemas.openxmlformats.org',
+  'www.w3.org',
+  'purl.org',
+]);
 
 function scanSrcForRealHosts(): string[] {
   const offenders: string[] = [];

@@ -231,11 +231,17 @@ describe('DATA-MIG-book 迁移执行器簿记（SQL 记录器假适配器 × 真
         // 剩余 up 项仅允许「索引随所属表级联删除」语义；其余不对称一律失败
         const dropped = droppedTablesOf(downSqls);
         const owner = indexOwnerOf(upSqls);
+        // 剩余 up 项允许两类「随表级联」语义：索引随所属表删除；
+        // RLS 开关与行策略亦随 DROP TABLE 级联消失（PG 语义），无需显式 down 语句。
         const restUp = pendingUp.filter((k) => {
           const m = /^index:(.+)$/.exec(k);
-          if (!m) return true;
-          const t = owner.get(m[1]);
-          return !(t !== undefined && dropped.has(t));
+          if (m) {
+            const t = owner.get(m[1]);
+            return !(t !== undefined && dropped.has(t));
+          }
+          const p = /^(?:policy|rls):public\.(\w+)(?:\.\w+)?$/.exec(k);
+          if (p) return !dropped.has(p[1]);
+          return true;
         });
         assert.deepEqual(restUp, [], `${entry.file} up 侧存在无法配对的 DDL`);
         assert.deepEqual(restDown, [], `${entry.file} down 侧存在无法配对的 DDL`);
