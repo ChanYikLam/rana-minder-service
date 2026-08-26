@@ -20,8 +20,7 @@ describe('JointResponseMapper 冒烟', () => {
     const exports = Object.keys(mod);
     assert.ok(exports.length > 0, `response-mapper 应有导出: ${exports.join(',')}`);
     for (const key of exports) {
-      const val = (mod as Record<string, unknown>)[key];
-      if (typeof val === 'function') continue; // 函数导出 ✓
+      assert.equal(typeof (mod as Record<string, unknown>)[key], 'function', `${key} 应为函数`);
     }
   });
 });
