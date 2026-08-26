@@ -14,6 +14,7 @@
  *   不依赖外部 uow.active）。
  */
 
+import { randomUUID } from 'node:crypto';
 import type { DbAdapter } from '../../../shared/db-adapter';
 import type { IdentityUnitOfWork } from './unit-of-work';
 import type { SessionRevocationPort } from '../application/ports/session-revocation.port';
@@ -84,6 +85,18 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
   async invalidateAllSessions(subjectId: string): Promise<number> {
     const tx = this.uow.active;
 
+    // 0) 先对该主体的全部会话行加行锁（FOR UPDATE），串行化同一主体的并发吊销：
+    //    否则两个并发事务可能基于相同的 MAX(revoke_version) 各自 +1，得到相同版本号
+    //    （撤销版本回退/不单调）。加锁后第二个事务的 FOR UPDATE 会阻塞直至第一个
+    //    事务提交，再基于最新数据计算下一版本。空表时锁 0 行、无法串行化，但
+    //    session_id 用 randomUUID 保证唯一，不会主键冲突，且读侧拦截依赖 revokedAt
+    //    而非版本号，安全不失效（并发登出同主体概率极低）。
+    await this.db.query(
+      tx,
+      `SELECT session_id FROM auth_sessions WHERE subject_id = $1 FOR UPDATE`,
+      [subjectId],
+    );
+
     // 1) 推进既有未失效会话行的撤销版本（有会话行时）
     const updated = await this.db.query<{ revoke_version: string }>(
       tx,
@@ -100,8 +113,9 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
       return Number(updated[0].revoke_version);
     }
 
-    // 2) 无未失效会话行：插入一条吊销记录（session_id 带时间戳保证唯一），
-    //    版本承接该主体历史最大版本 +1，确保单调递增。
+    // 2) 无未失效会话行：插入一条吊销记录（session_id 用 randomUUID 保证唯一，
+    //    避免同主体并发/同毫秒场景主键冲突；版本承接该主体历史最大版本 +1，
+    //    配合上方 FOR UPDATE 行锁保证单调递增）。
     const inserted = await this.db.query<{ revoke_version: string }>(
       tx,
       `INSERT INTO auth_sessions (session_id, subject_id, revoke_version, revoked_at)
@@ -110,7 +124,7 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
                   FROM auth_sessions WHERE subject_id = $1) + 1,
                NOW())
        RETURNING revoke_version`,
-      [subjectId, `revocation:${subjectId}:${Date.now()}`],
+      [subjectId, `revocation:${subjectId}:${randomUUID()}`],
     );
     return Number(inserted[0].revoke_version);
   }

@@ -113,17 +113,25 @@ describe('OPS-VER-011 会话吊销版本推进与判定演练', () => {
     const revocation = new PostgresSessionRevocation(db, uow);
 
     await uow.run({ kind: 'single', subjectId: 'user-ops' }, async () => {
-      // 每次吊销 = UPDATE 未失效会话（返回新版本）；有行时不再走 INSERT
+      // 每次吊销 = 1 次 FOR UPDATE 行锁 + 1 次 UPDATE（有行时不再走 INSERT）
+      db.enqueueResult([]); // FOR UPDATE 锁历史行
       db.enqueueResult([{ revoke_version: '6' }]);
       assert.equal(await revocation.invalidateAllSessions('user-ops'), 6);
 
+      db.enqueueResult([]); // FOR UPDATE 锁历史行
       db.enqueueResult([{ revoke_version: '7' }]);
       assert.equal(await revocation.invalidateAllSessions('user-ops'), 7);
       return undefined as void;
     });
 
-    // 每次吊销含 1 次 UPDATE，共 2 次查询
-    assert.equal(db.queries.length, 2);
+    // 每次吊销含 1 次 FOR UPDATE + 1 次 UPDATE，共 4 次查询
+    assert.equal(db.queries.length, 4);
+    const lockQueries = db.queries.filter((q) => /FOR UPDATE/.test(q.sql));
+    assert.equal(lockQueries.length, 2, '每次吊销须先对同主体会话行加行锁');
+    for (const q of lockQueries) {
+      assert.match(q.sql, /^SELECT session_id FROM auth_sessions/, 'FOR UPDATE 锁该主体会话行');
+      assert.deepEqual(q.params, ['user-ops']);
+    }
     const updateQueries = db.queries.filter((q) => /UPDATE auth_sessions/.test(q.sql));
     assert.equal(updateQueries.length, 2);
     for (const q of updateQueries) {
@@ -134,7 +142,16 @@ describe('OPS-VER-011 会话吊销版本推进与判定演练', () => {
     }
     // 吊销与账号状态同事务收口（IFC-TX-001）：查询发生在 begin 与 commit 之间
     const order = db.eventPrefixes().map((p) => p.split(':')[0]);
-    assert.deepEqual(order, ['begin', 'set-rls', 'query', 'query', 'commit', 'clear-rls']);
+    assert.deepEqual(order, [
+      'begin',
+      'set-rls',
+      'query',
+      'query',
+      'query',
+      'query',
+      'commit',
+      'clear-rls',
+    ]);
     findings.revocationVersionAdvance = true;
   });
 
@@ -144,6 +161,7 @@ describe('OPS-VER-011 会话吊销版本推进与判定演练', () => {
     const revocation = new PostgresSessionRevocation(db, uow);
 
     await uow.run({ kind: 'single', subjectId: 'user-ops' }, async () => {
+      db.enqueueResult([]); // FOR UPDATE 锁历史行（空表锁 0 行）
       db.enqueueResult([]); // UPDATE 命中 0 行（无会话行）
       db.enqueueResult([{ revoke_version: '1' }]); // INSERT 返回版本
       assert.equal(await revocation.invalidateAllSessions('user-ops'), 1);
