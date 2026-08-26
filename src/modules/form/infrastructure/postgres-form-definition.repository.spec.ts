@@ -66,7 +66,7 @@ describe('PostgresFormDefinitionRepository', () => {
     const seed = { versions: [{ form_id: 'f1', version_number: 1 }] };
     const { db } = makeFakeDb(seed);
     const repo = new PostgresFormDefinitionRepository(db as never, makeUow());
-    const latest = await repo.loadLatestVersion('f1').catch(() => null);
+    await repo.loadLatestVersion('f1').catch(() => null);
     // seed 有数据 → 域重建可能成功（非 null）或因行数据不全抛错被 catch 为 null；二者均为有效行为
     const list = await repo.loadVersions('f1');
     assert.ok(Array.isArray(list), 'loadVersions 应返回数组');
