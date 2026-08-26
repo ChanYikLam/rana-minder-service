@@ -46,7 +46,7 @@ describe('PostgresFormSubmissionRepository', () => {
   });
 
   it('insert：发出含 form_submissions 的 SQL', async () => {
-    const { db, calls } = makeFakeDb();
+    const { db } = makeFakeDb();
     const repo = new PostgresFormSubmissionRepository(db as never, makeUow());
     await repo.insert({ id: 's-new', formId: 'f1' } as never).catch(() => undefined);
     assert.ok(true); // 调用可达（域快照校验可能在 fake 环境先于 SQL 抛错）
