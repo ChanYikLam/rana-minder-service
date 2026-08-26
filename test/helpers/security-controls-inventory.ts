@@ -2,9 +2,15 @@
  * 安全控制清单（P1-B / TST-SEC-*；CI-004 证据）。
  *
  * 权威来源：docs/specification/安全设计与实现级威胁模型-v1.0.md
- * （26 威胁 / 38 控制目标）。威胁侧以 THR 桩位占额（status=未执行），
- * 控制侧仅登记**当前仓库已有可执行证据**的条目（evidence 必须存在）；
- * 未登记部分由 TOTAL_CONTROLS - concrete 显式留缺口，禁止虚报。
+ * （26 威胁 / 38 控制目标，SEC-CTL-001~038）。威胁侧以 THR 桩位占额
+ * （status=未执行）；控制侧仅登记**当前仓库已有可执行证据**的条目
+ * （evidence 必须存在）；未登记部分由 TOTAL_CONTROLS - concrete 显式
+ * 留缺口，禁止虚报。
+ *
+ * 留白说明：当前唯一留白项对应权威文档 **SEC-CTL-001（事实追溯：所有
+ * 放行必须能追溯到产品事实/SRS，无来源行为为零）**——属流程审计范畴，
+ * 无法以代码可执行测试佐证，故显式留白不登记。注意它与已登记的
+ * **TST-SEC-CTL-01**（身份占位 fail-closed）分属不同编号体系，勿混淆。
  *
  * 棘轮：BASELINE_CONCRETE_CONTROLS 只许上调；新增控制必须带真实
  * evidence 文件路径（套件内断言存在），否则清单测试失败。
@@ -154,6 +160,8 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   {
     id: 'TST-SEC-CTL-23',
     title: '批量操作冻结目标与参数；部分成功保留、重试仅含原失败项',
+    // 断言范围：controlled-batch.use-case.spec.ts 覆盖目标/参数冻结与
+    // 部分成功保留；batch-rules.ts 为批量规则常量（冻结目标的单一事实源）
     evidence: [
       R('src/modules/organization/application/commands/controlled-batch.use-case.spec.ts'),
       R('src/platform/tasks/batch/batch-rules.ts'),
@@ -162,6 +170,8 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   {
     id: 'TST-SEC-CTL-24',
     title: '外部调用意图先行持久化：迟到/超时先读回，不凭 HTTP 成功宣称成功',
+    // 断言范围（与 CTL-18 共用 outbox.spec.ts）：CTL-24 侧重迟到/超时先
+    // 读回不回放；CTL-18 侧重成功后不再重放（防重复副作用）
     evidence: [R('src/platform/tasks/outbox/outbox.spec.ts')],
   },
   {
@@ -175,6 +185,8 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   {
     id: 'TST-SEC-CTL-26',
     title: '失效联动：投影缓存跨社团隔离且可失效重建',
+    // 断言范围（与 CTL-12 共用 in-memory-projection-store.spec.ts）：
+    // CTL-26 侧重失效重建；CTL-12 侧重跨社团隔离不串缓存
     evidence: [R('src/platform/read-model/projection/in-memory-projection-store.spec.ts')],
   },
   {
@@ -193,6 +205,8 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   {
     id: 'TST-SEC-CTL-29',
     title: '撤权先于清理：正式删除流程按清单推进且失败不恢复访问',
+    // 断言范围（与 CTL-33/37 共用 deletion.spec.ts）：CTL-29 侧重撤权先于
+    // 清理、失败不恢复访问
     evidence: [R('src/modules/audit/application/commands/deletion.spec.ts')],
   },
   {
@@ -216,6 +230,8 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   {
     id: 'TST-SEC-CTL-33',
     title: '正式删除跨存储清单推进：部分失败不宣称完成、未完成步骤幂等收敛',
+    // 断言范围（与 CTL-29/37 共用 deletion.spec.ts）：CTL-33 侧重跨存储
+    // 清单推进与部分失败幂等收敛；task-execution-pipeline.spec.ts 佐证任务链收口
     evidence: [
       R('src/modules/audit/application/commands/deletion.spec.ts'),
       R('src/platform/tasks/executors/task-execution-pipeline.spec.ts'),
@@ -224,6 +240,8 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   {
     id: 'TST-SEC-CTL-34',
     title: '追踪编号不含个人信息或秘密：契约运行时面守恒',
+    // 断言范围（与 CTL-15 共用 contracts-runtime.spec.ts）：CTL-34 侧重追踪
+    // 编号不含个人信息/秘密；CTL-15 侧重契约运行时面（external-result/API 漂移）
     evidence: [R('src/common/contracts/contracts-runtime.spec.ts')],
   },
   {
@@ -242,6 +260,8 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
   {
     id: 'TST-SEC-CTL-37',
     title: '到期清理先撤权并最终收敛：保留期清理命令实现',
+    // 断言范围：deletion.spec.ts 覆盖临时清理/审计角色/逐项失败收敛；
+    // retention-cleanup.command.ts 为保留期清理编排实现（fail-closed 占位）
     evidence: [
       R('src/modules/audit/application/commands/deletion.spec.ts'),
       R('src/modules/audit/application/commands/retention-cleanup.command.ts'),
