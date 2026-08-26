@@ -65,7 +65,9 @@ function makeChannelSnap(status: string) {
 }
 
 function makeRepo(channelStatus = 'NOT_OPEN') {
+  const savedChannels: unknown[] = [];
   return {
+    savedChannels,
     loadActivity: async () => ACTIVITY_SNAP,
     saveActivity: async () => {},
     loadParticipant: async () => null,
@@ -126,7 +128,7 @@ function makeRepo(channelStatus = 'NOT_OPEN') {
     loadConclusionsByActivity: async () => [],
     saveConclusion: async () => {},
     loadChannel: async () => makeChannelSnap(channelStatus),
-    saveChannel: async () => {},
+    saveChannel: async (s: unknown) => savedChannels.push(s),
   } as never;
 }
 
@@ -182,17 +184,18 @@ async function assertAuthRejects(
   );
 }
 
-/** 创建已授权用例实例 */
+/** 创建已授权用例实例（附带 savedChannels 供断言仓储写入） */
 function makeAuthorized(
   UseCaseClass: abstract new (...args: never[]) => unknown,
   channelStatus = 'NOT_OPEN',
-): { execute(input: never): Promise<unknown> } {
+): { execute(input: never): Promise<unknown>; savedChannels: unknown[] } {
   const repo = makeRepo(channelStatus);
   const auth = makeAuth(true);
   const Ctor = UseCaseClass as unknown as new (...args: unknown[]) => {
     execute(input: never): Promise<unknown>;
   };
-  return new Ctor(repo, auth, tasksStub);
+  const uc = new Ctor(repo, auth, tasksStub);
+  return Object.assign(uc, { savedChannels: (repo as { savedChannels: unknown[] }).savedChannels });
 }
 
 const BASE_INPUT = {
@@ -278,13 +281,20 @@ describe('通道操作命令：授权通过 + 状态流转（happy path）', () 
     assert.ok(true);
   });
 
-  it('SuspendJointChannel：OPEN → SUSPENDED', async () => {
+  it('SuspendJointChannel：OPEN → SUSPENDED（saveChannel 收到快照）', async () => {
     const uc = makeAuthorized(DefaultSuspendJointChannelUseCase, 'OPEN');
     await uc.execute(BASE_INPUT as never);
+    // 断言 saveChannel 确实写入且状态为 SUSPENDED
+    assert.ok(uc.savedChannels.length >= 1, 'saveChannel 应被调用');
+    const snap = uc.savedChannels[0] as { status: string };
+    assert.equal(snap.status, 'SUSPENDED', '通道应转为 SUSPENDED');
   });
 
-  it('ExtendJointChannel：OPEN → OPEN（自环延长）', async () => {
+  it('ExtendJointChannel：OPEN → OPEN（saveChannel 收到快照）', async () => {
     const uc = makeAuthorized(DefaultExtendJointChannelUseCase, 'OPEN');
     await uc.execute({ ...BASE_INPUT, deadline: new Date('2026-10-15') } as never);
+    assert.ok(uc.savedChannels.length >= 1, 'saveChannel 应被调用');
+    const snap = uc.savedChannels[0] as { status: string };
+    assert.equal(snap.status, 'OPEN', 'EXTEND 为自环保持 OPEN');
   });
 });
