@@ -119,53 +119,54 @@ export class PublishFieldMappingCommand {
           impactPreview: input.impactPreview,
         });
 
-      // 写入版本线：基于当前发布版本创建新草稿（回滚语义），走完整测试→发布流程
-      let root: ConfigRoot;
-      let draftRecord: { versionNumber: number };
-      if (rootSnapshot === null) {
-        // 首发版本线：ConfigRoot.create 内建 v1 DRAFT，直接作为本次发布载体
-        root = ConfigRoot.create({
-          rootId: FIELD_MAPPING_ROOT_ID,
-          kind: 'FIELD_MAPPING',
-          now: input.now,
-          by: input.subjectId,
-        });
-        draftRecord = root.toSnapshot().versions[0];
-      } else {
-        root = ConfigRoot.fromSnapshot(rootSnapshot);
-        const currentPublished = root.getCurrentPublished();
-        // 有已发布版本→基于它建新草稿（回滚语义）；否则全新草稿。两路都产出全新 DRAFT。
-        draftRecord =
-          currentPublished !== null
-            ? root.rollbackTo(currentPublished.versionNumber, {
-                by: input.subjectId,
-                now: input.now,
-              })
-            : root.createDraft({ by: input.subjectId, now: input.now });
-      }
+        // 写入版本线：基于当前发布版本创建新草稿（回滚语义），走完整测试→发布流程
+        let root: ConfigRoot;
+        let draftRecord: { versionNumber: number };
+        if (rootSnapshot === null) {
+          // 首发版本线：ConfigRoot.create 内建 v1 DRAFT，直接作为本次发布载体
+          root = ConfigRoot.create({
+            rootId: FIELD_MAPPING_ROOT_ID,
+            kind: 'FIELD_MAPPING',
+            now: input.now,
+            by: input.subjectId,
+          });
+          draftRecord = root.toSnapshot().versions[0];
+        } else {
+          root = ConfigRoot.fromSnapshot(rootSnapshot);
+          const currentPublished = root.getCurrentPublished();
+          // 有已发布版本→基于它建新草稿（回滚语义）；否则全新草稿。两路都产出全新 DRAFT。
+          draftRecord =
+            currentPublished !== null
+              ? root.rollbackTo(currentPublished.versionNumber, {
+                  by: input.subjectId,
+                  now: input.now,
+                })
+              : root.createDraft({ by: input.subjectId, now: input.now });
+        }
 
-      root.editDraft(
-        draftRecord.versionNumber,
-        { entries: [...existing.entries] } as Record<string, unknown>,
-        {
+        root.editDraft(
+          draftRecord.versionNumber,
+          { entries: [...existing.entries] } as Record<string, unknown>,
+          {
+            by: input.subjectId,
+            now: input.now,
+          },
+        );
+        // 完整测试→发布编排：DRAFT → TESTING →（真实接口凭证）READY_TO_PUBLISH → 高风险确认发布
+        root.startTesting(draftRecord.versionNumber, { by: input.subjectId, now: input.now });
+        root.markTestPassed(draftRecord.versionNumber, input.testResultRef, {
           by: input.subjectId,
           now: input.now,
-        },
-      );
-      // 完整测试→发布编排：DRAFT → TESTING →（真实接口凭证）READY_TO_PUBLISH → 高风险确认发布
-      root.startTesting(draftRecord.versionNumber, { by: input.subjectId, now: input.now });
-      root.markTestPassed(draftRecord.versionNumber, input.testResultRef, {
-        by: input.subjectId,
-        now: input.now,
-      });
-      root.publish(
-        draftRecord.versionNumber,
-        { impactSummary: input.impactSummary, confirmation: input.confirmation },
-        { by: input.subjectId, now: input.now },
-      );
-      await this.rootRepository.save(root.toSnapshot());
-      return { publishedVersionNumber: draftRecord.versionNumber };
-    });
+        });
+        root.publish(
+          draftRecord.versionNumber,
+          { impactSummary: input.impactSummary, confirmation: input.confirmation },
+          { by: input.subjectId, now: input.now },
+        );
+        await this.rootRepository.save(root.toSnapshot());
+        return { publishedVersionNumber: draftRecord.versionNumber };
+      },
+    );
     // 通知置于事务提交之后（评审 1）：外部通知失败不回滚已提交的发布；
     // 外部调用期间不持续持有 DB 行锁
     // 失败补偿策略（评审 info）：通知抛错时调用方看到失败但发布已落库——重试会触发
