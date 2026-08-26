@@ -22,6 +22,7 @@ import { PostgresAccountAccessRepository } from './postgres-account-access.repos
 import { PostgresIdentityAudit } from './postgres-audit';
 import { PostgresReauthEvidence } from './postgres-reauth-evidence';
 import { PostgresSessionRevocation } from './postgres-session-revocation';
+import type { ProfileSnapshot } from '../domain/models/profile';
 
 async function inTx<T>(uow: IdentityUnitOfWork, fn: () => Promise<T>): Promise<T> {
   return uow.run({ kind: 'single', subjectId: 'user-1' }, fn);
@@ -68,10 +69,21 @@ describe('Identity PostgreSQL 仓储（P3 覆盖补齐）', () => {
     assert.equal(await inTx(uow, () => repo.load('ghost')), null);
 
     db.seed('identity_profiles', [{ subject_id: 'user-1', display_name: '旧名', version: 1 }]);
-    await inTx(uow, () => repo.save({ subjectId: 'user-1', displayName: '新名' } as never, [], 1));
+    const snapshot: ProfileSnapshot = {
+      subjectId: 'user-1',
+      fields: { email: 'a@example.com' },
+      emailVerified: true,
+      verifiedEmail: 'a@example.com',
+      pendingEmail: null,
+      version: 1,
+      gateState: 'WRITABLE',
+      restrictions: [],
+    };
+    await inTx(uow, () => repo.save(snapshot, [], 1));
     const upsert = db.queries.find((q) => /INSERT INTO identity_profiles/i.test(q.sql));
     assert.ok(upsert, '应执行 identity_profiles upsert');
     assert.match(upsert.sql, /ON CONFLICT \(subject_id\)/);
+    assert.equal(upsert.params[2], true, 'emailVerified 应写入');
   });
 
   it('AccountAccessRepository：load 未命中 null', async () => {
@@ -97,8 +109,8 @@ describe('Identity PostgreSQL 仓储（P3 覆盖补齐）', () => {
       }),
     );
 
-    const insert = db.queries[0];
-    assert.match(insert.sql, /INSERT INTO identity_audit/);
+    const insert = db.queries.find((q) => /INSERT INTO identity_audit/i.test(q.sql));
+    assert.ok(insert, '应执行 INSERT INTO identity_audit');
     assert.equal(insert.params[1], 'EMAIL_VERIFICATION');
     assert.equal(insert.params[2], 'user-1');
     assert.equal(insert.params[5], '{"requestVersion":1,"verified":false}');
@@ -133,11 +145,13 @@ describe('Identity PostgreSQL 仓储（P3 覆盖补齐）', () => {
 
     await inTx(uow, () => revocation.invalidateAllSessions('user-1'));
 
-    const lockQuery = db.queries[0];
-    assert.match(lockQuery.sql, /SELECT session_id FROM auth_sessions/);
+    const lockQuery = db.queries.find((q) => /SELECT session_id FROM auth_sessions/i.test(q.sql));
+    assert.ok(lockQuery, '应先执行行锁 SELECT');
     assert.match(lockQuery.sql, /FOR UPDATE/);
-    const update = db.queries[1];
-    assert.match(update.sql, /UPDATE auth_sessions/);
+    const update = db.queries.find(
+      (q) => /UPDATE auth_sessions/i.test(q.sql) && /RETURNING revoke_version/i.test(q.sql),
+    );
+    assert.ok(update, '应执行推进撤销版本的 UPDATE');
     assert.match(update.sql, /revoked_at IS NULL/);
     assert.match(update.sql, /RETURNING revoke_version/);
     assert.equal(update.params[0], 'user-1');
