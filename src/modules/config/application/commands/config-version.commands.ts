@@ -59,7 +59,8 @@ export class ConfigVersionOperationBase {
     kind: ConfigKind,
     init: { now: Date; by: string },
   ): Promise<{ root: ConfigRoot; builtinFirstDraft: ConfigVersionSnapshotRecord | null }> {
-    const snapshot = await this.repository.find(rootId);
+    // 加锁读（CFG-005 并发发布保护）：既有根行加锁，串行化并发建草稿/发布/回滚
+    const snapshot = await this.repository.findForUpdate(rootId);
     if (snapshot !== null) {
       if (snapshot.kind !== kind) {
         throw cfgErrors.conflict(
@@ -123,7 +124,7 @@ export interface EditConfigDraftInput {
 export class EditConfigDraftCommand extends ConfigVersionOperationBase {
   async execute(input: EditConfigDraftInput) {
     await this.requirePlatformAdmin(input.subjectId);
-    const snapshot = await this.repository.find(input.rootId);
+    const snapshot = await this.repository.findForUpdate(input.rootId);
     if (snapshot === null) {
       throw cfgErrors.notFound('配置根');
     }
@@ -151,7 +152,7 @@ export interface PublishConfigVersionInput {
 export class PublishConfigVersionCommand extends ConfigVersionOperationBase {
   async execute(input: PublishConfigVersionInput) {
     await this.requirePlatformAdmin(input.subjectId);
-    const snapshot = await this.repository.find(input.rootId);
+    const snapshot = await this.repository.findForUpdate(input.rootId);
     if (snapshot === null) {
       throw cfgErrors.notFound('配置根');
     }
@@ -190,7 +191,7 @@ export interface RollbackConfigVersionInput {
 export class RollbackConfigVersionCommand extends ConfigVersionOperationBase {
   async execute(input: RollbackConfigVersionInput) {
     await this.requirePlatformAdmin(input.subjectId);
-    const snapshot = await this.repository.find(input.rootId);
+    const snapshot = await this.repository.findForUpdate(input.rootId);
     if (snapshot === null) {
       throw cfgErrors.notFound('配置根');
     }

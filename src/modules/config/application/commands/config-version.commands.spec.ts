@@ -205,4 +205,37 @@ describe('配置版本线命令（CFG-005）', () => {
       { code: 'CFG_CONFLICT' },
     );
   });
+
+  it('写操作（建草稿/编辑/发布/回滚）使用加锁读 findForUpdate（CFG-005 并发发布保护）', async () => {
+    let forUpdateCalls = 0;
+    const trackingRepo = new (class extends InMemoryConfigRootRepository {
+      override async findForUpdate(rootId: string) {
+        forUpdateCalls++;
+        return super.findForUpdate(rootId);
+      }
+    })();
+    const create = new CreateConfigDraftCommand(trackingRepo, auth, notify);
+    const edit = new EditConfigDraftCommand(trackingRepo, auth, notify);
+    const publish = new PublishConfigVersionCommand(trackingRepo, auth, notify);
+    const rollback = new RollbackConfigVersionCommand(trackingRepo, auth, notify);
+
+    await create.execute({ rootId: ROOT, kind: 'PLATFORM_POLICY', subjectId: SA, now: NOW });
+    await edit.execute({
+      rootId: ROOT,
+      versionNumber: 1,
+      subjectId: SA,
+      now: NOW,
+      payload: { a: 1 },
+    });
+    await publish.execute({
+      rootId: ROOT,
+      versionNumber: 1,
+      subjectId: SA,
+      now: NOW,
+      testResultRef: 't-1',
+    });
+    await rollback.execute({ rootId: ROOT, sourceVersionNumber: 1, subjectId: SA, now: NOW });
+
+    assert.equal(forUpdateCalls, 4, '四个写命令都必须加锁读根（串行化并发版本操作）');
+  });
 });

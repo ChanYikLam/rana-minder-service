@@ -105,6 +105,15 @@ export interface ConfigRootRepositoryPort {
   find(
     rootId: string,
   ): Promise<import('../domain/models/config-version').ConfigRootSnapshot | null>;
+  /**
+   * 加锁读根（CFG-005 并发发布保护）：在活动事务内对根行加行锁，串行化
+   * 「读-改-写」窗口内的并发建草稿/发布/回滚，防止版本号竞态与指针覆盖。
+   * 事务外调用退化为普通读（无锁语义）；根不存在返回 null（并发首建的
+   * 竞态由 root_id 唯一约束兜底）。
+   */
+  findForUpdate(
+    rootId: string,
+  ): Promise<import('../domain/models/config-version').ConfigRootSnapshot | null>;
   save(snapshot: import('../domain/models/config-version').ConfigRootSnapshot): Promise<void>;
 }
 

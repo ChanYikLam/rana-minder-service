@@ -108,7 +108,8 @@ export class PublishFieldMappingCommand {
     });
 
     // 写入版本线：基于当前发布版本创建新草稿（回滚语义），走完整测试→发布流程
-    const rootSnapshot = await this.rootRepository.find(FIELD_MAPPING_ROOT_ID);
+    // （findForUpdate：CFG-005 并发发布保护，锁根行串行化并发发布）
+    const rootSnapshot = await this.rootRepository.findForUpdate(FIELD_MAPPING_ROOT_ID);
     let root: ConfigRoot;
     let draftRecord: { versionNumber: number };
     if (rootSnapshot === null) {
