@@ -1,8 +1,8 @@
 /**
  * PostgreSQL Joint 仓储测试（4.x 收口；fake DbAdapter 按 SQL 分发）。
  *
- * 覆盖：18 个 load/save 方法全部触达（10 load + 8 save），验证 SQL 发射与空集返回。
- * save 方法在 fake 环境可能触发乐观锁 ConflictError——仅验证 SQL 发射。
+ * 覆盖：18 个 load/save 方法全部触达（10 load + 8 save），验证 SQL 发射、空集返回与
+ * 乐观锁命中即成功（fake 对 RETURNING id 返回记录）。
  */
 
 import { describe, it } from 'node:test';
@@ -25,6 +25,8 @@ function makeFakeDb(seed: Record<string, unknown[]> = {}) {
     clearRlsContext: async () => undefined,
     query: async <T>(_tx: unknown, sql: string): Promise<T[]> => {
       calls.push(sql);
+      // 写路径：INSERT/UPDATE ... RETURNING id 返回一条记录 → 乐观锁命中即成功
+      if (sql.includes('RETURNING id')) return [{ id: 'returned-id' }] as T[];
       if (sql.includes('FROM joint_activities') && sql.includes('SELECT'))
         return (seed['activity'] ?? []) as T[];
       if (sql.includes('FROM joint_participants') && sql.includes('SELECT'))
@@ -57,57 +59,59 @@ describe('PostgresJointRepository', () => {
     assert.equal(await repoMiss.loadActivity('ghost'), null);
   });
 
-  it('saveActivity：发出含 joint_activities 的 SQL（乐观锁冲突可容忍）', async () => {
+  it('saveActivity：发出含 joint_activities 的 SQL（RETURNING id 命中即成功）', async () => {
     const { db, calls } = makeFakeDb();
     const repo = new PostgresJointRepository(db as never, makeUow());
-    await repo
-      .saveActivity(
-        {
-          id: 'act-new',
-          title: 't',
-          description: null,
-          status: 'DRAFT_CONFIRMING',
-          confirmRound: 1,
-          confirmDeadline: NOW,
-          publishedAt: null,
-          firstInvitationAt: null,
-          cancelRound: 0,
-          forcedEndedReason: null,
-          revisionNumber: 1,
-          createdBy: 'u',
-          createdAt: NOW,
-          updatedAt: NOW,
-        } as never,
-        -1,
-      )
-      .catch(() => undefined);
-    assert.ok(calls.some((s) => s.includes('joint_activities')));
+    await repo.saveActivity(
+      {
+        id: 'act-new',
+        title: 't',
+        description: null,
+        status: 'DRAFT_CONFIRMING',
+        confirmRound: 1,
+        confirmDeadline: NOW,
+        publishedAt: null,
+        firstInvitationAt: null,
+        cancelRound: 0,
+        forcedEndedReason: null,
+        revisionNumber: 1,
+        createdBy: 'u',
+        createdAt: NOW,
+        updatedAt: NOW,
+      } as never,
+      -1,
+    );
+    assert.ok(
+      calls.some((s) => s.includes('joint_activities')),
+      '应发出含 joint_activities 的 SQL',
+    );
   });
 
-  it('saveParticipant：发出含 joint_participants 的 SQL', async () => {
+  it('saveParticipant：发出含 joint_participants 的 SQL（RETURNING id 命中即成功）', async () => {
     const { db, calls } = makeFakeDb();
     const repo = new PostgresJointRepository(db as never, makeUow());
-    await repo
-      .saveParticipant(
-        {
-          id: 'p1',
-          activityId: 'a',
-          clubId: 'c',
-          status: 'PROPOSED',
-          roundId: 1,
-          decidedBy: null,
-          confirmedAt: null,
-          suspendedAt: null,
-          resumedAt: null,
-          suspendedForMs: 0,
-          revisionNumber: 1,
-          createdAt: NOW,
-          updatedAt: NOW,
-        } as never,
-        -1,
-      )
-      .catch(() => undefined);
-    assert.ok(calls.some((s) => s.includes('joint_participants')));
+    await repo.saveParticipant(
+      {
+        id: 'p1',
+        activityId: 'a',
+        clubId: 'c',
+        status: 'PROPOSED',
+        roundId: 1,
+        decidedBy: null,
+        confirmedAt: null,
+        suspendedAt: null,
+        resumedAt: null,
+        suspendedForMs: 0,
+        revisionNumber: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      } as never,
+      -1,
+    );
+    assert.ok(
+      calls.some((s) => s.includes('joint_participants')),
+      '应发出含 joint_participants 的 SQL',
+    );
   });
 
   it('loadParticipantsByActivity：返回数组', async () => {
@@ -126,90 +130,104 @@ describe('PostgresJointRepository', () => {
     assert.equal(await repoMiss.loadApplication('x'), null);
   });
 
-  it('saveApplication：发出含 joint_applications 的 SQL', async () => {
+  it('saveApplication：发出含 joint_applications 的 SQL（RETURNING id 命中即成功）', async () => {
     const { db, calls } = makeFakeDb();
     const repo = new PostgresJointRepository(db as never, makeUow());
-    await repo
-      .saveApplication(
-        {
-          id: 'a-x',
-          jointActivityId: 'act',
-          applicantId: 'u',
-          status: 'DRAFT',
-          formRef: null,
-          participantsSnapshot: [],
-          consentSnapshotHash: null,
-          sharedNote: null,
-          revisionNumber: 1,
-          createdAt: NOW,
-          updatedAt: NOW,
-        } as never,
-        -1,
-      )
-      .catch(() => undefined);
-    assert.ok(calls.some((s) => s.includes('joint_applications')));
+    await repo.saveApplication(
+      {
+        id: 'a-x',
+        jointActivityId: 'act',
+        applicantId: 'u',
+        status: 'DRAFT',
+        formRef: null,
+        participantsSnapshot: [],
+        consentSnapshotHash: null,
+        sharedNote: null,
+        revisionNumber: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      } as never,
+      -1,
+    );
+    assert.ok(
+      calls.some((s) => s.includes('joint_applications')),
+      '应发出含 joint_applications 的 SQL',
+    );
   });
 
-  it('saveInterview / saveConclusion / saveChannel：各发出对应表名 SQL', async () => {
+  it('saveInterview：发出含 joint_interviews 的 SQL（RETURNING id 命中即成功）', async () => {
     const { db, calls } = makeFakeDb();
     const repo = new PostgresJointRepository(db as never, makeUow());
-    await repo
-      .saveInterview(
-        {
-          id: 'i1',
-          jointActivityId: 'a',
-          jointApplicationId: 'app',
-          status: 'PENDING_CHOICE',
-          scheduledAt: null,
-          location: null,
-          method: null,
-          evaluations: [],
-          voidReason: null,
-          rescheduleCount: 0,
-          revisionNumber: 1,
-          createdAt: NOW,
-          updatedAt: NOW,
-        } as never,
-        -1,
-      )
-      .catch(() => undefined);
-    await repo
-      .saveConclusion(
-        {
-          id: 'c1',
-          jointActivityId: 'a',
-          jointApplicationId: 'app',
-          clubId: 'club-a',
-          decision: null,
-          note: null,
-          inviteStatus: 'NONE',
-          invitationId: null,
-          versions: [],
-          revisionNumber: 1,
-          createdAt: NOW,
-          updatedAt: NOW,
-        } as never,
-        -1,
-      )
-      .catch(() => undefined);
-    await repo
-      .saveChannel(
-        {
-          id: 'ch:a',
-          jointActivityId: 'a',
-          status: 'NOT_OPEN',
-          currentWindow: null,
-          windows: [],
-          revisionNumber: 1,
-          createdAt: NOW,
-          updatedAt: NOW,
-        } as never,
-        -1,
-      )
-      .catch(() => undefined);
-    assert.ok(calls.some((s) => s.includes('joint_interviews')));
-    assert.ok(calls.some((s) => s.includes('joint_conclusions')));
-    assert.ok(calls.some((s) => s.includes('joint_channels')));
+    await repo.saveInterview(
+      {
+        id: 'i1',
+        jointActivityId: 'a',
+        jointApplicationId: 'app',
+        status: 'PENDING_CHOICE',
+        scheduledAt: null,
+        location: null,
+        method: null,
+        evaluations: [],
+        voidReason: null,
+        rescheduleCount: 0,
+        revisionNumber: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      } as never,
+      -1,
+    );
+    assert.ok(
+      calls.some((s) => s.includes('joint_interviews')),
+      '应发出含 joint_interviews 的 SQL',
+    );
+  });
+
+  it('saveConclusion：发出含 joint_conclusions 的 SQL（RETURNING id 命中即成功）', async () => {
+    const { db, calls } = makeFakeDb();
+    const repo = new PostgresJointRepository(db as never, makeUow());
+    await repo.saveConclusion(
+      {
+        id: 'c1',
+        jointActivityId: 'a',
+        jointApplicationId: 'app',
+        clubId: 'club-a',
+        decision: null,
+        note: null,
+        inviteStatus: 'NONE',
+        invitationId: null,
+        versions: [],
+        revisionNumber: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      } as never,
+      -1,
+    );
+    assert.ok(
+      calls.some((s) => s.includes('joint_conclusions')),
+      '应发出含 joint_conclusions 的 SQL',
+    );
+  });
+
+  it('saveChannel：发出含 joint_channels 的 SQL（RETURNING id 命中即成功）', async () => {
+    const { db, calls } = makeFakeDb();
+    const repo = new PostgresJointRepository(db as never, makeUow());
+    await repo.saveChannel(
+      {
+        id: 'ch:a',
+        jointActivityId: 'a',
+        status: 'NOT_OPEN',
+        currentWindow: null,
+        windows: [],
+        revisionNumber: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      } as never,
+      -1,
+    );
+    assert.ok(
+      calls.some((s) => s.includes('joint_channels')),
+      '应发出含 joint_channels 的 SQL',
+    );
   });
 
   it('loadChannel：未命中返回 null', async () => {
