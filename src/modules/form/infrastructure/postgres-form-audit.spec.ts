@@ -31,22 +31,18 @@ function makeFakeDb() {
 }
 
 describe('PostgresFormAudit', () => {
-  it('record：调用可达（发出 INSERT SQL 或域校验抛错均为有效行为证据）', async () => {
+  it('record：按真实 FormAuditFact 字段发出 INSERT SQL', async () => {
     const { db, calls } = makeFakeDb();
     const audit = new PostgresFormAudit(db as never, makeUow() as never);
-    let caught: Error | undefined;
-    await audit
-      .record({
-        eventType: 'FORM_SUBMIT',
-        actorId: 'u1',
-        formId: 'f1',
-        submissionId: 's1',
-        now: new Date(),
-      } as never)
-      .catch((e: Error) => {
-        caught = e;
-      });
-    const sqlEmitted = calls.some((s) => s.includes('form_audit') || s.includes('INSERT'));
-    assert.ok(sqlEmitted || caught !== undefined, 'record 应发射 SQL 或抛域校验错误');
+    await audit.record({
+      type: 'FORM_SUBMISSION_CREATED',
+      subjectId: 'f1',
+      occurredAt: new Date('2026-01-01T00:00:00Z'),
+      actor: 'u1',
+      summary: { status: 'draft' },
+      traceId: null,
+    });
+    const sqlEmitted = calls.some((s) => s.includes('INSERT INTO form_audit'));
+    assert.ok(sqlEmitted, 'record 应发射 INSERT INTO form_audit SQL');
   });
 });
