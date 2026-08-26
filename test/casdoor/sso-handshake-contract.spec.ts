@@ -186,6 +186,7 @@ function installFakeProvider(initialIdToken: string): FakeProviderHandle {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
+    // exchangeCode 以 URLSearchParams 发送表单体；统一转为字符串便于合同断言
     const body =
       typeof init?.body === 'string'
         ? init.body
@@ -483,12 +484,16 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
         clientSecret: CLIENT_SECRET,
         redirectUri: REDIRECT_URI,
       });
-      // wrongAud：aud 与 clientId 不符 → 拒绝（CAS-CAP-004 受众绑定）
       await assert.rejects(client.verifyIdToken(wrongAud, 'n-a'));
-      // wrongIss：iss 与真实 discovery issuer（ISSUER）不符 → 拒绝（签发方绑定）。
-      // 注意：不得把 discovery issuer 改为 evil，否则 wrongIss.iss 反而与之一致，
-      // 无法验证「签发方绑定」（历史缺陷：setIssuer(evil) 使 iss 匹配而放行）。
-      await assert.rejects(client.verifyIdToken(wrongIss, 'n-a'));
+      // discovery 保持真实 ISSUER，令牌 iss=evil.example 与签发方不匹配 → 拒绝
+      // （CAS-CAP-004 签发方绑定：客户端只接受 discovery 声明的权威签发方）
+      const client2 = new RealOidcClient({
+        endpoint: ISSUER,
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+        redirectUri: REDIRECT_URI,
+      });
+      await assert.rejects(client2.verifyIdToken(wrongIss, 'n-a'));
     } finally {
       handle.restore();
     }

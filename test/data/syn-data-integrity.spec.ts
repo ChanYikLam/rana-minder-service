@@ -44,7 +44,7 @@ const SYN_DATASETS: readonly string[] = [
   'SYN-DATA-TASK-INTENT-CASDOOR-SYNC-0001',
 ];
 
-/** 全量表清单冻结（59 张业务表；漂移须显式改本清单并过评审） */
+/** 全量表清单冻结（48 张业务表；漂移须显式改本清单并过评审） */
 const EXPECTED_TABLES: readonly string[] = [
   'account_access',
   'application_channels',
@@ -53,7 +53,6 @@ const EXPECTED_TABLES: readonly string[] = [
   'auth_reauth_evidence',
   'auth_sessions',
   'batch_records',
-  'channel_delivery_attempts',
   'config_academic_year_settings',
   'config_club_cohorts',
   'config_club_profiles',
@@ -63,6 +62,7 @@ const EXPECTED_TABLES: readonly string[] = [
   'config_versions',
   'deletion_checklist',
   'department_paths',
+  'channel_delivery_attempts',
   'email_templates',
   'email_verification_requests',
   'file_access_audit',
@@ -75,18 +75,18 @@ const EXPECTED_TABLES: readonly string[] = [
   'form_submissions',
   'form_template_publications',
   'form_versions',
-  'idempotency_records',
   'identity_audit',
   'identity_profiles',
+  'idempotency_records',
   'interview_records',
   'invitations',
-  'job_tasks',
   'joint_activities',
   'joint_applications',
   'joint_channels',
   'joint_conclusions',
   'joint_interviews',
   'joint_participants',
+  'job_tasks',
   'name_correction_requests',
   'notification_configs',
   'notification_facts',
@@ -119,7 +119,7 @@ test('SYN-DATA-REG-01（测试规格§4.1-1）: 合成数据集全部以 SYN-DAT
   }
 });
 
-test('SYN-DATA-PK-02（DATA-CON-001 引用与作用域前置）: 48 张关键表主键全部在场且表清单零漂移', async () => {
+test('SYN-DATA-PK-02（DATA-CON-001 引用与作用域前置）: 59 张关键表主键全部在场且表清单零漂移', async () => {
   const model = await modelP;
   const actual = [...model.tables.keys()].sort();
   assert.deepEqual(actual, [...EXPECTED_TABLES].sort(), '实际建表清单与冻结清单不一致');
@@ -292,17 +292,36 @@ const DATA_CON_002_ROWS: readonly UniquenessRow[] = [
   },
   {
     row: 12,
-    clause:
-      '通知逻辑事件＋收件人（＋渠道）唯一——由 notification_facts.dedup_key UNIQUE 承载（NTF-003）',
-    status: 'PARTIAL',
+    clause: '通知逻辑事件＋收件人唯一——通知表族已入册（迁移 20260825100000）',
+    status: 'DDL',
     verify: (m) => {
-      const facts = m.tables.get('notification_facts');
-      assert.ok(facts, '缺通知事实表 notification_facts');
-      const dedupDefs = facts?.columns.get('dedup_key') ?? [];
+      const factDefs = m.tables.get('notification_facts')?.columns.get('dedup_key') ?? [];
       assert.ok(
-        dedupDefs.some((d) => /\bUNIQUE\b/i.test(d)),
-        'notification_facts.dedup_key 应声明 UNIQUE（NTF-003 去重键）',
+        factDefs.some((d) => /\bUNIQUE\b/i.test(d)),
+        'notification_facts.dedup_key 应内联 UNIQUE 承载事件去重',
       );
+      assert.deepEqual(
+        namedUniqueOf(
+          m,
+          'notification_inbox_presentations',
+          'uq_notification_presentation_fact_recipient',
+        ),
+        ['fact_id', 'recipient_id'],
+      );
+      assert.deepEqual(namedUniqueOf(m, 'email_templates', 'uq_email_templates_scope'), [
+        'scope_type',
+        'scope_key',
+        'kind',
+      ]);
+      // notification_configs（复合主键 config_kind+config_key）、channel_delivery_attempts、
+      // notification_privileged_audit 的主键由 PK-02 统一校验，此处仅保存在性。
+      for (const t of [
+        'channel_delivery_attempts',
+        'notification_configs',
+        'notification_privileged_audit',
+      ]) {
+        assert.ok(m.tables.get(t), `缺表 ${t}`);
+      }
     },
   },
   {
@@ -370,7 +389,8 @@ test('SYN-DATA-UQ-03（DATA-CON-002）: 唯一性清单 15 行逐行核对——
     tally[r.status] += 1;
   }
   // 分布冻结：未来某行升级为完整 DDL 承载时，请同步翻转状态并改写本行注释
-  assert.deepEqual(tally, { DDL: 7, PARTIAL: 6, ABSENT: 2 });
+  // （row12 通知表族已随迁移 20260825100000 入册，ABSENT→DDL）
+  assert.deepEqual(tally, { DDL: 8, PARTIAL: 5, ABSENT: 2 });
 });
 
 /** 关键骨架列 NOT NULL 抽样矩阵（表, 列）——覆盖 CREATE 主体列与 ALTER 补丁列 */

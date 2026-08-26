@@ -28,6 +28,7 @@
     "test:unit": "node --env-file=.env.test --test --test-concurrency=8 -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
     "test:integration": "node --env-file=.env.test --test --test-concurrency=1 -r ts-node/register \"test/integration/**/*.spec.ts\"",
     "test:contract": "node --env-file=.env.test --test -r ts-node/register \"test/contract/**/*.spec.ts\"",
+    "test:l5": "node --env-file=.env.test --test --test-concurrency=4 -r ts-node/register \"test/nfr/**/*.spec.ts\" \"test/ops/**/*.spec.ts\" \"test/casdoor/**/*.spec.ts\" \"test/data/**/*.spec.ts\" \"test/security/**/*.spec.ts\"",
     "coverage:all": "node --env-file=.env.test --test --test-concurrency=8 -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
     "test:cov": "c8 -o coverage -- npm run coverage:all",
     "test:cov:gate": "node scripts/ci/coverage-gate.js",
