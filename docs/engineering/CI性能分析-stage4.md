@@ -10,12 +10,12 @@
 
 ## 本地实测（不含 c8，仅 node --test + ts-node）
 
-| 模块 | spec 数 | 耗时 |
-|---|---|---|
-| organization | 25 | 35,060ms |
-| notification | 23 | 14,646ms |
-| joint | 8 | 1,938ms |
-| 其余模块合计 | ~50 | 估算 <40s |
+| 模块         | spec 数 | 耗时      |
+| ------------ | ------- | --------- |
+| organization | 25      | 35,060ms  |
+| notification | 23      | 14,646ms  |
+| joint        | 8       | 1,938ms   |
+| 其余模块合计 | ~50     | 估算 <40s |
 
 **ts-node 编译是最大瓶颈**：每个 spec 文件独立编译 TS → JS，
 25 个 organization spec 的编译开销远大于测试执行本身。
