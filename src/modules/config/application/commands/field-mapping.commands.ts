@@ -98,24 +98,26 @@ export class PublishFieldMappingCommand {
     if (!(await this.authorization.canManagePlatform(input.subjectId))) {
       throw cfgErrors.forbidden('仅平台超管可发布 Casdoor 字段映射');
     }
-    let publishedVersionNumber = 0;
     // 单事务窗口：加锁读版本线 → 修改 → save（CFG-005 并发保护；findForUpdate 行锁
-    // 在命令读-改-写期间持续持有，锁不随 find 的独立事务释放）
-    await this.uow.runShared({ kind: 'unprotected' }, async () => {
-      // 先取版本线根行锁（findForUpdate），再读草稿（评审 warning）：并发发布时
-      // 第二个发布者在根锁上阻塞，锁到手后读到的是前序发布提交后的最新草稿——
-      // 「串行化并发发布」语义覆盖草稿读取，无旧快照缝隙
-      const rootSnapshot = await this.rootRepository.findForUpdate(FIELD_MAPPING_ROOT_ID);
-      const existing = await this.stateRepository.load();
-      if (existing === null) {
-        throw cfgErrors.preconditionFailed('字段映射草稿尚不存在');
-      }
-      const draft = FieldMappingDraft.fromSnapshot(existing);
-      // 发布前门禁：测试凭证+影响预览+条目兜底校验（CFG-004）
-      draft.validateForPublish({
-        testResultRef: input.testResultRef,
-        impactPreview: input.impactPreview,
-      });
+    // 在命令读-改-写期间持续持有，锁不随 find 的独立事务释放）。
+    // 事务内状态经返回值解构（不闭包外泄，降低耦合）
+    const { publishedVersionNumber } = await this.uow.runShared(
+      { kind: 'unprotected' },
+      async () => {
+        // 先取版本线根行锁（findForUpdate），再读草稿（评审 warning）：并发发布时
+        // 第二个发布者在根锁上阻塞，锁到手后读到的是前序发布提交后的最新草稿——
+        // 「串行化并发发布」语义覆盖草稿读取，无旧快照缝隙
+        const rootSnapshot = await this.rootRepository.findForUpdate(FIELD_MAPPING_ROOT_ID);
+        const existing = await this.stateRepository.load();
+        if (existing === null) {
+          throw cfgErrors.preconditionFailed('字段映射草稿尚不存在');
+        }
+        const draft = FieldMappingDraft.fromSnapshot(existing);
+        // 发布前门禁：测试凭证+影响预览+条目兜底校验（CFG-004）
+        draft.validateForPublish({
+          testResultRef: input.testResultRef,
+          impactPreview: input.impactPreview,
+        });
 
       // 写入版本线：基于当前发布版本创建新草稿（回滚语义），走完整测试→发布流程
       let root: ConfigRoot;
@@ -162,7 +164,7 @@ export class PublishFieldMappingCommand {
         { by: input.subjectId, now: input.now },
       );
       await this.rootRepository.save(root.toSnapshot());
-      publishedVersionNumber = draftRecord.versionNumber;
+      return { publishedVersionNumber: draftRecord.versionNumber };
     });
     // 通知置于事务提交之后（评审 1）：外部通知失败不回滚已提交的发布；
     // 外部调用期间不持续持有 DB 行锁
