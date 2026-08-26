@@ -126,6 +126,13 @@ function buildDatabase(
     user: parseString(raw?.user, env.DATABASE_USER, 'DATABASE_USER', 'ranaminder'),
     schema: parseString(raw?.schema, env.DATABASE_SCHEMA, 'DATABASE_SCHEMA', 'app'),
     ssl: parseBool(raw?.ssl, env.DATABASE_SSL, false),
+    // SSL 证书校验开关（默认 true 安全校验）：自签/内部 CA 部署可显式置 false，
+    // 否则 pg 握手将因无法校验链而连接失败（评审修复：此前声明未解析致恒 undefined→?? true 且不可配置）
+    sslRejectUnauthorized: parseBool(
+      raw?.sslRejectUnauthorized,
+      env.DATABASE_SSL_REJECT_UNAUTHORIZED,
+      true,
+    ),
     passwordRef: requireField(
       raw?.passwordRef,
       env.DATABASE_PASSWORD_REF,

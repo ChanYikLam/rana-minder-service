@@ -156,6 +156,10 @@
         - name: 6-契约测试L3
           if: "[ -f package.json ]"
           script: npm run test:contract
+        # 阶段 6b：L5 验收证据测试（TST-NFR/OPS-VER/SYN-DATA/SEC；确定性无外部依赖，pg/jose 缺失自动 skip）
+        - name: 6b-L5验收测试
+          if: "[ -f package.json ]"
+          script: npm run test:l5
         # 阶段 7：构建（HTTP 应用 + Worker 双入口，ADR-001/ADR-013）
         - name: 7-构建
           if: "[ -f package.json ]"
@@ -294,6 +298,10 @@
         - name: 6-契约测试L3
           if: "[ -f package.json ]"
           script: npm run test:contract
+        # 阶段 6b：L5 验收证据测试（TST-NFR/OPS-VER/SYN-DATA/SEC；确定性无外部依赖，pg/jose 缺失自动 skip）
+        - name: 6b-L5验收测试
+          if: "[ -f package.json ]"
+          script: npm run test:l5
         - name: 7-构建
           if: "[ -f package.json ]"
           script: |
@@ -424,6 +432,9 @@
         - name: 6-契约测试L3
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: npm run test:contract
+        - name: 6b-L5验收测试
+          if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
+          script: npm run test:l5
         - name: 7-构建
           if: '[[ "$CNB_BRANCH" == v* ]] && [ -f package.json ]'
           script: |

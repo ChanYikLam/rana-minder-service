@@ -105,3 +105,61 @@ describe('config.loader 占位符 fail-closed', () => {
     }
   });
 });
+
+describe('config.loader SSL 证书校验开关（sslRejectUnauthorized）', () => {
+  it('未配置时默认 true（安全默认：校验证书链）', () => {
+    const file = writeTempConfig(GOOD_CONFIG);
+    try {
+      const cfg = loadConfig({ env: {}, configFilePath: file });
+      assert.equal(cfg.database.sslRejectUnauthorized, true);
+    } finally {
+      cleanupTemp(file);
+    }
+  });
+
+  it('配置文件显式 false 可关闭（自签/内部 CA 部署逃生通道）', () => {
+    const file = writeTempConfig(
+      GOOD_CONFIG.replace('ssl: false', 'ssl: false\n  sslRejectUnauthorized: false'),
+    );
+    try {
+      const cfg = loadConfig({ env: {}, configFilePath: file });
+      assert.equal(cfg.database.sslRejectUnauthorized, false);
+    } finally {
+      cleanupTemp(file);
+    }
+  });
+
+  it('文件未配置时环境变量 DATABASE_SSL_REJECT_UNAUTHORIZED 生效；文件显式值优先（与 ssl 同口径）', () => {
+    const noFlag = writeTempConfig(GOOD_CONFIG);
+    try {
+      // 文件未配置：环境变量决定
+      assert.equal(
+        loadConfig({ env: { DATABASE_SSL_REJECT_UNAUTHORIZED: 'false' }, configFilePath: noFlag })
+          .database.sslRejectUnauthorized,
+        false,
+      );
+      assert.equal(
+        loadConfig({ env: { DATABASE_SSL_REJECT_UNAUTHORIZED: '1' }, configFilePath: noFlag })
+          .database.sslRejectUnauthorized,
+        true,
+      );
+      // 文件显式配置：优先于环境变量（parseBool 文件优先语义）
+      const explicit = writeTempConfig(
+        GOOD_CONFIG.replace('ssl: false', 'ssl: false\n  sslRejectUnauthorized: false'),
+      );
+      try {
+        assert.equal(
+          loadConfig({
+            env: { DATABASE_SSL_REJECT_UNAUTHORIZED: 'true' },
+            configFilePath: explicit,
+          }).database.sslRejectUnauthorized,
+          false,
+        );
+      } finally {
+        cleanupTemp(explicit);
+      }
+    } finally {
+      cleanupTemp(noFlag);
+    }
+  });
+});
