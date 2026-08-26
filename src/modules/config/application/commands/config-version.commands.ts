@@ -19,7 +19,11 @@ import {
   type ConfigKind,
   type ConfigVersionRecord,
 } from '../../domain/models/config-version';
-import type { ConfigRootRepositoryPort, PolicyAuthorizationPort, CommandTransactionPort } from '../ports';
+import type {
+  ConfigRootRepositoryPort,
+  PolicyAuthorizationPort,
+  CommandTransactionPort,
+} from '../ports';
 import type { ConfigNotificationPort } from '../../infrastructure/not-wired.config-ports';
 import { cfgErrors } from '../errors';
 
