@@ -63,3 +63,66 @@ describe('RejectAllAuthSessionProvider（fail-closed）', () => {
     assert.equal(r, null);
   });
 });
+
+// ---- AuthGuard 真实行为测试（评审 warning①：补齐未认证→401/已认证→挂载会话）----
+
+import { AuthGuard, AUTH_SESSION_KEY } from './auth.guard';
+import type { AuthSessionProvider } from './auth-session';
+
+function makeMockContext(request: Record<string, unknown>) {
+  return {
+    switchToHttp: () => ({
+      getRequest: () => request,
+    }),
+  } as never;
+}
+
+const mockTrace = { current: () => ({ traceId: 'trace-guard-test' }) } as never;
+
+describe('AuthGuard 行为级测试（评审 warning①）', () => {
+  it('未认证：session=null → 抛 HttpException 401 IFC-ERR-001', async () => {
+    const sessions: AuthSessionProvider = {
+      resolveSession: async () => null,
+    };
+    const guard = new AuthGuard(sessions, mockTrace);
+    const request = {};
+    await assert.rejects(
+      () => guard.canActivate(makeMockContext(request)),
+      (e: unknown) => {
+        const httpErr = e as { status?: number; response?: { code?: string; message?: string } };
+        return (
+          httpErr.status === 401 &&
+          httpErr.response?.code === 'IFC-ERR-001' &&
+          typeof httpErr.response?.message === 'string'
+        );
+      },
+    );
+  });
+
+  it('已认证：canActivate 返回 true + 会话挂载到 request.authSession', async () => {
+    const session: AuthSession = { subjectId: 'u_test', now: NOW };
+    const sessions: AuthSessionProvider = {
+      resolveSession: async () => session,
+    };
+    const guard = new AuthGuard(sessions, mockTrace);
+    const request: Record<string, unknown> = {};
+    const result = await guard.canActivate(makeMockContext(request));
+    assert.equal(result, true);
+    // 会话已挂载到 request 上，后续 controller/sessionFromRequest 可读取
+    const mounted = request[AUTH_SESSION_KEY] as AuthSession;
+    assert.ok(mounted);
+    assert.equal(mounted.subjectId, 'u_test');
+  });
+
+  it('sessionFromRequest：从挂载后的请求中提取 subjectId', async () => {
+    const session: AuthSession = { subjectId: 'u_extract', now: NOW };
+    const sessions: AuthSessionProvider = { resolveSession: async () => session };
+    const guard = new AuthGuard(sessions, mockTrace);
+    const request: Record<string, unknown> = {};
+    await guard.canActivate(makeMockContext(request));
+    // 使用守卫导出的辅助函数验证挂载结果
+    const { sessionFromRequest } = await import('./auth.guard');
+    const extracted = sessionFromRequest(request);
+    assert.equal(extracted.subjectId, 'u_extract');
+  });
+});
