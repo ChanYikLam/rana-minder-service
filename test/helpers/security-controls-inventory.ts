@@ -3,14 +3,18 @@
  *
  * 权威来源：docs/specification/安全设计与实现级威胁模型-v1.0.md
  * （26 威胁 / 38 控制目标，SEC-CTL-001~038）。威胁侧以 THR 桩位占额
- * （status=未执行）；控制侧仅登记**当前仓库已有可执行证据**的条目
- * （evidence 必须存在）；未登记部分由 TOTAL_CONTROLS - concrete 显式
- * 留缺口，禁止虚报。
+ * （status=未执行）；控制侧分 code 与 process 两通道记账（见下），
+ * 每项必须携带真实存在的证据（evidence 文件），禁止虚报。
  *
- * 留白说明：当前唯一留白项对应权威文档 **SEC-CTL-001（事实追溯：所有
- * 放行必须能追溯到产品事实/SRS，无来源行为为零）**——属流程审计范畴，
- * 无法以代码可执行测试佐证，故显式留白不登记。注意它与已登记的
- * **TST-SEC-CTL-01**（身份占位 fail-closed）分属不同编号体系，勿混淆。
+ * 分通道记账：
+ * - codeControls = CONCRETE_CONTROLS（37 项，每项有可执行测试证据文件）
+ * - processControls = PROCESS_CONTROLS（1 项 SEC-CTL-001，流程证据文档承载）
+ *   codeControls + processControls === TOTAL_CONTROLS (38)
+ *
+ * 留白说明：SEC-CTL-001（事实追溯：所有放行必须能追溯到产品事实/SRS，
+ * 无来源行为为零）属流程审计范畴，无法以代码可执行测试佐证，故登记为
+ * process 通道流程证据（见 PROCESS_CONTROLS）而非代码证据。注意它与已
+ * 登记的 **TST-SEC-CTL-01**（身份占位 fail-closed）分属不同编号体系，勿混淆。
  *
  * 棘轮：BASELINE_CONCRETE_CONTROLS 只许上调；新增控制必须带真实
  * evidence 文件路径（套件内断言存在），否则清单测试失败。
@@ -266,6 +270,29 @@ export const CONCRETE_CONTROLS: readonly SecurityControlEntry[] = [
       R('src/modules/audit/application/commands/deletion.spec.ts'),
       R('src/modules/audit/application/commands/retention-cleanup.command.ts'),
     ],
+  },
+];
+
+// ---- 流程证据（SEC-CTL-001；路径 2 轻量版：账目分通道）----
+
+/** 流程证据条目（非代码测试，由可审计文档承载） */
+export interface ProcessEvidenceEntry {
+  readonly id: string;
+  readonly title: string;
+  /** 流程证据文档路径（必须存在，fs.existsSync 校验） */
+  readonly evidenceDoc: string;
+}
+
+/**
+ * SEC-CTL-001（事实追溯）为流程审计控制——其证据是需求追踪矩阵的
+ * "逐事实全链路追踪"与"无来源映射=0"，而非代码单测。
+ * 登记为 kind:'process' 以与代码证据分通道记账（路径 2 轻量方案）。
+ */
+export const PROCESS_CONTROLS: readonly ProcessEvidenceEntry[] = [
+  {
+    id: 'TST-SEC-CTL-001',
+    title: '事实追溯：所有放行可追溯到产品事实/SRS，无来源行为为零',
+    evidenceDoc: R('docs/specification/需求追踪矩阵-v1.0.md'),
   },
 ];
 
