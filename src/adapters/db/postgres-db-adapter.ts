@@ -97,9 +97,10 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       // 连接超时：避免 DB 不可达时 pool.connect() 无限挂起（如 CI 集成测试阶段
       // dind 网络未就绪时静默阻塞直到 Runner 超时强杀）。超时后快速抛错便于定位。
       connectionTimeoutMillis: poolConfig.connectionTimeoutMillis ?? 10_000,
-      // 归还前若发现连接上仍有未收口事务，兜底回滚并告警（污染防护）。
+      // 空闲连接超时（30s 无活动则归还池）；与兜底回滚钩子无关——回滚逻辑在 pool 'release' 事件监听中。
       idleTimeoutMillis: 30_000,
-      // 连接池空闲即允许进程退出，避免 node --test 因池常驻句柄而等待事件循环耗尽。
+      // 空闲时允许进程退出：node --test 场景下池常驻句柄会阻塞事件循环耗尽；
+      // 长驻进程（生产 API/Worker）由进程管理器（Docker/K8s）控制生命周期，此配置无副作用。
       allowExitOnIdle: true,
     });
 
