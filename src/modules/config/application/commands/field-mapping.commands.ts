@@ -98,9 +98,10 @@ export class PublishFieldMappingCommand {
     if (!(await this.authorization.canManagePlatform(input.subjectId))) {
       throw cfgErrors.forbidden('仅平台超管可发布 Casdoor 字段映射');
     }
+    let publishedVersionNumber = 0;
     // 单事务窗口：加锁读版本线 → 修改 → save（CFG-005 并发保护；findForUpdate 行锁
     // 在命令读-改-写期间持续持有，锁不随 find 的独立事务释放）
-    return this.uow.runShared({ kind: 'unprotected' }, async () => {
+    await this.uow.runShared({ kind: 'unprotected' }, async () => {
       const existing = await this.stateRepository.load();
       if (existing === null) {
         throw cfgErrors.preconditionFailed('字段映射草稿尚不存在');
@@ -159,21 +160,21 @@ export class PublishFieldMappingCommand {
         { by: input.subjectId, now: input.now },
       );
       await this.rootRepository.save(root.toSnapshot());
-
-      // 字段映射发布改变外部身份数据口径（CFG-005 高权益影响）：必须通知
-      await this.notification.notifyConfigPublished({
-        rootId: FIELD_MAPPING_ROOT_ID,
-        kind: 'FIELD_MAPPING',
-        versionNumber: draftRecord.versionNumber,
-        publishedBy: input.subjectId,
-        highRisk: true,
-      });
-
-      return {
-        publishedVersionNumber: draftRecord.versionNumber,
-        reconciliationRequired: true as const,
-      };
+      publishedVersionNumber = draftRecord.versionNumber;
     });
+    // 通知置于事务提交之后（评审 1）：外部通知失败不回滚已提交的发布；
+    // 外部调用期间不持续持有 DB 行锁
+    await this.notification.notifyConfigPublished({
+      rootId: FIELD_MAPPING_ROOT_ID,
+      kind: 'FIELD_MAPPING',
+      versionNumber: publishedVersionNumber,
+      publishedBy: input.subjectId,
+      highRisk: true,
+    });
+    return {
+      publishedVersionNumber,
+      reconciliationRequired: true as const,
+    };
   }
 }
 

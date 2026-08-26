@@ -54,8 +54,7 @@ describe('配置版本线命令（CFG-005）', () => {
       { code: 'CFG_FORBIDDEN' },
     );
     await assert.rejects(
-      () =>
-        new GetConfigRootQuery(repo, auth, notify, uow).execute({ rootId: ROOT, subjectId: 'x' }),
+      () => new GetConfigRootQuery(repo, auth).execute({ rootId: ROOT, subjectId: 'x' }),
       { code: 'CFG_FORBIDDEN' },
     );
   });
@@ -182,15 +181,14 @@ describe('配置版本线命令（CFG-005）', () => {
       subjectId: SA,
       now: NOW,
     });
-    const snap = await new GetConfigRootQuery(repo, auth, notify, uow).execute({
+    const snap = await new GetConfigRootQuery(repo, auth).execute({
       rootId: ROOT,
       subjectId: SA,
     });
     assert.equal(snap.kind, 'PLATFORM_POLICY');
 
     await assert.rejects(
-      () =>
-        new GetConfigRootQuery(repo, auth, notify, uow).execute({ rootId: 'ghost', subjectId: SA }),
+      () => new GetConfigRootQuery(repo, auth).execute({ rootId: 'ghost', subjectId: SA }),
       { code: 'CFG_NOT_FOUND' },
     );
   });

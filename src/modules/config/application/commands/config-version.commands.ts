@@ -168,7 +168,8 @@ export interface PublishConfigVersionInput {
 export class PublishConfigVersionCommand extends ConfigVersionOperationBase {
   async execute(input: PublishConfigVersionInput) {
     await this.requirePlatformAdmin(input.subjectId);
-    return this.runInTx(async () => {
+    // 事务窗口只覆盖「加锁读→改聚合→save」；提交后行锁释放
+    const published = await this.runInTx(async () => {
       const root = await this.loadRootForWrite(input.rootId);
       if (root === null) {
         throw cfgErrors.notFound('配置根');
@@ -184,20 +185,21 @@ export class PublishConfigVersionCommand extends ConfigVersionOperationBase {
         { by: input.subjectId, now: input.now },
       );
       await this.repository.save(root.toSnapshot());
-      // 发布通知（CFG-005/NTF-005：改变学生权益或管理员权限时必须通知；高风险必达）
-      await this.notification.notifyConfigPublished({
-        rootId: input.rootId,
-        kind: root.kind,
-        versionNumber: input.versionNumber,
-        publishedBy: input.subjectId,
-        highRisk: HIGH_RISK_CONFIG_KINDS.includes(root.kind),
-      });
-      const current = root.getCurrentPublished();
-      return {
-        rootId: input.rootId,
-        currentPublishedVersionNumber: current?.versionNumber ?? null,
-      };
+      return { kind: root.kind, current: root.getCurrentPublished() };
     });
+    // 发布通知置于事务提交之后（评审 1）：外部通知失败不回滚已提交的发布；
+    // 外部调用期间不持续持有 DB 行锁（当前 NotWired noop；3.x 接线真实副作用时即生效）
+    await this.notification.notifyConfigPublished({
+      rootId: input.rootId,
+      kind: published.kind,
+      versionNumber: input.versionNumber,
+      publishedBy: input.subjectId,
+      highRisk: HIGH_RISK_CONFIG_KINDS.includes(published.kind),
+    });
+    return {
+      rootId: input.rootId,
+      currentPublishedVersionNumber: published.current?.versionNumber ?? null,
+    };
   }
 }
 
@@ -226,10 +228,17 @@ export class RollbackConfigVersionCommand extends ConfigVersionOperationBase {
   }
 }
 
-export class GetConfigRootQuery extends ConfigVersionOperationBase {
+/** 版本线只读查询：独立实现（不依赖事务端口；查询路径不加锁、不注入 uow） */
+export class GetConfigRootQuery {
+  constructor(
+    private readonly repository: ConfigRootRepositoryPort,
+    private readonly authorization: PolicyAuthorizationPort,
+  ) {}
+
   async execute(input: { rootId: string; subjectId: string }) {
-    await this.requirePlatformAdmin(input.subjectId);
-    // 只读查询：不加锁（普通读）
+    if (!(await this.authorization.canManagePlatform(input.subjectId))) {
+      throw cfgErrors.forbidden('仅平台超管可操作配置版本');
+    }
     const snapshot = await this.repository.find(input.rootId);
     if (snapshot === null) {
       throw cfgErrors.notFound('配置根');

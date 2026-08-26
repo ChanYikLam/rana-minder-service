@@ -352,13 +352,8 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
     },
     {
       provide: GET_CONFIG_ROOT_QUERY,
-      useFactory: (roots, authz, notify, uow) => new GetConfigRootQuery(roots, authz, notify, uow),
-      inject: [
-        CONFIG_ROOT_REPOSITORY,
-        CONFIG_POLICY_AUTHORIZATION,
-        CONFIG_NOTIFICATION_PORT,
-        ConfigUnitOfWork,
-      ],
+      useFactory: (roots, authz) => new GetConfigRootQuery(roots, authz),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
     },
   ],
   exports: [
