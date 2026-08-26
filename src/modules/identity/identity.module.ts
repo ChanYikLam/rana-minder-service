@@ -56,6 +56,7 @@ import {
   NAME_CORRECTION_CONTROLLER,
   AUTH_SESSION_PROVIDER,
   CASDOOR_AVAILABILITY,
+  OIDC_NONCE_STORE,
 } from './tokens';
 
 import { IdentityUnitOfWork } from './infrastructure/unit-of-work';
@@ -112,6 +113,7 @@ import {
   type RanaMinderConfig,
 } from '../../config';
 import { AuthGuard } from './interfaces/nest/auth.guard';
+import { InMemoryOidcNonceStore } from './interfaces/nest/oidc-nonce-store';
 import { ProfilesNestController } from './interfaces/nest/profiles.nest.controller';
 import { AccountAccessNestController } from './interfaces/nest/account-access.nest.controller';
 import { NameCorrectionNestController } from './interfaces/nest/name-correction.nest.controller';
@@ -133,6 +135,11 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
         new CasdoorAvailability((config.casdoor?.endpoint?.length ?? 0) > 0),
       inject: [RANA_MINDER_CONFIG],
     },
+    // BUG-008：nonce 存储默认注入内存桩；多实例部署时覆盖为 Redis 等共享存储。
+    {
+      provide: OIDC_NONCE_STORE,
+      useFactory: () => new InMemoryOidcNonceStore(),
+    },
     {
       provide: AUTH_SESSION_PROVIDER,
       useFactory: (
@@ -149,8 +156,14 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
           const clientSecret = isSecretRef(config.casdoor.clientSecretRef)
             ? resolveSecret(config.casdoor.clientSecretRef)
             : config.casdoor.clientSecretRef;
+          // BUG-017：配置 sessionSecretRef 时使用独立专用会话密钥，与 clientSecret 解耦。
+          const dedicatedSecret = config.casdoor.sessionSecretRef
+            ? isSecretRef(config.casdoor.sessionSecretRef)
+              ? resolveSecret(config.casdoor.sessionSecretRef)
+              : config.casdoor.sessionSecretRef
+            : undefined;
           return new OidcAuthSessionProvider({
-            sessionSecret: deriveSessionSecret(clientSecret),
+            sessionSecret: deriveSessionSecret(clientSecret, dedicatedSecret),
             // 运行时共享状态：Casdoor 不可用时降级窗口生效（CAS-FAIL-001）
             casdoorAvailable: availability,
             // BUG-003 读侧接线：吊销后旧令牌立即失效

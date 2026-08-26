@@ -14,7 +14,7 @@
  * 会话解析退回到 RejectAllAuthSessionProvider（受保护端点 401 IFC-ERR-001）。
  */
 
-import { Controller, Delete, Get, HttpCode, HttpException, Inject } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, HttpException, Inject, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { type Request as ExpressRequest, type Response } from 'express';
 import { jwtVerify } from 'jose';
@@ -34,7 +34,7 @@ import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-prov
 import { deriveSessionSecret } from './session-secret';
 import { CasdoorAvailability } from './casdoor-availability';
 import { InMemoryOidcNonceStore } from './oidc-nonce-store';
-import { CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT } from '../../tokens';
+import { CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT, OIDC_NONCE_STORE } from '../../tokens';
 import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
 
 /** Casdoor 账号状态（与 CasdoorOidcClient.fetchAccountState 返回值一致）。 */
@@ -73,7 +73,8 @@ export class CasdoorSessionController {
      * BUG-008：nonce 存储可注入（多实例部署时替换为 Redis 等共享存储）。
      * 未注入时回退到进程内实现（单实例基线）。
      */
-    @Inject('OIDC_NONCE_STORE')
+    @Optional()
+    @Inject(OIDC_NONCE_STORE)
     private readonly nonceStoreOverride?: import('./oidc-nonce-store').OidcNonceStore,
   ) {}
 
@@ -280,7 +281,10 @@ export class CasdoorSessionController {
     const c = this.config.casdoor;
     if (!c?.clientSecretRef) return null;
     try {
-      this.sessionSecret = deriveSessionSecret(this.resolveClientSecret(c.clientSecretRef));
+      this.sessionSecret = deriveSessionSecret(
+        this.resolveClientSecret(c.clientSecretRef),
+        this.resolveDedicatedSessionSecret(),
+      );
       return this.sessionSecret;
     } catch {
       return null;
@@ -308,7 +312,7 @@ export class CasdoorSessionController {
       redirectUri: c.redirectUri,
     };
     this.oidcClient = new CasdoorOidcClient(oidcConfig);
-    this.sessionSecret = deriveSessionSecret(clientSecret);
+    this.sessionSecret = deriveSessionSecret(clientSecret, this.resolveDedicatedSessionSecret());
     return this.oidcClient;
   }
 
@@ -318,6 +322,13 @@ export class CasdoorSessionController {
    * 输入（Critical：会话伪造 / token 交换失败）。
    */
   private resolveClientSecret(ref: string): string {
+    return isSecretRef(ref) ? resolveSecret(ref) : ref;
+  }
+
+  /** BUG-017：解析专用会话密钥（casdoor.sessionSecretRef）；未配置返回 undefined 回退 v1。 */
+  private resolveDedicatedSessionSecret(): string | undefined {
+    const ref = this.config.casdoor?.sessionSecretRef;
+    if (!ref) return undefined;
     return isSecretRef(ref) ? resolveSecret(ref) : ref;
   }
 }

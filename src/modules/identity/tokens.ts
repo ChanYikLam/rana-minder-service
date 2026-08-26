@@ -47,3 +47,9 @@ export const AUTH_SESSION_PROVIDER = 'IDENTITY_AUTH_SESSION_PROVIDER';
 
 /** Casdoor 连通状态共享对象（CAS-FAIL-001 降级窗口运行时联动）。 */
 export const CASDOOR_AVAILABILITY = 'IDENTITY_CASDOOR_AVAILABILITY';
+
+/**
+ * BUG-008：OIDC nonce 服务端存储（CAS-CAP-004 会话固定防护）。
+ * 默认注册 InMemory 内存桩；多实例部署时覆盖为 Redis 等共享存储。
+ */
+export const OIDC_NONCE_STORE = 'IDENTITY_OIDC_NONCE_STORE';
