@@ -32,7 +32,8 @@ import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-prov
 import { deriveSessionSecret } from './session-secret';
 import { CasdoorAvailability } from './casdoor-availability';
 import { InMemoryOidcNonceStore } from './oidc-nonce-store';
-import { CASDOOR_AVAILABILITY } from '../../tokens';
+import { CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT } from '../../tokens';
+import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
 
 /** Casdoor 账号状态（与 CasdoorOidcClient.fetchAccountState 返回值一致）。 */
 type AccountState = 'ACTIVE' | 'DISABLED' | 'DELETED' | 'UNKNOWN';
@@ -65,6 +66,7 @@ export class CasdoorSessionController {
   constructor(
     @Inject(RANA_MINDER_CONFIG) private readonly config: RanaMinderConfig,
     @Inject(CASDOOR_AVAILABILITY) private readonly availability: CasdoorAvailability,
+    @Inject(SESSION_REVOCATION_PORT) private readonly revocationPort?: SessionRevocationPort,
   ) {}
 
   /** GET /api/auth/casdoor/login-url */
@@ -195,6 +197,17 @@ export class CasdoorSessionController {
   @Delete('logout')
   @HttpCode(200)
   async logout(req: ExpressRequest, res: Response): Promise<{ ok: boolean }> {
+    // BUG-007：登出时主动吊销该主体全部会话（不只清 Cookie）
+    if (this.revocationPort) {
+      const sub = this.extractSubjectFromRequest(req);
+      if (sub) {
+        try {
+          await this.revocationPort.invalidateAllSessions(sub);
+        } catch {
+          // 吊销失败不阻断 Cookie 清除（客户端已不可信）
+        }
+      }
+    }
     // 清 cookie 时使用与写入一致的 Path/HttpOnly/SameSite/Secure 属性，确保真正清除。
     const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
     const secureAttr = secure ? '; Secure' : '';
@@ -203,6 +216,27 @@ export class CasdoorSessionController {
       `session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureAttr}`,
     );
     return { ok: true };
+  }
+
+  /** 从请求中提取 JWT subjectId（用于吊销；仅解码 payload 不验签） */
+  private extractSubjectFromRequest(req: ExpressRequest): string | null {
+    let token: string | null = null;
+    const auth = req.headers['authorization'];
+    if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+      token = auth.slice(7);
+    } else if (typeof req.headers['cookie'] === 'string') {
+      const match = req.headers['cookie'].match(/(?:^|;\s*)session_token=([^;]+)/);
+      if (match) token = match[1];
+    }
+    if (token === null) return null;
+    try {
+      const [, payloadB64] = token.split('.');
+      if (!payloadB64) return null;
+      const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+      return typeof payload['sub'] === 'string' ? payload['sub'] : null;
+    } catch {
+      return null;
+    }
   }
 
   // ----- 内部 -----

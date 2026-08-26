@@ -5,6 +5,9 @@
  * （HS256），返回 AuthSession。Casdoor 实例不可用时，若会话 JWT 签发于
  * 15 分钟内且非增强认证路径，可返回 degraded 会话（CAS-FAIL-001）。
  *
+ * BUG-003 读侧接线：resolveSession 在 JWT 验签通过后比对令牌 iat 与
+ * 撤销时间（revocationReader），已被吊销的会话立即返回 null（≤5s 生效）。
+ *
  * 配置驱动：casdoor.endpoint 为空时仍使用 RejectAllAuthSessionProvider
  * （fail-closed 门控）；配置存在时由本实现替换。
  */
@@ -22,6 +25,12 @@ export interface SessionClaims {
   readonly degraded: boolean;
 }
 
+/** 会话撤销状态（由 SessionRevocationPort.getRevocation 返回） */
+export interface SessionRevocationInfo {
+  readonly revokeVersion: number;
+  readonly revokedAt: string | null;
+}
+
 export interface OidcSessionConfig {
   readonly sessionSecret: Uint8Array;
   /**
@@ -29,6 +38,12 @@ export interface OidcSessionConfig {
    * CasdoorAvailability 状态对象（运行时由会话控制器动态更新，CAS-FAIL-001）。
    */
   readonly casdoorAvailable: boolean | CasdoorAvailability;
+  /**
+   * BUG-003 读侧接线：会话撤销版本读取端口（可选，未注入时不校验吊销）。
+   * resolveSession 在 JWT 验签通过后比对令牌 iat 与撤销时间，
+   * 已被吊销的会话立即返回 null。
+   */
+  readonly revocationReader?: (subjectId: string) => Promise<SessionRevocationInfo | null>;
 }
 
 export class OidcAuthSessionProvider implements AuthSessionProvider {
@@ -58,6 +73,17 @@ export class OidcAuthSessionProvider implements AuthSessionProvider {
         const ageMs = now.getTime() - iat * 1000;
         if (ageMs > 15 * 60 * 1000) {
           return null; // 降级窗口过期
+        }
+      }
+
+      // BUG-003 读侧接线：比对撤销版本——吊销后签发的旧令牌立即失效
+      if (this.config.revocationReader) {
+        const revocation = await this.config.revocationReader(sub);
+        if (revocation !== null && revocation.revokedAt !== null) {
+          const revokedAtMs = new Date(revocation.revokedAt).getTime();
+          if (iat * 1000 <= revokedAtMs) {
+            return null; // 令牌签发早于或等于吊销时刻 → 已被吊销
+          }
         }
       }
 
