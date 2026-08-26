@@ -1,12 +1,17 @@
 /**
  * PostgreSQL 会话失效（infrastructure；IDN-008/GOV-009/CAS-FAIL-002）。
  *
- * 表 auth_sessions：session_id text PK、subject_id uuid、revoke_version bigint、
+ * 表 auth_sessions：session_id text PK、subject_id text、revoke_version bigint、
  * revoked_at timestamptz null、created_at timestamptz。
- * 会话为无状态 JWT 不主动落行；invalidateAllSessions 使用 UPSERT 确保
- * 即使无既有行也能写入吊销记录（BUG-003/007 端到端闭环关键）。
- * getRevocation / invalidateAllSessions 各自管理独立事务（不依赖外部 uow.active），
- * 供无守卫端点（如 DELETE /logout）直接调用（Critical 3 修复）。
+ * 会话为无状态 JWT 不主动落行；invalidateAllSessions 在无既有会话行时也会
+ * 写入一条吊销记录（BUG-003/007 端到端闭环关键），确保读侧 getRevocation
+ * 能查到 revokedAt 并拦截旧令牌。
+ *
+ * 事务约束（安全控制，SEC-CTL-004 / IFC-TX-001）：
+ * - invalidateSessions / invalidateAllSessions 必须在身份域工作单元事务内
+ *   （this.uow.active）执行——禁止脱离事务读写；
+ * - getRevocation 为只读查询，自管理只读事务（供认证链路 resolveSession 使用，
+ *   不依赖外部 uow.active）。
  */
 
 import type { DbAdapter } from '../../../shared/db-adapter';
@@ -35,13 +40,17 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
     const tx = await this.db.beginTransaction();
     try {
       await this.db.setRlsContext(tx, { kind: 'unprotected' });
+      // 取撤销版本最高的一行（即最近一次吊销），版本与时间来自同一行，
+      // 避免 MAX(revoke_version) 与 MAX(revoked_at) 取自不同行导致的状态不一致。
       const rows = await this.db.query<{
         revoke_version: string | null;
         revoked_at: Date | null;
       }>(
         tx,
-        `SELECT MAX(revoke_version) AS revoke_version, MAX(revoked_at) AS revoked_at
-           FROM auth_sessions WHERE subject_id = $1`,
+        `SELECT revoke_version, revoked_at
+           FROM auth_sessions WHERE subject_id = $1
+          ORDER BY revoke_version DESC
+          LIMIT 1`,
         [subjectId],
       );
       await this.db.commit(tx);
@@ -64,58 +73,45 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
   /**
    * 吊销主体全部会话并推进撤销版本。
    *
-   * Critical 2+3 修复：
-   * - 自管理事务：不依赖 this.uow.active（无守卫端点直接调用时 uow.active 为 undefined 会抛错）；
-   * - UPSERT 语义：即使该主体在 auth_sessions 中没有行（JWT 无状态会话从不落行），
-   *   也插入一条吊销记录，确保读侧 getRevocation 能查到 revokedAt 并拦截旧令牌。
+   * BUG-003/007 端到端闭环关键：无状态 JWT 会话从不落行，若只做 UPDATE，
+   * 空表场景恒命中 0 行、吊销记录不落库，读侧 getRevocation 将永远查不到
+   * revokedAt。故先 UPDATE 既有未失效会话行推进版本；若无行可更新（从未落行
+   * 或已全部吊销），则 INSERT 一条吊销记录，保证读侧可拦截旧令牌。
+   *
+   * 必须在身份域工作单元事务内执行（this.uow.active；安全控制 SEC-CTL-004，
+   * 禁止脱离事务读写）。
    */
   async invalidateAllSessions(subjectId: string): Promise<number> {
-    const tx = await this.db.beginTransaction();
-    try {
-      await this.db.setRlsContext(tx, { kind: 'unprotected' });
+    const tx = this.uow.active;
 
-      // 先加行锁串行化并发吊销（有行时）
-      await this.db.query(
-        tx,
-        `SELECT session_id FROM auth_sessions WHERE subject_id = $1 FOR UPDATE`,
-        [subjectId],
-      );
-
-      // UPSERT：无行时 INSERT 一条吊销记录（session_id 用 subjectId 前缀保证唯一）
-      // 有行时 UPDATE 推进版本 + NOW()
-      const result = await this.db.query<{ revoke_version: string }>(
-        tx,
-        `INSERT INTO auth_sessions (session_id, subject_id, revoke_version, revoked_at)
-         VALUES ($2, $1, 1, NOW())
-         ON CONFLICT (subject_id, revoked_at IS NOT NULL) DO NOTHING
-         RETURNING revoke_version`,
-        [subjectId, `revocation:${subjectId}`],
-      );
-
-      // 如果 UPSERT 未插入新行（已有活跃行），执行 UPDATE 推进版本
-      if (result.length === 0) {
-        const updated = await this.db.query<{ revoke_version: string }>(
-          tx,
-          `UPDATE auth_sessions
-              SET revoke_version = COALESCE(
-                    (SELECT MAX(revoke_version) FROM auth_sessions WHERE subject_id = $1), 0
-                  ) + 1,
-                  revoked_at = NOW()
-            WHERE subject_id = $1
-            RETURNING revoke_version`,
-          [subjectId],
-        );
-        await this.db.commit(tx);
-        return updated.length > 0 ? Number(updated[0].revoke_version) : 0;
-      }
-
-      await this.db.commit(tx);
-      return Number(result[0].revoke_version);
-    } catch (error) {
-      await this.db.rollback(tx).catch(() => undefined);
-      throw error;
-    } finally {
-      await this.db.clearRlsContext(tx).catch(() => undefined);
+    // 1) 推进既有未失效会话行的撤销版本（有会话行时）
+    const updated = await this.db.query<{ revoke_version: string }>(
+      tx,
+      `UPDATE auth_sessions
+          SET revoke_version = COALESCE(
+                (SELECT MAX(revoke_version) FROM auth_sessions WHERE subject_id = $1), 0
+              ) + 1,
+              revoked_at = NOW()
+        WHERE subject_id = $1 AND revoked_at IS NULL
+        RETURNING revoke_version`,
+      [subjectId],
+    );
+    if (updated.length > 0) {
+      return Number(updated[0].revoke_version);
     }
+
+    // 2) 无未失效会话行：插入一条吊销记录（session_id 带时间戳保证唯一），
+    //    版本承接该主体历史最大版本 +1，确保单调递增。
+    const inserted = await this.db.query<{ revoke_version: string }>(
+      tx,
+      `INSERT INTO auth_sessions (session_id, subject_id, revoke_version, revoked_at)
+       VALUES ($2, $1,
+               (SELECT COALESCE(MAX(revoke_version), 0)
+                  FROM auth_sessions WHERE subject_id = $1) + 1,
+               NOW())
+       RETURNING revoke_version`,
+      [subjectId, `revocation:${subjectId}:${Date.now()}`],
+    );
+    return Number(inserted[0].revoke_version);
   }
 }

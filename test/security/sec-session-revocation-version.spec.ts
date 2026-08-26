@@ -260,6 +260,112 @@ describe('SEC-CTL-004 invalidateAllSessions 撤销版本单调推进（假 uow/d
   });
 });
 
+describe('SEC-CTL-004 invalidateAllSessions 空表场景（BUG-003/007 闭环）', () => {
+  it('SEC-CTL-004：无会话行时 INSERT 落吊销记录，读侧可拦截旧令牌', async () => {
+    const db = new EmptyAuthSessionsFakeDb();
+    const uow = new IdentityUnitOfWork(db);
+    const revocation = new PostgresSessionRevocation(db, uow);
+
+    let version = 0;
+    await uow.run({ kind: 'single', subjectId: 'u-empty' }, async () => {
+      version = await revocation.invalidateAllSessions('u-empty');
+    });
+    assert.equal(version, 1, '空表首推版本 = 1');
+
+    // 读侧应能查到已吊销状态（revokedAt 非空），据此拦截旧令牌
+    const state = await revocation.getRevocation('u-empty');
+    assert.ok(state, '读侧应返回吊销状态');
+    assert.equal(state.revokeVersion, 1);
+    assert.notEqual(state.revokedAt, null, '吊销时间必须非空');
+  });
+
+  it('SEC-CTL-004：重复吊销版本单调递增且读侧同步', async () => {
+    const db = new EmptyAuthSessionsFakeDb();
+    const uow = new IdentityUnitOfWork(db);
+    const revocation = new PostgresSessionRevocation(db, uow);
+
+    let v1 = 0;
+    await uow.run({ kind: 'single', subjectId: 'u-empty' }, async () => {
+      v1 = await revocation.invalidateAllSessions('u-empty');
+    });
+    let v2 = 0;
+    await uow.run({ kind: 'single', subjectId: 'u-empty' }, async () => {
+      v2 = await revocation.invalidateAllSessions('u-empty');
+    });
+    assert.ok(v2 > v1, `版本须单调递增（${v2} > ${v1}）`);
+    assert.equal(v2, 2);
+  });
+});
+
+/** 空表场景专用假适配器：模拟 INSERT 落行 + 版本递增 + 读侧查询。 */
+class EmptyAuthSessionsFakeDb implements DbAdapter {
+  private rows: Array<{
+    session_id: string;
+    subject_id: string;
+    revoke_version: number;
+    revoked_at: Date | null;
+  }> = [];
+  private readonly events: string[] = [];
+
+  async beginTransaction(): Promise<TransactionContext> {
+    const tx = { id: `tx-${this.events.length + 1}` };
+    this.events.push(`begin:${tx.id}`);
+    return tx;
+  }
+  async commit(tx: TransactionContext): Promise<void> {
+    this.events.push(`commit:${tx.id}`);
+  }
+  async rollback(tx: TransactionContext): Promise<void> {
+    this.events.push(`rollback:${tx.id}`);
+  }
+  async setRlsContext(tx: TransactionContext, scope: { kind: string }): Promise<void> {
+    this.events.push(`set-rls:${tx.id}:${scope.kind}`);
+  }
+  async clearRlsContext(tx: TransactionContext): Promise<void> {
+    this.events.push(`clear-rls:${tx.id}`);
+  }
+  async query<T>(_tx: TransactionContext, sql: string, params: readonly unknown[]): Promise<T[]> {
+    if (/UPDATE\s+auth_sessions/i.test(sql)) {
+      const subjectId = params[0] as string;
+      const next =
+        this.rows
+          .filter((r) => r.subject_id === subjectId)
+          .reduce((m, r) => Math.max(m, r.revoke_version), 0) + 1;
+      const targets = this.rows.filter((r) => r.subject_id === subjectId && r.revoked_at === null);
+      for (const row of targets) {
+        row.revoke_version = next;
+        row.revoked_at = new Date();
+      }
+      return targets.map(() => ({ revoke_version: String(next) })) as T[];
+    }
+    if (/INSERT INTO\s+auth_sessions/i.test(sql)) {
+      const subjectId = params[0] as string;
+      const next =
+        this.rows
+          .filter((r) => r.subject_id === subjectId)
+          .reduce((m, r) => Math.max(m, r.revoke_version), 0) + 1;
+      this.rows.push({
+        session_id: params[1] as string,
+        subject_id: subjectId,
+        revoke_version: next,
+        revoked_at: new Date(),
+      });
+      return [{ revoke_version: String(next) }] as T[];
+    }
+    if (/SELECT revoke_version, revoked_at/i.test(sql)) {
+      const subjectId = params[0] as string;
+      const latest = this.rows
+        .filter((r) => r.subject_id === subjectId)
+        .sort((a, b) => b.revoke_version - a.revoke_version)[0];
+      if (!latest) return [] as T[];
+      return [
+        { revoke_version: String(latest.revoke_version), revoked_at: latest.revoked_at },
+      ] as T[];
+    }
+    return [] as T[];
+  }
+}
+
 describe('SEC-CTL-004 FakeDbAdapter 复用核验（端口级假体可用性）', () => {
   it('SEC-CTL-004：共享假适配器记录 RLS 生命周期事件，供上述真实类驱动', async () => {
     const db = new FakeDbAdapter();

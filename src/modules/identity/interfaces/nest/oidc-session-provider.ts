@@ -26,8 +26,6 @@ export interface SessionClaims {
   readonly degraded: boolean;
 }
 
-/** 会话撤销状态（由 SessionRevocationPort.getRevocation 返回） */
-
 export interface OidcSessionConfig {
   readonly sessionSecret: Uint8Array;
   /**

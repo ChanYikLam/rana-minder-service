@@ -113,19 +113,17 @@ describe('OPS-VER-011 会话吊销版本推进与判定演练', () => {
     const revocation = new PostgresSessionRevocation(db, uow);
 
     await uow.run({ kind: 'single', subjectId: 'user-ops' }, async () => {
-      // 每次吊销 = SELECT ... FOR UPDATE（加锁，空集） + UPDATE（返回新版本）
-      db.enqueueResult([]); // 锁定查询（首次）
+      // 每次吊销 = UPDATE 未失效会话（返回新版本）；有行时不再走 INSERT
       db.enqueueResult([{ revoke_version: '6' }]);
       assert.equal(await revocation.invalidateAllSessions('user-ops'), 6);
 
-      db.enqueueResult([]); // 锁定查询（第二次）
       db.enqueueResult([{ revoke_version: '7' }]);
       assert.equal(await revocation.invalidateAllSessions('user-ops'), 7);
       return undefined as void;
     });
 
-    // 每次吊销含 1 次锁定 SELECT + 1 次 UPDATE，共 4 次查询
-    assert.equal(db.queries.length, 4);
+    // 每次吊销含 1 次 UPDATE，共 2 次查询
+    assert.equal(db.queries.length, 2);
     const updateQueries = db.queries.filter((q) => /UPDATE auth_sessions/.test(q.sql));
     assert.equal(updateQueries.length, 2);
     for (const q of updateQueries) {
@@ -134,27 +132,33 @@ describe('OPS-VER-011 会话吊销版本推进与判定演练', () => {
       assert.match(q.sql, /revoked_at IS NULL/, '已失效会话不得重复卷入');
       assert.deepEqual(q.params, ['user-ops']);
     }
-    // 锁定查询：对该主体全部会话行加 FOR UPDATE，串行化并发吊销的版本计算
-    const lockQueries = db.queries.filter((q) => q.sql.includes('FOR UPDATE'));
-    assert.equal(lockQueries.length, 2, '每次吊销前须对该主体会话行加锁');
-    for (const q of lockQueries) {
-      assert.match(q.sql, /SELECT session_id FROM auth_sessions/);
-      assert.match(q.sql, /WHERE subject_id = \$1/);
-      assert.match(q.sql, /FOR UPDATE/, '须以行锁串行化并发吊销');
-      assert.deepEqual(q.params, ['user-ops']);
-    }
     // 吊销与账号状态同事务收口（IFC-TX-001）：查询发生在 begin 与 commit 之间
     const order = db.eventPrefixes().map((p) => p.split(':')[0]);
-    assert.deepEqual(order, [
-      'begin',
-      'set-rls',
-      'query',
-      'query',
-      'query',
-      'query',
-      'commit',
-      'clear-rls',
-    ]);
+    assert.deepEqual(order, ['begin', 'set-rls', 'query', 'query', 'commit', 'clear-rls']);
+    findings.revocationVersionAdvance = true;
+  });
+
+  it('invalidateAllSessions 空表场景：无未失效行时 INSERT 落吊销记录', async () => {
+    const db = new RecordingDbAdapter();
+    const uow = new IdentityUnitOfWork(db);
+    const revocation = new PostgresSessionRevocation(db, uow);
+
+    await uow.run({ kind: 'single', subjectId: 'user-ops' }, async () => {
+      db.enqueueResult([]); // UPDATE 命中 0 行（无会话行）
+      db.enqueueResult([{ revoke_version: '1' }]); // INSERT 返回版本
+      assert.equal(await revocation.invalidateAllSessions('user-ops'), 1);
+      return undefined as void;
+    });
+
+    const insert = db.queries.find((q) => /INSERT INTO auth_sessions/.test(q.sql));
+    assert.ok(insert, '空表场景必须 INSERT 落吊销记录（BUG-003/007 闭环）');
+    assert.match(insert.sql, /COALESCE\(MAX\(revoke_version\), 0\)/, '版本承接历史 MAX+1');
+    assert.equal(insert.params[0], 'user-ops', 'INSERT 首参为主体');
+    assert.match(
+      insert.params[1] as string,
+      /^revocation:user-ops:/,
+      'session_id 带主体前缀且唯一',
+    );
     findings.revocationVersionAdvance = true;
   });
 
@@ -171,8 +175,13 @@ describe('OPS-VER-011 会话吊销版本推进与判定演练', () => {
     db.enqueueResult([]);
     assert.equal(await revocation.getRevocation('nobody'), null);
 
-    const select = db.queries.find((q) => q.sql.includes('SELECT MAX(revoke_version)'));
-    assert.ok(select, '读取走聚合查询');
+    const select = db.queries.find((q) => q.sql.includes('SELECT revoke_version, revoked_at'));
+    assert.ok(select, '读取走最近吊销行查询');
+    assert.match(
+      select.sql,
+      /ORDER BY revoke_version DESC/,
+      '取撤销版本最高的一行（版本与时间同源）',
+    );
     assert.match(select.sql, /WHERE subject_id = \$1/);
   });
 });
