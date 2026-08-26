@@ -102,6 +102,10 @@ export class PublishFieldMappingCommand {
     // 单事务窗口：加锁读版本线 → 修改 → save（CFG-005 并发保护；findForUpdate 行锁
     // 在命令读-改-写期间持续持有，锁不随 find 的独立事务释放）
     await this.uow.runShared({ kind: 'unprotected' }, async () => {
+      // 先取版本线根行锁（findForUpdate），再读草稿（评审 warning）：并发发布时
+      // 第二个发布者在根锁上阻塞，锁到手后读到的是前序发布提交后的最新草稿——
+      // 「串行化并发发布」语义覆盖草稿读取，无旧快照缝隙
+      const rootSnapshot = await this.rootRepository.findForUpdate(FIELD_MAPPING_ROOT_ID);
       const existing = await this.stateRepository.load();
       if (existing === null) {
         throw cfgErrors.preconditionFailed('字段映射草稿尚不存在');
@@ -114,8 +118,6 @@ export class PublishFieldMappingCommand {
       });
 
       // 写入版本线：基于当前发布版本创建新草稿（回滚语义），走完整测试→发布流程
-      // （findForUpdate：CFG-005 并发发布保护，锁根行串行化并发发布）
-      const rootSnapshot = await this.rootRepository.findForUpdate(FIELD_MAPPING_ROOT_ID);
       let root: ConfigRoot;
       let draftRecord: { versionNumber: number };
       if (rootSnapshot === null) {
@@ -164,6 +166,9 @@ export class PublishFieldMappingCommand {
     });
     // 通知置于事务提交之后（评审 1）：外部通知失败不回滚已提交的发布；
     // 外部调用期间不持续持有 DB 行锁
+    // 失败补偿策略（评审 info）：通知抛错时调用方看到失败但发布已落库——重试会触发
+    // 「已发布不可重复发布」校验；3.x 接线须提供幂等补偿（通知侧按 rootId+版本号去重，
+    // 失败仅记录待补偿队列，不重放发布流程）
     await this.notification.notifyConfigPublished({
       rootId: FIELD_MAPPING_ROOT_ID,
       kind: 'FIELD_MAPPING',
