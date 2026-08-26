@@ -7,7 +7,6 @@ import assert from 'node:assert/strict';
 
 import { ArchiveContentKind } from './archive-access-policy';
 
-
 describe('ArchiveContentKind（内容类别常量）', () => {
   it('四类内容类别定义齐全', () => {
     assert.deepEqual(Object.keys(ArchiveContentKind).sort(), [

@@ -15,7 +15,6 @@ import {
 } from './export-authorization.policy';
 import type { ExportPrincipal } from './ports/export-authorization.port';
 
-
 function clubLeader(clubId: string): ExportPrincipal {
   return {
     userId: 'u_leader',
