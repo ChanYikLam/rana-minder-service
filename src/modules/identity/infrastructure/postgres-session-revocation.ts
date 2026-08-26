@@ -25,13 +25,47 @@ export class PostgresSessionRevocation implements SessionRevocationPort {
     private readonly uow: IdentityUnitOfWork,
   ) {}
 
+  /**
+   * 吊销主体全部未失效会话并写入指定撤销版本（账号禁用/删除路径，BUG-003 写侧）。
+   *
+   * BUG-003 闭环关键：无状态 JWT 会话从不落行，若只做 UPDATE，空表场景恒命中 0 行、
+   * 吊销记录不落库，读侧 getRevocation 将永远查不到 revokedAt，禁用账号令牌仍可用到
+   * 24h 过期（验收标准 ≤5s 失效未达成）。故先加行锁串行化并发吊销、UPDATE 既有未失效
+   * 会话行；若无行可更新（从未落行或已全部吊销），则 INSERT 一条吊销记录，保证读侧
+   * 能拦截旧令牌。
+   *
+   * 必须在身份域工作单元事务内执行（this.uow.active；安全控制 SEC-CTL-004）。
+   */
   async invalidateSessions(subjectId: string, revokeVersion: number): Promise<void> {
+    const tx = this.uow.active;
+
+    // 对该主体全部会话行加行锁，串行化同一主体并发吊销（与 invalidateAllSessions 一致）。
     await this.db.query(
-      this.uow.active,
+      tx,
+      `SELECT session_id FROM auth_sessions WHERE subject_id = $1 FOR UPDATE`,
+      [subjectId],
+    );
+
+    // 1) 推进既有未失效会话行的撤销版本（有会话行时）
+    const updated = await this.db.query(
+      tx,
       `UPDATE auth_sessions
           SET revoke_version = $2, revoked_at = NOW()
-        WHERE subject_id = $1 AND revoked_at IS NULL`,
+        WHERE subject_id = $1 AND revoked_at IS NULL
+        RETURNING session_id`,
       [subjectId, revokeVersion],
+    );
+    if (updated.length > 0) {
+      return;
+    }
+
+    // 2) 无未失效会话行（无状态 JWT 空表）：插入一条吊销记录，确保读侧可拦截旧令牌。
+    //    session_id 用 randomUUID 保证唯一，版本沿用账号状态机传入的 revokeVersion。
+    await this.db.query(
+      tx,
+      `INSERT INTO auth_sessions (session_id, subject_id, revoke_version, revoked_at)
+       VALUES ($2, $1, $3, NOW())`,
+      [subjectId, `revocation:${subjectId}:${randomUUID()}`, revokeVersion],
     );
   }
 

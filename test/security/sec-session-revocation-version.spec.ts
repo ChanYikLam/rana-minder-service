@@ -340,14 +340,18 @@ class EmptyAuthSessionsFakeDb implements DbAdapter {
     }
     if (/INSERT INTO\s+auth_sessions/i.test(sql)) {
       const subjectId = params[0] as string;
+      // invalidateSessions 显式传入撤销版本（$3）；invalidateAllSessions 由调用方
+      // 计算 MAX+1 后同样经 $3 落库。无 $3（旧形态）时回退 MAX+1。
       const next =
-        this.rows
-          .filter((r) => r.subject_id === subjectId)
-          .reduce((m, r) => Math.max(m, r.revoke_version), 0) + 1;
+        typeof params[2] === 'number'
+          ? params[2]
+          : this.rows
+              .filter((r) => r.subject_id === subjectId)
+              .reduce((m, r) => Math.max(m, r.revoke_version), 0) + 1;
       this.rows.push({
         session_id: params[1] as string,
         subject_id: subjectId,
-        revoke_version: next,
+        revoke_version: next as number,
         revoked_at: new Date(),
       });
       return [{ revoke_version: String(next) }] as T[];
@@ -365,6 +369,44 @@ class EmptyAuthSessionsFakeDb implements DbAdapter {
     return [] as T[];
   }
 }
+
+describe('SEC-CTL-004 invalidateSessions 账号禁用空表路径（BUG-003 写侧缺口修复）', () => {
+  it('SEC-CTL-004：禁用账号空表时 INSERT 落吊销记录，读侧可拦截旧令牌', async () => {
+    const db = new EmptyAuthSessionsFakeDb();
+    const uow = new IdentityUnitOfWork(db);
+    const revocation = new PostgresSessionRevocation(db, uow);
+
+    // 账号禁用路径显式传入账号状态机的撤销版本（首禁用为 1）
+    await uow.run({ kind: 'single', subjectId: 'disabled-u' }, async () => {
+      await revocation.invalidateSessions('disabled-u', 1);
+    });
+
+    // 空表 UPDATE 恒 0 行 → 必须 INSERT 落吊销记录，读侧据此拦截旧令牌
+    const state = await revocation.getRevocation('disabled-u');
+    assert.ok(state, '读侧应返回吊销状态');
+    assert.equal(state.revokeVersion, 1, '应使用账号状态机传入的撤销版本');
+    assert.notEqual(state.revokedAt, null, '吊销时间必须非空，供 iat≤revokedAt 拦截');
+  });
+
+  it('SEC-CTL-004：禁用已有未失效会话行时 UPDATE 推进版本而非重复 INSERT', async () => {
+    const db = new EmptyAuthSessionsFakeDb();
+    const uow = new IdentityUnitOfWork(db);
+    const revocation = new PostgresSessionRevocation(db, uow);
+
+    // 模拟已存在一条未失效会话行（JWT 会话虽不落行，但历史吊销会留有行）
+    await uow.run({ kind: 'single', subjectId: 'u2' }, async () => {
+      await revocation.invalidateSessions('u2', 1);
+    });
+    // 二次禁用：既有行均已吊销（无未失效行），再次落一条新版本吊销记录
+    await uow.run({ kind: 'single', subjectId: 'u2' }, async () => {
+      await revocation.invalidateSessions('u2', 2);
+    });
+
+    const state = await revocation.getRevocation('u2');
+    assert.ok(state, '读侧应返回吊销状态');
+    assert.equal(state.revokeVersion, 2, 'UPDATE 路径沿用账号状态机传入的撤销版本');
+  });
+});
 
 describe('SEC-CTL-004 FakeDbAdapter 复用核验（端口级假体可用性）', () => {
   it('SEC-CTL-004：共享假适配器记录 RLS 生命周期事件，供上述真实类驱动', async () => {
