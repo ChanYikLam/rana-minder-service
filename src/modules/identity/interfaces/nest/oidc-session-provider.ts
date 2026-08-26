@@ -16,6 +16,7 @@ import type { Request } from 'express';
 import { jwtVerify, SignJWT } from 'jose';
 import type { AuthSession, AuthSessionProvider } from './auth-session';
 import type { CasdoorAvailability } from './casdoor-availability';
+import type { SessionRevocation } from '../../application/ports/session-revocation.port';
 
 export interface SessionClaims {
   readonly sub: string;
@@ -26,10 +27,7 @@ export interface SessionClaims {
 }
 
 /** 会话撤销状态（由 SessionRevocationPort.getRevocation 返回） */
-export interface SessionRevocationInfo {
-  readonly revokeVersion: number;
-  readonly revokedAt: string | null;
-}
+
 
 export interface OidcSessionConfig {
   readonly sessionSecret: Uint8Array;
@@ -43,7 +41,7 @@ export interface OidcSessionConfig {
    * resolveSession 在 JWT 验签通过后比对令牌 iat 与撤销时间，
    * 已被吊销的会话立即返回 null。
    */
-  readonly revocationReader?: (subjectId: string) => Promise<SessionRevocationInfo | null>;
+  readonly revocationReader?: (subjectId: string) => Promise<SessionRevocation | null>;
 }
 
 export class OidcAuthSessionProvider implements AuthSessionProvider {
