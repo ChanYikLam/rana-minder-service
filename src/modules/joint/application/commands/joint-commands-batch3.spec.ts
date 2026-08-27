@@ -83,6 +83,20 @@ const APPLICATION_SNAP = {
   updatedAt: NOW,
 };
 
+const CONCLUSION_SNAP = {
+  id: 'conclusion:app-1:club-a',
+  jointActivityId: 'act-1',
+  jointApplicationId: 'app-1',
+  clubId: 'club-a',
+  status: 'REVIEW_PENDING',
+  decision: 'ADMIT',
+  inviteStatus: 'NONE',
+  invitationId: 'inv-1',
+  revisionNumber: 1,
+  createdAt: NOW,
+  updatedAt: NOW,
+};
+
 const INTERVIEW_SNAP = {
   id: 'int-1',
   jointActivityId: 'act-1',
@@ -105,7 +119,7 @@ function makeRepo(seed: Record<string, unknown> = {}) {
     saved,
     loadActivity: async () => ACTIVITY_SNAP,
     saveActivity: async (s: unknown) => saved.push(s),
-    loadParticipant: async () => null,
+    loadParticipant: async () => PARTICIPANTS[0],
     loadParticipantsByActivity: async () => PARTICIPANTS,
     saveParticipant: async (s: unknown) => saved.push(s),
     loadApplication: async () => APPLICATION_SNAP,
@@ -115,7 +129,7 @@ function makeRepo(seed: Record<string, unknown> = {}) {
     loadInterviewByApplication: async () => null,
     loadInterviewsByActivity: async () => [],
     saveInterview: async (s: unknown) => saved.push(s),
-    loadConclusion: async () => null,
+    loadConclusion: async () => CONCLUSION_SNAP,
     loadConclusionsByApplication: async () => [],
     loadConclusionsByActivity: async () => [],
     saveConclusion: async (s: unknown) => saved.push(s),
@@ -171,6 +185,17 @@ const tasksStub: JointTaskEnqueuer = {
 /** 构造器类型（unknown 参数避免宽松签名掩盖） */
 type Ctor = new (...args: unknown[]) => { execute(input: never): Promise<unknown> };
 
+/** 联合邀请端口桩（RestoreFromReview/SendClubInvitation 构造依赖） */
+const invitationStub = {
+  sendJointInvitation: async () => ({ invitationId: 'inv-1', status: 'PENDING', acceptedAt: null }),
+  getInvitationStatus: async () => null,
+  restoreFrozenInvitation: async () => ({
+    invitationId: 'inv-1',
+    status: 'PENDING',
+    acceptedAt: null,
+  }),
+} as never;
+
 const BASE_INPUT = {
   activityId: 'act-1',
   jointActivityId: 'act-1',
@@ -184,15 +209,25 @@ const BASE_INPUT = {
   now: NOW,
 };
 
-/** 通用授权拒绝（按实际构造签名传参） */
-async function rejectWithAuth(Ctor: Ctor, input: Record<string, unknown>): Promise<void> {
+/** 通用授权拒绝：按实际构造签名传参，并严格断言为 JNT_FORBIDDEN（杜绝假绿） */
+async function rejectWithAuth(
+  Ctor: Ctor,
+  input: Record<string, unknown>,
+  constructArgs?: unknown[],
+): Promise<void> {
   const repo = makeRepo();
   const auth = makeAuth(false);
-  const uc = new Ctor(repo, auth, tasksStub);
+  // 默认 2 参构造（repository + authorization）；需第 3/4 参时经 constructArgs 覆盖。
+  const args = constructArgs ?? [repo, auth];
+  const uc = new Ctor(...args);
   await assert.rejects(
     () => uc.execute(input as never),
     (e: unknown) => {
-      assert.ok((e as Error).message.length > 0);
+      assert.equal(
+        (e as { code?: string }).code,
+        'JNT_FORBIDDEN',
+        `期望授权拒绝 JNT_FORBIDDEN，实际抛出: ${(e as Error).message}`,
+      );
       return true;
     },
   );
@@ -203,7 +238,8 @@ async function smokeRepoCommand(Ctor: Ctor, input: Record<string, unknown>): Pro
   const repo = makeRepo();
   const uc = new Ctor(repo);
   await uc.execute(input as never).catch((e: Error) => {
-    // 域校验失败（数据不完整）也是有效行为证据——不静默吞
+    // 成功或域校验失败均为有效行为证据——但必须是已定义错误而非意外崩溃
+    assert.ok(e instanceof Error, '应抛出已定义错误而非原始崩溃');
     assert.ok(e.message.length > 0);
   });
 }
@@ -231,7 +267,15 @@ describe('授权拒绝（fail-closed）：第三批 auth 命令', () => {
   });
 
   it('RestoreFromReview → forbidden', async () => {
-    await rejectWithAuth(DefaultRestoreFromReviewUseCase as Ctor, BASE_INPUT);
+    // 构造签名 (repository, invitation, authorization, tasks)——授权位于第 3 参
+    const repo = makeRepo();
+    const auth = makeAuth(false);
+    await rejectWithAuth(DefaultRestoreFromReviewUseCase as Ctor, BASE_INPUT, [
+      repo,
+      invitationStub,
+      auth,
+      tasksStub,
+    ]);
   });
 
   it('ResumeParticipation → forbidden', async () => {

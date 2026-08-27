@@ -272,13 +272,20 @@ describe('面试操作命令：授权拒绝（fail-closed）', () => {
 describe('通道操作命令：授权通过 + 状态流转（happy path）', () => {
   it('OpenJointChannel：NOT_OPEN → OPEN + 窗口创建', async () => {
     const uc = makeAuthorized(DefaultOpenJointChannelUseCase, 'NOT_OPEN');
-    // Open 命令返回 void；执行成功即状态流转完成（不抛错）
     await uc.execute({
       ...BASE_INPUT,
       windowId: 'w1',
       deadline: DEADLINE,
     } as never);
-    assert.ok(true);
+    // 断言 saveChannel 确实写入且快照已流转为 OPEN、窗口已创建
+    assert.ok(uc.savedChannels.length >= 1, 'saveChannel 应被调用');
+    const snap = uc.savedChannels[0] as {
+      status: string;
+      currentWindow?: { windowId: string } | null;
+    };
+    assert.equal(snap.status, 'OPEN', '通道应转为 OPEN');
+    assert.ok(snap.currentWindow != null, '应创建当前窗口');
+    assert.equal(snap.currentWindow?.windowId, 'w1', '窗口 id 应为 w1');
   });
 
   it('SuspendJointChannel：OPEN → SUSPENDED（saveChannel 收到快照）', async () => {
