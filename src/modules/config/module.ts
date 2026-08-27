@@ -21,6 +21,11 @@ import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { OrganizationModule } from '../organization/module';
 import { IdentityModule } from '../identity/identity.module';
+import { AuditModule } from '../audit/module';
+import { AuditWriter } from '../audit/application/commands/audit-writer';
+import { NotificationModule } from '../notification/notification.module';
+import { CreateNotificationFactCommand } from '../notification/application/commands/create-notification-fact.command';
+import { NOTIFICATION_REPOSITORY } from '../notification/tokens';
 import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
 import { adaptSessionProvider } from '../../shared/adapt-session-provider';
 import { CURRENT_PERMISSIONS_PORT } from '../organization/application/ports';
@@ -82,9 +87,9 @@ import {
 } from './infrastructure/postgres.repositories';
 import { DB_ADAPTER } from '../../adapters/tokens';
 import {
-  NotWiredConfigNotification,
-  NotWiredConfigAudit,
-} from './infrastructure/not-wired.config-ports';
+  AuditBackedConfigAudit,
+  NotificationFactBackedConfigNotification,
+} from './infrastructure/config-cross-module-adapters';
 
 import { DefaultUpdateClubProfileCommand } from './application/commands/update-club-profile.command';
 import { DefaultGetClubProfileQuery } from './application/queries/get-club-profile.query';
@@ -125,7 +130,16 @@ import { AdminConfigNestController } from './interfaces/nest/admin-config.nest.c
 import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule, OrganizationModule, IdentityModule],
+  // AuditModule：CFG-001/003 审计同事务写入（AuditWriter；AUD-003）
+  // NotificationModule：CFG-002/005 权益通知事实同事务保存（NTF-002/005）
+  imports: [
+    AdaptersModule,
+    ObservabilityModule,
+    OrganizationModule,
+    IdentityModule,
+    AuditModule,
+    NotificationModule,
+  ],
   controllers: [
     PublicClubProfileNestController,
     OrgClubProfileNestController,
@@ -189,9 +203,18 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
       inject: [CURRENT_PERMISSIONS_PORT],
     },
     { provide: CONFIG_ACCESS_INFO_PORT, useClass: NotWiredClubAccessInfoPort },
-    // ----- 跨模块能力接缝（3.x 通知事实/审计同事务接线前 NotWiring 默认）-----
-    { provide: CONFIG_NOTIFICATION_PORT, useClass: NotWiredConfigNotification },
-    { provide: CONFIG_AUDIT_PORT, useClass: NotWiredConfigAudit },
+    // ----- 跨模块能力接线（CFG-001/002/003/005）：审计与通知事实真实落库 -----
+    {
+      provide: CONFIG_AUDIT_PORT,
+      useFactory: (writer) => new AuditBackedConfigAudit(writer),
+      inject: [AuditWriter],
+    },
+    {
+      provide: CONFIG_NOTIFICATION_PORT,
+      useFactory: (createFact, facts) =>
+        new NotificationFactBackedConfigNotification(createFact, facts),
+      inject: [CreateNotificationFactCommand, NOTIFICATION_REPOSITORY],
+    },
     // ----- 应用命令/查询 -----
     {
       provide: UPDATE_CLUB_PROFILE_COMMAND,

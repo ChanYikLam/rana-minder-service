@@ -1,13 +1,12 @@
 /**
- * config 跨模块能力端口的未接线桩（infrastructure）。
+ * config 跨模块能力端口的接缝定义（infrastructure）。
  *
- * 语义对齐 joint/membership 既有约定（NotWiredJointNotification 等）：3.x 通知
- * 事实同事务接线与审计写入器共享事务接线落地前，先以端口接缝固化调用点——
- * 命令层在变更成功后必须 await 端口（NotWired 即时返回）；届时替换 DI 绑定，
- * 命令与测试不改。
+ * 端口接口定义于此；生产绑定已切换为真实适配器（config-cross-module-adapters.ts，
+ * CFG-001/002/003/005 经共享事务上下文同事务落库）。NotWired 桩保留：供单元测试
+ * 显式构造 noop/记录桩，以及未来其他模块在接线前复用同一接缝形态。
  *
- * - NotWiredConfigNotification：CFG-002/005 权益影响通知（NTF-002/NTF-005）
- * - NotWiredConfigAudit：CFG-001 展示资料修改审计、CFG-003 分界规则变更审计
+ * - ConfigNotificationPort：CFG-002/005 权益影响通知（NTF-002/NTF-005）
+ * - ConfigAuditPort：CFG-001 展示资料修改审计、CFG-003 分界规则变更审计
  */
 
 import type { ClubProfileFieldChange } from '../domain/models/club-profile';

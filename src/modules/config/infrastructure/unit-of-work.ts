@@ -8,6 +8,7 @@
  */
 
 import type { DbAdapter, RlsScope, TransactionContext } from '../../../shared/db-adapter';
+import { runWithCrossModuleTx } from '../../../shared/cross-module-transaction';
 
 export class ConfigUnitOfWork {
   private current: TransactionContext | null = null;
@@ -29,7 +30,9 @@ export class ConfigUnitOfWork {
     this.current = tx;
     try {
       await this.db.setRlsContext(tx, scope);
-      const result = await fn();
+      // 跨模块同事务：窗口内经共享上下文登记当前事务，audit/notification 等跨模块
+      // 适配器据此借用同一事务（commit/rollback 边界仍归本工作单元）
+      const result = await runWithCrossModuleTx('config', tx, fn);
       await this.db.commit(tx);
       return result;
     } catch (error) {

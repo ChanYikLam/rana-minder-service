@@ -7,6 +7,7 @@
  */
 
 import type { DbAdapter, RlsScope, TransactionContext } from '../../../shared/db-adapter';
+import { borrowCrossModuleTx } from '../../../shared/cross-module-transaction';
 
 export class AuditUnitOfWork {
   private current: TransactionContext | null = null;
@@ -21,10 +22,25 @@ export class AuditUnitOfWork {
     return this.current;
   }
 
-  /** 在 RLS 上下文内执行 fn 并原子收口 */
+  /**
+   * 在 RLS 上下文内执行 fn 并原子收口。
+   * 跨模块同事务（AUD-003/IFC-TX-006）：业务方（如 config/recruitment）事务窗口
+   * 内调用时借用其已登记的 TransactionContext——不 begin、不 commit/rollback、
+   * 不覆盖外层 RLS 上下文，审计随外层事务原子提交；借用段失败沿原异常上抛，
+   * 业务整体回滚。无登记时保持既有行为（自开短事务收口）。
+   */
   async run<T>(scope: RlsScope, fn: () => Promise<T>): Promise<T> {
     if (this.current !== null) {
       throw new Error('AuditUnitOfWork: 工作单元不支持嵌套事务');
+    }
+    const borrowed = borrowCrossModuleTx('audit');
+    if (borrowed !== null) {
+      this.current = borrowed.tx;
+      try {
+        return await fn();
+      } finally {
+        this.current = null;
+      }
     }
     const tx = await this.db.beginTransaction();
     this.current = tx;

@@ -196,10 +196,8 @@ export class PublishConfigVersionCommand extends ConfigVersionOperationBase {
       return { kind: root.kind, current: root.getCurrentPublished() };
     });
     // 发布通知置于事务提交之后（评审 1）：外部通知失败不回滚已提交的发布；
-    // 外部调用期间不持续持有 DB 行锁（当前 NotWired noop；3.x 接线真实副作用时即生效）
-    // 失败补偿策略（评审 info）：通知抛错时调用方看到失败但发布已落库——重试会触发
-    // 「已发布不可重复发布」校验；3.x 接线须提供幂等补偿（通知侧按 rootId+版本号去重，
-    // 失败仅记录待补偿队列，不重放发布流程）
+    // 外部调用期间不持续持有 DB 行锁。真实 adapter（config-cross-module-adapters）
+    // 按 rootId+版本号幂等去重；失败仅沿异常上抛登记待补偿，不重放发布流程
     await this.notification.notifyConfigPublished({
       rootId: input.rootId,
       kind: published.kind,
