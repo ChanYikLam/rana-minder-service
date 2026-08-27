@@ -7,6 +7,7 @@
 
 import { Injectable } from '@nestjs/common';
 import type { DbAdapter, RlsScope, TransactionContext } from '../../../shared/db-adapter';
+import { borrowCrossModuleTx } from '../../../shared/cross-module-transaction';
 import type {
   NotificationFactModel,
   CreateNotificationFactInput,
@@ -172,6 +173,12 @@ export class PostgresNotificationRepository implements NotificationRepository {
   constructor(private readonly db: DbAdapter) {}
 
   private async inTx<T>(fn: (tx: TransactionContext) => Promise<T>): Promise<T> {
+    // 跨模块同事务（IFC-TX-002）：业务方事务窗口内调用时借用其事务——不 begin、
+    // 不 commit/rollback、不覆盖外层 RLS 上下文，通知事实随业务原子收口
+    const borrowed = borrowCrossModuleTx('notification');
+    if (borrowed !== null) {
+      return fn(borrowed.tx);
+    }
     const tx = await this.db.beginTransaction();
     try {
       await this.db.setRlsContext(tx, NOTIFICATION_RLS_SCOPE);
@@ -1048,6 +1055,12 @@ class PostgresConfigStore {
   constructor(protected readonly db: DbAdapter) {}
 
   protected async inTx<T>(fn: (tx: TransactionContext) => Promise<T>): Promise<T> {
+    // 跨模块同事务：借用语义同 PostgresNotificationRepository.inTx（kill-switch 等
+    // KV 读随业务事务可见，避免外层未提交状态读不到的幻影）
+    const borrowed = borrowCrossModuleTx('notification');
+    if (borrowed !== null) {
+      return fn(borrowed.tx);
+    }
     const tx = await this.db.beginTransaction();
     try {
       await this.db.setRlsContext(tx, NOTIFICATION_RLS_SCOPE);

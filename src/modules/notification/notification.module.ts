@@ -235,6 +235,8 @@ import {
     ApplyKillSwitchCommand,
     ResumeKillSwitchCommand,
     NotificationQueryService,
+    // config 模块 CFG-002/005 同事务通知接线需要按事实级 dedup_key 幂等预检
+    NOTIFICATION_REPOSITORY,
   ],
 })
 export class NotificationModule {}
