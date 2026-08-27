@@ -32,7 +32,8 @@
     "coverage:all": "node --env-file=.env.test --test --test-concurrency=8 -r ts-node/register \"src/**/*.spec.ts\" \"test/*.spec.ts\"",
     "test:cov": "c8 -o coverage -- npm run coverage:all",
     "test:cov:gate": "node scripts/ci/coverage-gate.js",
-    "test:cov:baseline": "node scripts/ci/coverage-baseline.js"
+    "test:cov:baseline": "node scripts/ci/coverage-baseline.js",
+    "api:openapi": "node scripts/generate-openapi.js"
   },
   "c8": {
     "include": [
