@@ -146,6 +146,10 @@ export class InMemoryConfigRootRepository implements ConfigRootRepositoryPort {
   async find(rootId: string): Promise<ConfigRootSnapshot | null> {
     return this.roots.get(rootId) ?? null;
   }
+  async findForUpdate(rootId: string): Promise<ConfigRootSnapshot | null> {
+    // 内存桩无锁语义：与 find 同返回（接口对齐；并发保护由 Postgres 行锁承担）
+    return this.roots.get(rootId) ?? null;
+  }
   async save(snapshot: ConfigRootSnapshot): Promise<void> {
     this.roots.set(snapshot.rootId, snapshot);
   }

@@ -402,10 +402,20 @@ export class PostgresConfigRootRepository implements ConfigRootRepositoryPort {
   ) {}
 
   async find(rootId: string): Promise<ConfigRootSnapshot | null> {
+    return this.loadRoot(rootId, false);
+  }
+
+  async findForUpdate(rootId: string): Promise<ConfigRootSnapshot | null> {
+    return this.loadRoot(rootId, true);
+  }
+
+  /** 根加载共用路径：forUpdate=true 时对根行加 FOR UPDATE 行锁（CFG-005 并发保护） */
+  private async loadRoot(rootId: string, forUpdate: boolean): Promise<ConfigRootSnapshot | null> {
     return this.uow.runShared({ kind: 'unprotected' }, async () => {
       const rootRows = await this.db.query<Row>(
         this.uow.active,
-        `SELECT kind, current_published_version_number FROM public.config_roots WHERE root_id = $1`,
+        `SELECT kind, current_published_version_number FROM public.config_roots
+          WHERE root_id = $1${forUpdate ? '\n          FOR UPDATE' : ''}`,
         [rootId],
       );
       if (rootRows.length === 0) {

@@ -15,6 +15,16 @@
  */
 
 import type { ClubProfileSnapshot } from '../domain/models/club-profile';
+import type { RlsScope } from '../../../shared/db-adapter';
+
+/**
+ * 命令层事务包装端口（CFG-005 并发保护）：配置版本线写命令在单一事务窗口内
+ * 执行「加锁读→改聚合→save」，findForUpdate 行锁须持至整个窗口结束。
+ * 实现注入 ConfigUnitOfWork（已有外层事务则复用，否则自开并在命令完成后提交）。
+ */
+export interface CommandTransactionPort {
+  runShared<T>(scope: RlsScope, fn: () => Promise<T>): Promise<T>;
+}
 
 /** 展示资料仓储端口：按社团 ID 存取聚合快照 */
 export interface ClubProfileRepositoryPort {
@@ -103,6 +113,17 @@ export interface CohortRepositoryPort {
 /** 配置根仓储（一个 rootId 一条版本线；当前 InMemory，PostgreSQL 随迁移切片接入） */
 export interface ConfigRootRepositoryPort {
   find(
+    rootId: string,
+  ): Promise<import('../domain/models/config-version').ConfigRootSnapshot | null>;
+  /**
+   * 加锁读根（CFG-005 并发发布保护）：在活动事务内对根行加行锁，串行化
+   * 「读-改-写」窗口内的并发建草稿/发布/回滚，防止版本号竞态与指针覆盖。
+   * 事务外调用退化为普通读（无锁语义）；根不存在返回 null。
+   * 并发首建（根缺失）说明：save 为 ON CONFLICT DO UPDATE（upsert），不抛唯一
+   * 约束；首建是一次性引导操作、两路 v1 等价时结果收敛，聚合级 lost-update
+   * 窗口实际风险低（评审 info）。
+   */
+  findForUpdate(
     rootId: string,
   ): Promise<import('../domain/models/config-version').ConfigRootSnapshot | null>;
   save(snapshot: import('../domain/models/config-version').ConfigRootSnapshot): Promise<void>;

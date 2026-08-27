@@ -27,7 +27,12 @@ export interface ConfigNotificationPort {
     effectiveAt: Date;
   }): Promise<void>;
 
-  /** 配置版本发布改变学生权益或管理员权限时必须通知 */
+  /**
+   * 配置版本发布通知（CFG-005/NTF-005；命令层在事务提交之后调用）。
+   * 幂等契约（评审 warning）：3.x 接线时必须按 rootId+versionNumber 幂等去重——
+   * 命令层重试/失败重放不得产生重复通知；通知失败时调用方看到失败但发布已落库，
+   * 实现不得重放发布流程，失败应降级为待补偿队列。
+   */
   notifyConfigPublished(input: {
     rootId: string;
     kind: ConfigKind;

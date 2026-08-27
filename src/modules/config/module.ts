@@ -290,13 +290,14 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
     },
     {
       provide: PUBLISH_FIELD_MAPPING_COMMAND,
-      useFactory: (states, roots, authz, notify) =>
-        new PublishFieldMappingCommand(states, roots, authz, notify),
+      useFactory: (states, roots, authz, notify, uow) =>
+        new PublishFieldMappingCommand(states, roots, authz, notify, uow),
       inject: [
         FIELD_MAPPING_STATE_REPOSITORY,
         CONFIG_ROOT_REPOSITORY,
         CONFIG_POLICY_AUTHORIZATION,
         CONFIG_NOTIFICATION_PORT,
+        ConfigUnitOfWork,
       ],
     },
     {
@@ -304,31 +305,55 @@ import { OrgPolicyNestController } from './interfaces/nest/org-policy.nest.contr
       useFactory: (states, authz) => new GetFieldMappingQuery(states, authz),
       inject: [FIELD_MAPPING_STATE_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
     },
-    // ----- CFG-005 配置版本线 -----
+    // ----- CFG-005 配置版本线（命令层自开事务包裹读-改-写，评审 Critical）-----
     {
       provide: CREATE_CONFIG_DRAFT_COMMAND,
-      useFactory: (roots, authz, notify) => new CreateConfigDraftCommand(roots, authz, notify),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
+      useFactory: (roots, authz, notify, uow) =>
+        new CreateConfigDraftCommand(roots, authz, notify, uow),
+      inject: [
+        CONFIG_ROOT_REPOSITORY,
+        CONFIG_POLICY_AUTHORIZATION,
+        CONFIG_NOTIFICATION_PORT,
+        ConfigUnitOfWork,
+      ],
     },
     {
       provide: EDIT_CONFIG_DRAFT_COMMAND,
-      useFactory: (roots, authz, notify) => new EditConfigDraftCommand(roots, authz, notify),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
+      useFactory: (roots, authz, notify, uow) =>
+        new EditConfigDraftCommand(roots, authz, notify, uow),
+      inject: [
+        CONFIG_ROOT_REPOSITORY,
+        CONFIG_POLICY_AUTHORIZATION,
+        CONFIG_NOTIFICATION_PORT,
+        ConfigUnitOfWork,
+      ],
     },
     {
       provide: PUBLISH_CONFIG_VERSION_COMMAND,
-      useFactory: (roots, authz, notify) => new PublishConfigVersionCommand(roots, authz, notify),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
+      useFactory: (roots, authz, notify, uow) =>
+        new PublishConfigVersionCommand(roots, authz, notify, uow),
+      inject: [
+        CONFIG_ROOT_REPOSITORY,
+        CONFIG_POLICY_AUTHORIZATION,
+        CONFIG_NOTIFICATION_PORT,
+        ConfigUnitOfWork,
+      ],
     },
     {
       provide: ROLLBACK_CONFIG_VERSION_COMMAND,
-      useFactory: (roots, authz, notify) => new RollbackConfigVersionCommand(roots, authz, notify),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
+      useFactory: (roots, authz, notify, uow) =>
+        new RollbackConfigVersionCommand(roots, authz, notify, uow),
+      inject: [
+        CONFIG_ROOT_REPOSITORY,
+        CONFIG_POLICY_AUTHORIZATION,
+        CONFIG_NOTIFICATION_PORT,
+        ConfigUnitOfWork,
+      ],
     },
     {
       provide: GET_CONFIG_ROOT_QUERY,
-      useFactory: (roots, authz, notify) => new GetConfigRootQuery(roots, authz, notify),
-      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION, CONFIG_NOTIFICATION_PORT],
+      useFactory: (roots, authz) => new GetConfigRootQuery(roots, authz),
+      inject: [CONFIG_ROOT_REPOSITORY, CONFIG_POLICY_AUTHORIZATION],
     },
   ],
   exports: [
