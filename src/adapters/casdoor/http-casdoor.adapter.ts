@@ -49,7 +49,14 @@ function mapUser(raw: Record<string, unknown>): CasdoorUser | null {
     phone: typeof raw['phone'] === 'string' ? raw['phone'] : null,
     college: typeof raw['college'] === 'string' ? raw['college'] : null,
     grade: typeof raw['grade'] === 'string' ? raw['grade'] : null,
-    state: typeof raw['state'] === 'string' ? raw['state'] : 'UNVERIFIABLE',
+    // 账号状态从 isDeleted/isForbidden 推导（Casdoor 用户对象无 state 字段；
+    // 原 state 字段回退导致读取恒 UNVERIFIABLE，接受邀请被误拒——联调 2026-08-27 修复）
+    state:
+      raw['isDeleted'] === true
+        ? 'DELETED'
+        : raw['isForbidden'] === true
+          ? 'DISABLED'
+          : 'ACTIVE',
     externalVersion:
       typeof raw['externalVersion'] === 'string'
         ? (raw['externalVersion'] as string)
@@ -174,7 +181,10 @@ export class HttpCasdoorAdapter implements CasdoorAdapter {
         ts,
       );
     }
-    const user = mapUser(data as Record<string, unknown>);
+    // get-user 响应为 { status, data: <用户对象> }：需解包 data 再做形状映射，
+    // 直接把外层 body 传入 mapUser 会因缺 id 恒判无效（联调 2026-08-27 修复）
+    const bodyObj = data as { status?: string; data?: Record<string, unknown> } | null;
+    const user = mapUser((bodyObj?.data ?? data) as Record<string, unknown>);
     if (!user) {
       return externalFailure(
         'UNCERTAIN',
@@ -212,17 +222,43 @@ export class HttpCasdoorAdapter implements CasdoorAdapter {
         ts,
       );
     }
-    const { ok, status } = await this.request(
-      `/api/update-user?organization=${encodeURIComponent(this.organization)}&id=${encodeURIComponent(userId)}`,
-      { method: 'POST', body: JSON.stringify(patch) },
+    // 读-改-写（联调 2026-08-27 修复）：Casdoor update-user 校验完整用户对象
+    // （缺 id/owner/name/displayName 等必填字段即拒绝，部分 patch 静默无效），
+    // 必须先取全量用户再合并补丁提交。
+    const rawRead = await this.request(
+      `/api/get-user?organization=${encodeURIComponent(this.organization)}&id=${encodeURIComponent(userId)}`,
+      { method: 'GET' },
     );
-    if (!ok) {
+    const rawBody = rawRead.data as { status?: string; data?: Record<string, unknown> } | null;
+    if (!rawRead.ok || rawBody?.status !== 'ok' || !rawBody.data) {
+      return externalFailure(
+        'NON_RETRYABLE',
+        {
+          code: 'CAS-WRITE-REJECTED',
+          message: 'read-before-write failed: user not found via get-user',
+          retryable: false,
+          rawStatusCode: rawRead.status || null,
+        },
+        attemptId,
+        ts,
+      );
+    }
+    // body 的 id 必须为 Casdoor 用户对象自身的 id（get-user 返回值，非 URL 的
+    // org/name 定位形式；两者不同——本种子用户 id 为 ranaminder-dev__admin__fixed）。
+    // 提交被改动 id 会报 "The ID is immutable."（联调 2026-08-27 修复）
+    const fullUser: Record<string, unknown> = { ...rawBody.data, ...patch };
+    const { ok, status, data: updateData } = await this.request(
+      `/api/update-user?organization=${encodeURIComponent(this.organization)}&id=${encodeURIComponent(userId)}`,
+      { method: 'POST', body: JSON.stringify(fullUser) },
+    );
+    const updateBody = updateData as { status?: string; msg?: string } | null;
+    if (!ok || updateBody?.status === 'error') {
       const retryable = status === 0 || status >= 500 || status === 429;
       return externalFailure(
         retryable ? 'RETRYABLE_FAILURE' : 'NON_RETRYABLE',
         {
           code: retryable ? 'CAS-WRITE-FAILED' : 'CAS-WRITE-REJECTED',
-          message: 'write rejected by casdoor',
+          message: `write rejected by casdoor: ${updateBody?.msg ?? `http ${status}`}`,
           retryable,
           rawStatusCode: status || null,
         },

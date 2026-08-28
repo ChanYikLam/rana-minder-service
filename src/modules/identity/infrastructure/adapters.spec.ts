@@ -144,13 +144,15 @@ describe('ProfileSyncTaskWriter（事务发件箱）', () => {
     });
 
     assert.equal(db.queries.length, 2);
-    assert.equal(db.queries[0].params[1], 'profile_sync');
-    assert.equal(db.queries[0].params[0], 'profile_sync:user-1:phone:4');
-    assert.equal(db.queries[1].params[1], 'profile_readback');
-    assert.equal(db.queries[1].params[0], 'profile_readback:user-1:phone:4');
-    const payload = JSON.parse(db.queries[0].params[3] as string) as { intentId: string };
+    assert.equal(db.queries[0].params[1], 'CASDOOR_SYNC');
+    assert.equal(db.queries[0].params[0], 'CASDOOR_SYNC:user-1:phone:4');
+    assert.equal(db.queries[1].params[1], 'CASDOOR_SYNC');
+    assert.equal(db.queries[1].params[0], 'CASDOOR_SYNC:user-1:phone:4');
+    // 新参数序：[0]task_id [1]task_type [2]intent_id [3]scope [4]source [5]payload
+    assert.equal(db.queries[0].params[2], 'intent-1');
+    const payload = JSON.parse(db.queries[0].params[5] as string) as { intentId: string };
     assert.equal(payload.intentId, 'intent-1');
-    assert.match(db.queries[0].sql, /ON CONFLICT DO NOTHING/);
+    assert.match(db.queries[0].sql, /ON CONFLICT \(task_id\) DO NOTHING/);
   });
 });
 

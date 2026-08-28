@@ -7,6 +7,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import type { CasdoorAdapter, CasdoorUser } from '../../../adapters/casdoor/casdoor-adapter';
 import type { AccountAccessState } from '../domain/state-machines/account-access.state-machine';
 import type {
@@ -34,12 +35,36 @@ type FailureStatus =
   | 'UNAVAILABLE';
 
 export class CasdoorUserAdapter implements CasdoorUserPort {
-  constructor(private readonly casdoor: CasdoorAdapter) {}
+  private readonly pool?: Pool;
+
+  constructor(
+    private readonly casdoor: CasdoorAdapter,
+    /** subjectId → Casdoor 用户 id（org/name）映射查询；注入失败时按原样透传（联调 2026-08-27） */
+    db?: { getPool?: () => Pool },
+  ) {
+    // 仅接受真实 PG 适配器（提供连接池）；桩适配器无 getPool，映射降级透传
+    this.pool = typeof db?.getPool === 'function' ? db.getPool() : undefined;
+  }
+
+  /**
+   * 本地 subject 与 Casdoor 用户的 id 映射：Casdoor 的 get-user/update-user
+   * 以 `<organization>/<username>` 为用户 id，直接传本地 subjectId 永远打不中
+   * 目标用户（此前 get-user 恒失败 / update 静默无效的根因）。
+   */
+  private async toCasdoorUserId(subjectId: string): Promise<string> {
+    if (!this.pool) return subjectId;
+    const { rows } = await this.pool.query<{ casdoor_org: string; casdoor_name: string }>(
+      'SELECT casdoor_org, casdoor_name FROM public.users WHERE subject_id = $1',
+      [subjectId],
+    );
+    const row = rows[0];
+    return row ? `${row.casdoor_org}/${row.casdoor_name}` : subjectId;
+  }
 
   async readAccountStatus(
     subjectId: string,
   ): Promise<ExternalResult<CasdoorAccountStatusObservation>> {
-    const user = await this.casdoor.getUser(subjectId);
+    const user = await this.casdoor.getUser(await this.toCasdoorUserId(subjectId));
     if (user.status !== 'SUCCESS' || user.data === null) {
       return externalFailure(
         user.status as FailureStatus,
@@ -77,7 +102,7 @@ export class CasdoorUserAdapter implements CasdoorUserPort {
     subjectId: string,
     field: ProfileField,
   ): Promise<ExternalResult<CasdoorProfileFieldObservation>> {
-    const user = await this.casdoor.getUser(subjectId);
+    const user = await this.casdoor.getUser(await this.toCasdoorUserId(subjectId));
     if (user.status !== 'SUCCESS' || user.data === null) {
       return externalFailure(
         user.status as FailureStatus,
@@ -103,7 +128,7 @@ export class CasdoorUserAdapter implements CasdoorUserPort {
     field: ProfileField,
     value: string,
   ): Promise<ExternalResult<CasdoorProfileFieldObservation>> {
-    const written = await this.casdoor.updateUser(subjectId, { [field]: value });
+    const written = await this.casdoor.updateUser(await this.toCasdoorUserId(subjectId), { [field]: value });
     if (written.status !== 'SUCCESS') {
       return externalFailure(
         written.status as FailureStatus,

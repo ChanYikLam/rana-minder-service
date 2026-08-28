@@ -34,6 +34,7 @@ import {
   SUPER_ADMIN_VERIFIER,
   REAUTH_EVIDENCE_PORT,
   SESSION_REVOCATION_PORT,
+  SESSION_IDENTITY_REPOSITORY,
   PROFILE_WRITE_GATE_MACHINE,
   PROFILE_SYNC_MACHINE,
   ACCOUNT_ACCESS_MACHINE,
@@ -67,6 +68,7 @@ import { PostgresAccountAccessRepository } from './infrastructure/postgres-accou
 import { PostgresNameCorrectionRepository } from './infrastructure/postgres-name-correction.repository';
 import { PostgresReauthEvidence } from './infrastructure/postgres-reauth-evidence';
 import { PostgresSessionRevocation } from './infrastructure/postgres-session-revocation';
+import { PostgresSessionIdentityRepository } from './infrastructure/postgres-session-identity.repository';
 import type { SessionRevocationPort } from './application/ports/session-revocation.port';
 import { PostgresProfileFieldDirectory } from './infrastructure/postgres-profile-field-directory';
 import { NotWiredSuperAdminVerifier } from './infrastructure/not-wired-super-admin.verifier';
@@ -224,6 +226,12 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
       inject: [DB_ADAPTER, IdentityUnitOfWork],
     },
     {
+      // 会话身份建档/读取（API-AUTH-001 胖 session 支撑；联调 2026-08-27 新增）
+      provide: SESSION_IDENTITY_REPOSITORY,
+      useFactory: (db, uow) => new PostgresSessionIdentityRepository(db, uow),
+      inject: [DB_ADAPTER, IdentityUnitOfWork],
+    },
+    {
       provide: PROFILE_FIELD_DIRECTORY,
       useFactory: (db) => new PostgresProfileFieldDirectory(db),
       inject: [DB_ADAPTER],
@@ -236,8 +244,8 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     // ----- 领域适配器 -----
     {
       provide: CASDOOR_USER_PORT,
-      useFactory: (casdoor) => new CasdoorUserAdapter(casdoor),
-      inject: [CASDOOR_ADAPTER],
+      useFactory: (casdoor, db) => new CasdoorUserAdapter(casdoor, db),
+      inject: [CASDOOR_ADAPTER, DB_ADAPTER],
     },
     {
       provide: MAIL_VERIFICATION_PORT,
