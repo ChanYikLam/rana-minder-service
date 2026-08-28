@@ -187,13 +187,14 @@ export class PostgresInvitationRepository implements InvitationRepository {
     try {
       const rows = await this.db.query<{ invitation_id: string }>(
         tx,
+        // 联调修复（2026-08-27）：原 SQL 从 $2 起引用但绑定了 $1~$8（$1 幽灵参数
+        // 无法推断类型）；重排为 $1~$7 连续引用
         `UPDATE public.invitations SET
-           status = $2, version = $3, accepted_at = $4,
-           activation_json = $5, history_json = $6
-         WHERE invitation_id = $7 AND version = $8
+           status = $1, version = $2, accepted_at = $3,
+           activation_json = $4, history_json = $5
+         WHERE invitation_id = $6 AND version = $7
          RETURNING invitation_id`,
         [
-          current.invitationId,
           next.status,
           next.version,
           next.acceptedAt === null ? null : toDate(next.acceptedAt),
