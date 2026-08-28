@@ -96,7 +96,7 @@ describe('CasdoorSessionController 登出吊销（BUG-007 安全接线）', () =
     const h = makeHarness();
     const token = await signValidToken('user-1');
     const result = await h.controller.logout(reqWithBearer(token), h.response);
-    assert.deepEqual(result, { code: 0, data: null });
+    assert.deepEqual(result, { code: 0, data: { endSessionUrl: null } });
     assert.deepEqual(h.revocations, ['user-1'], '只吊销验签通过的当前主体');
     assert.match(h.cookies['Set-Cookie'] ?? '', /session_token=;/, '清除会话 Cookie');
   });
@@ -105,14 +105,14 @@ describe('CasdoorSessionController 登出吊销（BUG-007 安全接线）', () =
     const h = makeHarness();
     const token = await signForgedToken('victim-user');
     const result = await h.controller.logout(reqWithBearer(token), h.response);
-    assert.deepEqual(result, { code: 0, data: null });
+    assert.deepEqual(result, { code: 0, data: { endSessionUrl: null } });
     assert.deepEqual(h.revocations, [], '伪造令牌必须被拒，不得吊销任意主体');
   });
 
   it('无令牌登出：不吊销，仅清 Cookie', async () => {
     const h = makeHarness();
     const result = await h.controller.logout({ headers: {} } as never, h.response);
-    assert.deepEqual(result, { code: 0, data: null });
+    assert.deepEqual(result, { code: 0, data: { endSessionUrl: null } });
     assert.deepEqual(h.revocations, [], '无有效令牌不触发吊销');
   });
 
@@ -141,7 +141,7 @@ describe('CasdoorSessionController 登出吊销（BUG-007 安全接线）', () =
     } as unknown as Response;
     const token = await signValidToken('user-2');
     const result = await controller.logout(reqWithBearer(token), res);
-    assert.deepEqual(result, { code: 0, data: null }, '吊销失败仍返回登出成功');
+    assert.deepEqual(result, { code: 0, data: { endSessionUrl: null } }, '吊销失败仍返回登出成功');
     assert.deepEqual(revocations, ['user-2']);
     assert.match(cookies['Set-Cookie'] ?? '', /session_token=;/, 'Cookie 已清除');
   });

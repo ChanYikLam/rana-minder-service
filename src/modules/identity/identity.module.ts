@@ -115,7 +115,7 @@ import {
   type RanaMinderConfig,
 } from '../../config';
 import { AuthGuard } from './interfaces/nest/auth.guard';
-import { InMemoryOidcNonceStore } from './interfaces/nest/oidc-nonce-store';
+import { PostgresOidcNonceStore } from './infrastructure/postgres-oidc-nonce.store';
 import { ProfilesNestController } from './interfaces/nest/profiles.nest.controller';
 import { AccountAccessNestController } from './interfaces/nest/account-access.nest.controller';
 import { NameCorrectionNestController } from './interfaces/nest/name-correction.nest.controller';
@@ -137,10 +137,13 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
         new CasdoorAvailability((config.casdoor?.endpoint?.length ?? 0) > 0),
       inject: [RANA_MINDER_CONFIG],
     },
-    // BUG-008：nonce 存储默认注入内存桩；多实例部署时覆盖为 Redis 等共享存储。
+    // B3 修复（2026-08-28）：nonce/PKCE 载荷存储改为 PostgreSQL 共享实现——
+    // 后端重启不再丢失未消费授权请求，多实例部署校验一致；表内不含个人敏感
+    // 字段，使用 unprotected 直连事务。内存桩保留供测试注入（InMemoryOidcNonceStore）。
     {
       provide: OIDC_NONCE_STORE,
-      useFactory: () => new InMemoryOidcNonceStore(),
+      useFactory: (db) => new PostgresOidcNonceStore(db),
+      inject: [DB_ADAPTER],
     },
     {
       provide: AUTH_SESSION_PROVIDER,

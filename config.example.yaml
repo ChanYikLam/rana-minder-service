@@ -30,12 +30,22 @@ database:
   ssl: false                    # 传输加密布尔开关；正式环境按 OPS-CFG-006 强制 TLS
 
 # ---- casdoor：学校既有 v3.108.0 精确兼容基线（loader: redirectUri 为必填）----
+# 接学校真实实例前的安全开关（2026-08-28 加固）：
+#   - pkceEnabled 默认 true（RFC 7636 S256）；学校实例经能力验证脚本确认不支持时才可置 false 并留证据
+#   - cookieSecureEnforced 生产/HTTPS 灰度必须 true（强制会话 Cookie Secure，不依赖探测）
+#   - requireDedicatedSessionSecret 生产必须 true：强制独立会话签名密钥（≥32 字符），缺失 fail-closed
 casdoor:
   endpoint: http://127.0.0.1:8000   # 学校实例地址（开发为本地 Casdoor 靶场）
   organization: CHANGE_ME           # 学校级 Organization
   clientId: CHANGE_ME               # OIDC 客户端标识（非秘密）
   clientSecretRef: CHANGE_ME        # 客户端秘密引用（必填）
   redirectUri: http://localhost:5173/auth/callback  # 登录回调（开发为前端 dev server，必填）
+  # sessionSecretRef: ${env:CASDOOR_SESSION_SECRET}   # 独立会话签名密钥（生产必填，≥32 字符）
+  # pkceEnabled: true                # OIDC PKCE（S256），默认开启
+  # cookieSecureEnforced: false      # 生产/HTTPS 灰度置 true
+  # requireDedicatedSessionSecret: false  # 生产置 true（NODE_ENV=production 时自动强制）
+  # discoveryTtlMs: 3600000          # 发现文档缓存 TTL（默认 1 小时，到期复检 issuer 指纹）
+  # sessionCookieMaxAgeSec: 86400    # 会话 Cookie Max-Age（默认 86400，对齐会话 JWT）
 
 # ---- storage：S3 兼容对象存储（DATA-Q-012 三个私有 Bucket，loader: buckets 嵌套）----
 storage:

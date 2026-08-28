@@ -109,13 +109,14 @@ describe('HttpCasdoorAdapter', () => {
     const fetchFn = makeFetch(async (url) => {
       if (url.includes('/api/update-user')) {
         updatedPhone = true;
-        return { ok: true, status: 200, body: null };
+        return { ok: true, status: 200, body: { status: 'ok' } };
       }
-      // getUser readback
+      // get-user（读-改-写的前置读取 + 写后读回）：信封形态 { status, data }
+      // （F16/F17 修复后读-改-写要求信封 + 完整用户对象）
       return {
         ok: true,
         status: 200,
-        body: userBody(updatedPhone ? { phone: '13900000000' } : {}),
+        body: { status: 'ok', data: userBody(updatedPhone ? { phone: '13900000000' } : {}) },
       };
     });
     const adapter = new HttpCasdoorAdapter({
@@ -132,10 +133,10 @@ describe('HttpCasdoorAdapter', () => {
   it('updateUser 读回不可见返回 UNCERTAIN（不得以 HTTP 成功宣称成功）', async () => {
     const fetchFn = makeFetch(async (url) => {
       if (url.includes('/api/update-user')) {
-        return { ok: true, status: 200, body: null };
+        return { ok: true, status: 200, body: { status: 'ok' } };
       }
-      // readback 不反映变更
-      return { ok: true, status: 200, body: userBody({ phone: null }) };
+      // readback 不反映变更（信封形态，读回 phone 仍为 null）
+      return { ok: true, status: 200, body: { status: 'ok', data: userBody({ phone: null }) } };
     });
     const adapter = new HttpCasdoorAdapter({
       endpoint: 'https://casdoor.example.com',

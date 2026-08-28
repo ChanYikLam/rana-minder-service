@@ -41,6 +41,29 @@ export interface CasdoorConfig {
    * 生产建议显式配置独立随机高熵密钥，避免与 Casdoor clientSecret 耦合。
    */
   readonly sessionSecretRef?: string;
+  /**
+   * OIDC PKCE（S256）开关（默认开启）。学校真实实例经能力验证脚本确认不支持时
+   * 才允许显式置 false 并记录证据；关闭后基线回落为 confidential client +
+   * 一次性 code + 服务端一次性 nonce/state。
+   */
+  readonly pkceEnabled?: boolean;
+  /**
+   * 会话 Cookie 强制 Secure（默认关闭，按请求自动探测 HTTPS）。生产/灰度经
+   * HTTPS 提供服务时必须置 true：不再依赖 x-forwarded-proto 探测，防反代
+   * 配置漂移导致 Cookie 明文传输。
+   */
+  readonly cookieSecureEnforced?: boolean;
+  /**
+   * 强制专用会话签名密钥（默认关闭）。置 true 时未配置 sessionSecretRef
+   * （或长度 < 32 字符）将拒绝启动会话链路（fail-closed，503
+   * CAS-ERR-SESSION_SECRET_REQUIRED）；生产部署应置 true，避免轮换
+   * clientSecret 时连带打掉全部在线会话。
+   */
+  readonly requireDedicatedSessionSecret?: boolean;
+  /** 发现文档缓存 TTL（毫秒）；缺省用客户端内置 1 小时。 */
+  readonly discoveryTtlMs?: number;
+  /** 会话 Cookie Max-Age（秒，默认 86400，与会话 JWT 24h 有效期对齐）。 */
+  readonly sessionCookieMaxAgeSec?: number;
 }
 
 export interface StorageConfig {

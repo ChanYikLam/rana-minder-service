@@ -173,6 +173,24 @@ function buildCasdoor(
       env.CASDOOR_SESSION_SECRET_REF,
       undefined,
     ),
+    // 安全开关（默认值见字段注释）：PKCE 默认开启；Cookie 强制 Secure /
+    // 强制专用会话密钥默认关闭（生产配置模板中显式置 true）。
+    pkceEnabled: parseBool(raw?.pkceEnabled, env.CASDOOR_PKCE_ENABLED, true),
+    cookieSecureEnforced: parseBool(
+      raw?.cookieSecureEnforced,
+      env.CASDOOR_COOKIE_SECURE_ENFORCED,
+      false,
+    ),
+    requireDedicatedSessionSecret: parseBool(
+      raw?.requireDedicatedSessionSecret,
+      env.CASDOOR_REQUIRE_DEDICATED_SESSION_SECRET,
+      false,
+    ),
+    discoveryTtlMs: optionalInt(raw?.discoveryTtlMs, env.CASDOOR_DISCOVERY_TTL_MS),
+    sessionCookieMaxAgeSec: optionalInt(
+      raw?.sessionCookieMaxAgeSec,
+      env.CASDOOR_SESSION_COOKIE_MAX_AGE_SEC,
+    ),
   };
 }
 
@@ -402,4 +420,13 @@ function optionalString(
     );
   }
   return fallback;
+}
+
+/** 可选正整数（未提供/非法为 0 时返回 undefined；供毫秒/秒级可选参数使用）。 */
+function optionalInt(fromFile: unknown, fromEnv: string | undefined): number | undefined {
+  const raw = typeof fromFile === 'number' ? String(fromFile) : fromEnv;
+  if (raw === undefined || raw === '') return undefined;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return n;
 }

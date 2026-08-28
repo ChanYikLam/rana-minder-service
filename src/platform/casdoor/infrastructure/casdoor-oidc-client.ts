@@ -5,15 +5,21 @@
  * （使用 jose 库验证 RS256 签名与 JWKS）、UserInfo 拉取。
  *
  * 设计决策：
- * - OIDC 发现（.well-known/openid-configuration）用于获取端点，不硬编码路径
+ * - OIDC 发现（.well-known/openid-configuration）用于获取端点，不硬编码路径；
+ *   发现文档带 TTL 缓存并固化指纹（sha256），复检时 issuer 漂移即 fail-closed
+ *   （CAS-CAP-002/003：实例指纹证据，防端点被替换后静默换签）
  * - JWT 签名验证使用 jose 的 JWKS 远程密钥集（缓存 + 自动刷新），不信任裸令牌
+ * - PKCE（RFC 7636，S256）默认开启：授权请求携带 code_challenge，token 交换
+ *   携带仅服务端持有的 code_verifier；即使授权码被重定向链路截获也无法换码
+ *   （纵深防御，学校实例支持性由 CAS-CAP 能力验证脚本确认后可经配置关闭）
+ * - 出站错误消息一律脱敏：只保留状态码与尝试标识，不回显响应体/令牌/秘密
+ *   （CAS-SEC-003/004：错误与日志不泄密）
  * - 会话令牌（本地 JWT）签名使用 HS256 + 本地秘密，不依赖 Casdoor
- * - 依赖 CASDOOR_CONFIG 注入（endpoint/clientId/clientSecretRef/redirectUri）；
- *   endpoint 为空时本客户端不实例化，走现有 RejectAll 桩
  *
  * 费用：新增 jose（MIT，DEP-003 已登记，兼容矩阵 DEP-002 已预见 Casdoor v3.108.0 × OIDC SDK）
  */
 
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 
@@ -22,11 +28,21 @@ export interface CasdoorOidcConfig {
   readonly clientId: string;
   readonly clientSecret: string;
   readonly redirectUri: string;
+  /**
+   * PKCE（S256）开关（默认开启）。学校真实实例经能力验证脚本确认不支持时
+   * 才允许显式置 false（记录证据）；关闭后安全基线回落为 confidential client
+   * + 一次性 code + 服务端一次性 nonce/state。
+   */
+  readonly pkceEnabled?: boolean;
+  /** 发现文档缓存 TTL（毫秒，默认 1 小时）；到期复检 issuer 稳定性与指纹。 */
+  readonly discoveryTtlMs?: number;
 }
 
 export interface OidcState {
   readonly nonce: string;
   readonly redirectAfter?: string;
+  /** PKCE code_verifier（仅服务端持有；pkceEnabled 时必填，缺失 fail-closed）。 */
+  readonly codeVerifier?: string;
 }
 
 export interface TokenSet {
@@ -56,6 +72,23 @@ export interface OidcDiscovery {
 /** 出站 OIDC 请求超时（毫秒）；避免 Casdoor 挂起无限阻塞 /api/auth/session。 */
 export const OIDC_FETCH_TIMEOUT_MS = 5000;
 
+/** 发现文档默认缓存 TTL（毫秒）：issuer/JWKS 指纹按此周期复检。 */
+export const DISCOVERY_TTL_MS = 60 * 60 * 1000;
+
+/** 生成 PKCE code_verifier（RFC 7636 §4.1：32 字节随机 → base64url，43+ 字符）。 */
+export function generateCodeVerifier(): string {
+  return randomBytesBase64url(32);
+}
+
+/** 计算 S256 code_challenge（BASE64URL(SHA256(verifier))，无填充）。 */
+export function computeCodeChallengeS256(verifier: string): string {
+  return createHash('sha256').update(verifier, 'ascii').digest('base64url');
+}
+
+function randomBytesBase64url(bytes: number): string {
+  return randomBytes(bytes).toString('base64url');
+}
+
 /** 带超时的 fetch：AbortController 计时中断挂起连接（CAS-AUTH-001 出站不阻塞）。 */
 async function fetchWithTimeout(
   url: string | URL,
@@ -71,16 +104,32 @@ async function fetchWithTimeout(
   }
 }
 
+interface DiscoveryCacheEntry {
+  readonly discovery: OidcDiscovery;
+  readonly fingerprint: string;
+  readonly fetchedAt: number;
+}
+
 export class CasdoorOidcClient {
-  private discovery?: OidcDiscovery;
+  private discoveryCache?: DiscoveryCacheEntry;
+  private jwksByUri = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
   constructor(private readonly config: CasdoorOidcConfig) {}
 
+  private get pkceEnabled(): boolean {
+    return this.config.pkceEnabled !== false;
+  }
+
   /**
    * 构造 Casdoor OIDC 授权码登录 URL（state 含 nonce 用于回验）。
+   * pkceEnabled（默认）时必须提供 state.codeVerifier（仅服务端持有），
+   * 缺失即抛错 fail-closed——不以"可用的降级 URL"静默弱化基线。
    */
   async buildAuthorizationUrl(state: OidcState): Promise<string> {
     const disco = await this.ensureDiscovery();
+    if (this.pkceEnabled && typeof state.codeVerifier !== 'string') {
+      throw new Error('PKCE enabled but code_verifier missing (fail-closed)');
+    }
     const url = new URL(disco.authorization_endpoint);
     url.searchParams.set('client_id', this.config.clientId);
     url.searchParams.set('response_type', 'code');
@@ -88,28 +137,45 @@ export class CasdoorOidcClient {
     url.searchParams.set('scope', 'openid profile email');
     url.searchParams.set('state', this.encodeState(state));
     url.searchParams.set('nonce', state.nonce);
+    if (this.pkceEnabled && state.codeVerifier) {
+      url.searchParams.set('code_challenge', computeCodeChallengeS256(state.codeVerifier));
+      url.searchParams.set('code_challenge_method', 'S256');
+    }
     return url.toString();
   }
 
   /**
    * 授权码 → TokenSet（含 id_token、access_token）。
+   * pkceEnabled 时必须传入与授权请求配对的 code_verifier（RFC 7636 §4.5）。
+   * 错误脱敏：失败只抛状态码 + 尝试标识，不携带响应体（可能含上游细节）。
    */
-  async exchangeCode(code: string): Promise<TokenSet> {
+  async exchangeCode(code: string, codeVerifier?: string): Promise<TokenSet> {
     const disco = await this.ensureDiscovery();
+    if (this.pkceEnabled && typeof codeVerifier !== 'string') {
+      throw new Error('PKCE enabled but code_verifier missing for token exchange (fail-closed)');
+    }
+    const attemptId = randomUUID();
+    const form = new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+      code,
+      redirect_uri: this.config.redirectUri,
+    });
+    if (codeVerifier) {
+      form.set('code_verifier', codeVerifier);
+    }
     const res = await fetchWithTimeout(disco.token_endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
-        code,
-        redirect_uri: this.config.redirectUri,
-      }),
+      body: form,
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`Casdoor token endpoint returned ${res.status}: ${body.slice(0, 200)}`);
+      // CAS-SEC-003：不把上游错误响应体带进异常消息（可能进入日志/审计），
+      // 仅保留状态码与尝试标识供排障关联。
+      throw new Error(
+        `Casdoor token endpoint returned ${res.status} (attempt ${attemptId})`,
+      );
     }
     const json = (await res.json()) as Record<string, unknown>;
     return {
@@ -128,7 +194,7 @@ export class CasdoorOidcClient {
    */
   async verifyIdToken(idToken: string, nonce: string): Promise<JWTPayload> {
     const disco = await this.ensureDiscovery();
-    const JWKS = createRemoteJWKSet(new URL(disco.jwks_uri));
+    const JWKS = this.jwksFor(disco.jwks_uri);
     const { payload } = await jwtVerify(idToken, JWKS, {
       issuer: disco.issuer,
       audience: this.config.clientId,
@@ -196,17 +262,31 @@ export class CasdoorOidcClient {
     return 'ACTIVE';
   }
 
+  /** 当前发现文档指纹（sha256 hex；未抓取时 null）。供能力验证证据与运行期漂移监测。 */
+  getDiscoveryFingerprint(): string | null {
+    return this.discoveryCache?.fingerprint ?? null;
+  }
+
+  /** 当前发现文档 issuer（未抓取时 null）。 */
+  getDiscoveryIssuer(): string | null {
+    return this.discoveryCache?.discovery.issuer ?? null;
+  }
+
   // ----- 内部 -----
 
   private async ensureDiscovery(): Promise<OidcDiscovery> {
-    if (this.discovery) return this.discovery;
+    const ttl = this.config.discoveryTtlMs ?? DISCOVERY_TTL_MS;
+    const cached = this.discoveryCache;
+    if (cached && Date.now() - cached.fetchedAt < ttl) {
+      return cached.discovery;
+    }
     const url = `${this.config.endpoint}/.well-known/openid-configuration`;
     const res = await fetchWithTimeout(url);
     if (!res.ok) {
       throw new Error(`Casdoor OIDC discovery failed: ${res.status}`);
     }
     const doc = (await res.json()) as Record<string, unknown>;
-    this.discovery = {
+    const discovery: OidcDiscovery = {
       issuer: String(doc['issuer'] ?? ''),
       authorization_endpoint: String(doc['authorization_endpoint'] ?? ''),
       token_endpoint: String(doc['token_endpoint'] ?? ''),
@@ -215,7 +295,37 @@ export class CasdoorOidcClient {
       end_session_endpoint:
         typeof doc['end_session_endpoint'] === 'string' ? doc['end_session_endpoint'] : undefined,
     };
-    return this.discovery;
+    // 指纹 = 发现文档规范字段的 sha256（CAS-CAP-002：不可由普通客户端伪造的实例指纹输入之一）
+    const fingerprint = createHash('sha256')
+      .update(
+        JSON.stringify([
+          discovery.issuer,
+          discovery.authorization_endpoint,
+          discovery.token_endpoint,
+          discovery.userinfo_endpoint,
+          discovery.jwks_uri,
+          discovery.end_session_endpoint ?? null,
+        ]),
+      )
+      .digest('hex');
+    // issuer 漂移 fail-closed（CAS-CAP-003）：复检时签发方变更意味着端点/实例被
+    // 替换或重配置，继续使用旧 JWKS 验签将失去意义；拒绝并要求人工介入。
+    if (cached && cached.discovery.issuer !== discovery.issuer) {
+      throw new Error(
+        `Casdoor discovery issuer changed (was '${cached.discovery.issuer}', now '${discovery.issuer}') — fail-closed per CAS-CAP-003`,
+      );
+    }
+    this.discoveryCache = { discovery, fingerprint, fetchedAt: Date.now() };
+    return discovery;
+  }
+
+  private jwksFor(jwksUri: string): ReturnType<typeof createRemoteJWKSet> {
+    let jwks = this.jwksByUri.get(jwksUri);
+    if (!jwks) {
+      jwks = createRemoteJWKSet(new URL(jwksUri));
+      this.jwksByUri.set(jwksUri, jwks);
+    }
+    return jwks;
   }
 
   /** 编码 OIDC state（base64url JSON）。公开供控制器把 state 写入 HttpOnly Cookie 以做登录 CSRF 比对。 */

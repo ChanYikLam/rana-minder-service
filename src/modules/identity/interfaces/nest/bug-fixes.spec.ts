@@ -10,28 +10,38 @@ import { deriveSessionSecret } from './session-secret';
 import { isSecureRequest } from './secure-request';
 
 describe('BUG-008：nonce 存储可注入（多实例共享）', () => {
-  it('OidcNonceStore 接口契约：issue + consume（一次性）', () => {
+  it('OidcNonceStore 接口契约：issue + consume（一次性，载荷语义）', async () => {
     const store: OidcNonceStore = new InMemoryOidcNonceStore();
-    store.issue('nonce-abc');
-    assert.equal(store.consume('nonce-abc'), true, '首次消费应成功');
-    assert.equal(store.consume('nonce-abc'), false, '一次性 nonce 二次消费应拒绝');
-    assert.equal(store.consume('never-issued'), false);
+    await store.issue('nonce-abc');
+    assert.equal(await store.consume('nonce-abc'), '', '首次消费应成功（无载荷返回空串）');
+    assert.equal(await store.consume('nonce-abc'), null, '一次性 nonce 二次消费应拒绝');
+    assert.equal(await store.consume('never-issued'), null);
   });
 
-  it('自定义共享存储实现可替换内存桩（接口兼容性）', () => {
+  it('载荷随 nonce 一次性取回（PKCE verifier 绑定语义）', async () => {
+    const store: OidcNonceStore = new InMemoryOidcNonceStore();
+    await store.issue('nonce-pkce', undefined, 'code-verifier-value');
+    assert.equal(await store.consume('nonce-pkce'), 'code-verifier-value');
+    assert.equal(await store.consume('nonce-pkce'), null, '消费后不可再次取回');
+  });
+
+  it('自定义共享存储实现可替换内存桩（接口兼容性）', async () => {
     // 模拟 Redis 等共享存储实现
     class SharedNonceStore implements OidcNonceStore {
-      private readonly backing = new Map<string, number>();
+      private readonly backing = new Map<string, string>();
       issue(nonce: string): void {
-        this.backing.set(nonce, Date.now());
+        this.backing.set(nonce, '');
       }
-      consume(nonce: string): boolean {
-        return this.backing.delete(nonce);
+      consume(nonce: string): string | null {
+        const payload = this.backing.get(nonce);
+        if (payload === undefined) return null;
+        this.backing.delete(nonce);
+        return payload;
       }
     }
     const shared: OidcNonceStore = new SharedNonceStore();
-    shared.issue('shared-nonce');
-    assert.equal(shared.consume('shared-nonce'), true);
+    await shared.issue('shared-nonce');
+    assert.equal(await shared.consume('shared-nonce'), '');
   });
 });
 

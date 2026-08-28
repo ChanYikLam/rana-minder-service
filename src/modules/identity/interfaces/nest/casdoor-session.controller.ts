@@ -9,6 +9,16 @@
  * 端点不加 @UseGuards(AuthGuard)（会话建立前无认证主体）。
  * 会话 JWT 以 Set-Cookie 和 JSON body 双通道返回。
  *
+ * 安全基线（接学校真实实例前加固，2026-08-28）：
+ * - PKCE（S256）默认开启：verifier 仅服务端持有（随 nonce 入共享存储，B3 修复），
+ *   授权 URL/state/Cookie 均不携带（RFC 7636）；
+ * - login-url / session 匿名端点按来源 IP + 全局双桶限流（auth-rate-limiter）；
+ * - Cookie 强制 HttpOnly + SameSite=Lax；Secure 由 cookieSecureEnforced 配置强制
+ *   或 HTTPS 探测；Max-Age 与会话 JWT 有效期对齐；
+ * - 生产（NODE_ENV=production）或 requireDedicatedSessionSecret=true 时必须配置
+ *   专用会话密钥（≥32 字符），否则会话链路 fail-closed（503）；
+ * - 错误响应仅含安全分类码，不回显上游令牌/响应体（CAS-SEC-003/004）。
+ *
  * 配置驱动：casdoor.endpoint/clientId/clientSecretRef 缺失时，登录/会话端点
  * 抛 SessionError(503 CAS-ERR-NOT_CONFIGURED)（fail-closed，不签发会话 JWT）；
  * 会话解析退回到 RejectAllAuthSessionProvider（受保护端点 401 IFC-ERR-001）。
@@ -25,7 +35,10 @@ import {
   type RanaMinderConfig,
 } from '../../../../config';
 import { IdentityUnitOfWork } from '../../infrastructure/unit-of-work';
-import { CasdoorOidcClient } from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
+import {
+  CasdoorOidcClient,
+  generateCodeVerifier,
+} from '../../../../platform/casdoor/infrastructure/casdoor-oidc-client';
 import type {
   CasdoorOidcConfig,
   TokenSet,
@@ -34,6 +47,7 @@ import { OidcAuthSessionProvider, type SessionClaims } from './oidc-session-prov
 import { deriveSessionSecret } from './session-secret';
 import { CasdoorAvailability } from './casdoor-availability';
 import { InMemoryOidcNonceStore } from './oidc-nonce-store';
+import { AuthRateLimiter } from './auth-rate-limiter';
 import { secureFromRequest } from './secure-request';
 import { CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT, SESSION_IDENTITY_REPOSITORY, ACCOUNT_ACCESS_CONTROLLER, OIDC_NONCE_STORE } from '../../tokens';
 import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
@@ -73,6 +87,8 @@ export class CasdoorSessionController {
         subjectId: string;
         casdoorOrg: string;
         casdoorName: string;
+        /** 学号（控制器统一计算：claims 学号优先，兜底 org:name 限定形态） */
+        studentId: string;
         displayName: string;
         email: string | null;
         emailVerifiedFromClaim: boolean;
@@ -82,7 +98,17 @@ export class CasdoorSessionController {
     @Optional()
     @Inject(ACCOUNT_ACCESS_CONTROLLER)
     private readonly accountAccess?: AccountAccessController,
-  ) {}
+    /**
+     * 匿名端点限流器（每控制器实例一个 = 每应用进程一个；注入位供测试
+     * 使用独立窗口）。多实例部署边界见 AuthRateLimiter 实现注释。
+     */
+    @Optional()
+    rateLimiterOverride?: AuthRateLimiter,
+  ) {
+    this.rateLimiter = rateLimiterOverride ?? new AuthRateLimiter();
+  }
+
+  private readonly rateLimiter: AuthRateLimiter;
 
   /** nonceStore：优先使用注入的共享存储，否则回退内存桩（单实例基线） */
   private get nonceStore(): import('./oidc-nonce-store').OidcNonceStore {
@@ -92,14 +118,25 @@ export class CasdoorSessionController {
 
   /** GET /api/auth/casdoor/login-url（契约：data.loginUrl，接口清单 §4） */
   @Get('casdoor/login-url')
-  async getLoginUrl(_req: ExpressRequest): Promise<{ code: 0; data: { loginUrl: string } }> {
+  async getLoginUrl(@Req() req: ExpressRequest): Promise<{ code: 0; data: { loginUrl: string } }> {
+    // 匿名端点限流：超限返回 429 + Retry-After（安全分类码，不回显内部细节）
+    const limit = this.rateLimiter.check(this.clientKey(req));
+    if (!limit.ok) {
+      throw new SessionError('请求过于频繁，请稍后再试', 429, 'CAS-ERR-RATE_LIMITED');
+    }
     const client = this.ensureClient();
     const nonce = randomUUID();
+    // PKCE：verifier 仅服务端持有，与 nonce 绑定入存储（一次性取出）；
+    // pkce 关闭（能力验证证据支持）时该值为空串，授权 URL 不携带 challenge。
+    const codeVerifier = this.config.casdoor.pkceEnabled === false ? '' : generateCodeVerifier();
     // 服务端记录本次授权请求的 nonce，回调时校验并一次性消费（登录 CSRF/会话固定防护）。
-    this.nonceStore.issue(nonce);
-    const state = { nonce };
+    // 共享存储（Postgres）实现为异步：必须 await 落库后再下发授权 URL，
+    // 防止回调先于落库到达造成合法登录被拒。
+    await this.nonceStore.issue(nonce, undefined, codeVerifier);
     try {
-      const url = await client.buildAuthorizationUrl(state);
+      const url = await client.buildAuthorizationUrl(
+        codeVerifier ? { nonce, codeVerifier } : { nonce },
+      );
       this.availability.markAvailable();
       return { code: 0, data: { loginUrl: url } };
     } catch (error) {
@@ -158,8 +195,15 @@ export class CasdoorSessionController {
     // 成功建立的会话仍标记为 degraded，受 CAS-FAIL-001 的 15 分钟降级窗口约束。
     const wasAvailable = this.availability.available;
 
+    // 匿名回调端点限流（建立路径同样覆盖，防 code/nonce 盲猜与回调 DoS）
+    const limit = this.rateLimiter.check(this.clientKey(req));
+    if (!limit.ok) {
+      throw new SessionError('请求过于频繁，请稍后再试', 429, 'CAS-ERR-RATE_LIMITED');
+    }
+
     // 解码 state → nonce，并校验该 nonce 确由本服务签发（一次性消费）。
     // 未签发/已消费/过期一律拒绝，防登录 CSRF 与会话固定。
+    // 消费同时取回服务端私有载荷（PKCE code_verifier；未启用时为空串）。
     let nonce: string;
     try {
       const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8'));
@@ -167,14 +211,19 @@ export class CasdoorSessionController {
     } catch {
       throw new SessionError('Invalid state', 400);
     }
-    if (typeof nonce !== 'string' || !this.nonceStore.consume(nonce)) {
+    if (typeof nonce !== 'string') {
+      throw new SessionError('Invalid state', 400);
+    }
+    const consumedPayload = await this.nonceStore.consume(nonce);
+    if (consumedPayload === null) {
       throw new SessionError('Invalid or expired state (nonce not issued by this service)', 400);
     }
 
-    // 交换授权码 → TokenSet（Casdoor 连通失败时标记降级窗口，CAS-FAIL-001）
+    // 交换授权码 → TokenSet（Casdoor 连通失败时标记降级窗口，CAS-FAIL-001）。
+    // PKCE 启用时携带与授权请求配对的 code_verifier（仅服务端持有）。
     let tokens: TokenSet;
     try {
-      tokens = await client.exchangeCode(code);
+      tokens = await client.exchangeCode(code, consumedPayload || undefined);
     } catch (error) {
       this.availability.markUnavailable();
       throw error;
@@ -221,12 +270,15 @@ export class CasdoorSessionController {
       this.sessionSecret!,
     );
 
-    // Set-Cookie：HttpOnly + SameSite=Lax 强制；Secure 在 HTTPS 下启用（防明文截获）。
-    const secure = secureFromRequest(req);
+    // Set-Cookie：HttpOnly + SameSite=Lax 强制；Secure 由 cookieSecureEnforced
+    // 配置强制（生产基线）或 HTTPS 探测启用（防明文截获）；Max-Age 与会话 JWT
+    // 有效期对齐（默认 24h），避免"浏览器关闭即丢 Cookie 但 JWT 仍有效"的漂移。
+    const secure = this.config.casdoor.cookieSecureEnforced === true || secureFromRequest(req);
     const secureAttr = secure ? '; Secure' : '';
+    const maxAgeSec = this.config.casdoor.sessionCookieMaxAgeSec ?? 24 * 60 * 60;
     res.setHeader(
       'Set-Cookie',
-      `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax${secureAttr}`,
+      `session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secureAttr}`,
     );
 
     // profileGate 联动真实账号/声明（CAS-REC-002）：emailVerified 来自 id_token 声明，
@@ -237,7 +289,7 @@ export class CasdoorSessionController {
     const profileComplete = Boolean(name && email);
 
     // 会话身份建档（API-AUTH-001 胖 session）：库内档案优先；仓储未装配时
-    // 以 claims 兜底组装同形态响应（学号以 casdoor 用户名占位，正式规则见 IDN 域）。
+    // 以 claims 组装同形态响应（不落库）。
     // Casdoor 登录名：优先 name 声明（Casdoor 登录名即 name claim），
     // 兜底 preferred_username → sub（联调 2026-08-27 修正：原取 sub 导致
     // users.casdoor_name 与 Casdoor 真实登录名错位，写回读改写打不中用户）
@@ -245,27 +297,49 @@ export class CasdoorSessionController {
       (typeof claims['name'] === 'string' && claims['name']) ||
       (typeof claims['preferred_username'] === 'string' && claims['preferred_username']) ||
       sub;
+    // 学号来源（B1 修复，2026-08-28）：claims 学号字段优先（真实字段形态以
+    // CAS-CAP-004 能力验证证据为准）；无学号来源时以 "org:name" 限定形态兜底
+    // ——Casdoor 组织内用户名唯一，org 限定消除跨组织同名对
+    // uq_users_student_id 全局唯一约束的碰撞（原实现直接以用户名占位，
+    // 两个组织同名用户第二个登录即 500）。
+    const studentId =
+      (typeof claims['studentId'] === 'string' && claims['studentId']) ||
+      (typeof claims['student_id'] === 'string' && claims['student_id']) ||
+      `${this.config.casdoor.organization}:${casdoorName}`;
     let snapshot: SessionIdentitySnapshot;
-    if (this.sessionIdentity) {
-      snapshot = await this.sessionIdentity.ensureAndRead({
-        subjectId: sub,
-        casdoorOrg: this.config.casdoor.organization,
-        casdoorName,
-        displayName: name,
-        email: email ?? null,
-        emailVerifiedFromClaim: emailVerified,
-      });
-    } else {
-      snapshot = {
-        subjectId: sub,
-        studentId: casdoorName,
-        name,
-        email: email ?? null,
-        phone: '',
-        avatar: null,
-        emailVerified,
-        profileComplete,
-      };
+    try {
+      if (this.sessionIdentity) {
+        snapshot = await this.sessionIdentity.ensureAndRead({
+          subjectId: sub,
+          casdoorOrg: this.config.casdoor.organization,
+          casdoorName,
+          studentId,
+          displayName: name,
+          email: email ?? null,
+          emailVerifiedFromClaim: emailVerified,
+        });
+      } else {
+        snapshot = {
+          subjectId: sub,
+          studentId,
+          name,
+          email: email ?? null,
+          phone: '',
+          avatar: null,
+          emailVerified,
+          profileComplete,
+        };
+      }
+    } catch (error) {
+      // 学号唯一约束冲突 → 显式业务错误（非 500）：提示走姓名/学号更正流程
+      if (isUniqueViolation(error)) {
+        throw new SessionError(
+          '学号已被其他账号占用，请联系管理员处理',
+          409,
+          'IFC-ERR-STUDENT-ID-CONFLICT',
+        );
+      }
+      throw error;
     }
 
     return {
@@ -296,7 +370,7 @@ export class CasdoorSessionController {
   /** DELETE /api/auth/logout */
   @Delete('logout')
   @HttpCode(200)
-  async logout(@Req() req: ExpressRequest, @Res({ passthrough: true }) res: Response): Promise<{ code: 0; data: null }> {
+  async logout(@Req() req: ExpressRequest, @Res({ passthrough: true }) res: Response): Promise<{ code: 0; data: { endSessionUrl: string | null } }> {
     // BUG-007：登出时主动吊销该主体全部会话（不只清 Cookie）。
     // 必须验签通过后才取 sub（防未鉴权伪造任意主体吊销），并在身份域工作单元
     // 事务内写入吊销记录（SEC-CTL-004：禁止脱离事务读写）。
@@ -313,14 +387,25 @@ export class CasdoorSessionController {
       }
     }
     // 清 cookie 时使用与写入一致的 Path/HttpOnly/SameSite/Secure 属性，确保真正清除。
-    const secure = secureFromRequest(req);
+    const secure = this.config.casdoor.cookieSecureEnforced === true || secureFromRequest(req);
     const secureAttr = secure ? '; Secure' : '';
     res.setHeader(
       'Set-Cookie',
       `session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureAttr}`,
     );
-    // 契约响应信封（接口清单 §1.2）：data 为 null 表示成功且无数据
-    return { code: 0, data: null };
+    // RP-initiated logout（可选增强）：本地吊销完成后提供 Casdoor end_session
+    // 地址供前端跳转；未配置/失败时返回 null（本地登出已闭环，不阻断）。
+    let endSessionUrl: string | null = null;
+    if (this.oidcClient) {
+      try {
+        endSessionUrl = await this.oidcClient.buildLogoutUrl();
+      } catch {
+        this.availability.markUnavailable();
+        endSessionUrl = null;
+      }
+    }
+    // 契约响应信封（接口清单 §1.2）：data.endSessionUrl 供前端 RP-initiated 登出
+    return { code: 0, data: { endSessionUrl } };
   }
 
   /**
@@ -362,7 +447,7 @@ export class CasdoorSessionController {
     try {
       this.sessionSecret = deriveSessionSecret(
         this.resolveClientSecret(c.clientSecretRef),
-        this.resolveDedicatedSessionSecret(),
+        this.dedicatedSessionSecretOrThrow(),
       );
       return this.sessionSecret;
     } catch {
@@ -371,6 +456,36 @@ export class CasdoorSessionController {
   }
 
   // ----- 内部 -----
+
+  /**
+   * 限流桶键：请求来源地址。不信任 x-forwarded-for（可伪造轮换绕过限流），
+   * 以 socket 地址为准；反代/代理链路下所有请求聚合到代理地址，限流偏保守
+   * （宁紧勿松，安全基线不受部署配置漂移影响）。
+   */
+  private clientKey(req: ExpressRequest): string {
+    return req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+  }
+
+  /**
+   * 专用会话密钥强制（BUG-017 演进）：生产（NODE_ENV=production）或配置
+   * requireDedicatedSessionSecret=true 时，必须配置 ≥32 字符的独立会话密钥，
+   * 否则 fail-closed 抛 503——禁止在生产静默回退"从 clientSecret 派生"
+   * （轮换 clientSecret 会连带打掉全部在线会话，且两密钥耦合扩大攻击面）。
+   */
+  private dedicatedSessionSecretOrThrow(): string | undefined {
+    const dedicated = this.resolveDedicatedSessionSecret();
+    const enforcementOn =
+      this.config.casdoor.requireDedicatedSessionSecret === true ||
+      process.env.NODE_ENV === 'production';
+    if (enforcementOn && (!dedicated || dedicated.length < 32)) {
+      throw new SessionError(
+        '会话签名密钥未配置或强度不足（需 casdoor.sessionSecretRef，≥32 字符）',
+        503,
+        'CAS-ERR-SESSION_SECRET_REQUIRED',
+      );
+    }
+    return dedicated;
+  }
 
   private ensureClient(): CasdoorOidcClient {
     if (this.oidcClient) return this.oidcClient;
@@ -389,9 +504,14 @@ export class CasdoorSessionController {
       clientId: c.clientId,
       clientSecret,
       redirectUri: c.redirectUri,
+      pkceEnabled: c.pkceEnabled,
+      discoveryTtlMs: c.discoveryTtlMs,
     };
     this.oidcClient = new CasdoorOidcClient(oidcConfig);
-    this.sessionSecret = deriveSessionSecret(clientSecret, this.resolveDedicatedSessionSecret());
+    this.sessionSecret = deriveSessionSecret(
+      clientSecret,
+      this.dedicatedSessionSecretOrThrow(),
+    );
     return this.oidcClient;
   }
 
@@ -421,4 +541,16 @@ export class SessionError extends HttpException {
     super({ message, statusCode, ...(code ? { code } : {}) }, statusCode);
     this.name = 'SessionError';
   }
+}
+
+/**
+ * 判断错误是否为 PostgreSQL 唯一约束冲突（SQLSTATE 23505，或驱动以消息形态
+ * 冒泡时的文本特征）。用于把学号唯一约束冲突映射为显式业务错误而非 500。
+ */
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    if ((error as { code?: unknown }).code === '23505') return true;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('duplicate key value violates unique constraint');
 }
