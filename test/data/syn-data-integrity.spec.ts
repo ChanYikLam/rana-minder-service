@@ -92,6 +92,7 @@ const EXPECTED_TABLES: readonly string[] = [
   'notification_facts',
   'notification_inbox_presentations',
   'notification_privileged_audit',
+  'oidc_nonce_issues',
   'org_appointment_command',
   'org_club_space',
   'org_group_mapping',

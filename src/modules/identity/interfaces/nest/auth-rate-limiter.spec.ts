@@ -10,11 +10,13 @@ import assert from 'node:assert/strict';
 
 import { AuthRateLimiter } from './auth-rate-limiter';
 
-function makeLimiter(overrides: {
-  maxPerKey?: number;
-  maxGlobal?: number;
-  windowMs?: number;
-} = {}) {
+function makeLimiter(
+  overrides: {
+    maxPerKey?: number;
+    maxGlobal?: number;
+    windowMs?: number;
+  } = {},
+) {
   let now = 1_000_000;
   const limiter = new AuthRateLimiter({
     windowMs: overrides.windowMs ?? 60_000,

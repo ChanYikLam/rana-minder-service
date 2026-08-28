@@ -116,7 +116,8 @@ class FakeJobTaskDb implements DbAdapter {
         return false;
       })
       .sort(
-        (a, b) => a.created_at.getTime() - b.created_at.getTime() || (a.task_id < b.task_id ? -1 : 1),
+        (a, b) =>
+          a.created_at.getTime() - b.created_at.getTime() || (a.task_id < b.task_id ? -1 : 1),
       )
       .slice(0, batchSize);
     return candidates.map((row) => {
@@ -141,7 +142,12 @@ class FakeJobTaskDb implements DbAdapter {
   private doRetry(id: string, notBefore: Date): void {
     const row = this.rows.get(id);
     if (row && row.status === 'LEASED') {
-      this.rows.set(id, { ...row, status: 'RETRYABLE_FAILED', not_before: notBefore, lease_until: null });
+      this.rows.set(id, {
+        ...row,
+        status: 'RETRYABLE_FAILED',
+        not_before: notBefore,
+        lease_until: null,
+      });
     }
   }
 
@@ -185,7 +191,11 @@ describe('PostgresJobTaskStore（ADR-004 租约领取/结算，真实表结构�
     const db = new FakeJobTaskDb();
     db.seed(
       task({ task_id: 't-due', status: 'PENDING', not_before: new Date(now.getTime() - 1_000) }),
-      task({ task_id: 't-future', status: 'PENDING', not_before: new Date(now.getTime() + minute) }),
+      task({
+        task_id: 't-future',
+        status: 'PENDING',
+        not_before: new Date(now.getTime() + minute),
+      }),
       task({ task_id: 't-done', status: 'COMPLETED' }),
     );
     const store = new PostgresJobTaskStore(db);

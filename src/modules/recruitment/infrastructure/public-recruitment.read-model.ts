@@ -124,7 +124,10 @@ export class PublicRecruitmentReadModel {
     if (rows.length === 0) return null;
     return {
       formId,
-      versions: rows.map((r) => ({ versionNumber: Number(r.version_number), fields: r.fields ?? [] })),
+      versions: rows.map((r) => ({
+        versionNumber: Number(r.version_number),
+        fields: r.fields ?? [],
+      })),
     };
   }
 
@@ -177,7 +180,13 @@ export class PublicRecruitmentReadModel {
 
   /** 社团目录列表（公开浏览页） */
   async listClubsPublic(): Promise<
-    Array<{ id: string; name: string; description: string | null; memberCount: number; logo: string | null }>
+    Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      memberCount: number;
+      logo: string | null;
+    }>
   > {
     const { rows } = await this.pool.query<{
       id: string;

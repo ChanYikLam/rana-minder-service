@@ -46,8 +46,11 @@ export class FormBackedJointForm implements JointFormPort {
     submissionId: string;
     versionNumber: number;
   }): Promise<JointFormRefDto | null> {
-    const result = await this.pool.query<{ id: string; form_id: string; version_number: string | number }>(
-
+    const result = await this.pool.query<{
+      id: string;
+      form_id: string;
+      version_number: string | number;
+    }>(
       `SELECT id, form_id, version_number
          FROM public.form_submissions
         WHERE id = $1 AND form_id = $2 AND version_number = $3

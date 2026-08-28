@@ -90,14 +90,6 @@ class JobDbSession {
   }
 }
 
-/** 内部状态 → 真实表 status 枚举 */
-const STATUS = {
-  pending: 'PENDING',
-  running: 'LEASED',
-  done: 'COMPLETED',
-  failed: 'RETRYABLE_FAILED',
-} as const;
-
 /** 状态聚合口径：RETRYABLE_FAILED/UNCERTAIN/MANUAL_INTERVENTION 归入 failed 展示 */
 const FAILED_GROUP: readonly string[] = ['RETRYABLE_FAILED', 'UNCERTAIN', 'MANUAL_INTERVENTION'];
 
@@ -126,7 +118,12 @@ export class PostgresJobTaskStore implements JobTaskStore {
                  ) c
           WHERE t.task_id = c.task_id AND t.status IN ('PENDING', 'LEASED')
           RETURNING t.task_id, t.task_type, t.payload, t.attempts`,
-        [batchSize, new Date(now.getTime() + leaseMs), now, `worker-${process.pid}-${now.getTime()}`],
+        [
+          batchSize,
+          new Date(now.getTime() + leaseMs),
+          now,
+          `worker-${process.pid}-${now.getTime()}`,
+        ],
       );
       // 先在事务内完成 payload 解析：若某行 payload 损坏导致 JSON.parse 抛错，
       // 会在 catch 中对本次领取整体回滚（任务保持 PENDING，可被再次领取），
@@ -139,7 +136,8 @@ export class PostgresJobTaskStore implements JobTaskStore {
         return {
           id: row.task_id,
           type: row.task_type,
-          subjectId: typeof payload['subjectId'] === 'string' ? (payload['subjectId'] as string) : '',
+          subjectId:
+            typeof payload['subjectId'] === 'string' ? (payload['subjectId'] as string) : '',
           payload,
           attempts: Number(row.attempts),
         };

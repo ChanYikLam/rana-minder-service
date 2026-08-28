@@ -109,8 +109,12 @@ describe('SEC-CTL-002 默认拒绝与失败关闭', () => {
         },
       );
     }
+    // F10 修复后的契约：expectedVersion 允许 0（资料首建未保存时 version 即 0，
+    // 首存场景以其为乐观锁基线）；负数仍拒绝。
+    const ok = parseRequestEnvelope({ expectedVersion: 0 });
+    assert.equal(ok.expectedVersion, 0);
     assert.throws(
-      () => parseRequestEnvelope({ expectedVersion: 0 }),
+      () => parseRequestEnvelope({ expectedVersion: -1 }),
       (err: unknown) => {
         assert.equal((err as IdentityCommandError).code, IdentityErrorCode.VALIDATION_FAILED);
         return true;

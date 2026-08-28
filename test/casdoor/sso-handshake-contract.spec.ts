@@ -48,7 +48,7 @@ try {
 /** 真实 OIDC 客户端形状（仅 jose 可用时经 require hook 动态加载编译）。 */
 interface FakeOidcClientInstance {
   buildAuthorizationUrl(state: Record<string, unknown>): Promise<string>;
-  exchangeCode(code: string): Promise<{
+  exchangeCode(code: string, codeVerifier?: string): Promise<{
     readonly accessToken: string;
     readonly idToken: string;
     readonly refreshToken?: string;
@@ -177,7 +177,7 @@ function installFakeProvider(initialIdToken: string): FakeProviderHandle {
         body: { sub: 'u_1001', name: '张三', preferred_username: 'zhangsan' },
       };
     }
-    if (url === `${ISSUER}/api/get-user`) {
+    if (url === `${ISSUER}/api/get-account` || url === `${ISSUER}/api/get-user`) {
       return { status: 200, body: { status: 'ok', data: state.accountData } };
     }
     return { status: 404, body: { error: 'unrouted' } };
@@ -254,10 +254,11 @@ describe('SSO 握手 · jose-free 部分（回调参数校验/state/nonce 匹配
     };
 
     assert.equal(typeof decoded.nonce, 'string');
-    assert.equal(store.consume(decoded.nonce as string), true);
+    // 载荷契约：未携带载荷的一次性消费返回空串（2026-08-28 PKCE 加固）
+    assert.equal(store.consume(decoded.nonce as string), '');
   });
 
-  it('伪造 state（nonce 非本服务签发）→ consume=false → 回调必须拒绝（登录 CSRF / 会话固定防护）', () => {
+  it('伪造 state（nonce 非本服务签发）→ consume=null → 回调必须拒绝（登录 CSRF / 会话固定防护）', () => {
     const store = new InMemoryOidcNonceStore();
     const attackerState = Buffer.from(JSON.stringify({ nonce: 'forged-by-attacker' })).toString(
       'base64url',
@@ -266,10 +267,10 @@ describe('SSO 握手 · jose-free 部分（回调参数校验/state/nonce 匹配
       nonce?: unknown;
     };
     assert.equal(typeof decoded.nonce, 'string');
-    assert.equal(store.consume(decoded.nonce as string), false);
+    assert.equal(store.consume(decoded.nonce as string), null);
   });
 
-  it('重放回调：同一合法 state 二次提交 → consume=false（一次性 nonce）', () => {
+  it('重放回调：同一合法 state 二次提交 → consume=null（一次性 nonce）', () => {
     const store = new InMemoryOidcNonceStore();
     store.issue('nonce-once');
     const stateParam = Buffer.from(JSON.stringify({ nonce: 'nonce-once' })).toString('base64url');
@@ -277,12 +278,12 @@ describe('SSO 握手 · jose-free 部分（回调参数校验/state/nonce 匹配
     const first = JSON.parse(Buffer.from(stateParam, 'base64url').toString('utf8')) as {
       nonce: string;
     };
-    assert.equal(store.consume(first.nonce), true);
+    assert.equal(store.consume(first.nonce), '');
     // 第二次完整重放同一回调
     const second = JSON.parse(Buffer.from(stateParam, 'base64url').toString('utf8')) as {
       nonce: string;
     };
-    assert.equal(store.consume(second.nonce), false);
+    assert.equal(store.consume(second.nonce), null);
   });
 
   it('畸形 state（非法编码/非 JSON）→ 解码抛错 → 控制器映射 400 Invalid state', () => {
@@ -332,7 +333,9 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
         redirectUri: REDIRECT_URI,
       });
 
-      const url = await client.buildAuthorizationUrl({ nonce: 'n-url' });
+      // PKCE（2026-08-28 加固）：授权 URL 必须携带 S256 challenge，verifier 仅服务端持有
+      const verifier = 'test-verifier-must-be-at-least-43-chars-long-aaaaaaaaaaaaaaa';
+      const url = await client.buildAuthorizationUrl({ nonce: 'n-url', codeVerifier: verifier });
       const parsed = new URL(url);
       assert.equal(parsed.origin + parsed.pathname, `${ISSUER}/login/oauth/authorize`);
       assert.equal(parsed.searchParams.get('client_id'), CLIENT_ID);
@@ -340,6 +343,12 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
       assert.equal(parsed.searchParams.get('redirect_uri'), REDIRECT_URI);
       assert.equal(parsed.searchParams.get('scope'), 'openid profile email');
       assert.equal(parsed.searchParams.get('nonce'), 'n-url');
+      assert.equal(parsed.searchParams.get('code_challenge_method'), 'S256');
+      assert.ok(
+        (parsed.searchParams.get('code_challenge') ?? '').length >= 43,
+        'S256 challenge 必须在场',
+      );
+      assert.equal(parsed.searchParams.get('code_verifier'), null, 'verifier 不得出现在授权 URL');
       const stateRaw = parsed.searchParams.get('state') ?? '';
       const stateObj = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8')) as {
         nonce?: string;
@@ -347,7 +356,7 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
       assert.equal(stateObj.nonce, 'n-url');
 
       // discovery 缓存：第二次构造不再出网
-      await client.buildAuthorizationUrl({ nonce: 'n-url-2' });
+      await client.buildAuthorizationUrl({ nonce: 'n-url-2', codeVerifier: verifier });
       assert.equal(
         provider.requests.filter((r) => r.url.includes('openid-configuration')).length,
         1,
@@ -375,9 +384,10 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
       const frozenNow = 1_777_000_000_000;
       const realNow = Date.now;
       Date.now = () => frozenNow;
+      const verifier = 'test-verifier-for-exchange-must-be-long-enough-aaaaaaaaaaaa';
       let tokens: Awaited<ReturnType<FakeOidcClientInstance['exchangeCode']>>;
       try {
-        tokens = await client.exchangeCode('auth-code-abc');
+        tokens = await client.exchangeCode('auth-code-abc', verifier);
       } finally {
         Date.now = realNow;
       }
@@ -392,6 +402,9 @@ describe('SSO 握手 · 真实校验路径（jose 可用时；否则 skip）', (
       );
       assert.ok(tokenCall);
       assert.ok((tokenCall.body ?? '').includes('code=auth-code-abc'));
+      // PKCE：换码请求必须携带服务端持有的 code_verifier
+      const tokenForm = new URLSearchParams(tokenCall.body ?? '');
+      assert.equal(tokenForm.get('code_verifier'), verifier);
     } finally {
       provider.restore();
     }

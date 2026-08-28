@@ -1,3 +1,4 @@
+// no-spec-required 纯类型契约文件，无运行时代码；加载逻辑由 config.loader.spec.ts 全量覆盖
 /**
  * RanaMinder 配置类型契约（ADR-010 单文件外置配置 + ADR-014 单库单 Schema +
  * ADR-009 Casdoor 适配 + ADR-008 S3 兼容存储 + ADR-011 内置最小观测 +

@@ -26,13 +26,9 @@ export async function up(runner: MigrationQueryRunner): Promise<void> {
 }
 
 export async function down(runner: MigrationQueryRunner): Promise<void> {
-  await runner.query(
-    `ALTER TABLE public.recruitment_activities DROP COLUMN IF EXISTS departments`,
-  );
+  await runner.query(`ALTER TABLE public.recruitment_activities DROP COLUMN IF EXISTS departments`);
   await runner.query(
     `ALTER TABLE public.recruitment_activities DROP COLUMN IF EXISTS allow_adjustment_default`,
   );
-  await runner.query(
-    `ALTER TABLE public.recruitment_activities DROP COLUMN IF EXISTS form_id`,
-  );
+  await runner.query(`ALTER TABLE public.recruitment_activities DROP COLUMN IF EXISTS form_id`);
 }

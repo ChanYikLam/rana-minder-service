@@ -177,9 +177,9 @@ async function makeHarness(options: HarnessOptions = {}): Promise<Harness> {
   };
 }
 
-function makeRequest(query: Record<string, string>): Parameters<
-  CasdoorSessionController['establishSession']
->[0] {
+function makeRequest(
+  query: Record<string, string>,
+): Parameters<CasdoorSessionController['establishSession']>[0] {
   return {
     query,
     headers: {},
@@ -213,10 +213,7 @@ async function runLogin(h: Harness): Promise<{ code: number; data: Record<string
   )) as unknown as { code: number; data: Record<string, unknown> };
 }
 
-function expectSessionError(
-  status: number,
-  code: string | undefined,
-): (err: unknown) => boolean {
+function expectSessionError(status: number, code: string | undefined): (err: unknown) => boolean {
   return (err: unknown) =>
     err instanceof SessionError &&
     err.getStatus?.() === status &&
@@ -306,10 +303,7 @@ describe('会话控制器加固：学号来源（B1）', () => {
       },
     });
     after(() => h.dispose());
-    await assert.rejects(
-      runLogin(h),
-      expectSessionError(409, 'IFC-ERR-STUDENT-ID-CONFLICT'),
-    );
+    await assert.rejects(runLogin(h), expectSessionError(409, 'IFC-ERR-STUDENT-ID-CONFLICT'));
   });
 });
 

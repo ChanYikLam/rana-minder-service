@@ -1,3 +1,4 @@
+// no-spec-required CLI 迁移入口；runMigrations 逻辑由 test/integration/migrations.spec.ts 真库全量覆盖
 /**
  * 数据库迁移执行器（database；BUG-002 修复）。
  *

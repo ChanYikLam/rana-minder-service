@@ -29,12 +29,12 @@ function tryRequire(id: string): unknown | null {
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 describe('SEC-CTL-003 OIDC 登录流程关联证据失败关闭', () => {
-  it('SEC-CTL-003：nonce 一次性消费——同一回调重放被拒', () => {
+  it('SEC-CTL-003：nonce 一次性消费——同一回调重放被拒（载荷契约）', () => {
     const store = new InMemoryOidcNonceStore();
     store.issue('nonce-A');
-    assert.equal(store.consume('nonce-A'), true);
-    assert.equal(store.consume('nonce-A'), false, '重放同一 nonce 必须失败');
-    assert.equal(store.consume('nonce-B'), false, '未签发 nonce 校验必须失败');
+    assert.equal(store.consume('nonce-A'), '', '首次消费成功（无载荷返回空串）');
+    assert.equal(store.consume('nonce-A'), null, '重放同一 nonce 必须失败');
+    assert.equal(store.consume('nonce-B'), null, '未签发 nonce 校验必须失败');
   });
 
   it(`SEC-CTL-003：过期 nonce 拒绝（默认 TTL ${DEFAULT_NONCE_TTL_MS}ms 常量为正）`, async () => {
@@ -42,7 +42,7 @@ describe('SEC-CTL-003 OIDC 登录流程关联证据失败关闭', () => {
     const store = new InMemoryOidcNonceStore();
     store.issue('nonce-expired', 1);
     await sleep(10);
-    assert.equal(store.consume('nonce-expired'), false, '过期请求关联证据不得建立会话');
+    assert.equal(store.consume('nonce-expired'), null, '过期请求关联证据不得建立会话');
   });
 
   it('SEC-CTL-003：jose 可用时 OIDC 客户端真实模块可加载；缺失则显式跳过（依赖探测）', async (t) => {

@@ -200,9 +200,7 @@ export function conclusionRowToSnapshot(row: ConclusionRow): JointConclusionSnap
     updatedAt: row.updated_at,
   };
 }
-function normalizeWindow(
-  win: Record<string, unknown>,
-): JointChannelSnapshot['currentWindow'] {
+function normalizeWindow(win: Record<string, unknown>): JointChannelSnapshot['currentWindow'] {
   if (win === null || typeof win !== 'object') return null;
   return {
     ...win,
@@ -222,9 +220,7 @@ export function channelRowToSnapshot(row: ChannelRow): JointChannelSnapshot {
     // jsonb 里的日期是字符串：归一化为 Date（isOpen 调 getTime）；
     // closedAt 缺省补 null（语义=窗口未关闭）
     currentWindow:
-      row.current_window === null
-        ? null
-        : normalizeWindow(parseJsonb(row.current_window)),
+      row.current_window === null ? null : normalizeWindow(parseJsonb(row.current_window)),
     windows: parseJsonb(row.windows),
     revisionNumber: Number(row.revision_number),
     createdAt: row.created_at,

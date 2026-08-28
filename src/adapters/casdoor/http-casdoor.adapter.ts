@@ -52,11 +52,7 @@ function mapUser(raw: Record<string, unknown>): CasdoorUser | null {
     // 账号状态从 isDeleted/isForbidden 推导（Casdoor 用户对象无 state 字段；
     // 原 state 字段回退导致读取恒 UNVERIFIABLE，接受邀请被误拒——联调 2026-08-27 修复）
     state:
-      raw['isDeleted'] === true
-        ? 'DELETED'
-        : raw['isForbidden'] === true
-          ? 'DISABLED'
-          : 'ACTIVE',
+      raw['isDeleted'] === true ? 'DELETED' : raw['isForbidden'] === true ? 'DISABLED' : 'ACTIVE',
     externalVersion:
       typeof raw['externalVersion'] === 'string'
         ? (raw['externalVersion'] as string)
@@ -247,7 +243,11 @@ export class HttpCasdoorAdapter implements CasdoorAdapter {
     // org/name 定位形式；两者不同——本种子用户 id 为 ranaminder-dev__admin__fixed）。
     // 提交被改动 id 会报 "The ID is immutable."（联调 2026-08-27 修复）
     const fullUser: Record<string, unknown> = { ...rawBody.data, ...patch };
-    const { ok, status, data: updateData } = await this.request(
+    const {
+      ok,
+      status,
+      data: updateData,
+    } = await this.request(
       `/api/update-user?organization=${encodeURIComponent(this.organization)}&id=${encodeURIComponent(userId)}`,
       { method: 'POST', body: JSON.stringify(fullUser) },
     );

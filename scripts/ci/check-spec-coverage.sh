@@ -110,7 +110,7 @@ fi
 # git 的 '**' 在 pathspec 中要求至少一层目录，仅写 src/**/*.ts 会漏检 src/main.ts 等顶层文件。
 # 三点 diff（base..HEAD）；失败即报错退出，不使用语义不一致的两点 diff 兜底
 if ! changed="$(git diff --name-only --diff-filter=d "$base"...HEAD -- 'src/*.ts' 'src/**/*.ts' 2>&1)"; then
-  echo "ERROR check-spec-coverage: 三点 diff 失败（base=$base）" >&2
+  echo "ERROR check-spec-coverage: 三点 diff 失败（base=${base}）" >&2
   exit 1
 fi
 # 只看生产代码；测试文件自身不要求配对
@@ -215,7 +215,7 @@ while IFS= read -r f; do
     echo "SKIP  $f (no-spec-required)"
     continue
   fi
-  echo "MISS  $f -> 缺少 $spec（或添加 '// no-spec-required <原因>' 豁免）"
+  echo "MISS  $f -> 缺少 ${spec}（或添加 '// no-spec-required <原因>' 豁免）"
   fail=1
 done <<EOF
 $changed

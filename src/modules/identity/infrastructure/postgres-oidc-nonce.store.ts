@@ -28,7 +28,11 @@ interface NonceRow {
 export class PostgresOidcNonceStore implements OidcNonceStore {
   constructor(private readonly db: DbAdapter) {}
 
-  async issue(nonce: string, ttlMs: number = DEFAULT_NONCE_TTL_MS, payload: string = ''): Promise<void> {
+  async issue(
+    nonce: string,
+    ttlMs: number = DEFAULT_NONCE_TTL_MS,
+    payload: string = '',
+  ): Promise<void> {
     let tx: TransactionContext | null = null;
     try {
       tx = await this.db.beginTransaction();

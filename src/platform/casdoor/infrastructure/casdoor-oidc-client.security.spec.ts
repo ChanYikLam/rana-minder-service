@@ -91,10 +91,7 @@ describe('CasdoorOidcClient PKCE（S256，默认开启）', () => {
     ]);
     await withFetch(fn, async () => {
       const client = new CasdoorOidcClient(baseConfig);
-      await assert.rejects(
-        client.buildAuthorizationUrl({ nonce: 'n-1' }),
-        /code_verifier missing/,
-      );
+      await assert.rejects(client.buildAuthorizationUrl({ nonce: 'n-1' }), /code_verifier missing/);
     });
   });
 
@@ -104,10 +101,7 @@ describe('CasdoorOidcClient PKCE（S256，默认开启）', () => {
     ]);
     await withFetch(fn, async () => {
       const client = new CasdoorOidcClient(baseConfig);
-      await assert.rejects(
-        client.exchangeCode('auth-code'),
-        /code_verifier missing/,
-      );
+      await assert.rejects(client.exchangeCode('auth-code'), /code_verifier missing/);
       const tokenCalls = calls.filter((c) => /access_token/.test(c.url));
       assert.equal(tokenCalls.length, 0, 'fail-closed 检查先于网络请求');
     });
@@ -118,8 +112,7 @@ describe('CasdoorOidcClient PKCE（S256，默认开启）', () => {
       { match: /openid-configuration/, respond: () => Response.json(DISCOVERY) },
       {
         match: /access_token/,
-        respond: () =>
-          Response.json({ access_token: 'at', id_token: 'it', expires_in: 3600 }),
+        respond: () => Response.json({ access_token: 'at', id_token: 'it', expires_in: 3600 }),
       },
     ]);
     await withFetch(fn, async () => {
@@ -172,12 +165,10 @@ describe('CasdoorOidcClient 错误脱敏（CAS-SEC-003）', () => {
     ]);
     await withFetch(fn, async () => {
       const client = new CasdoorOidcClient(baseConfig);
-      const err = await client
-        .exchangeCode('code-1', 'verifier-1')
-        .then(
-          () => null,
-          (e: unknown) => e as Error,
-        );
+      const err = await client.exchangeCode('code-1', 'verifier-1').then(
+        () => null,
+        (e: unknown) => e as Error,
+      );
       assert.ok(err instanceof Error);
       assert.doesNotMatch(
         err.message,

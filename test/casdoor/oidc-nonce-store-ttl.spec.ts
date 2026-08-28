@@ -4,6 +4,9 @@
  * 契约锚点：
  * - `CAS-CAP-004`（令牌、Claims 与 UserInfo 的主体绑定）：nonce 必须由服务端签发、
  *   一次性消费；未签发/已消费/过期一律拒绝；
+ * - PKCE 载荷语义（2026-08-28 加固）：consume 返回签发时绑定的服务端私有载荷
+ *   （未携带载荷为空串），无效/过期/已消费返回 null——一次性消费与载荷取回
+ *   同一原子操作；
  * - `CAS-EVT-*` 反向印证：外部不可信输入不得绕过本地签发校验。
  *
  * 被测：InMemoryOidcNonceStore（oidc-nonce-store.ts）。
@@ -31,29 +34,29 @@ function withFrozenClock(atMs: number, fn: () => void): void {
 }
 
 describe('OidcNonceStore 一次性消费（CAS-CAP-004 回调单次有效）', () => {
-  it('签发后首次消费成功', () => {
+  it('签发后首次消费成功（无载荷返回空串）', () => {
     withFrozenClock(1_000_000, () => {
       const store = new InMemoryOidcNonceStore();
       store.issue('nonce-alpha');
-      assert.equal(store.consume('nonce-alpha'), true);
+      assert.equal(store.consume('nonce-alpha'), '');
     });
   });
 
-  it('重放拒绝：同一 nonce 第二次消费返回 false（「我确实签发过」且只允许一次）', () => {
+  it('重放拒绝：同一 nonce 第二次消费返回 null（「我确实签发过」且只允许一次）', () => {
     withFrozenClock(1_000_000, () => {
       const store = new InMemoryOidcNonceStore();
       store.issue('nonce-replay');
-      assert.equal(store.consume('nonce-replay'), true);
+      assert.equal(store.consume('nonce-replay'), '');
       // 攻击者重放同一回调（同 state/nonce）
-      assert.equal(store.consume('nonce-replay'), false);
-      assert.equal(store.consume('nonce-replay'), false);
+      assert.equal(store.consume('nonce-replay'), null);
+      assert.equal(store.consume('nonce-replay'), null);
     });
   });
 
   it('未签发的 nonce 拒绝消费（伪造 state / 登录 CSRF）', () => {
     withFrozenClock(1_000_000, () => {
       const store = new InMemoryOidcNonceStore();
-      assert.equal(store.consume('never-issued-by-this-service'), false);
+      assert.equal(store.consume('never-issued-by-this-service'), null);
     });
   });
 
@@ -61,8 +64,17 @@ describe('OidcNonceStore 一次性消费（CAS-CAP-004 回调单次有效）', (
     withFrozenClock(1_000_000, () => {
       const store = new InMemoryOidcNonceStore();
       store.issue('nonce-a');
-      assert.equal(store.consume('nonce-b'), false);
-      assert.equal(store.consume('nonce-a'), true);
+      assert.equal(store.consume('nonce-b'), null);
+      assert.equal(store.consume('nonce-a'), '');
+    });
+  });
+
+  it('PKCE 载荷随消费一次性取回（verifier 与 nonce 绑定，不可二次取回）', () => {
+    withFrozenClock(1_000_000, () => {
+      const store = new InMemoryOidcNonceStore();
+      store.issue('nonce-pkce', undefined, 'code-verifier-abc');
+      assert.equal(store.consume('nonce-pkce'), 'code-verifier-abc');
+      assert.equal(store.consume('nonce-pkce'), null);
     });
   });
 });
@@ -79,7 +91,7 @@ describe('OidcNonceStore TTL 过期（确定性时钟注入）', () => {
       const store = new InMemoryOidcNonceStore();
       store.issue('nonce-edge');
       withFrozenClock(T0 + DEFAULT_NONCE_TTL_MS, () => {
-        assert.equal(store.consume('nonce-edge'), true);
+        assert.equal(store.consume('nonce-edge'), '');
       });
     });
   });
@@ -88,15 +100,15 @@ describe('OidcNonceStore TTL 过期（确定性时钟注入）', () => {
     const store = new InMemoryOidcNonceStore();
     withFrozenClock(T0, () => store.issue('nonce-late'));
     withFrozenClock(T0 + 5 * 60 * 1000, () => {
-      assert.equal(store.consume('nonce-late'), true);
+      assert.equal(store.consume('nonce-late'), '');
     });
   });
 
-  it('超时 1ms 即失效（边界严格：now - issuedAt > ttl → false）', () => {
+  it('超时 1ms 即失效（边界严格：now - issuedAt > ttl → null）', () => {
     const store = new InMemoryOidcNonceStore();
     withFrozenClock(T0, () => store.issue('nonce-expired'));
     withFrozenClock(T0 + DEFAULT_NONCE_TTL_MS + 1, () => {
-      assert.equal(store.consume('nonce-expired'), false);
+      assert.equal(store.consume('nonce-expired'), null);
     });
   });
 
@@ -104,10 +116,10 @@ describe('OidcNonceStore TTL 过期（确定性时钟注入）', () => {
     const store = new InMemoryOidcNonceStore();
     withFrozenClock(T0, () => store.issue('nonce-short', 5_000));
     withFrozenClock(T0 + 5_000, () => {
-      assert.equal(store.consume('nonce-short'), true);
+      assert.equal(store.consume('nonce-short'), '');
     });
     withFrozenClock(T0 + 5_001, () => {
-      assert.equal(store.consume('nonce-short'), false);
+      assert.equal(store.consume('nonce-short'), null);
     });
   });
 
@@ -115,10 +127,10 @@ describe('OidcNonceStore TTL 过期（确定性时钟注入）', () => {
     const store = new InMemoryOidcNonceStore();
     withFrozenClock(T0, () => store.issue('nonce-both'));
     withFrozenClock(T0 + 1_000, () => {
-      assert.equal(store.consume('nonce-both'), true); // 首次合法消费
+      assert.equal(store.consume('nonce-both'), ''); // 首次合法消费
     });
     withFrozenClock(T0 + 2_000, () => {
-      assert.equal(store.consume('nonce-both'), false); // 重放
+      assert.equal(store.consume('nonce-both'), null); // 重放
     });
   });
 });

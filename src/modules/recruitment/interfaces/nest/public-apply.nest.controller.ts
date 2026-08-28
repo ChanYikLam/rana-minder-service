@@ -93,9 +93,7 @@ function notFound(): HttpException {
 export class ExploreActivitiesNestController {
   // 说明：列表路由须注册在 :activityId 之前匹配（本 controller 内 @Get() 无路径冲突）
 
-  constructor(
-    @Inject(DB_ADAPTER) private readonly db: { getPool?: () => Pool },
-  ) {}
+  constructor(@Inject(DB_ADAPTER) private readonly db: { getPool?: () => Pool }) {}
 
   private readModel(): PublicRecruitmentReadModel {
     if (typeof this.db.getPool !== 'function') {
@@ -138,9 +136,7 @@ export class ExploreActivitiesNestController {
 /** 社团目录列表（公开浏览页；GET /api/explore/clubs） */
 @Controller('api/explore/clubs')
 export class ClubsExploreNestController {
-  constructor(
-    @Inject(DB_ADAPTER) private readonly db: { getPool?: () => Pool },
-  ) {}
+  constructor(@Inject(DB_ADAPTER) private readonly db: { getPool?: () => Pool }) {}
 
   private readModel(): PublicRecruitmentReadModel {
     if (typeof this.db.getPool !== 'function') {

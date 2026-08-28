@@ -111,7 +111,13 @@ export class PostgresSessionIdentityRepository {
            SET fields = CASE WHEN identity_profiles.fields = '{}'::jsonb
                              THEN EXCLUDED.fields
                              ELSE identity_profiles.fields END`,
-        [input.subjectId, input.studentId, input.displayName, input.email, input.emailVerifiedFromClaim],
+        [
+          input.subjectId,
+          input.studentId,
+          input.displayName,
+          input.email,
+          input.emailVerifiedFromClaim,
+        ],
       );
 
       // account_access：Casdoor 状态已核验为 ACTIVE（DISABLED/DELETED/UNKNOWN
