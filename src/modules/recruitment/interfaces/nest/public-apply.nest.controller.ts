@@ -14,7 +14,7 @@
  * answers/allowAdjustment 暂存 qualify_snapshot JSONB（正式表结构待上游收口）。
  */
 
-import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Pool } from 'pg';
 
 import { DB_ADAPTER } from '../../../../adapters/tokens';
@@ -91,6 +91,8 @@ function notFound(): HttpException {
 
 @Controller('api/explore/activities')
 export class ExploreActivitiesNestController {
+  // 说明：列表路由须注册在 :activityId 之前匹配（本 controller 内 @Get() 无路径冲突）
+
   constructor(
     @Inject(DB_ADAPTER) private readonly db: { getPool?: () => Pool },
   ) {}
@@ -103,6 +105,16 @@ export class ExploreActivitiesNestController {
       );
     }
     return new PublicRecruitmentReadModel(this.db.getPool());
+  }
+
+  /** GET /api/explore/activities（目录列表；契约 §浏览：q/status/limit，游标预留恒 null） */
+  @Get()
+  async listActivities(
+    @Query('q') q?: string,
+    @Query('status') status?: string,
+  ): Promise<ApiSuccess<unknown>> {
+    const items = await this.readModel().listActivitiesPublic({ q, status });
+    return { code: 0, data: { items, nextCursor: null } };
   }
 
   @Get(':activityId')
@@ -120,6 +132,30 @@ export class ExploreActivitiesNestController {
     const versions = await read.getPublishedFormVersions(activity.formId);
     if (!versions) throw notFound();
     return { code: 0, data: versions };
+  }
+}
+
+/** 社团目录列表（公开浏览页；GET /api/explore/clubs） */
+@Controller('api/explore/clubs')
+export class ClubsExploreNestController {
+  constructor(
+    @Inject(DB_ADAPTER) private readonly db: { getPool?: () => Pool },
+  ) {}
+
+  private readModel(): PublicRecruitmentReadModel {
+    if (typeof this.db.getPool !== 'function') {
+      throw new HttpException(
+        { code: 'IFC-ERR-014', message: '依赖服务暂不可用', supportId: generateTraceId() },
+        503,
+      );
+    }
+    return new PublicRecruitmentReadModel(this.db.getPool());
+  }
+
+  @Get()
+  async listClubs(): Promise<ApiSuccess<unknown>> {
+    const items = await this.readModel().listClubsPublic();
+    return { code: 0, data: { items, nextCursor: null } };
   }
 }
 

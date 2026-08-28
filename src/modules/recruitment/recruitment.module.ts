@@ -116,6 +116,7 @@ import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.
 import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-recruitment.nest.controller';
 import {
   ExploreActivitiesNestController,
+  ClubsExploreNestController,
   ApplicantApplyNestController,
 } from './interfaces/nest/public-apply.nest.controller';
 
@@ -133,6 +134,7 @@ import {
     ApplicantRecruitmentNestController,
     // 申请人端公开报名链路（接口清单 §11.1；联调 2026-08-27 新增）
     ExploreActivitiesNestController,
+    ClubsExploreNestController,
     ApplicantApplyNestController,
   ],
   providers: [

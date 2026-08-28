@@ -362,8 +362,27 @@ const OrgUnitOfWorkProvider = {
       provide: CURRENT_PERMISSIONS_PORT,
       useFactory: () =>
         new MemoryCurrentPermissionsPort({
-          superAdminUsers: ['u_root'],
-          clubPermissions: new Map([['club-acm-1', ['club:member:manage']]]),
+          // 联调临时（2026-08-27）：把本地 Casdoor 种子主体列为超管以解锁
+          // 组织端/管理端联调（权限真实接线为上游任务；本桩不入生产路径——
+          // 生产构造即被 GOV-007 守卫拒绝）
+          superAdminUsers: ['u_root', 'ranaminder-dev__admin__fixed'],
+          clubPermissions: new Map([
+            ['club-acm-1', ['club:member:manage']],
+            // 联调临时（2026-08-27）：club-demo 管理端全链解锁（招新/面试/成员/导出）
+            [
+              'club-demo',
+              [
+                'club:recruitment:manage',
+                'club:joint:manage',
+                'club:member:manage',
+                'club:interview:view',
+                'club:interview:evaluate',
+                'club:config:manage',
+                'club:export:execute',
+                'club:audit:view',
+              ],
+            ],
+          ]),
           positionGroupMemberships: new Map([
             [
               'u_a',

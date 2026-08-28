@@ -128,6 +128,82 @@ export class PublicRecruitmentReadModel {
     };
   }
 
+  /** 活动目录列表（公开浏览页；q 关键词/状态过滤，游标分页为契约预留） */
+  async listActivitiesPublic(filter: {
+    q?: string;
+    status?: string;
+  }): Promise<PublicActivityView[]> {
+    const { rows } = await this.pool.query<ActivityRow>(
+      `SELECT a.id,
+              a.club_id,
+              a.title,
+              a.description,
+              a.status,
+              a.departments,
+              a.allow_adjustment_default,
+              a.form_id,
+              ch.deadline::text AS deadline,
+              cs.payload ->> 'name' AS club_payload_name
+         FROM public.recruitment_activities a
+         LEFT JOIN LATERAL (
+           SELECT c.deadline
+             FROM public.application_channels c
+            WHERE c.activity_id = a.id
+            ORDER BY (c.status = 'OPEN') DESC, c.updated_at DESC
+            LIMIT 1
+         ) ch ON true
+         LEFT JOIN public.org_club_space cs ON cs.id = a.club_id
+        WHERE ($1::text IS NULL OR a.title ILIKE '%' || $1::text || '%')
+          AND ($2::text IS NULL OR a.status = $2::text)
+        ORDER BY a.created_at DESC
+        LIMIT 50`,
+      [filter.q ?? null, filter.status ?? null],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      clubId: row.club_id,
+      clubName: row.club_payload_name ?? row.club_id,
+      title: row.title,
+      description: row.description,
+      status: row.status.toLowerCase(),
+      deadline: row.deadline,
+      departments: Array.isArray(row.departments)
+        ? (row.departments as Array<{ id: string; name: string }>)
+        : [],
+      formId: row.form_id,
+      allowAdjustmentDefault: row.allow_adjustment_default,
+    }));
+  }
+
+  /** 社团目录列表（公开浏览页） */
+  async listClubsPublic(): Promise<
+    Array<{ id: string; name: string; description: string | null; memberCount: number; logo: string | null }>
+  > {
+    const { rows } = await this.pool.query<{
+      id: string;
+      name: string | null;
+      description: string | null;
+      member_count: string | number | null;
+      logo: string | null;
+    }>(
+      `SELECT cs.id,
+              cs.payload ->> 'name' AS name,
+              cs.payload ->> 'description' AS description,
+              cs.payload ->> 'memberCount' AS member_count,
+              cs.payload ->> 'logo' AS logo
+         FROM public.org_club_space cs
+        ORDER BY cs.id
+        LIMIT 100`,
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name ?? row.id,
+      description: row.description,
+      memberCount: row.member_count != null ? Number(row.member_count) : 0,
+      logo: row.logo,
+    }));
+  }
+
   async findOpenChannel(activityId: string): Promise<OpenChannelView | null> {
     const { rows } = await this.pool.query<{
       id: string;
