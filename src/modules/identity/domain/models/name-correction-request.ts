@@ -183,7 +183,7 @@ export class NameCorrectionRequest {
       decidedBy,
       decidedAt: now,
       decisionReason,
-      version: this.snapshot.version + 1,
+      version: Number(this.snapshot.version) + 1,
     };
     this.events_.push({
       type: 'NAME_CORRECTION_DECIDED',

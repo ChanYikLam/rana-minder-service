@@ -75,8 +75,10 @@ describe('parseRequestEnvelope（API-GEN-003）', () => {
     );
   });
 
-  it('API-GEN-003：expectedVersion 非正整数（0/负数）→ 422 IFC-ERR-005', () => {
-    for (const bad of [0, -1, -100]) {
+  it('API-GEN-003：expectedVersion 负数 → 422 IFC-ERR-005；0 合法（首存基线）', () => {
+    // 0 允许：资料等资源首建未保存时 version 即 0（联调 2026-08-27 行为修复）
+    assert.equal(parseRequestEnvelope({ expectedVersion: 0 }).expectedVersion, 0);
+    for (const bad of [-1, -100]) {
       assert.throws(
         () => parseRequestEnvelope({ expectedVersion: bad }),
         (error: unknown) =>

@@ -283,7 +283,8 @@ function toMyProfileResponse(profile: {
   readonly syncStatus: Record<string, { state: string }>;
 }): MyProfileResponse {
   return {
-    version: profile.version,
+    // bigint 列经 pg 返回字符串，契约 version 为 number（联调 2026-08-27 修复）
+    version: Number(profile.version),
     studentId: profile.fields.studentId ?? null,
     name: profile.fields.name ?? null,
     email: profile.fields.email ?? null,

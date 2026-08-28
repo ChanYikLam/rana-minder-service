@@ -78,7 +78,9 @@ export class DefaultSaveProfileUseCase implements SaveProfileUseCase {
       throw error;
     }
     if (!saved) {
-      if (input.expectedVersion !== snapshot.version) {
+      // 数值比较：pg bigint 返回字符串（"0"），与信封 number 严格相等恒 false
+      // （联调 2026-08-27 修复：版本比对统一转数值）
+      if (Number(input.expectedVersion) !== Number(snapshot.version)) {
         throw identityErrors.versionConflict();
       }
       throw identityErrors.preconditionFailed(

@@ -121,7 +121,9 @@ export class Profile {
 
   /** 保存可编辑白名单字段（IDN-002/006/010）：乐观锁校验 + 只允许白名单字段；本地立即生效 */
   saveEditableFields(input: SaveEditableFieldsInput): boolean {
-    if (input.expectedVersion !== this.snapshot.version) {
+    // 数值比较：pg bigint 返回字符串（"0"），与信封 number 严格相等恒 false
+    // （联调 2026-08-27 修复：否则首存场景被误判为版本冲突 → saved=false）
+    if (Number(input.expectedVersion) !== Number(this.snapshot.version)) {
       return false; // 409 IFC-ERR-008 版本冲突，由应用层映射
     }
     const changed: EditableFieldName[] = [];
@@ -155,7 +157,7 @@ export class Profile {
     if (changed.length === 0) {
       return false;
     }
-    this.snapshot = { ...this.snapshot, version: this.snapshot.version + 1 };
+    this.snapshot = { ...this.snapshot, version: Number(this.snapshot.version) + 1 };
     this.events_.push({
       type: 'PROFILE_SAVED',
       occurredAt: input.now,
@@ -189,7 +191,7 @@ export class Profile {
     this.snapshot = {
       ...this.snapshot,
       pendingEmail: normalized,
-      version: this.snapshot.version + 1,
+      version: Number(this.snapshot.version) + 1,
     };
     this.events_.push({
       type: 'EMAIL_VERIFICATION_REQUESTED',
@@ -228,7 +230,7 @@ export class Profile {
       pendingEmail: null,
       fields: { ...this.snapshot.fields, email: newEmail },
       gateState: gate.nextState,
-      version: this.snapshot.version + 1,
+      version: Number(this.snapshot.version) + 1,
     };
     this.events_.push({
       type: 'EMAIL_VERIFIED',
@@ -260,7 +262,7 @@ export class Profile {
       ...this.snapshot,
       restrictions: [...this.snapshot.restrictions, restriction],
       gateState: gate.nextState,
-      version: this.snapshot.version + 1,
+      version: Number(this.snapshot.version) + 1,
     };
     this.emitGateTransition(fromGate, gate.nextState, now);
     return true;
@@ -296,7 +298,7 @@ export class Profile {
       ...this.snapshot,
       restrictions: remaining,
       gateState: gate.nextState,
-      version: this.snapshot.version + 1,
+      version: Number(this.snapshot.version) + 1,
     };
     this.emitGateTransition(fromGate, gate.nextState, now);
     return true;
@@ -334,7 +336,7 @@ export class Profile {
     this.snapshot = {
       ...this.snapshot,
       gateState: gate.nextState,
-      version: this.snapshot.version + 1,
+      version: Number(this.snapshot.version) + 1,
     };
     this.events_.push({
       type: 'GATE_TRANSITIONED',
@@ -351,7 +353,7 @@ export class Profile {
 
   /** R009 本人保留本地目标值：创建新同步版本（字段不变，版本 +1 使新同步意图成为当前版本，IDN-007） */
   bumpVersionForConflictRetry(_now: Date): void {
-    this.snapshot = { ...this.snapshot, version: this.snapshot.version + 1 };
+    this.snapshot = { ...this.snapshot, version: Number(this.snapshot.version) + 1 };
   }
 
   /** R010 本人接受 Casdoor 当前值：本地采用经本人确认的外部值并重算资料门（邮箱同时落已验证） */
@@ -395,7 +397,7 @@ export class Profile {
       this.emitGateTransition(fromGate, gate.nextState, now);
     }
 
-    this.snapshot = { ...this.snapshot, version: this.snapshot.version + 1 };
+    this.snapshot = { ...this.snapshot, version: Number(this.snapshot.version) + 1 };
     this.events_.push({
       type: 'PROFILE_SAVED',
       occurredAt: now,

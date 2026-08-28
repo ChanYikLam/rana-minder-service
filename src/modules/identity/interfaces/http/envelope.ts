@@ -36,11 +36,13 @@ export function parseRequestEnvelope(body: unknown): ApiRequestEnvelope<Record<s
       { fieldErrors: { expectedVersion: ['必须是整数'] } },
     );
   }
-  if (record.expectedVersion !== undefined && Number(record.expectedVersion) <= 0) {
+  // 允许 0：资料等资源首建未保存时 version 即为 0，首存场景必须以其为乐观锁基线
+  // （联调 2026-08-27 修复：原正整数校验使 version 0 的资料永远无法首次保存）
+  if (record.expectedVersion !== undefined && Number(record.expectedVersion) < 0) {
     throw new IdentityCommandError(
       IdentityErrorCode.VALIDATION_FAILED,
-      'expectedVersion 必须是正整数',
-      { fieldErrors: { expectedVersion: ['必须是正整数'] } },
+      'expectedVersion 必须是非负整数',
+      { fieldErrors: { expectedVersion: ['必须是非负整数'] } },
     );
   }
   if (
