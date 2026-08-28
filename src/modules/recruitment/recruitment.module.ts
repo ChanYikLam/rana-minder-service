@@ -114,6 +114,10 @@ import { RecruitmentController } from './interfaces/controllers/recruitment.cont
 import { RecruitmentAuthGuard } from './interfaces/nest/recruitment-auth.guard';
 import { OrgRecruitmentNestController } from './interfaces/nest/org-recruitment.nest.controller';
 import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-recruitment.nest.controller';
+import {
+  ExploreActivitiesNestController,
+  ApplicantApplyNestController,
+} from './interfaces/nest/public-apply.nest.controller';
 
 @Module({
   imports: [
@@ -124,7 +128,13 @@ import { ApplicantRecruitmentNestController } from './interfaces/nest/applicant-
     FormModule,
     InvitationModule,
   ],
-  controllers: [OrgRecruitmentNestController, ApplicantRecruitmentNestController],
+  controllers: [
+    OrgRecruitmentNestController,
+    ApplicantRecruitmentNestController,
+    // 申请人端公开报名链路（接口清单 §11.1；联调 2026-08-27 新增）
+    ExploreActivitiesNestController,
+    ApplicantApplyNestController,
+  ],
   providers: [
     // ----- 会话（认证基建接入前失败关闭）-----
     {

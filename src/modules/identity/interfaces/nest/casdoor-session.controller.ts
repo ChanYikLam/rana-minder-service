@@ -14,7 +14,7 @@
  * 会话解析退回到 RejectAllAuthSessionProvider（受保护端点 401 IFC-ERR-001）。
  */
 
-import { Controller, Delete, Get, HttpCode, HttpException, Inject, Optional } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, HttpException, Inject, Optional, Req, Res } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { type Request as ExpressRequest, type Response } from 'express';
 import { jwtVerify } from 'jose';
@@ -35,30 +35,18 @@ import { deriveSessionSecret } from './session-secret';
 import { CasdoorAvailability } from './casdoor-availability';
 import { InMemoryOidcNonceStore } from './oidc-nonce-store';
 import { secureFromRequest } from './secure-request';
-import { CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT, OIDC_NONCE_STORE } from '../../tokens';
+import { CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT, SESSION_IDENTITY_REPOSITORY, ACCOUNT_ACCESS_CONTROLLER, OIDC_NONCE_STORE } from '../../tokens';
 import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
+import type { SessionIdentitySnapshot } from '../../infrastructure/postgres-session-identity.repository';
+import type { AccountAccessController } from '../controllers/account-access.controller';
+import { sessionContractFromViews, type SessionResponseContract } from './response-mapper';
+import { generateTraceId } from '../../../../platform/observability/domain/services/trace-id.generator';
 
 /** Casdoor 账号状态（与 CasdoorOidcClient.fetchAccountState 返回值一致）。 */
 type AccountState = 'ACTIVE' | 'DISABLED' | 'DELETED' | 'UNKNOWN';
 
-/** GET /api/auth/session 响应（API-AUTH-001） */
-export interface SessionResponse {
-  user: {
-    sub: string;
-    name: string;
-    email?: string;
-  };
-  profileGate: {
-    profileComplete: boolean;
-    emailVerified: boolean;
-  };
-  degraded: boolean;
-  degradedSince: string | null;
-  permissions: string[];
-  workspace: {
-    clubs: Array<{ id: string; name: string; role: string }>;
-  } | null;
-}
+/** GET /api/auth/session 响应 data（接口清单 §4 / API-AUTH-001 权威契约） */
+export type SessionResponse = SessionResponseContract;
 
 @Controller('api/auth')
 export class CasdoorSessionController {
@@ -77,6 +65,23 @@ export class CasdoorSessionController {
     @Optional()
     @Inject(OIDC_NONCE_STORE)
     private readonly nonceStoreOverride?: import('./oidc-nonce-store').OidcNonceStore,
+    /** 会话身份建档/读取（可选注入：缺省时以 claims 组装契约形态，不落库） */
+    @Optional()
+    @Inject(SESSION_IDENTITY_REPOSITORY)
+    private readonly sessionIdentity?: {
+      ensureAndRead(input: {
+        subjectId: string;
+        casdoorOrg: string;
+        casdoorName: string;
+        displayName: string;
+        email: string | null;
+        emailVerifiedFromClaim: boolean;
+      }): Promise<SessionIdentitySnapshot>;
+    },
+    /** 会话刷新委托（account-access 领域；无 code/state 的 GET session 走此路径） */
+    @Optional()
+    @Inject(ACCOUNT_ACCESS_CONTROLLER)
+    private readonly accountAccess?: AccountAccessController,
   ) {}
 
   /** nonceStore：优先使用注入的共享存储，否则回退内存桩（单实例基线） */
@@ -85,9 +90,9 @@ export class CasdoorSessionController {
   }
   private defaultNonceStore = new InMemoryOidcNonceStore();
 
-  /** GET /api/auth/casdoor/login-url */
+  /** GET /api/auth/casdoor/login-url（契约：data.loginUrl，接口清单 §4） */
   @Get('casdoor/login-url')
-  async getLoginUrl(_req: ExpressRequest): Promise<{ url: string }> {
+  async getLoginUrl(_req: ExpressRequest): Promise<{ code: 0; data: { loginUrl: string } }> {
     const client = this.ensureClient();
     const nonce = randomUUID();
     // 服务端记录本次授权请求的 nonce，回调时校验并一次性消费（登录 CSRF/会话固定防护）。
@@ -96,26 +101,62 @@ export class CasdoorSessionController {
     try {
       const url = await client.buildAuthorizationUrl(state);
       this.availability.markAvailable();
-      return { url };
+      return { code: 0, data: { loginUrl: url } };
     } catch (error) {
       this.availability.markUnavailable();
       throw error;
     }
   }
 
-  /** GET /api/auth/session?code=xxx&state=yyy */
+  /** GET /api/auth/session?code=xxx&state=yyy（契约响应信封：{code:0,data}） */
   @Get('session')
-  async establishSession(req: ExpressRequest, res: Response): Promise<SessionResponse> {
+  async establishSession(
+    @Req() req: ExpressRequest,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ code: 0; data: SessionResponse }> {
+    const code = req.query['code'] as string | undefined;
+    const stateRaw = req.query['state'] as string | undefined;
+    try {
+      return await this.handleSessionRequest(req, res, code, stateRaw);
+    } catch (err) {
+      // 意外错误（非 HttpException）直落堆栈：observability 记录器不保留原始堆栈，
+      // 联调排障需要真实 error 对象（后续由统一异常过滤器收口）。
+      if (!(err instanceof HttpException)) {
+        console.error('[casdoor-session] unexpected error:', err);
+      }
+      throw err;
+    }
+  }
+
+  private async handleSessionRequest(
+    req: ExpressRequest,
+    res: Response,
+    code: string | undefined,
+    stateRaw: string | undefined,
+  ): Promise<{ code: 0; data: SessionResponse }> {
+    // 路由统一（联调 2026-08-27）：本路径唯一注册者。无 code/state 即「会话刷新」
+    // 语义——校验会话 cookie 后委托 account-access 领域返回契约视图；
+    // 无有效会话 → 401 IFC-ERR-001（与 AuthGuard 同构）。
+    if (!code || !stateRaw) {
+      const sub = await this.extractVerifiedSubject(req);
+      if (!sub || !this.accountAccess) {
+        throw new SessionError('未认证或认证失效', 401, 'IFC-ERR-001');
+      }
+      const refreshed = await this.accountAccess.getSession({
+        subjectId: sub,
+        now: new Date(),
+        traceId: generateTraceId(),
+      });
+      if (!refreshed.ok) {
+        throw new HttpException(refreshed.body, refreshed.status);
+      }
+      return { code: 0, data: sessionContractFromViews(sub, refreshed.value) };
+    }
+
     const client = this.ensureClient();
     // 记录本次登录尝试开始前的 Casdoor 连通状态：若此前探测已判定不可用，则本次
     // 成功建立的会话仍标记为 degraded，受 CAS-FAIL-001 的 15 分钟降级窗口约束。
     const wasAvailable = this.availability.available;
-    const code = req.query['code'] as string | undefined;
-    const stateRaw = req.query['state'] as string | undefined;
-
-    if (!code || !stateRaw) {
-      throw new SessionError('Missing code or state', 400);
-    }
 
     // 解码 state → nonce，并校验该 nonce 确由本服务签发（一次性消费）。
     // 未签发/已消费/过期一律拒绝，防登录 CSRF 与会话固定。
@@ -195,24 +236,67 @@ export class CasdoorSessionController {
     const emailVerified = claims['email_verified'] === true;
     const profileComplete = Boolean(name && email);
 
-    return {
-      user: {
-        sub,
+    // 会话身份建档（API-AUTH-001 胖 session）：库内档案优先；仓储未装配时
+    // 以 claims 兜底组装同形态响应（学号以 casdoor 用户名占位，正式规则见 IDN 域）。
+    // Casdoor 登录名：优先 name 声明（Casdoor 登录名即 name claim），
+    // 兜底 preferred_username → sub（联调 2026-08-27 修正：原取 sub 导致
+    // users.casdoor_name 与 Casdoor 真实登录名错位，写回读改写打不中用户）
+    const casdoorName =
+      (typeof claims['name'] === 'string' && claims['name']) ||
+      (typeof claims['preferred_username'] === 'string' && claims['preferred_username']) ||
+      sub;
+    let snapshot: SessionIdentitySnapshot;
+    if (this.sessionIdentity) {
+      snapshot = await this.sessionIdentity.ensureAndRead({
+        subjectId: sub,
+        casdoorOrg: this.config.casdoor.organization,
+        casdoorName,
+        displayName: name,
+        email: email ?? null,
+        emailVerifiedFromClaim: emailVerified,
+      });
+    } else {
+      snapshot = {
+        subjectId: sub,
+        studentId: casdoorName,
         name,
-        email,
+        email: email ?? null,
+        phone: '',
+        avatar: null,
+        emailVerified,
+        profileComplete,
+      };
+    }
+
+    return {
+      code: 0,
+      data: {
+        user: {
+          id: snapshot.subjectId,
+          studentId: snapshot.studentId,
+          name: snapshot.name,
+          email: snapshot.email,
+          phone: snapshot.phone,
+          avatar: snapshot.avatar,
+          emailVerified: snapshot.emailVerified,
+          profileComplete: snapshot.profileComplete,
+        },
+        profileGate: {
+          complete: snapshot.profileComplete,
+          emailVerified: snapshot.emailVerified,
+        },
+        degraded,
+        degradedSince: degraded ? new Date(now * 1000).toISOString() : null,
+        permissions: [],
+        workspace: null,
       },
-      profileGate: { profileComplete, emailVerified },
-      degraded,
-      degradedSince: degraded ? new Date(now * 1000).toISOString() : null,
-      permissions: [],
-      workspace: null,
     };
   }
 
   /** DELETE /api/auth/logout */
   @Delete('logout')
   @HttpCode(200)
-  async logout(req: ExpressRequest, res: Response): Promise<{ ok: boolean }> {
+  async logout(@Req() req: ExpressRequest, @Res({ passthrough: true }) res: Response): Promise<{ code: 0; data: null }> {
     // BUG-007：登出时主动吊销该主体全部会话（不只清 Cookie）。
     // 必须验签通过后才取 sub（防未鉴权伪造任意主体吊销），并在身份域工作单元
     // 事务内写入吊销记录（SEC-CTL-004：禁止脱离事务读写）。
@@ -235,7 +319,8 @@ export class CasdoorSessionController {
       'Set-Cookie',
       `session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureAttr}`,
     );
-    return { ok: true };
+    // 契约响应信封（接口清单 §1.2）：data 为 null 表示成功且无数据
+    return { code: 0, data: null };
   }
 
   /**

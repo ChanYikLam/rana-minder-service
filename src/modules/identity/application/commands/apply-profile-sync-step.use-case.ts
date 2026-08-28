@@ -62,12 +62,14 @@ export class DefaultApplyProfileSyncStepUseCase implements ApplyProfileSyncStepU
     if (!snapshot) {
       throw identityErrors.notFound('同步意图');
     }
-    if (snapshot.targetVersion !== input.targetVersion) {
+    // 数值比较：pg bigint 返回字符串，与 payload number 严格相等恒 false
+    // （联调 2026-08-27 修复）
+    if (Number(snapshot.targetVersion) !== Number(input.targetVersion)) {
       throw identityErrors.versionConflict();
     }
     const intent = ProfileSyncIntent.fromSnapshot(snapshot);
     const profile = await this.profileRepository.load(input.subjectId);
-    const isCurrentVersion = profile !== null && profile.version === snapshot.targetVersion;
+    const isCurrentVersion = profile !== null && Number(profile.version) === Number(snapshot.targetVersion);
 
     if (!isCurrentVersion) {
       // 存在更晚本地版本：旧同步意图不得推进（IDN-007）

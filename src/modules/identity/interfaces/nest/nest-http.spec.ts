@@ -201,7 +201,7 @@ describe('ProfilesNestController（API-AUTH-002 传输落地）', () => {
 });
 
 describe('AccountAccessNestController（GET /api/auth/session）', () => {
-  it('成功 → { code:0, data }（本人资料 + 账号访问状态）', async () => {
+  it('成功 → { code:0, data }（契约 §4 会话视图：user/profileGate/degraded/workspace）', async () => {
     const sessionView: SessionResponse = {
       profile: {
         version: 1,
@@ -238,7 +238,23 @@ describe('AccountAccessNestController（GET /api/auth/session）', () => {
 
     assert.deepEqual(await controller.getSession({ authSession: session }), {
       code: 0,
-      data: sessionView,
+      data: {
+        user: {
+          id: session.subjectId,
+          studentId: '',
+          name: '',
+          email: null,
+          phone: '',
+          avatar: null,
+          emailVerified: false,
+          profileComplete: false,
+        },
+        profileGate: { complete: false, emailVerified: false },
+        degraded: false,
+        degradedSince: null,
+        permissions: [],
+        workspace: null,
+      },
     });
   });
 });

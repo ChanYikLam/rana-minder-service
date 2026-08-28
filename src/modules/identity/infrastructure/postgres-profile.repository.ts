@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PostgreSQL 平台公共资料仓储（infrastructure；IDN-002 聚合根持久化）。
  *
  * 表 identity_profiles（单数据库统一应用业务 Schema，ADR-014）：
@@ -98,14 +98,18 @@ export class PostgresProfileRepository implements ProfileRepository {
 }
 
 function rowToSnapshot(row: ProfileRow): ProfileSnapshot {
+  // jsonb 列经 pg 驱动已反序列化为对象；兼容历史 TEXT 形态（字符串则再解析），
+  // 否则 JSON.parse('[object Object]') 运行时崩溃（联调 2026-08-27 修复）。
+  const parseIfString = (value: unknown): unknown =>
+    typeof value === 'string' ? JSON.parse(value) : value;
   return {
     subjectId: row.subject_id,
-    fields: JSON.parse(row.fields) as ProfileFields,
+    fields: parseIfString(row.fields) as ProfileFields,
     emailVerified: row.email_verified,
     verifiedEmail: row.verified_email,
     pendingEmail: row.pending_email,
     version: row.version,
     gateState: row.gate_state as ProfileSnapshot['gateState'],
-    restrictions: JSON.parse(row.restrictions) as ProfileSnapshot['restrictions'],
+    restrictions: parseIfString(row.restrictions) as ProfileSnapshot['restrictions'],
   };
 }
