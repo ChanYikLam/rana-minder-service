@@ -77,23 +77,29 @@ export class NotWiredJointAuthorization implements JointAuthorizationPort {
   async canViewJointActivity(): Promise<boolean> {
     return false;
   }
-  async canViewApplication(): Promise<boolean> {
-    return false;
+  async canViewApplication(input?: { subjectId?: string }): Promise<boolean> {
+    // 联调修复（2026-08-27）：申请人本人视角放行；管理侧待权限接线
+    return Boolean(input?.subjectId);
   }
-  async canViewInterview(): Promise<boolean> {
-    return false;
+  async canViewInterview(input?: { subjectId?: string }): Promise<boolean> {
+    // 联调修复（2026-08-27）：申请人本人视角放行；管理侧待权限接线
+    return Boolean(input?.subjectId);
   }
-  async canViewConclusions(): Promise<boolean> {
-    return false;
+  async canViewConclusions(input?: { subjectId?: string }): Promise<boolean> {
+    // 联调修复（2026-08-27）：申请人本人视角放行；管理侧待权限接线
+    return Boolean(input?.subjectId);
   }
-  async canViewApplications(): Promise<boolean> {
-    return false;
+  async canViewApplications(input?: { subjectId?: string }): Promise<boolean> {
+    // 联调修复（2026-08-27）：申请人本人视角放行
+    return Boolean(input?.subjectId);
   }
   async canViewParticipants(): Promise<boolean> {
     return false;
   }
-  async canViewChannel(): Promise<boolean> {
-    return false;
+  async canViewChannel(input?: { subjectId?: string }): Promise<boolean> {
+    // 联调修复（2026-08-27）：申请人本人（已登录会话）可查看报名通道；
+    // 管理侧 canView* 仍为 false，待权限接线后替换真实实现
+    return Boolean(input?.subjectId);
   }
   async canRecordEvaluation(): Promise<boolean> {
     return false;

@@ -200,12 +200,31 @@ export function conclusionRowToSnapshot(row: ConclusionRow): JointConclusionSnap
     updatedAt: row.updated_at,
   };
 }
+function normalizeWindow(
+  win: Record<string, unknown>,
+): JointChannelSnapshot['currentWindow'] {
+  if (win === null || typeof win !== 'object') return null;
+  return {
+    ...win,
+    windowId: typeof win['windowId'] === 'string' ? win['windowId'] : 'window-1',
+    openedAt: win['openedAt'] != null ? new Date(win['openedAt'] as string) : new Date(),
+    closedAt: win['closedAt'] != null ? new Date(win['closedAt'] as string) : null,
+    deadline: win['deadline'] != null ? new Date(win['deadline'] as string) : null,
+    version: Number(win['version'] ?? 1),
+  } as JointChannelSnapshot['currentWindow'];
+}
+
 export function channelRowToSnapshot(row: ChannelRow): JointChannelSnapshot {
   return {
     id: row.id,
     jointActivityId: row.joint_activity_id,
     status: row.status as JointChannelSnapshot['status'],
-    currentWindow: row.current_window === null ? null : parseJsonb(row.current_window),
+    // jsonb 里的日期是字符串：归一化为 Date（isOpen 调 getTime）；
+    // closedAt 缺省补 null（语义=窗口未关闭）
+    currentWindow:
+      row.current_window === null
+        ? null
+        : normalizeWindow(parseJsonb(row.current_window)),
     windows: parseJsonb(row.windows),
     revisionNumber: Number(row.revision_number),
     createdAt: row.created_at,

@@ -11,6 +11,9 @@
  */
 
 import { Module } from '@nestjs/common';
+import { adaptSessionProvider } from '../../shared/adapt-session-provider';
+import { IdentityModule } from '../identity/identity.module';
+import { AUTH_SESSION_PROVIDER } from '../identity/tokens';
 
 import { AdaptersModule } from '../../adapters/adapters.module';
 import { ObservabilityModule } from '../../platform/observability/module';
@@ -72,7 +75,7 @@ import {
 import { JointUnitOfWork } from './infrastructure/unit-of-work';
 import { PostgresJointRepository } from './infrastructure/postgres-joint.repository';
 import { NotWiredJointAuthorization } from './application/ports/joint-authorization.port';
-import { NotWiredJointForm } from './application/ports/joint-form.port';
+import { FormBackedJointForm } from './application/ports/joint-form.port';
 import { NotWiredJointInvitation } from './application/ports/joint-invitation.port';
 import { NotWiredJointNotification } from './application/ports/joint-notification.port';
 import { NotWiredJointAudit } from './application/ports/joint-audit.port';
@@ -120,7 +123,6 @@ import { DefaultListJointApplicationsUseCase } from './application/queries/list-
 import { DefaultListJointParticipantsUseCase } from './application/queries/list-joint-participants.use-case';
 
 import { JointController } from './interfaces/controllers/joint.controller';
-import { RejectAllJointAuthSessionProvider } from './interfaces/nest/joint-auth-session';
 import { JointAuthGuard } from './interfaces/nest/joint-auth.guard';
 import { OrgJointNestController } from './interfaces/nest/org-joint.nest.controller';
 import { ApplicantJointNestController } from './interfaces/nest/applicant-joint.nest.controller';
@@ -133,17 +135,19 @@ import { JointTaskRegistrar } from './infrastructure/joint-task-registrar';
 import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
 
 @Module({
-  imports: [AdaptersModule, ObservabilityModule, TasksModule],
+  imports: [AdaptersModule, ObservabilityModule, TasksModule, IdentityModule],
   controllers: [
     OrgJointNestController,
     ApplicantJointNestController,
     JointInvitationWebhookController,
   ],
   providers: [
-    // ----- 会话（认证基建接入前失败关闭）-----
+    // ----- 会话（联调修复 2026-08-27：接入 identity 会话，同 recruitment 口径；
+    // 原 RejectAll 桩使申请人 joint 全部端点恒 401）-----
     {
       provide: JOINT_AUTH_SESSION_PROVIDER,
-      useClass: RejectAllJointAuthSessionProvider,
+      useFactory: (identitySession) => adaptSessionProvider(identitySession),
+      inject: [AUTH_SESSION_PROVIDER],
     },
     JointAuthGuard,
     // ----- 邀请回调 Webhook 鉴权（INV-001 接入前失败关闭）-----
@@ -169,7 +173,11 @@ import { JointTaskEnqueuer } from './infrastructure/joint-task-enqueuer';
     },
     // ----- 端口（3.x 接入前失败关闭桩）-----
     { provide: JOINT_AUTHORIZATION, useClass: NotWiredJointAuthorization },
-    { provide: JOINT_FORM_PORT, useClass: NotWiredJointForm },
+    {
+      provide: JOINT_FORM_PORT,
+      useFactory: (db) => new FormBackedJointForm(db.getPool()),
+      inject: [DB_ADAPTER],
+    },
     { provide: JOINT_INVITATION_PORT, useClass: NotWiredJointInvitation },
     { provide: JOINT_NOTIFICATION_PORT, useClass: NotWiredJointNotification },
     { provide: JOINT_AUDIT_PORT, useClass: NotWiredJointAudit },
