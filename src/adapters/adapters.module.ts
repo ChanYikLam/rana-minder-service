@@ -96,6 +96,8 @@ const depLatestRecorder: DepLatestRecorder = new InMemoryDepLatestRecorder();
           password,
           ssl: db.ssl,
           sslRejectUnauthorized: db.sslRejectUnauthorized,
+          // 统一业务 Schema（ADR-014）：连接级 search_path 钉到 <schema>,public
+          schema: db.schema,
         });
       },
       inject: [RANA_MINDER_CONFIG],

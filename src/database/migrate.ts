@@ -130,9 +130,24 @@ async function main(): Promise<void> {
     password: config.database.passwordRef,
     ssl: config.database.ssl,
     sslRejectUnauthorized: config.database.sslRejectUnauthorized,
+    schema: config.database.schema,
   });
 
   try {
+    // 统一业务 Schema（ADR-014）：非 public 时先保证 schema 存在，
+    // 迁移内裸建表语句经连接级 search_path 落入该 schema。
+    const schema = config.database.schema?.trim();
+    if (schema && schema.toLowerCase() !== 'public') {
+      const tx = await db.beginTransaction();
+      try {
+        await db.query(tx, `CREATE SCHEMA IF NOT EXISTS "${schema}"`, []);
+        await db.commit(tx);
+        console.log(`[migrate] schema ready: ${schema}`);
+      } catch (err) {
+        await db.rollback(tx).catch(() => undefined);
+        throw err;
+      }
+    }
     const applied = await runMigrations(db);
     if (applied.length > 0) {
       console.log(`[migrate] done: ${applied.length} migration(s) applied`);

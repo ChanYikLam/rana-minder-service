@@ -80,10 +80,23 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
       ssl: boolean;
       /** SSL 证书校验开关：默认 true（校验）；仅测试/内网可显式关闭。 */
       sslRejectUnauthorized?: boolean;
+      /** 统一业务 Schema（ADR-014）：缺省 public；非 public 时连接级固定 search_path */
+      schema?: string;
       max?: number;
       connectionTimeoutMillis?: number;
     },
   ) {
+    // 业务 Schema 处理：配置为 app 等统一业务 Schema 时，按 ADR-014 把
+    // search_path 钉死到 `<schema>,public`（连接参数注入，避免逐语句前缀）。
+    // 标识符白名单校验防注入；未配置则维持 public 行为。
+    let connectionOptions: string | undefined;
+    const configuredSchema = poolConfig.schema?.trim();
+    if (configuredSchema && configuredSchema.toLowerCase() !== 'public') {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(configuredSchema)) {
+        throw new Error(`非法的数据库 schema 标识符：${configuredSchema}`);
+      }
+      connectionOptions = `-c search_path=${configuredSchema},public`;
+    }
     this.pool = new Pool({
       host: poolConfig.host,
       port: poolConfig.port,
@@ -94,6 +107,7 @@ export class PostgresDbAdapter implements DbAdapter, OnModuleDestroy {
         ? { rejectUnauthorized: poolConfig.sslRejectUnauthorized ?? true }
         : false,
       max: poolConfig.max ?? 10,
+      ...(connectionOptions !== undefined ? { options: connectionOptions } : {}),
       // 连接超时：避免 DB 不可达时 pool.connect() 无限挂起（如 CI 集成测试阶段
       // dind 网络未就绪时静默阻塞直到 Runner 超时强杀）。超时后快速抛错便于定位。
       connectionTimeoutMillis: poolConfig.connectionTimeoutMillis ?? 10_000,
