@@ -204,8 +204,15 @@ const LOG_QUERY_PROVIDER: Provider = {
 
 const NEST_LOGGER_SERVICE_PROVIDER: Provider = {
   provide: NEST_LOGGER_SERVICE,
-  useFactory: (sanitizer, appLogger) => new NestLoggerServiceAdapter({ sanitizer, appLogger }),
-  inject: [LOG_SANITIZER, APP_LOGGER],
+  // 回环修复（联调 2026-08-27）：本适配器经 app.useLogger() 接管全局 Logger 后，
+  // 内部 Nest 日志若再走共享 APP_LOGGER（其内部依赖全局 Logger）会无限递归；
+  // bootstrap 链路改用直写 stdout 的专用实例，应用层日志路径保持不变。
+  useFactory: (sanitizer) =>
+    new NestLoggerServiceAdapter({
+      sanitizer,
+      appLogger: new NestAppLogger({ sanitizer, contextName: 'Nest', writeToStdout: true }),
+    }),
+  inject: [LOG_SANITIZER],
 };
 
 // ----- tracing providers -----

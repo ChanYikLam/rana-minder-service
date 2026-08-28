@@ -167,23 +167,24 @@ export class CasdoorOidcClient {
   /**
    * 读取账号当前状态（CAS-CAP-005：账号有效、禁用、删除与恢复的可信读取）。
    *
-   * 经 access_token 调用 Casdoor /api/get-user 读取本人账号；isForbidden →
-   * DISABLED，isDeleted → DELETED。字段缺失时返回 UNKNOWN（fail-closed，
-   * 不宣称账号当前有效）。
+   * 经 access_token 调用 Casdoor /api/get-account 读取本人账号（联调 2026-08-27
+   * 修正：/api/get-user 需管理员授权与 id 参数，本人状态读取应走 get-account）；
+   * isForbidden → DISABLED，isDeleted → DELETED。字段缺失时返回 UNKNOWN
+   * （fail-closed，不宣称账号当前有效）。
    */
   async fetchAccountState(
     accessToken: string,
   ): Promise<'ACTIVE' | 'DISABLED' | 'DELETED' | 'UNKNOWN'> {
-    const url = `${this.config.endpoint}/api/get-user`;
+    const url = `${this.config.endpoint}/api/get-account`;
     const res = await fetchWithTimeout(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
-      throw new Error(`Casdoor get-user returned ${res.status}`);
+      throw new Error(`Casdoor get-account returned ${res.status}`);
     }
     const body = (await res.json()) as { status?: string; data?: Record<string, unknown> };
     if (body.status !== 'ok' || !body.data) {
-      throw new Error('Casdoor get-user returned non-ok status');
+      throw new Error('Casdoor get-account returned non-ok status');
     }
     const user = body.data;
     if (user['isDeleted'] === true) return 'DELETED';

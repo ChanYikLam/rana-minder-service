@@ -32,29 +32,48 @@ export interface NestAppLoggerOptions {
   readonly contextName?: string;
   readonly sanitizer?: LogSanitizer;
   readonly maxFieldLength?: number;
+  /**
+   * 直写 stdout：不经 @nestjs/common Logger。
+   * bootstrap 期 main.ts 用 app.useLogger(NestLoggerServiceAdapter) 接管了
+   * 全局 Logger；此时若内部 Nest 日志经本类默认路径再次调用全局 Logger，
+   * 会形成 适配器→NestAppLogger→全局 Logger→适配器 的无限递归。
+   * 仅在 NestLoggerServiceAdapter 装配的专用实例上开启。
+   */
+  readonly writeToStdout?: boolean;
 }
 
 export class NestAppLogger implements AppLogger {
   private readonly logger: Logger;
   private readonly sanitizer: LogSanitizer;
   private readonly maxFieldLength?: number;
+  private readonly writeToStdout: boolean;
 
   constructor(options: NestAppLoggerOptions = {}) {
     this.logger = new Logger(options.contextName ?? 'App');
     this.sanitizer = options.sanitizer ?? new DefaultLogSanitizer();
     this.maxFieldLength = options.maxFieldLength;
+    this.writeToStdout = options.writeToStdout ?? false;
   }
 
   info(record: LogRecord): void {
-    this.logger.log(this.serialize(record));
+    this.emit('log', record);
   }
 
   warn(record: LogRecord): void {
-    this.logger.warn(this.serialize(record));
+    this.emit('warn', record);
   }
 
   error(record: LogRecord): void {
-    this.logger.error(this.serialize(record));
+    this.emit('error', record);
+  }
+
+  private emit(severity: 'log' | 'warn' | 'error', record: LogRecord): void {
+    const line = this.serialize(record);
+    if (this.writeToStdout) {
+      process.stdout.write(line + '\n');
+      return;
+    }
+    this.logger[severity](line);
   }
 
   private serialize(record: LogRecord): string {
