@@ -21,7 +21,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # postgres:18 镜像要求挂载 /var/lib/postgresql（内部按主版本建子目录，
+      # 挂载旧路径 /var/lib/postgresql/data 会拒绝启动）
+      - pgdata:/var/lib/postgresql
       # 首次初始化自动执行扩展脚本（pg_trgm / btree_gist）
       - ./scripts/dev/postgres-init.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
     healthcheck:
@@ -46,8 +48,8 @@ services:
     volumes:
       - miniodata:/data
     healthcheck:
-      # minio/minio 镜像内置 curl（官方 compose 示例同款探针）
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      # minio/minio 镜像不内置 curl（2024-08 系列已确认），改用内置 mc 的 ready 探针
+      test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -58,6 +60,13 @@ services:
     container_name: ranaminder-dev-casdoor
     ports:
       - "8000:8000"
+    # v3.108.0 官方镜像默认连 localhost MySQL（无配置即 panic）；
+    # 挂载 app.conf 改连本编排 postgres（casdoor 库需预先创建）
+    volumes:
+      - ./scripts/dev/casdoor/app.conf:/conf/app.conf:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
     # 种子导入：Organization/Group 用虚构学校数据（开发指南 §2），
     # 禁止真实数据；验证 Claims/Group 读写/写后可见性（TVER-A-* 靶场）
     healthcheck:
