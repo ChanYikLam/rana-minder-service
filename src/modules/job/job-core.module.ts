@@ -1,4 +1,4 @@
-﻿/**
+/**
  * job 核心模块（持久任务领取/执行；HTTP 与 worker 入口共用，不含轮询器）。
  *
  * 依赖：AdaptersModule（DB_ADAPTER）、IdentityModule（APPLY_PROFILE_SYNC_STEP_USE_CASE
@@ -44,10 +44,16 @@ import { IdentityUnitOfWork } from '../identity/infrastructure/unit-of-work';
     },
     {
       provide: JOB_TASK_HANDLERS,
+      // 真实表 task_type 枚举只有 CASDOOR_SYNC（联调 2026-08-27 对齐）：
+      // identity 的资料同步/读回/改名写回三类任务统一登记为 CASDOOR_SYNC，
+      // 领取后按 payload 是否携带 newName 分发到对应 handler。
       useFactory: (syncHandler, nameWriteHandler) => ({
-        profile_sync: syncHandler,
-        profile_readback: syncHandler,
-        profile_name_write: nameWriteHandler,
+        CASDOOR_SYNC: {
+          execute: (task: { readonly id: string; readonly payload: Record<string, unknown> }) =>
+            typeof task.payload['newName'] === 'string'
+              ? nameWriteHandler.execute(task as never)
+              : syncHandler.execute(task as never),
+        },
       }),
       inject: [ProfileSyncTaskHandler, ProfileNameWriteTaskHandler],
     },

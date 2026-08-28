@@ -1,26 +1,29 @@
 /**
  * 持久任务领取/结算存储（job 模块；ADR-004 租约执行单元）。
  *
- * job_tasks 表（与业务意图同库同事务登记，见 identity/infrastructure
- * profile-sync-task.writer.ts）：
- *   id text PK（幂等去重键：<type>:<subject>:<field>:<version>）
- *   type text（profile_sync / profile_readback）
- *   subject_id text
- *   payload jsonb
- *   status text（pending / running / done / failed）
- *   attempts int（每次领取 +1）
- *   next_run_at timestamptz null（pending 可执行时刻）
- *   leased_until timestamptz null（running 租约截止）
- *   last_attempt_at / claimed_at / completed_at / failed_at timestamptz null
- *   error text null
- *   created_at timestamptz
+ * 对齐 job_tasks 真实表结构（迁移 20260820130000；联调 2026-08-27 重写——
+ * 原实现按旧想象结构 id/type/pending/next_run_at 编写，真实 PG 下全线失败）：
+ *   task_id text PK（幂等去重键）
+ *   task_type text（CASDOOR_SYNC / NOTIFICATION_DELIVERY / FILE_CHECK / ... 大写枚举）
+ *   intent_id text UNIQUE（来源意图引用）
+ *   idempotency_key text
+ *   scope / source jsonb（RLS 上下文与来源描述）
+ *   payload jsonb（业务载荷，handler 校验消费）
+ *   status text（PENDING / LEASED / RETRYABLE_FAILED / UNCERTAIN /
+ *               MANUAL_INTERVENTION / COMPLETED）
+ *   attempts int、max_attempts int
+ *   not_before timestamptz（PENDING 可执行时刻）
+ *   lease_worker_id / lease_version / lease_until / leased_at（租约四列，
+ *   CHECK 约束要求同空或同非空）
+ *   created_at / updated_at
  *
- * 语义（ADR-004 §2）：
- * - 领取 = 单条 UPDATE ... RETURNING（原子单胜者：同批候选只有一个执行单元
- *   领取成功；过期租约可被再次领取，至少一次执行，业务以幂等键收口）；
- * - 结算（complete/retry/fail）只允许 running 状态（持租约者）；
- * - 未知任务类型 → 立即失败（不可重试）；执行抛错 → 指数退避重试，
- *   达到最大尝试次数 → 失败（保留错误证据）。
+ * 接口语义（ADR-004 §2，与原实现一致）：
+ * - 领取 = 单条 UPDATE ... RETURNING（原子单胜者；过期租约可被再次领取）；
+ * - 结算（complete/retry/fail）只允许 LEASED（持租约者）；
+ * - retry → RETRYABLE_FAILED（not_before=退避时刻，可再次流转）；
+ *   fail → MANUAL_INTERVENTION（人工介入，不自动重试）；
+ *   requeue → 回 PENDING（人工重投入口）。
+ * 注：真实表无 error 列，失败证据仅保留在业务日志（证据持久化为已知缺口）。
  */
 
 import type { DbAdapter, RlsScope, TransactionContext } from '../../shared/db-adapter';
@@ -43,15 +46,14 @@ export interface JobTaskStore {
   fail(id: string, error: string, now: Date): Promise<void>;
   /** 按状态聚合当前积压/完成情况（只读，供运维状态查询） */
   countByStatus(): Promise<Readonly<Record<JobTaskStatus, number>>>;
-  /** 人工重投：将 failed/pending 任务重置为 pending 并立即可被领取（手动重试入口） */
+  /** 人工重投：将 failed/pending 任务重置为 PENDING 并立即可被领取（手动重试入口） */
   requeue(id: string, nextRunAt: Date, now: Date): Promise<void>;
 }
 
 interface JobTaskRow {
-  id: string;
-  type: string;
-  subject_id: string;
-  payload: string;
+  task_id: string;
+  task_type: string;
+  payload: Record<string, unknown> | string;
   attempts: number;
 }
 
@@ -88,6 +90,17 @@ class JobDbSession {
   }
 }
 
+/** 内部状态 → 真实表 status 枚举 */
+const STATUS = {
+  pending: 'PENDING',
+  running: 'LEASED',
+  done: 'COMPLETED',
+  failed: 'RETRYABLE_FAILED',
+} as const;
+
+/** 状态聚合口径：RETRYABLE_FAILED/UNCERTAIN/MANUAL_INTERVENTION 归入 failed 展示 */
+const FAILED_GROUP: readonly string[] = ['RETRYABLE_FAILED', 'UNCERTAIN', 'MANUAL_INTERVENTION'];
+
 export class PostgresJobTaskStore implements JobTaskStore {
   constructor(private readonly db: DbAdapter) {}
 
@@ -96,33 +109,41 @@ export class PostgresJobTaskStore implements JobTaskStore {
     try {
       const rows = await session.query<JobTaskRow>(
         `UPDATE job_tasks t
-            SET status = 'running',
-                leased_until = $2,
-                claimed_at = NOW(),
+            SET status = 'LEASED',
+                lease_worker_id = $4,
+                lease_version = (floor(random() * 9000000000) + 1000000000)::bigint,
+                lease_until = $2,
+                leased_at = NOW(),
                 attempts = t.attempts + 1,
-                last_attempt_at = NOW()
+                updated_at = NOW()
            FROM (
-                  SELECT id
+                  SELECT task_id
                     FROM job_tasks
-                   WHERE (status = 'pending' AND (next_run_at IS NULL OR next_run_at <= NOW()))
-                      OR (status = 'running' AND leased_until < $3)
-                   ORDER BY created_at, id
+                   WHERE (status = 'PENDING' AND not_before <= NOW())
+                      OR (status = 'LEASED' AND lease_until < $3)
+                   ORDER BY created_at, task_id
                    LIMIT $1
-                ) c
-          WHERE t.id = c.id AND t.status IN ('pending', 'running')
-          RETURNING t.id, t.type, t.subject_id, t.payload, t.attempts`,
-        [batchSize, new Date(now.getTime() + leaseMs), now],
+                 ) c
+          WHERE t.task_id = c.task_id AND t.status IN ('PENDING', 'LEASED')
+          RETURNING t.task_id, t.task_type, t.payload, t.attempts`,
+        [batchSize, new Date(now.getTime() + leaseMs), now, `worker-${process.pid}-${now.getTime()}`],
       );
       // 先在事务内完成 payload 解析：若某行 payload 损坏导致 JSON.parse 抛错，
-      // 会在 catch 中对本次领取整体回滚（任务保持 pending，可被再次领取），
-      // 避免"已提交但 payload 不可用"的悬空 running 任务。
-      const claimed = rows.map((row) => ({
-        id: row.id,
-        type: row.type,
-        subjectId: row.subject_id,
-        payload: JSON.parse(row.payload) as Record<string, unknown>,
-        attempts: row.attempts,
-      }));
+      // 会在 catch 中对本次领取整体回滚（任务保持 PENDING，可被再次领取），
+      // 避免"已提交但 payload 不可用"的悬空 LEASED 任务。
+      const claimed = rows.map((row) => {
+        const payload =
+          typeof row.payload === 'string'
+            ? (JSON.parse(row.payload) as Record<string, unknown>)
+            : (row.payload ?? {});
+        return {
+          id: row.task_id,
+          type: row.task_type,
+          subjectId: typeof payload['subjectId'] === 'string' ? (payload['subjectId'] as string) : '',
+          payload,
+          attempts: Number(row.attempts),
+        };
+      });
       await session.close(true);
       return claimed;
     } catch (error) {
@@ -134,8 +155,10 @@ export class PostgresJobTaskStore implements JobTaskStore {
   async complete(id: string, now: Date): Promise<void> {
     await this.mutate(
       `UPDATE job_tasks
-          SET status = 'done', completed_at = $2, leased_until = NULL
-        WHERE id = $1 AND status = 'running'`,
+          SET status = 'COMPLETED',
+              lease_worker_id = NULL, lease_version = NULL, lease_until = NULL, leased_at = NULL,
+              updated_at = $2
+        WHERE task_id = $1 AND status = 'LEASED'`,
       [id, now],
     );
   }
@@ -143,18 +166,25 @@ export class PostgresJobTaskStore implements JobTaskStore {
   async retry(id: string, nextRunAt: Date, now: Date): Promise<void> {
     await this.mutate(
       `UPDATE job_tasks
-          SET status = 'pending', next_run_at = $2, leased_until = NULL, last_attempt_at = $3
-        WHERE id = $1 AND status = 'running'`,
+          SET status = 'RETRYABLE_FAILED',
+              not_before = $2,
+              lease_worker_id = NULL, lease_version = NULL, lease_until = NULL, leased_at = NULL,
+              updated_at = $3
+        WHERE task_id = $1 AND status = 'LEASED'`,
       [id, nextRunAt, now],
     );
   }
 
   async fail(id: string, error: string, now: Date): Promise<void> {
+    // 真实表无 error 列：不可重试失败落 MANUAL_INTERVENTION（错误证据见业务日志）
+    void error;
     await this.mutate(
       `UPDATE job_tasks
-          SET status = 'failed', error = $2, failed_at = $3, leased_until = NULL
-        WHERE id = $1 AND status = 'running'`,
-      [id, error, now],
+          SET status = 'MANUAL_INTERVENTION',
+              lease_worker_id = NULL, lease_version = NULL, lease_until = NULL, leased_at = NULL,
+              updated_at = $2
+        WHERE task_id = $1 AND status = 'LEASED'`,
+      [id, now],
     );
   }
 
@@ -172,9 +202,10 @@ export class PostgresJobTaskStore implements JobTaskStore {
         failed: 0,
       };
       for (const row of rows) {
-        if (row.status in counts) {
-          counts[row.status as JobTaskStatus] = row.cnt;
-        }
+        if (row.status === 'PENDING') counts.pending += row.cnt;
+        else if (row.status === 'LEASED') counts.running += row.cnt;
+        else if (row.status === 'COMPLETED') counts.done += row.cnt;
+        else if (FAILED_GROUP.includes(row.status)) counts.failed += row.cnt;
       }
       await session.close(true);
       return counts;
@@ -187,8 +218,11 @@ export class PostgresJobTaskStore implements JobTaskStore {
   async requeue(id: string, nextRunAt: Date, now: Date): Promise<void> {
     await this.mutate(
       `UPDATE job_tasks
-          SET status = 'pending', next_run_at = $2, leased_until = NULL, last_attempt_at = $3
-        WHERE id = $1 AND status IN ('pending', 'failed')`,
+          SET status = 'PENDING',
+              not_before = $2,
+              lease_worker_id = NULL, lease_version = NULL, lease_until = NULL, leased_at = NULL,
+              updated_at = $3
+        WHERE task_id = $1 AND status IN ('PENDING', 'RETRYABLE_FAILED', 'MANUAL_INTERVENTION')`,
       [id, nextRunAt, now],
     );
   }
