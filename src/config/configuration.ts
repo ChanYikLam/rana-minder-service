@@ -122,6 +122,20 @@ export interface RanaMinderConfig {
   readonly notify: ExternalServiceConfig;
   /** 外部备份/恢复记录服务（ADAPTERS_BACKUP_REAL）。 */
   readonly backup: ExternalServiceConfig;
+  /**
+   * 组织域配置（A4 权限接线；ORG-029 平台超管允许清单）。
+   * 留空即无可用平台超管（fail-closed：超管能力不会误放）。
+   */
+  readonly org: OrgConfig;
   readonly observability: ObservabilityConfig;
   readonly job: JobConfig;
+}
+
+export interface OrgConfig {
+  /**
+   * 平台超级管理员主体允许清单（ORG-029；GOV-007：身份不来自 Group 名派生）。
+   * 配置即授权：放入此清单的主体在会话层获得平台超管权限集并享有跨社团
+   * 隔离豁免（ORG-023）；缺失/未配置 = 无人是平台超管 = fail-closed。
+   */
+  readonly superAdminUserIds: readonly string[];
 }

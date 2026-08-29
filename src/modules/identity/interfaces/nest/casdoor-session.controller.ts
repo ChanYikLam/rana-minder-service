@@ -65,6 +65,7 @@ import {
   SESSION_IDENTITY_REPOSITORY,
   ACCOUNT_ACCESS_CONTROLLER,
   OIDC_NONCE_STORE,
+  SESSION_AUTHZ_QUERY,
 } from '../../tokens';
 import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
 import type { SessionIdentitySnapshot } from '../../infrastructure/postgres-session-identity.repository';
@@ -114,6 +115,14 @@ export class CasdoorSessionController {
     @Optional()
     @Inject(ACCOUNT_ACCESS_CONTROLLER)
     private readonly accountAccess?: AccountAccessController,
+    /**
+     * 会话授权视图查询（A4 接线）。建立路径直接用其构造 workspace/permissions；
+     * 刷新路径同样由 SessionAuthorizationQuery.describe 产出视图后映射契约。
+     * 未装配时退化为 fail-closed：permissions=[]/workspace=null。
+     */
+    @Optional()
+    @Inject(SESSION_AUTHZ_QUERY)
+    private readonly sessionAuthz?: import('../../application/queries/session-authz.query').SessionAuthorizationQuery,
     /**
      * 匿名端点限流器（每控制器实例一个 = 每应用进程一个；注入位供测试
      * 使用独立窗口）。多实例部署边界见 AuthRateLimiter 实现注释。
@@ -203,7 +212,11 @@ export class CasdoorSessionController {
       if (!refreshed.ok) {
         throw new HttpException(refreshed.body, refreshed.status);
       }
-      return { code: 0, data: sessionContractFromViews(sub, refreshed.value) };
+      const refreshAuthz = this.sessionAuthz ? await this.sessionAuthz.describe(sub) : undefined;
+      return {
+        code: 0,
+        data: sessionContractFromViews(sub, refreshed.value, refreshAuthz),
+      };
     }
 
     const client = this.ensureClient();
@@ -358,6 +371,9 @@ export class CasdoorSessionController {
       throw error;
     }
 
+    const establishAuthz = this.sessionAuthz
+      ? await this.sessionAuthz.describe(snapshot.subjectId)
+      : undefined;
     return {
       code: 0,
       data: {
@@ -377,8 +393,10 @@ export class CasdoorSessionController {
         },
         degraded,
         degradedSince: degraded ? new Date(now * 1000).toISOString() : null,
-        permissions: [],
-        workspace: null,
+        permissions: establishAuthz ? [...establishAuthz.permissions] : [],
+        workspace: establishAuthz?.workspace
+          ? { ...establishAuthz.workspace, permissions: [...establishAuthz.workspace.permissions] }
+          : null,
       },
     };
   }

@@ -28,7 +28,9 @@ import {
   PROFILES_CONTROLLER,
   ACCOUNT_ACCESS_CONTROLLER,
   AUTH_SESSION_PROVIDER,
+  SESSION_AUTHZ_QUERY,
 } from '../../tokens';
+import { SessionAuthorizationQuery } from '../../application/queries/session-authz.query';
 import type {
   ProfilesController,
   MyProfileResponse,
@@ -91,6 +93,7 @@ describe('ProfilesNestController（API-AUTH-002 传输落地）', () => {
         { provide: PROFILES_CONTROLLER, useValue: plain },
         { provide: ACCOUNT_ACCESS_CONTROLLER, useValue: fakeAccountAccess() },
         { provide: TRACE_CONTEXT, useValue: createTraceContextAdapter() },
+        { provide: SESSION_AUTHZ_QUERY, useValue: new SessionAuthorizationQuery(undefined) },
       ],
     }).compile();
     return {
@@ -232,6 +235,7 @@ describe('AccountAccessNestController（GET /api/auth/session）', () => {
         { provide: AUTH_SESSION_PROVIDER, useValue: fixedSessionProvider(session) },
         { provide: ACCOUNT_ACCESS_CONTROLLER, useValue: plain },
         { provide: TRACE_CONTEXT, useValue: createTraceContextAdapter() },
+        { provide: SESSION_AUTHZ_QUERY, useValue: new SessionAuthorizationQuery(undefined) },
       ],
     }).compile();
     const controller = module.get(AccountAccessNestController);
@@ -256,6 +260,79 @@ describe('AccountAccessNestController（GET /api/auth/session）', () => {
         workspace: null,
       },
     });
+  });
+
+  it('A4 接线：授权视图非空时会话返回 workspace/permissions（主社团 = 角色优先级最高）', async () => {
+    const sessionView: SessionResponse = {
+      profile: {
+        version: 1,
+        studentId: '20210001',
+        name: '张三',
+        email: null,
+        phone: null,
+        emailVerified: false,
+        profileComplete: true,
+        syncStatus: {},
+      },
+      accountAccess: {
+        state: 'ACTIVE',
+        degraded: false,
+        degradedSince: null,
+        remainingWindowMs: 0,
+      },
+    };
+    const plain: AccountAccessController = {
+      async getSession() {
+        return { ok: true, value: sessionView };
+      },
+    } as unknown as AccountAccessController;
+    const authzQuery = new SessionAuthorizationQuery({
+      async describeForSubject(subjectId: string) {
+        assert.equal(subjectId, session.subjectId);
+        return {
+          platformSuperAdmin: false,
+          clubs: [
+            {
+              clubId: 'club-b',
+              clubName: 'B 社',
+              role: 'member' as const,
+              permissions: ['club:config:manage'],
+            },
+            {
+              clubId: 'club-a',
+              clubName: 'A 社',
+              role: 'club_leader' as const,
+              permissions: ['club:dashboard:view', 'club:member:manage'],
+            },
+          ],
+        };
+      },
+    });
+    const module = await Test.createTestingModule({
+      controllers: [AccountAccessNestController],
+      providers: [
+        AuthGuard,
+        { provide: AUTH_SESSION_PROVIDER, useValue: fixedSessionProvider(session) },
+        { provide: ACCOUNT_ACCESS_CONTROLLER, useValue: plain },
+        { provide: TRACE_CONTEXT, useValue: createTraceContextAdapter() },
+        { provide: SESSION_AUTHZ_QUERY, useValue: authzQuery },
+      ],
+    }).compile();
+    const controller = module.get(AccountAccessNestController);
+
+    const result = await controller.getSession({ authSession: session });
+    assert.equal(result.code, 0);
+    // 主社团 = 角色优先级最高（club_leader > member）
+    assert.equal(result.data.workspace?.clubId, 'club-a');
+    assert.equal(result.data.workspace?.role, 'club_leader');
+    assert.deepEqual(result.data.permissions, ['club:dashboard:view', 'club:member:manage']);
+
+    // /api/me/clubs（A3）：返回全部有效社团（含角色）
+    const clubs = await controller.listMyClubs({ authSession: session });
+    assert.deepEqual(clubs.data.clubs, [
+      { clubId: 'club-a', clubName: 'A 社', role: 'club_leader' },
+      { clubId: 'club-b', clubName: 'B 社', role: 'member' },
+    ]);
   });
 });
 

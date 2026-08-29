@@ -57,6 +57,7 @@ const mockRanaMinderConfig: RanaMinderConfig = {
   notify: { endpoint: '' },
   backup: { endpoint: '' },
   observability: { logLevel: 'info', traceSamplingRate: 1 },
+  org: { superAdminUserIds: [] },
   job: { schedulerIntervalMs: 1_000, defaultLeaseMs: 60_000, maxAttempts: 5 },
 };
 

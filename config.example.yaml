@@ -47,6 +47,12 @@ casdoor:
   # discoveryTtlMs: 3600000          # 发现文档缓存 TTL（默认 1 小时，到期复检 issuer 指纹）
   # sessionCookieMaxAgeSec: 86400    # 会话 Cookie Max-Age（默认 86400，对齐会话 JWT）
 
+# ---- org：组织域（A4 权限接线；ORG-029 平台超管允许清单）----
+# superAdminUserIds：平台超管主体清单（逗号分隔或 YAML 数组）。
+# 配置即授权（GOV-007 合规：不从 Group 名派生）；留空 = 无人是平台超管（fail-closed）。
+org:
+  superAdminUserIds: []            # 例：["ranaminder-dev__admin__fixed"]
+
 # ---- storage：S3 兼容对象存储（DATA-Q-012 三个私有 Bucket，loader: buckets 嵌套）----
 storage:
   endpoint: http://127.0.0.1:9000   # MinIO / 兼容端点

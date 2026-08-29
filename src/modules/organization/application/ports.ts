@@ -228,6 +228,60 @@ export interface CurrentPermissionsPort {
   primaryRoleAt(userId: string, clubId: string): Promise<string>;
 }
 
+/**
+ * 主体在会话层面的授权视图（identity 会话装配的组合点数据源；A4 接线）。
+ *
+ * 与 CurrentPermissionsPort 的区别：CurrentPermissionsPort 是 per-club/per-dept
+ * 元数据逐请求授权查询（被 org-context.query 等内部控制面消费）；本接口面向
+ * 会话装配一次性返回"主体所有有效社团工作空间 + 平台超管标记"，被 identity
+ * sessionContractFromViews 调用以填充 session.permissions / session.workspace /
+ * /api/me/clubs。两者可由同一适配器实现但语义与消费方分离（评审独立）。
+ */
+export type OrgSessionClubRole =
+  /** 社团负责人（PTPL-BUILTIN-LEADER） */
+  | 'club_leader'
+  /** 人事管理员（PTPL-BUILTIN-PERSONNEL） */
+  | 'hr'
+  /** 部门负责人（PTPL-BUILTIN-DEPT-HEAD） */
+  | 'department_leader'
+  /** 仅社团普通成员（无职位模板绑定） */
+  | 'member';
+
+export interface OrgSessionClubView {
+  readonly clubId: string;
+  readonly clubName: string;
+  readonly role: OrgSessionClubRole;
+  /** 已发布模板权限 ∪（社团层 + 部门层，去重） */
+  readonly permissions: readonly string[];
+}
+
+export interface OrgSessionAuthzSnapshot {
+  /** ORG-029：平台超管身份（配置允许清单，无视社团权限集合） */
+  readonly platformSuperAdmin: boolean;
+  /**
+   * 主体当前有效社团工作空间（含角色 + 权限集合）；超管此处为空——
+   * 平台超管不混入社团工作空间（ORG-023 跨空间隔离）。
+   */
+  readonly clubs: readonly OrgSessionClubView[];
+}
+
+/**
+ * 会话授权视图源端口（org 提供；identity 通过 SESSION_AUTHZ_PORT 适配消费）。
+ * identity 不直接依赖 organization 模块内部符号，仅依赖本端口契约。
+ */
+export interface OrgSessionAuthzSource {
+  describeForSubject(subjectId: string): Promise<OrgSessionAuthzSnapshot>;
+}
+
+/** 平台超管会话层权限集（前端 hasPermission('platform:*')） */
+export const PLATFORM_SUPER_ADMIN_SESSION_PERMISSIONS = [
+  'platform:club:manage',
+  'platform:config:manage',
+  'platform:delete:execute',
+  'platform:export:execute',
+  'platform:audit:view',
+] as const;
+
 // --------------------------------------------------------------------------
 // 受控批量端口（ORG-004 属平台模块；平台 batch 执行器经此端口驱动）
 // --------------------------------------------------------------------------
@@ -258,6 +312,10 @@ export const JOB_SCHEDULER = Symbol('ORG_JOB_SCHEDULER');
 export const NOTIFICATION_PORT = Symbol('ORG_NOTIFICATION_PORT');
 export const CURRENT_PERMISSIONS_PORT = Symbol('ORG_CURRENT_PERMISSIONS_PORT');
 export const CONTROLLED_BATCH_PORT = Symbol('ORG_CONTROLLED_BATCH_PORT');
+/**
+ * 会话授权视图源（A4 接线；identity 通过 SESSION_AUTHZ_PORT 适配消费本端口）。
+ */
+export const ORG_SESSION_AUTHZ_SOURCE = Symbol('ORG_SESSION_AUTHZ_SOURCE');
 
 // 用例令牌
 export const ONBOARDING_USE_CASE = Symbol('ORG_ONBOARDING_USE_CASE');
@@ -281,3 +339,8 @@ export interface OrgEventEnvelope {
 }
 
 export type { RelationWriteStep };
+// 重导出领域类型，供 organization 模块外部（identity/adapters/...）以本文件为
+// 唯一交互入口使用，避免在多个模块入口散落引用 domain/ 子路径。
+export type { GroupStableRef } from '../domain/types';
+export { BUILT_IN_TEMPLATES } from '../domain/models/permission-template';
+export type { PositionTemplateBinding } from '../domain/models/permission-template';

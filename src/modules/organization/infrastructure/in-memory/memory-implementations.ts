@@ -668,3 +668,65 @@ export class MemoryCurrentPermissionsPort implements CurrentPermissionsPort {
     return out;
   }
 }
+
+// --------------------------------------------------------------------------
+// 会话授权视图（内存桩；A4 接线）：复用 MemoryPermissionConfig 为联调/纯前端
+// mock 模式提供与 PostgresOrgSessionAuthz 等价的 stub 输出——保证 ADAPTERS_*_REAL=0
+// 的纯前端 mock 模式不破。仅联调/单测可用（构造期由 GOV-007 守卫拒绝）。
+// --------------------------------------------------------------------------
+
+export class MemoryOrgSessionAuthzSource {
+  constructor(private readonly config: MemoryPermissionConfig) {
+    assertMemoryStubAllowed('MemoryOrgSessionAuthzSource');
+  }
+
+  async describeForSubject(subjectId: string): Promise<{
+    platformSuperAdmin: boolean;
+    clubs: ReadonlyArray<{
+      clubId: string;
+      clubName: string;
+      role: 'club_leader' | 'hr' | 'department_leader' | 'member';
+      permissions: readonly string[];
+    }>;
+  }> {
+    const isSuperAdmin = this.config.superAdminUsers.includes(subjectId);
+    const memberships = this.config.positionGroupMemberships.get(subjectId) ?? [];
+    const clubIds = uniqueClubsFromMemberships(memberships, this.config.clubPermissions);
+    return {
+      platformSuperAdmin: isSuperAdmin,
+      clubs: clubIds.map((clubId) => ({
+        clubId,
+        clubName: clubId,
+        role: inferRoleFromGroupNames(memberships.filter((m) => m.clubId === clubId)),
+        permissions: this.config.clubPermissions.get(clubId) ?? [],
+      })),
+    };
+  }
+}
+
+function uniqueClubsFromMemberships(
+  memberships: ReadonlyArray<{ clubId: string }>,
+  clubPerms: ReadonlyMap<string, string[]>,
+): readonly string[] {
+  const set = new Set<string>();
+  for (const m of memberships) set.add(m.clubId);
+  for (const k of clubPerms.keys()) set.add(k);
+  return [...set].sort();
+}
+
+function inferRoleFromGroupNames(
+  memberships: ReadonlyArray<{
+    group: GroupStableRef;
+    clubId: string;
+    departmentId: string | null;
+  }>,
+): 'club_leader' | 'hr' | 'department_leader' | 'member' {
+  for (const m of memberships) {
+    if (m.group.name.includes('leader') || m.group.name.includes('负责人')) return 'club_leader';
+    if (m.group.name.includes('personnel') || m.group.name.includes('人事')) return 'hr';
+    if (m.group.name.includes('dept') || m.group.name.includes('部门负责人')) {
+      return 'department_leader';
+    }
+  }
+  return 'member';
+}

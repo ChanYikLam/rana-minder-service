@@ -58,7 +58,8 @@ const defaultConfig: RanaMinderConfig = {
   notify: { endpoint: '' },
   backup: { endpoint: '' },
   observability: { logLevel: 'info', traceSamplingRate: 1.0 },
-  job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
+    org: { superAdminUserIds: [] },
+    job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
 };
 
 function makeBasicRepo(tasks: Map<string, TaskRecord>): TaskRepository {

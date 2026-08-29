@@ -70,6 +70,7 @@ describe('IdentityModule 装配（DI 图 + 失败关闭）', () => {
     notify: { endpoint: '' },
     backup: { endpoint: '' },
     observability: { logLevel: 'info', traceSamplingRate: 1 },
+    org: { superAdminUserIds: [] },
     job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
   };
 

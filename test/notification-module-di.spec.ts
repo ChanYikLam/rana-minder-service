@@ -63,6 +63,7 @@ function mockConfig(overrides: Partial<RanaMinderConfig> = {}): RanaMinderConfig
     notify: { endpoint: '', tokenRef: '' },
     backup: { endpoint: '', tokenRef: '' },
     observability: { logLevel: 'info', traceSamplingRate: 1 },
+    org: { superAdminUserIds: [] },
     job: { defaultLeaseMs: 60_000, schedulerIntervalMs: 1_000, maxAttempts: 5 },
     ...overrides,
   };

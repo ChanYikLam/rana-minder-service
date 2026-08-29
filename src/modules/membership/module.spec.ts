@@ -53,7 +53,8 @@ describe('MembershipModule（5.2.1 成员经历）', () => {
     notify: { endpoint: '' },
     backup: { endpoint: '' },
     observability: { logLevel: 'info', traceSamplingRate: 1 },
-    job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
+  org: { superAdminUserIds: [] },
+  job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
   };
 
   it('冒烟：全部端口与用例可解析（模块接入 app.module 验证）', async () => {

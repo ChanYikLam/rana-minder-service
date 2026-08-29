@@ -29,6 +29,7 @@ import type {
   ObservabilityConfig,
   JobConfig,
   ExternalServiceConfig,
+  OrgConfig,
 } from './configuration';
 
 export class ConfigLoadError extends Error {
@@ -52,6 +53,7 @@ interface RawConfig {
   readonly fileCheck?: Partial<ExternalServiceConfig>;
   readonly notify?: Partial<ExternalServiceConfig>;
   readonly backup?: Partial<ExternalServiceConfig>;
+  readonly org?: Partial<{ readonly superAdminUserIds?: unknown }>;
   readonly observability?: Partial<ObservabilityConfig>;
   readonly job?: Partial<JobConfig>;
 }
@@ -97,9 +99,33 @@ function buildConfig(raw: RawConfig, env: NodeJS.ProcessEnv): RanaMinderConfig {
     fileCheck: buildExternalService(raw.fileCheck, env, 'FILECHECK'),
     notify: buildExternalService(raw.notify, env, 'NOTIFY'),
     backup: buildExternalService(raw.backup, env, 'BACKUP'),
+    org: buildOrg(raw.org, env),
     observability: buildObservability(raw.observability, env),
     job: buildJob(raw.job, env),
   };
+}
+
+function buildOrg(raw: RawConfig['org'] | undefined, env: NodeJS.ProcessEnv): OrgConfig {
+  return {
+    superAdminUserIds: parseStringList(raw?.superAdminUserIds, env['ORG_SUPER_ADMIN_USER_IDS']),
+  };
+}
+
+function parseStringList(fromFile: unknown, fromEnv: string | undefined): readonly string[] {
+  const candidates: unknown[] = [];
+  if (Array.isArray(fromFile)) candidates.push(...fromFile);
+  else if (typeof fromFile === 'string') {
+    if (fromFile.length > 0) candidates.push(...fromFile.split(',').map((s) => s.trim()));
+  }
+  if (candidates.length === 0 && typeof fromEnv === 'string' && fromEnv.length > 0) {
+    return fromEnv
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  }
+  return candidates
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .map((item) => item.trim());
 }
 
 function buildServer(raw: Partial<ServerConfig> | undefined, env: NodeJS.ProcessEnv): ServerConfig {

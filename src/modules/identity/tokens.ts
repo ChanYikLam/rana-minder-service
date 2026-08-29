@@ -54,3 +54,11 @@ export const CASDOOR_AVAILABILITY = 'IDENTITY_CASDOOR_AVAILABILITY';
  * 默认注册 InMemory 内存桩；多实例部署时覆盖为 Redis 等共享存储。
  */
 export const OIDC_NONCE_STORE = 'IDENTITY_OIDC_NONCE_STORE';
+
+/**
+ * 会话授权视图源端口（A4 接线；identity ↔ organization 跨模块会话装配组合点）。
+ * 由 organization 模块 ORG_SESSION_AUTHZ_SOURCE 适配实现。
+ */
+export const SESSION_AUTHZ_PORT = 'IDENTITY_SESSION_AUTHZ_PORT';
+/** 会话授权查询（基于 SessionAuthzPort 构造 SessionAuthorisationView）。 */
+export const SESSION_AUTHZ_QUERY = 'IDENTITY_SESSION_AUTHZ_QUERY';

@@ -12,6 +12,7 @@ import type { ApiSuccess } from '../../../../common/contracts/api-envelope';
 import type { ApiErrorResult } from '../http/error-http';
 import type { ActorContext } from '../controllers/profiles.controller';
 import { generateTraceId } from '../../../../platform/observability/domain/services/trace-id.generator';
+import type { SessionAuthorisationView } from '../../application/queries/session-authz.query';
 import { sessionFromRequest } from './auth.guard';
 import type { AuthSession } from './auth-session';
 
@@ -43,13 +44,29 @@ export interface SessionResponseContract {
   degraded: boolean;
   degradedSince: string | null;
   permissions: string[];
-  workspace: null;
+  workspace: {
+    clubId: string;
+    clubName: string;
+    role:
+      | 'super_admin'
+      | 'club_leader'
+      | 'hr'
+      | 'department_leader'
+      | 'interviewer'
+      | 'member'
+      | 'applicant';
+    permissions: string[];
+    memberId?: string;
+  } | null;
 }
 
 /**
- * 会话刷新视图（profile + accountAccess）→ 契约会话视图。
+ * 会话刷新视图（profile + accountAccess + 授权视图）→ 契约会话视图。
  * 供 account-access / casdoor-session 两个会话读取路径复用，保证
  * 「建立会话」与「刷新会话」输出同构（前端单一 zod schema 可校验）。
+ *
+ * 注入的 `authz` 由 SessionAuthorizationQuery 产出；该参数可选——缺省时沿用
+ * A4 接线前的硬编码空权限 + null workspace（仅用于纯前端 mock 模式/单测）。
  */
 export function sessionContractFromViews(
   subjectId: string,
@@ -67,6 +84,7 @@ export function sessionContractFromViews(
       degradedSince: string | null;
     };
   },
+  authz?: SessionAuthorisationView,
 ): SessionResponseContract {
   return {
     user: {
@@ -85,8 +103,10 @@ export function sessionContractFromViews(
     },
     degraded: view.accountAccess.degraded,
     degradedSince: view.accountAccess.degradedSince,
-    permissions: [],
-    workspace: null,
+    permissions: authz ? [...authz.permissions] : [],
+    workspace: authz?.workspace
+      ? { ...authz.workspace, permissions: [...authz.workspace.permissions] }
+      : null,
   };
 }
 

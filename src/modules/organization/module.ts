@@ -60,10 +60,12 @@ import {
   GROUP_DIRECTORY_QUERY,
   PERMISSION_TEMPLATE_QUERY,
   ORG_CONTEXT_QUERY,
+  ORG_SESSION_AUTHZ_SOURCE,
   type CasdoorGroupPort,
   type ClubStore,
   type CurrentPermissionsPort,
   type GroupMappingRegistry,
+  type GroupStableRef,
   type PermissionTemplateStore,
 } from './application/ports';
 
@@ -87,6 +89,7 @@ import {
   PostgresGroupMappingRegistry,
   PostgresPermissionTemplateStore,
 } from './infrastructure/postgres/postgres-config.stores';
+import { PostgresCurrentPermissionsPort } from './infrastructure/postgres/postgres-current-permissions.port';
 import { HttpCasdoorGroupAdapter } from './infrastructure/http/http-casdoor-group.adapter';
 import { TaskRepositoryJobScheduler } from './infrastructure/task-repository.scheduler';
 import { NotifyChannelNotificationPort } from './infrastructure/notify-channel.notification-port';
@@ -105,6 +108,7 @@ import {
   InMemoryRelationCommandStore,
   InMemoryRelationCommandAuditStore,
   MemoryCurrentPermissionsPort,
+  MemoryOrgSessionAuthzSource,
   SystemClock,
 } from './infrastructure/in-memory/memory-implementations';
 import { DEMO_CASDOOR_SEED } from './infrastructure/in-memory/demo-seed';
@@ -207,6 +211,62 @@ const OrgUnitOfWorkProvider = {
   useFactory: (db: DbAdapter) => new OrgUnitOfWork(db),
   inject: [DB_ADAPTER],
 };
+
+/**
+ * 内存桩分支的联调种子配置（orgDbRealEnabled=false 时启用；ORG_DB_REAL=1 时忽略）。
+ *
+ * 保留 A4 接线前联调阶段组织端可用性（admin 用户拥有 club-demo 全量管理权限，
+ * u_a/u_b/u_c 覆盖负责人/人事/部门负责人角色样例）；生产装配即被 GOV-007 守卫
+ * 拒绝——该分支仅限开发/单测。
+ */
+const STUB_PERMISSION_CONFIG = {
+  superAdminUsers: ['u_root', 'ranaminder-dev__admin__fixed'] as readonly string[],
+  clubPermissions: new Map<string, string[]>([
+    ['club-acm-1', ['club:member:manage']],
+    [
+      'club-demo',
+      [
+        'club:recruitment:manage',
+        'club:joint:manage',
+        'club:member:manage',
+        'club:interview:view',
+        'club:interview:evaluate',
+        'club:config:manage',
+        'club:export:execute',
+        'club:audit:view',
+      ],
+    ],
+  ]),
+  positionGroupMemberships: new Map<
+    string,
+    Array<{ group: GroupStableRef; clubId: string; departmentId: string | null }>
+  >([
+    [
+      'u_a',
+      [
+        {
+          group: { owner: 'club-acm', name: '负责人组' },
+          clubId: 'club-acm-1',
+          departmentId: null,
+        },
+      ],
+    ],
+    [
+      'u_b',
+      [{ group: { owner: 'club-acm', name: '人事组' }, clubId: 'club-acm-1', departmentId: null }],
+    ],
+    [
+      'u_c',
+      [
+        {
+          group: { owner: 'club-acm', name: '宣传部' },
+          clubId: 'club-acm-1',
+          departmentId: 'dept-pr',
+        },
+      ],
+    ],
+  ]),
+} as const;
 
 @Module({
   // forwardRef：TasksModule→NotificationModule→OrganizationModule 存在既有引用环，
@@ -357,66 +417,55 @@ const OrgUnitOfWorkProvider = {
           },
         ]
       : [{ provide: NOTIFICATION_PORT, useFactory: () => new InMemoryNotificationPort() }]),
-    // ---- 当前权限（identity 接线为后续任务；生产由 GOV-007 守卫拒绝内存桩）----
-    {
-      provide: CURRENT_PERMISSIONS_PORT,
-      useFactory: () =>
-        new MemoryCurrentPermissionsPort({
-          // 联调临时（2026-08-27）：把本地 Casdoor 种子主体列为超管以解锁
-          // 组织端/管理端联调（权限真实接线为上游任务；本桩不入生产路径——
-          // 生产构造即被 GOV-007 守卫拒绝）
-          superAdminUsers: ['u_root', 'ranaminder-dev__admin__fixed'],
-          clubPermissions: new Map([
-            ['club-acm-1', ['club:member:manage']],
-            // 联调临时（2026-08-27）：club-demo 管理端全链解锁（招新/面试/成员/导出）
-            [
-              'club-demo',
-              [
-                'club:recruitment:manage',
-                'club:joint:manage',
-                'club:member:manage',
-                'club:interview:view',
-                'club:interview:evaluate',
-                'club:config:manage',
-                'club:export:execute',
-                'club:audit:view',
-              ],
-            ],
-          ]),
-          positionGroupMemberships: new Map([
-            [
-              'u_a',
-              [
-                {
-                  group: { owner: 'club-acm', name: '负责人组' },
-                  clubId: 'club-acm-1',
-                  departmentId: null,
-                },
-              ],
-            ],
-            [
-              'u_b',
-              [
-                {
-                  group: { owner: 'club-acm', name: '人事组' },
-                  clubId: 'club-acm-1',
-                  departmentId: null,
-                },
-              ],
-            ],
-            [
-              'u_c',
-              [
-                {
-                  group: { owner: 'club-acm', name: '宣传部' },
-                  clubId: 'club-acm-1',
-                  departmentId: 'dept-pr',
-                },
-              ],
-            ],
-          ]),
-        }),
-    },
+    // ---- 当前权限（A4 接线；ORG_DB_REAL=1 走 PostgreSQL，否则走内存桩） ----
+    // 真实分支：PostgresCurrentPermissionsPort 读 pg_member_group_current + 已发布
+    // 权限模板解析（GOV-007 合规，ORG-029 超管来自 RANA_MINDER_CONFIG.org.superAdminUserIds）。
+    // 内存桩分支：保留原联调种子配置（开发/单测；生产构造即被 GOV-007 守卫拒绝）。
+    ...(USE_PG
+      ? [
+          {
+            provide: CURRENT_PERMISSIONS_PORT,
+            useFactory: (
+              db: DbAdapter,
+              templates: PermissionTemplateStore,
+              clubs: ClubStore,
+              config: RanaMinderConfig,
+            ) =>
+              new PostgresCurrentPermissionsPort({
+                db,
+                templates,
+                clubs,
+                superAdminUserIds: config.org.superAdminUserIds,
+              }),
+            inject: [DB_ADAPTER, PERMISSION_TEMPLATE_STORE, CLUB_STORE, RANA_MINDER_CONFIG],
+          },
+          {
+            provide: ORG_SESSION_AUTHZ_SOURCE,
+            useFactory: (
+              db: DbAdapter,
+              templates: PermissionTemplateStore,
+              clubs: ClubStore,
+              config: RanaMinderConfig,
+            ) =>
+              new PostgresCurrentPermissionsPort({
+                db,
+                templates,
+                clubs,
+                superAdminUserIds: config.org.superAdminUserIds,
+              }),
+            inject: [DB_ADAPTER, PERMISSION_TEMPLATE_STORE, CLUB_STORE, RANA_MINDER_CONFIG],
+          },
+        ]
+      : [
+          {
+            provide: CURRENT_PERMISSIONS_PORT,
+            useFactory: () => new MemoryCurrentPermissionsPort(STUB_PERMISSION_CONFIG),
+          },
+          {
+            provide: ORG_SESSION_AUTHZ_SOURCE,
+            useFactory: () => new MemoryOrgSessionAuthzSource(STUB_PERMISSION_CONFIG),
+          },
+        ]),
     onboardingProvider,
     clubLifecycleProvider,
     relationCommandProvider,
@@ -456,6 +505,7 @@ const OrgUnitOfWorkProvider = {
     NOTIFICATION_PORT,
     GROUP_MAPPING_REGISTRY,
     PERMISSION_TEMPLATE_STORE,
+    ORG_SESSION_AUTHZ_SOURCE,
   ],
 })
 export class OrganizationModule {}

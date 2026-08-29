@@ -151,6 +151,7 @@ async function makeHarness(options: HarnessOptions = {}): Promise<Harness> {
     new InMemoryOidcNonceStore(),
     sessionIdentity,
     undefined,
+    undefined,
     options.rateLimiter,
   );
 

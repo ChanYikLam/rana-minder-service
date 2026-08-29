@@ -29,6 +29,7 @@ function makeWorker(overrides: { schedulerRun?: () => Promise<void> } = {}) {
     notify: { endpoint: '' },
     backup: { endpoint: '' },
     observability: { logLevel: 'info', traceSamplingRate: 1.0 },
+    org: { superAdminUserIds: [] },
     job: { schedulerIntervalMs: 1000, defaultLeaseMs: 60000, maxAttempts: 5 },
   };
   return { worker: new TasksWorker(scheduler as any, config), scheduler, config };

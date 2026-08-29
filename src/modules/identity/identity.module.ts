@@ -15,6 +15,11 @@
 import { forwardRef, Module } from '@nestjs/common';
 
 import { AdaptersModule } from '../../adapters/adapters.module';
+import { OrganizationModule } from '../organization/module';
+import {
+  ORG_SESSION_AUTHZ_SOURCE,
+  type OrgSessionAuthzSource,
+} from '../organization/application/ports';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { APP_LOGGER } from '../../platform/observability/logging/tokens';
 import { DB_ADAPTER, CASDOOR_ADAPTER, MAIL_CHANNEL_ADAPTER } from '../../adapters/tokens';
@@ -58,6 +63,8 @@ import {
   AUTH_SESSION_PROVIDER,
   CASDOOR_AVAILABILITY,
   OIDC_NONCE_STORE,
+  SESSION_AUTHZ_PORT,
+  SESSION_AUTHZ_QUERY,
 } from './tokens';
 
 import { IdentityUnitOfWork } from './infrastructure/unit-of-work';
@@ -97,6 +104,7 @@ import { DefaultReviewNameCorrectionUseCase } from './application/commands/revie
 import { DefaultApplyNameCorrectionWriteUseCase } from './application/commands/apply-name-correction-write.use-case';
 import { HighRiskCommandGuard } from './application/services/high-risk-command.guard';
 import { DefaultGetMyProfileQuery } from './application/queries/get-my-profile.query';
+import { SessionAuthorizationQuery } from './application/queries/session-authz.query';
 import { DefaultGetAccountAccessQuery } from './application/queries/get-account-access.query';
 
 import { ProfilesController } from './interfaces/controllers/profiles.controller';
@@ -121,7 +129,13 @@ import { AccountAccessNestController } from './interfaces/nest/account-access.ne
 import { NameCorrectionNestController } from './interfaces/nest/name-correction.nest.controller';
 
 @Module({
-  imports: [AdaptersModule, forwardRef(() => ObservabilityModule)],
+  // forwardRef：OrganizationModule（经 Tasks/Notification 链）与 identity 存在间接引用环；
+  // A4 会话授权接线需要 org 的 ORG_SESSION_AUTHZ_SOURCE
+  imports: [
+    AdaptersModule,
+    forwardRef(() => ObservabilityModule),
+    forwardRef(() => OrganizationModule),
+  ],
   controllers: [
     ProfilesNestController,
     AccountAccessNestController,
@@ -129,6 +143,22 @@ import { NameCorrectionNestController } from './interfaces/nest/name-correction.
     CasdoorSessionController,
   ],
   providers: [
+    // ----- 会话授权视图（A4 接线：organization 域 → identity 会话装配）-----
+    {
+      // 适配：org 的 OrgSessionAuthzSource（结构化类型与 identity SessionAuthzSnapshot
+      // 兼容）→ identity SessionAuthzPort。identity 不直接依赖 organization 内部符号，
+      // 仅经本工厂做一次结构适配。
+      provide: SESSION_AUTHZ_PORT,
+      useFactory: (orgSource: OrgSessionAuthzSource) => ({
+        describeForSubject: (subjectId: string) => orgSource.describeForSubject(subjectId),
+      }),
+      inject: [ORG_SESSION_AUTHZ_SOURCE],
+    },
+    {
+      provide: SESSION_AUTHZ_QUERY,
+      useFactory: (port) => new SessionAuthorizationQuery(port),
+      inject: [SESSION_AUTHZ_PORT],
+    },
     // ----- 会话（条件装配：Casdoor endpoint 配置时启用 OIDC；否则 fail-closed）-----
     {
       provide: CASDOOR_AVAILABILITY,
