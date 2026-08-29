@@ -274,4 +274,33 @@ export class PublicRecruitmentReadModel {
       updatedAt: row.updated_at,
     };
   }
+  // ----- 提交幂等回执（B2：同键重放返回原结果，API-GEN） -----
+
+  /** 命中既有回执则返回原结果 data；未命中返回 null（首次执行）。 */
+  async findIdempotentResult(
+    idempotencyKey: string,
+    scope: string,
+  ): Promise<Record<string, unknown> | null> {
+    const { rows } = await this.pool.query<{ result: Record<string, unknown> }>(
+      `SELECT result FROM public.recruitment_idempotency
+        WHERE idempotency_key = $1 AND scope = $2
+        LIMIT 1`,
+      [idempotencyKey, scope],
+    );
+    return rows[0]?.result ?? null;
+  }
+
+  /** 记录提交回执（同键重复保存静默忽略——首个成功结果即权威回执）。 */
+  async saveIdempotentResult(
+    idempotencyKey: string,
+    scope: string,
+    result: Record<string, unknown>,
+  ): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO public.recruitment_idempotency (idempotency_key, scope, result)
+       VALUES ($1, $2, $3::jsonb)
+       ON CONFLICT (idempotency_key) DO NOTHING`,
+      [idempotencyKey, scope, JSON.stringify(result)],
+    );
+  }
 }

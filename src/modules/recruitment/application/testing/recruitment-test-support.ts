@@ -127,6 +127,9 @@ export class InMemoryRecruitmentRepository implements RecruitmentRepository {
   async loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]> {
     return [...this.interviews.values()].filter((i) => i.roundId === roundId);
   }
+  async loadInterviewsByApplication(applicationId: string): Promise<InterviewRecordSnapshot[]> {
+    return [...this.interviews.values()].filter((i) => i.applicationId === applicationId);
+  }
 
   async saveRemedyWindow(snapshot: RemedyWindowSnapshot): Promise<void> {
     this.remedyWindows.set(snapshot.windowId, snapshot);

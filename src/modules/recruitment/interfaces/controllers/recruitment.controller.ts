@@ -17,6 +17,18 @@ import type {
   SubmitApplicationInput,
 } from '../../application/commands/submit-application.use-case';
 import type {
+  SaveApplicationDraftUseCase,
+  SaveApplicationDraftInput,
+} from '../../application/commands/save-application-draft.use-case';
+import type {
+  WithdrawApplicationUseCase,
+  WithdrawApplicationInput,
+} from '../../application/commands/withdraw-application.use-case';
+import type {
+  ExitRecruitmentUseCase,
+  ExitRecruitmentInput,
+} from '../../application/commands/exit-recruitment.use-case';
+import type {
   RecordDepartmentDecisionUseCase,
   RecordDepartmentDecisionInput,
 } from '../../application/commands/record-department-decision.use-case';
@@ -38,6 +50,9 @@ export class RecruitmentController {
     private readonly publishActivityUseCase: PublishRecruitmentActivityUseCase,
     private readonly openChannelUseCase: OpenApplicationChannelUseCase,
     private readonly submitApplicationUseCase: SubmitApplicationUseCase,
+    private readonly saveDraftUseCase: SaveApplicationDraftUseCase,
+    private readonly withdrawUseCase: WithdrawApplicationUseCase,
+    private readonly exitUseCase: ExitRecruitmentUseCase,
     private readonly recordDecisionUseCase: RecordDepartmentDecisionUseCase,
     private readonly interviewWorkflow: InterviewWorkflowUseCase,
     private readonly listActivitiesQuery: ListActivitiesQuery,
@@ -117,6 +132,36 @@ export class RecruitmentController {
   ): Promise<ControllerResult<unknown>> {
     return this.run(actor, () =>
       this.submitApplicationUseCase.execute({ ...input, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  /** 保存报名草稿（A2；无申请创建 DRAFT，已有草稿更新 answers） */
+  saveApplicationDraft(
+    actor: ActorContext,
+    input: Omit<SaveApplicationDraftInput, 'actor' | 'now'>,
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.saveDraftUseCase.execute({ ...input, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  /** 撤销提交回草稿（A2；SM-REC-003 submitted→draft） */
+  withdrawApplication(
+    actor: ActorContext,
+    input: Omit<WithdrawApplicationInput, 'actor' | 'now'>,
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.withdrawUseCase.execute({ ...input, actor: actor.subjectId, now: actor.now }),
+    );
+  }
+
+  /** 退出招新（A2；SM-REC-003 submitted→exited；需 confirm=true 二次确认） */
+  exitRecruitment(
+    actor: ActorContext,
+    input: Omit<ExitRecruitmentInput, 'actor' | 'now'>,
+  ): Promise<ControllerResult<unknown>> {
+    return this.run(actor, () =>
+      this.exitUseCase.execute({ ...input, actor: actor.subjectId, now: actor.now }),
     );
   }
 

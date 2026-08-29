@@ -574,6 +574,18 @@ export class PostgresRecruitmentRepository implements RecruitmentRepository {
     return rows.map(interviewRowToSnapshot);
   }
 
+  async loadInterviewsByApplication(applicationId: string): Promise<InterviewRecordSnapshot[]> {
+    const rows = await this.db.query<InterviewRow>(
+      this.uow.active,
+      `SELECT id, application_id, activity_id, club_id, round_id, applicant_id, status, revision_number,
+               interviewer_id, scheduled_at, location, skip_reason, hold_until, evaluations,
+               created_at, updated_at
+          FROM interview_records WHERE application_id = $1 ORDER BY updated_at DESC`,
+      [applicationId],
+    );
+    return rows.map(interviewRowToSnapshot);
+  }
+
   // ----- 补救窗口 -----
   async saveRemedyWindow(s: RemedyWindowSnapshot): Promise<void> {
     await this.db.query(

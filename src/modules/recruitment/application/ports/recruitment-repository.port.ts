@@ -35,6 +35,8 @@ export interface RecruitmentRepository {
   loadInterview(id: string): Promise<InterviewRecordSnapshot | null>;
   saveInterview(snapshot: InterviewRecordSnapshot, expectedRevision: number): Promise<void>;
   loadInterviewsByRound(roundId: string): Promise<InterviewRecordSnapshot[]>;
+  /** 按申请查面试记录（A2 撤销守卫：未排期/无结论才可撤回草稿） */
+  loadInterviewsByApplication(applicationId: string): Promise<InterviewRecordSnapshot[]>;
 
   saveRemedyWindow(snapshot: RemedyWindowSnapshot): Promise<void>;
   loadRemedyWindow(windowId: string): Promise<RemedyWindowSnapshot | null>;

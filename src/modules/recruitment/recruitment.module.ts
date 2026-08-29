@@ -56,6 +56,9 @@ import {
   RESCHEDULE_INTERVIEW_USE_CASE,
   OPEN_APPLICATION_CHANNEL_USE_CASE,
   SUBMIT_APPLICATION_USE_CASE,
+  SAVE_APPLICATION_DRAFT_USE_CASE,
+  WITHDRAW_APPLICATION_USE_CASE,
+  EXIT_RECRUITMENT_USE_CASE,
   RECORD_DEPARTMENT_DECISION_USE_CASE,
   INTERVIEW_WORKFLOW_USE_CASE,
   SEND_ADMISSION_INVITATION_USE_CASE,
@@ -98,6 +101,9 @@ import {
 } from './application/commands/interview-slot.use-case';
 import { DefaultOpenApplicationChannelUseCase } from './application/commands/open-application-channel.use-case';
 import { DefaultSubmitApplicationUseCase } from './application/commands/submit-application.use-case';
+import { DefaultSaveApplicationDraftUseCase } from './application/commands/save-application-draft.use-case';
+import { DefaultWithdrawApplicationUseCase } from './application/commands/withdraw-application.use-case';
+import { DefaultExitRecruitmentUseCase } from './application/commands/exit-recruitment.use-case';
 import { DefaultRecordDepartmentDecisionUseCase } from './application/commands/record-department-decision.use-case';
 import { InterviewWorkflowUseCase } from './application/commands/interview-workflow.use-case';
 import {
@@ -272,6 +278,21 @@ import {
       inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION, RECRUITMENT_FORM_PORT],
     },
     {
+      provide: SAVE_APPLICATION_DRAFT_USE_CASE,
+      useFactory: (repo) => new DefaultSaveApplicationDraftUseCase(repo),
+      inject: [RECRUITMENT_REPOSITORY],
+    },
+    {
+      provide: WITHDRAW_APPLICATION_USE_CASE,
+      useFactory: (repo) => new DefaultWithdrawApplicationUseCase(repo),
+      inject: [RECRUITMENT_REPOSITORY],
+    },
+    {
+      provide: EXIT_RECRUITMENT_USE_CASE,
+      useFactory: (repo) => new DefaultExitRecruitmentUseCase(repo),
+      inject: [RECRUITMENT_REPOSITORY],
+    },
+    {
       provide: RECORD_DEPARTMENT_DECISION_USE_CASE,
       useFactory: (repo, auth) => new DefaultRecordDepartmentDecisionUseCase(repo, auth),
       inject: [RECRUITMENT_REPOSITORY, RECRUITMENT_AUTHORIZATION],
@@ -316,6 +337,9 @@ import {
         publish,
         open,
         submit,
+        draft,
+        withdraw,
+        exit,
         decide,
         interview,
         listA,
@@ -330,6 +354,9 @@ import {
           publish,
           open,
           submit,
+          draft,
+          withdraw,
+          exit,
           decide,
           interview,
           listA,
@@ -344,6 +371,9 @@ import {
         PUBLISH_RECRUITMENT_ACTIVITY_USE_CASE,
         OPEN_APPLICATION_CHANNEL_USE_CASE,
         SUBMIT_APPLICATION_USE_CASE,
+        SAVE_APPLICATION_DRAFT_USE_CASE,
+        WITHDRAW_APPLICATION_USE_CASE,
+        EXIT_RECRUITMENT_USE_CASE,
         RECORD_DEPARTMENT_DECISION_USE_CASE,
         INTERVIEW_WORKFLOW_USE_CASE,
         LIST_ACTIVITIES_QUERY,

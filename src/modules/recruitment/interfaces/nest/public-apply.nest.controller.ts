@@ -18,7 +18,15 @@ import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } fro
 import type { Pool } from 'pg';
 
 import { DB_ADAPTER } from '../../../../adapters/tokens';
-import { RECRUITMENT_CONTROLLER } from '../../tokens';
+import {
+  RECRUITMENT_CONTROLLER,
+  SAVE_APPLICATION_DRAFT_USE_CASE,
+  WITHDRAW_APPLICATION_USE_CASE,
+  EXIT_RECRUITMENT_USE_CASE,
+} from '../../tokens';
+import type { SaveApplicationDraftUseCase } from '../../application/commands/save-application-draft.use-case';
+import type { WithdrawApplicationUseCase } from '../../application/commands/withdraw-application.use-case';
+import type { ExitRecruitmentUseCase } from '../../application/commands/exit-recruitment.use-case';
 import type { RecruitmentController } from '../controllers/recruitment.controller';
 import { parseRecruitmentRequestEnvelope } from '../http/recruitment-envelope';
 import { RecruitmentAuthGuard, RECRUITMENT_AUTH_SESSION_KEY } from './recruitment-auth.guard';
@@ -42,8 +50,12 @@ interface ApplyInput {
   readonly answers?: unknown;
 }
 
-/** 领域申请行 → 契约 RecApplication（接口清单 §11.1 响应 data） */
-function toRecApplication(row: ApplicationRow): Record<string, unknown> {
+/** 领域申请行 → 契约 RecApplication（接口清单 §11.1 响应 data）。
+ * departments 传入活动部门目录时，preferences 补全 departmentName（C5）。 */
+export function toRecApplication(
+  row: ApplicationRow,
+  departments?: ReadonlyArray<{ id: string; name: string }>,
+): Record<string, unknown> {
   const snapshot = (row.qualifySnapshot ?? {}) as {
     allowAdjustment?: unknown;
     answers?: unknown;
@@ -58,11 +70,22 @@ function toRecApplication(row: ApplicationRow): Record<string, unknown> {
     ADMITTED: 'accepted',
     ACCEPTED: 'accepted',
   };
+  const nameOf = (departmentId: string): string | null =>
+    departments?.find((d) => d.id === departmentId)?.name ?? null;
+  const rawChoices = (row.departmentChoices ?? []) as Array<{
+    departmentId?: unknown;
+    order?: unknown;
+  }>;
+  const preferences = rawChoices.map((c) => ({
+    order: typeof c.order === 'number' ? c.order : null,
+    departmentId: typeof c.departmentId === 'string' ? c.departmentId : '',
+    departmentName: typeof c.departmentId === 'string' ? nameOf(c.departmentId) : null,
+  }));
   return {
     id: row.id,
     activityId: row.activityId,
     status: statusMap[row.status] ?? row.status.toLowerCase(),
-    preferences: row.departmentChoices,
+    preferences,
     allowAdjustment: snapshot.allowAdjustment !== false,
     answers: snapshot.answers ?? {},
     formVersion: null,
@@ -166,6 +189,12 @@ export class ApplicantApplyNestController {
     @Inject(DB_ADAPTER) private readonly db: { getPool?: () => Pool },
     @Inject(RECRUITMENT_CONTROLLER)
     private readonly controller: RecruitmentController,
+    @Inject(SAVE_APPLICATION_DRAFT_USE_CASE)
+    private readonly saveDraftUseCase: SaveApplicationDraftUseCase,
+    @Inject(WITHDRAW_APPLICATION_USE_CASE)
+    private readonly withdrawUseCase: WithdrawApplicationUseCase,
+    @Inject(EXIT_RECRUITMENT_USE_CASE)
+    private readonly exitUseCase: ExitRecruitmentUseCase,
   ) {}
 
   private readModel(): PublicRecruitmentReadModel {
@@ -196,9 +225,13 @@ export class ApplicantApplyNestController {
     @Param('activityId') activityId: string,
   ): Promise<ApiSuccess<unknown>> {
     const actor = this.actor(request);
-    const row = await this.readModel().findApplication(activityId, actor.subjectId);
+    const read = this.readModel();
+    const [row, activity] = await Promise.all([
+      read.findApplication(activityId, actor.subjectId),
+      read.getActivityPublic(activityId),
+    ]);
     if (!row) throw notFound();
-    return { code: 0, data: toRecApplication(row) };
+    return { code: 0, data: toRecApplication(row, activity?.departments) };
   }
 
   /** POST /api/activity/recruitment/:activityId/apply（SM-REC-003 draft→submitted） */
@@ -219,7 +252,7 @@ export class ApplicantApplyNestController {
       );
     }
 
-    const { input } = parseRecruitmentRequestEnvelope(body);
+    const { input, idempotencyKey } = parseRecruitmentRequestEnvelope(body);
     const applyInput = (input ?? {}) as ApplyInput;
     const preferences = (applyInput.preferences ?? [])
       .map((p) => (typeof p?.departmentId === 'string' ? p.departmentId : null))
@@ -230,6 +263,12 @@ export class ApplicantApplyNestController {
         { code: 'IFC-ERR-006', message: '请至少选择一个志愿部门', supportId: generateTraceId() },
         422,
       );
+    }
+
+    // B2 幂等重放：同键重放直接返回首次成功结果（API-GEN；键由客户端信封携带）
+    if (idempotencyKey) {
+      const replayed = await read.findIdempotentResult(idempotencyKey, 'submit-application');
+      if (replayed) return { code: 0, data: replayed };
     }
 
     const submitted = await this.controller.submitApplication(actor, {
@@ -248,10 +287,140 @@ export class ApplicantApplyNestController {
       return toHttpResponse(submitted);
     }
 
-    // 幂等回读：以库内最新状态组装契约响应（幂等键由客户端信封携带，服务端以
-    // uq_applications_applicant_channel 兜底唯一性）
-    const row = await read.findApplication(activityId, actor.subjectId);
+    // 幂等回读：以库内最新状态组装契约响应（uq_applications_applicant_channel 兜底唯一性）
+    const [row, activity] = await Promise.all([
+      read.findApplication(activityId, actor.subjectId),
+      read.getActivityPublic(activityId),
+    ]);
     if (!row) throw notFound();
-    return { code: 0, data: toRecApplication(row) };
+    const data = toRecApplication(row, activity?.departments);
+
+    if (idempotencyKey) {
+      await read.saveIdempotentResult(idempotencyKey, 'submit-application', data);
+    }
+    return { code: 0, data };
+  }
+
+  /**
+   * POST /api/activity/recruitment/:activityId/draft（A2）
+   * 无申请创建 DRAFT；已有草稿更新 answers；已提交须先撤销。
+   */
+  @Post(':activityId/draft')
+  async saveDraft(
+    @Req() request: Record<string, unknown>,
+    @Param('activityId') activityId: string,
+    @Body() body: unknown,
+  ): Promise<ApiSuccess<unknown>> {
+    const actor = this.actor(request);
+    const read = this.readModel();
+
+    const channel = await read.findOpenChannel(activityId);
+    if (!channel) {
+      throw new HttpException(
+        { code: 'IFC-ERR-006', message: '报名通道未开放或已截止', supportId: generateTraceId() },
+        422,
+      );
+    }
+    const { input } = parseRecruitmentRequestEnvelope(body);
+    const applyInput = (input ?? {}) as ApplyInput;
+
+    const saved = await this.controller.saveApplicationDraft(actor, {
+      activityId,
+      channelId: channel.id,
+      applicantId: actor.subjectId,
+      answers: applyInput.answers ?? {},
+    });
+    if (!saved.ok) {
+      return toHttpResponse(saved);
+    }
+
+    const [row, activity] = await Promise.all([
+      read.findApplication(activityId, actor.subjectId),
+      read.getActivityPublic(activityId),
+    ]);
+    if (!row) throw notFound();
+    return {
+      code: 0,
+      data: {
+        activityId,
+        status: 'draft',
+        savedAt: new Date().toISOString(),
+        ...toRecApplication(row, activity?.departments),
+      },
+    };
+  }
+
+  /**
+   * POST /api/activity/recruitment/:activityId/apply/withdraw（A2）
+   * SM-REC-003 submitted→draft：仅通道开放未截止且无面试安排/结论可撤销。
+   */
+  @Post(':activityId/apply/withdraw')
+  async withdrawToDraft(
+    @Req() request: Record<string, unknown>,
+    @Param('activityId') activityId: string,
+  ): Promise<ApiSuccess<unknown>> {
+    const actor = this.actor(request);
+    const read = this.readModel();
+
+    const channel = await read.findOpenChannel(activityId);
+    if (!channel) {
+      throw new HttpException(
+        {
+          code: 'IFC-ERR-006',
+          message: '报名通道未开放或已截止，不可撤销',
+          supportId: generateTraceId(),
+        },
+        422,
+      );
+    }
+    const withdrawn = await this.controller.withdrawApplication(actor, {
+      activityId,
+      channelId: channel.id,
+      applicantId: actor.subjectId,
+    });
+    if (!withdrawn.ok) {
+      return toHttpResponse(withdrawn);
+    }
+
+    const [row, activity] = await Promise.all([
+      read.findApplication(activityId, actor.subjectId),
+      read.getActivityPublic(activityId),
+    ]);
+    if (!row) throw notFound();
+    return { code: 0, data: toRecApplication(row, activity?.departments) };
+  }
+
+  /**
+   * POST /api/activity/recruitment/:activityId/withdraw（A2）
+   * SM-REC-003 submitted→exited：退出招新（confirm=true 二次确认；响应 data=null）。
+   */
+  @Post(':activityId/withdraw')
+  async exitRecruitment(
+    @Req() request: Record<string, unknown>,
+    @Param('activityId') activityId: string,
+    @Body() body: unknown,
+  ): Promise<ApiSuccess<null>> {
+    const actor = this.actor(request);
+    const read = this.readModel();
+
+    const { input } = parseRecruitmentRequestEnvelope(body);
+    const exitInput = (input ?? {}) as { confirm?: unknown };
+
+    const channel = await read.findOpenChannel(activityId);
+    if (!channel) {
+      throw new HttpException(
+        { code: 'IFC-ERR-006', message: '报名通道未开放或已截止', supportId: generateTraceId() },
+        422,
+      );
+    }
+    const exited = await this.controller.exitRecruitment(actor, {
+      activityId,
+      channelId: channel.id,
+      applicantId: actor.subjectId,
+      confirm: exitInput.confirm === true,
+    });
+    // toHttpResponse 对 !ok 抛 HttpException（契约成功 data 恒为 null）
+    toHttpResponse(exited);
+    return { code: 0, data: null };
   }
 }

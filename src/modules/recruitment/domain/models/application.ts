@@ -103,6 +103,28 @@ export class Application {
     return { ...this.snapshot };
   }
 
+  /**
+   * 草稿期保存答题内容（A2：POST :activityId/draft）。
+   * 允许 DRAFT 与 WITHDRAWN（撤销回草稿后继续编辑）；其余状态拒绝——
+   * SUBMITTED 须先撤销，IDENTITY_EXCEPTION 身份异常不可保存。
+   */
+  saveDraftAnswers(answers: unknown, now: Date): void {
+    if (
+      this.snapshot.status !== ApplicationStatus.DRAFT &&
+      this.snapshot.status !== ApplicationStatus.WITHDRAWN
+    ) {
+      throw new Error('仅草稿态可保存报名草稿');
+    }
+    const existing = (this.snapshot.qualifySnapshot ?? {}) as Record<string, unknown>;
+    this.snapshot = {
+      ...this.snapshot,
+      // 每次草稿保存是一次编辑版本（乐观锁递增；PG CAS 写以 revision 比对）
+      revisionNumber: this.snapshot.revisionNumber + 1,
+      qualifySnapshot: { ...existing, answers },
+      updatedAt: now,
+    };
+  }
+
   /** 草稿期编辑志愿与表单引用（截止前） */
   editDraft(
     choices: readonly DepartmentChoice[],
