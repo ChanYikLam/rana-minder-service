@@ -37,7 +37,7 @@ async function bootstrap(): Promise<void> {
   // 打到 stdout；observability NestLoggerServiceAdapter 在 useLogger() 之后接管。
   const app = await NestFactory.create(AppModule, {
     bufferLogs: false,
-    logger: ["error", "warn"], // TEMP-DEBUG
+    logger: false,
   });
 
   // 通过 DI 取 observability 的 NestLoggerServiceAdapter：经 sanitize 后镜像 stdout。
