@@ -92,7 +92,9 @@ import {
 
 @Module({
   // forwardRef：组织模块在 ORG_JOBS_PLATFORM=1 时经 TasksModule 反向引用本模块（#68）
-  imports: [AdaptersModule, forwardRef(() => OrganizationModule), IdentityModule],
+  // forwardRef：identity → organization → tasks → notification → identity 存在装配环
+  // （A4 会话权限接线新增 identity→organization 边后暴露），惰性解析打破加载期循环
+  imports: [AdaptersModule, forwardRef(() => OrganizationModule), forwardRef(() => IdentityModule)],
   controllers: [NotificationController],
   providers: [
     // 应用命令
