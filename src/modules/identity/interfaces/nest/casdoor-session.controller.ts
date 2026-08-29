@@ -14,7 +14,17 @@
  * 会话解析退回到 RejectAllAuthSessionProvider（受保护端点 401 IFC-ERR-001）。
  */
 
-import { Controller, Delete, Get, HttpCode, HttpException, Inject, Optional, Req, Res } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpException,
+  Inject,
+  Optional,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { type Request as ExpressRequest, type Response } from 'express';
 import { jwtVerify } from 'jose';
@@ -35,7 +45,13 @@ import { deriveSessionSecret } from './session-secret';
 import { CasdoorAvailability } from './casdoor-availability';
 import { InMemoryOidcNonceStore } from './oidc-nonce-store';
 import { secureFromRequest } from './secure-request';
-import { CASDOOR_AVAILABILITY, SESSION_REVOCATION_PORT, SESSION_IDENTITY_REPOSITORY, ACCOUNT_ACCESS_CONTROLLER, OIDC_NONCE_STORE } from '../../tokens';
+import {
+  CASDOOR_AVAILABILITY,
+  SESSION_REVOCATION_PORT,
+  SESSION_IDENTITY_REPOSITORY,
+  ACCOUNT_ACCESS_CONTROLLER,
+  OIDC_NONCE_STORE,
+} from '../../tokens';
 import type { SessionRevocationPort } from '../../application/ports/session-revocation.port';
 import type { SessionIdentitySnapshot } from '../../infrastructure/postgres-session-identity.repository';
 import type { AccountAccessController } from '../controllers/account-access.controller';
@@ -296,7 +312,10 @@ export class CasdoorSessionController {
   /** DELETE /api/auth/logout */
   @Delete('logout')
   @HttpCode(200)
-  async logout(@Req() req: ExpressRequest, @Res({ passthrough: true }) res: Response): Promise<{ code: 0; data: null }> {
+  async logout(
+    @Req() req: ExpressRequest,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ code: 0; data: null }> {
     // BUG-007：登出时主动吊销该主体全部会话（不只清 Cookie）。
     // 必须验签通过后才取 sub（防未鉴权伪造任意主体吊销），并在身份域工作单元
     // 事务内写入吊销记录（SEC-CTL-004：禁止脱离事务读写）。

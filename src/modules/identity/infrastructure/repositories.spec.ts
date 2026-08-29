@@ -359,11 +359,14 @@ describe('PostgresAccountAccessRepository', () => {
       lastTrustedObservationAt: now,
       sessionRevokeVersion: 1,
     };
-    await inTx(uow, () => repo.save(snapshot, []));
+    // Top 1/C1：save 带 expectedStateVersion（读取时旧值 2）+ SQL CAS 守卫
+    await inTx(uow, () => repo.save(snapshot, 2, []));
     const upsert = db.queries[1];
     assert.match(upsert.sql, /ON CONFLICT \(subject_id\) DO UPDATE/);
+    assert.match(upsert.sql, /WHERE account_access\.state_version = \$7/);
     assert.equal(upsert.params[1], AccountAccessState.ACTIVE);
     assert.equal(upsert.params[5], 1);
+    assert.equal(upsert.params[6], 2, 'expectedStateVersion 传入 CAS 守卫');
   });
 });
 

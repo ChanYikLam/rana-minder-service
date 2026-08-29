@@ -82,7 +82,10 @@ export class DefaultHandleAccountStatusEventUseCase implements HandleAccountStat
       };
     }
 
-    await this.accountRepository.save(account.toSnapshot(), account.events);
+    // 乐观锁（Top 1/C1）：调用 save 时传 reading 时的旧 state_version；
+    // 并发更新若 DB 已被推进则抛 versionConflict。
+    const expectedStateVersion = snapshot?.stateVersion ?? -1;
+    await this.accountRepository.save(account.toSnapshot(), expectedStateVersion, account.events);
     const sessionRevoke = account.lastTransitionResult?.sessionRevoke ?? false;
     if (sessionRevoke) {
       // IDN-008：禁用/删除可信确认 → 立即终止该主体全部会话并撤销当前权限（同事务）

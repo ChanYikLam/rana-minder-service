@@ -60,7 +60,11 @@ export class PostgresSessionIdentityRepository {
     return this.uow.run({ kind: 'single', subjectId: input.subjectId }, async () => {
       const tx = this.uow.active;
 
-      // users：subject_id 稳定主键；学号以 casdoor 用户名兜底（唯一约束天然满足）
+      // users：subject_id 稳定主键；学号兜底用 `<org>:<casdoorName>`（Top-H/subagent HIGH）。
+      // 此前直接用 `casdoorName` 作为 student_id 跨 org 同名（"admin" 在两个 org 常见）
+      // 会撞 `uq_users_student_id`（全局唯一）抛 23505——不在 ensureAndRead 的 ON CONFLICT
+      // 覆盖路径上，会 fail-open。org:name 限定天然按组织隔离。
+      const studentIdFallback = `${input.casdoorOrg}:${input.casdoorName}`;
       await this.db.query(
         tx,
         `INSERT INTO users (subject_id, student_id, casdoor_org, casdoor_name, display_name)
@@ -70,7 +74,7 @@ export class PostgresSessionIdentityRepository {
                display_name = EXCLUDED.display_name`,
         [
           input.subjectId,
-          input.casdoorName,
+          studentIdFallback,
           input.casdoorOrg,
           input.casdoorName,
           input.displayName,
@@ -79,6 +83,7 @@ export class PostgresSessionIdentityRepository {
 
       // identity_profiles：首次建档落 Casdoor 权威只读字段（studentId/name）与
       // 邮箱验证基线；已存在且已填写资料则不覆盖（fields 为空对象视为未填写）
+      // studentId 字段同步使用 `<org>:<casdoorName>`（与 users.student_id 一致）
       await this.db.query(
         tx,
         `INSERT INTO identity_profiles (subject_id, fields, email_verified, verified_email)
@@ -89,16 +94,27 @@ export class PostgresSessionIdentityRepository {
            SET fields = CASE WHEN identity_profiles.fields = '{}'::jsonb
                              THEN EXCLUDED.fields
                              ELSE identity_profiles.fields END`,
-        [input.subjectId, input.casdoorName, input.displayName, input.email, input.emailVerifiedFromClaim],
+        [
+          input.subjectId,
+          studentIdFallback,
+          input.displayName,
+          input.email,
+          input.emailVerifiedFromClaim,
+        ],
       );
 
-      // account_access：Casdoor 状态已核验为 ACTIVE（DISABLED/DELETED/UNKNOWN
-      // 在调用前 fail-closed 拒绝），首次建档落可信观测基线，供会话刷新读取
+      // account_access：登录路径刷新账号状态为最新可信观测（Top 3/H3）。
+      // 此前 DO NOTHING 在并发新登录时无法更新陈旧 DISABLED/DELETED 残留状态，
+      // 致账号禁用失效。前提：casdoor-session.controller 的 getAccountState 已 fail-closed
+      // 验证 Casdoor state = ACTIVE 后才进入 ensureAndRead（CAS-CAP-004/CAS-FAIL-002 闭环），
+      // 故覆盖更新为 ACTIVE 是当前可信事实的最新化。
       await this.db.query(
         tx,
         `INSERT INTO account_access (subject_id, state, last_trusted_observation_at)
          VALUES ($1, 'ACTIVE', now())
-         ON CONFLICT (subject_id) DO NOTHING`,
+         ON CONFLICT (subject_id) DO UPDATE SET
+           state = EXCLUDED.state,
+           last_trusted_observation_at = EXCLUDED.last_trusted_observation_at`,
         [input.subjectId],
       );
 

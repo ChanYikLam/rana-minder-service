@@ -128,7 +128,9 @@ export class CasdoorUserAdapter implements CasdoorUserPort {
     field: ProfileField,
     value: string,
   ): Promise<ExternalResult<CasdoorProfileFieldObservation>> {
-    const written = await this.casdoor.updateUser(await this.toCasdoorUserId(subjectId), { [field]: value });
+    const written = await this.casdoor.updateUser(await this.toCasdoorUserId(subjectId), {
+      [field]: value,
+    });
     if (written.status !== 'SUCCESS') {
       return externalFailure(
         written.status as FailureStatus,

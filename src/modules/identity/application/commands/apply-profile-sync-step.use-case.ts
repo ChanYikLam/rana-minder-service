@@ -69,7 +69,8 @@ export class DefaultApplyProfileSyncStepUseCase implements ApplyProfileSyncStepU
     }
     const intent = ProfileSyncIntent.fromSnapshot(snapshot);
     const profile = await this.profileRepository.load(input.subjectId);
-    const isCurrentVersion = profile !== null && Number(profile.version) === Number(snapshot.targetVersion);
+    const isCurrentVersion =
+      profile !== null && Number(profile.version) === Number(snapshot.targetVersion);
 
     if (!isCurrentVersion) {
       // 存在更晚本地版本：旧同步意图不得推进（IDN-007）
