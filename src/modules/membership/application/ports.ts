@@ -52,6 +52,48 @@ export async function saveNotificationFact(
   }
 }
 
+/**
+ * 成员当前 Group 关系观测同步端口（A4 Group 写链路收口；CAS-MAP-004）。
+ *
+ * membership 域在"写后回读确认"收口点调用本端口，把已确认的 Casdoor Group 关系
+ * 同步到组织域观测表（org_member_group_current），供权限解析
+ * （PostgresCurrentPermissionsPort）使用。数据权威仍是 Casdoor；本端口只同步观测。
+ *
+ * 实现侧约定（组织模块适配器）：按 (club, purpose, refId) 查 Group 映射得到
+ * (group_owner, group_name)，upsert 观测行；失败不阻断主事务（saveObservation 落痕）。
+ */
+export interface MembershipRelationRef {
+  readonly kind: 'CLUB' | 'DEPARTMENT' | 'POSITION';
+  readonly refId: string;
+}
+
+export interface MembershipGroupObservationPort {
+  /** 成员生效（激活回读全部确认）后同步观测 */
+  syncOnActivationConfirmed(
+    clubId: string,
+    subjectId: string,
+    targets: readonly MembershipRelationRef[],
+  ): Promise<void>;
+  /** 退出/移除（级联回读确认清空）后清除该主体在该社团的观测 */
+  clearOnDepartureConfirmed(clubId: string, subjectId: string): Promise<void>;
+}
+
+/** DI 令牌（Symbol；与仓库约定一致） */
+export const MEMBERSHIP_GROUP_OBSERVATION_PORT = Symbol('MEMBERSHIP_GROUP_OBSERVATION_PORT');
+
+/** 安全调用：观测同步失败不阻断主事务（与 saveNotificationFact 同立场），仅留痕 */
+export async function safeSyncObservation(
+  port: MembershipGroupObservationPort | undefined,
+  run: () => Promise<void>,
+): Promise<void> {
+  if (!port) return;
+  try {
+    await run();
+  } catch {
+    // 失败不阻断主事务；组织域对账任务会周期性修正观测表（ADR-009 对账兜底）
+  }
+}
+
 /** DI 令牌（Symbol；与仓库约定一致） */
 export const MEMBERSHIP_ACCESS_PORT = Symbol('MEMBERSHIP_ACCESS_PORT');
 export const MEMBERSHIP_NOTIFICATION_PORT = Symbol('MEMBERSHIP_NOTIFICATION_PORT');

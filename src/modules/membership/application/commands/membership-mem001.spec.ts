@@ -20,6 +20,8 @@ import {
   CompensateMemberActivationCommand,
   CompensationBusyError,
 } from './compensate-member-activation.command';
+import { InMemoryMemberGroupObservationWriter } from '../../../organization/infrastructure/in-memory/memory-implementations';
+import { OrgMembershipGroupObservationAdapter } from '../../../organization/infrastructure/org-membership-group-observation.adapter';
 import { RequestDepartureCommand } from './request-departure.command';
 import { WithdrawDepartureCommand } from './withdraw-departure.command';
 import { ApproveDepartureCommand } from './approve-departure.command';
@@ -101,6 +103,7 @@ interface Rig {
   port: StubCasdoorPort;
   access: InMemoryMembershipAccessPort;
   notify: InMemoryMembershipNotificationPort;
+  observation: InMemoryMemberGroupObservationWriter;
   sm: MembershipPeriodStateMachine;
   plannedEnd: PlannedEndPolicy;
   enter: EnterMembershipCommand;
@@ -115,17 +118,70 @@ interface Rig {
   query: MemberExperienceQuery;
 }
 
+/** 观测桩 → membership 端口适配（与生产 OrgMembershipGroupObservationAdapter 同构） */
+const observationAdapterFrom = (writer: InMemoryMemberGroupObservationWriter) =>
+  new OrgMembershipGroupObservationAdapter(
+    {
+      // 观测桩不查真实映射：测试用 CLUB 目的直通映射（clubId 即 group），refId 即 group name
+      findByClubRef: async (
+        clubId: string,
+        purpose: 'club' | 'department' | 'position',
+        refId: string,
+      ) =>
+        purpose === 'club'
+          ? {
+              ref: { owner: clubId, name: clubId },
+              clubId,
+              purpose,
+              departmentId: null,
+              positionId: null,
+              mappingVersion: 1,
+            }
+          : purpose === 'department'
+            ? {
+                ref: { owner: clubId, name: refId },
+                clubId,
+                purpose,
+                departmentId: refId,
+                positionId: null,
+                mappingVersion: 1,
+              }
+            : {
+                ref: { owner: clubId, name: refId },
+                clubId,
+                purpose,
+                departmentId: null,
+                positionId: refId,
+                mappingVersion: 1,
+              },
+    } as never,
+    writer,
+  );
+
 const makeRig = (casdoor?: StubCasdoorPort): Rig => {
   const repo = new InMemoryMembershipRepository();
   const port = casdoor ?? new StubCasdoorPort();
+  const observation = new InMemoryMemberGroupObservationWriter();
   const access = new InMemoryMembershipAccessPort();
   const notify = new InMemoryMembershipNotificationPort();
   const policy = new MembershipPolicy();
   const sm = new MembershipPeriodStateMachine();
   const plannedEnd = new PlannedEndPolicy();
   const enter = new EnterMembershipCommand(repo, policy, notify, sm);
-  const resolveActivation = new ResolveMemberActivationCommand(repo, port, notify, sm);
-  const compensate = new CompensateMemberActivationCommand(repo, port, notify, sm);
+  const resolveActivation = new ResolveMemberActivationCommand(
+    repo,
+    port,
+    notify,
+    observationAdapterFrom(observation),
+    sm,
+  );
+  const compensate = new CompensateMemberActivationCommand(
+    repo,
+    port,
+    notify,
+    observationAdapterFrom(observation),
+    sm,
+  );
   const requestDeparture = new RequestDepartureCommand(repo, policy, notify);
   const withdrawDeparture = new WithdrawDepartureCommand(repo);
   const approveDeparture = new ApproveDepartureCommand(repo, access, policy, notify);
@@ -135,6 +191,7 @@ const makeRig = (casdoor?: StubCasdoorPort): Rig => {
   const query = new MemberExperienceQuery(repo, plannedEnd);
   return {
     repo,
+    observation,
     port,
     access,
     notify,
@@ -166,6 +223,14 @@ async function makeCurrentMember(rig: Rig): Promise<MembershipPeriod> {
   const p = await rig.enter.execute(enterInput);
   const r = await rig.resolveActivation.execute({ periodId: p.periodId, deadlineExceeded: false });
   assert.equal(r.period.status, 'CURRENT_MEMBER');
+  // A4 Group 写链路收口：激活确认后观测同步被调用（CLUB 目的直通映射）
+  assert.ok(rig.observation.upserts.length >= 1, '激活确认后应同步关系观测');
+  const upsert = rig.observation.upserts.at(-1)!;
+  assert.equal(upsert.subjectId, p.subjectId);
+  assert.ok(
+    upsert.relations.some((rel) => rel.purpose === 'club' && rel.clubId === p.clubId),
+    '观测应包含社团层关系',
+  );
   return r.period;
 }
 

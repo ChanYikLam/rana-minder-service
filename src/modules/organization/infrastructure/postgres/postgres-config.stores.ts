@@ -183,4 +183,25 @@ export class PostgresGroupMappingRegistry implements GroupMappingRegistry {
   async listAll(): Promise<GroupMappingRecord[]> {
     return this.queryRows('SELECT * FROM org_group_mapping', []);
   }
+
+  async findByClubRef(
+    clubId: string,
+    purpose: 'club' | 'department' | 'position',
+    refId: string,
+  ): Promise<GroupMappingRecord | null> {
+    // purpose='club' 时 mapping 仅匹配 club_id（position_id/department_id 为 NULL）；
+    // department/position 则按目的对应的 refId 列匹配。
+    const refColumn =
+      purpose === 'department' ? 'department_id' : purpose === 'position' ? 'position_id' : null;
+    const sql =
+      refColumn === null
+        ? 'SELECT * FROM org_group_mapping WHERE club_id = $1 AND purpose = $2 LIMIT 1'
+        : 'SELECT * FROM org_group_mapping WHERE club_id = $1 AND purpose = $2 AND ' +
+          refColumn +
+          ' = $3 LIMIT 1';
+    const params: ReadonlyArray<unknown> =
+      refColumn === null ? [clubId, purpose] : [clubId, purpose, refId];
+    const rows = await this.queryRows(sql, params);
+    return rows[0] ?? null;
+  }
 }

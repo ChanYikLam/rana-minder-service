@@ -298,6 +298,22 @@ export class InMemoryGroupMappingRegistry implements GroupMappingRegistry {
     return this.records.filter((r) => r.clubId === clubId);
   }
 
+  async findByClubRef(
+    clubId: string,
+    purpose: 'club' | 'department' | 'position',
+    refId: string,
+  ): Promise<GroupMappingRecord | null> {
+    const refColumn =
+      purpose === 'department' ? 'departmentId' : purpose === 'position' ? 'positionId' : null;
+    return (
+      this.records.find((r) => {
+        if (r.clubId !== clubId || r.purpose !== purpose) return false;
+        if (refColumn === null) return true;
+        return (r as unknown as Record<string, unknown>)[refColumn] === refId;
+      }) ?? null
+    );
+  }
+
   async listAll(): Promise<GroupMappingRecord[]> {
     return [...this.records];
   }
@@ -729,4 +745,52 @@ function inferRoleFromGroupNames(
     }
   }
   return 'member';
+}
+
+// --------------------------------------------------------------------------
+// 成员 Group 关系观测写入（内存桩；A4 Group 写链路收口）
+// --------------------------------------------------------------------------
+
+import type {
+  MemberGroupObservationWriter,
+  MemberGroupRelationObservation,
+} from '../../application/ports';
+
+/**
+ * 内存桩：记录 upsert / remove 调用，便于单测断言。
+ * 生产/灰度路径走 PostgresMemberGroupObservationWriter；本桩仅供开发/单测装配
+ * （GOV-007 守卫保证生产构造即拒）。
+ */
+export class InMemoryMemberGroupObservationWriter implements MemberGroupObservationWriter {
+  readonly upserts: Array<{
+    subjectId: string;
+    relations: readonly MemberGroupRelationObservation[];
+    at: string;
+  }> = [];
+  readonly removes: Array<{
+    subjectId: string;
+    clubId: string;
+    purpose: 'club' | 'department' | 'position';
+    at: string;
+  }> = [];
+  private readonly now: () => Date;
+
+  constructor(options: { now?: () => Date } = {}) {
+    this.now = options.now ?? (() => new Date());
+  }
+
+  async upsertCurrentRelations(
+    subjectId: string,
+    relations: readonly MemberGroupRelationObservation[],
+  ): Promise<void> {
+    this.upserts.push({ subjectId, relations, at: this.now().toISOString() });
+  }
+
+  async removeCurrentRelationsForClub(
+    subjectId: string,
+    clubId: string,
+    purpose: 'club' | 'department' | 'position',
+  ): Promise<void> {
+    this.removes.push({ subjectId, clubId, purpose, at: this.now().toISOString() });
+  }
 }

@@ -1,6 +1,13 @@
 import { Module } from '@nestjs/common';
 
 import { IdentityModule } from '../identity/identity.module';
+// A4 Group 写链路收口：组织域提供关系观测同步适配（Group 映射 → 观测表）
+import { OrganizationModule } from '../organization/module';
+import {
+  GROUP_MAPPING_REGISTRY,
+  MEMBER_GROUP_OBSERVATION_WRITER,
+} from '../organization/application/ports';
+import { OrgMembershipGroupObservationAdapter } from '../organization/infrastructure/org-membership-group-observation.adapter';
 import { ObservabilityModule } from '../../platform/observability/module';
 import { MembershipNestController } from './interfaces/nest/membership.nest.controller';
 import {
@@ -53,7 +60,11 @@ import {
   InMemoryMembershipAccessPort,
   InMemoryMembershipNotificationPort,
 } from './infrastructure/in-memory-stubs';
-import { MEMBERSHIP_ACCESS_PORT, MEMBERSHIP_NOTIFICATION_PORT } from './application/ports';
+import {
+  MEMBERSHIP_ACCESS_PORT,
+  MEMBERSHIP_NOTIFICATION_PORT,
+  MEMBERSHIP_GROUP_OBSERVATION_PORT,
+} from './application/ports';
 
 /**
  * 领域模块：成员生命周期（5.2.1~5.2.3；SRS-SM-MEM-001/002/003，
@@ -77,7 +88,7 @@ import { MEMBERSHIP_ACCESS_PORT, MEMBERSHIP_NOTIFICATION_PORT } from './applicat
  * - 同步异常只能经人工按 Casdoor 当前值修复收口，禁止一键重放（ORG-030/034）。
  */
 @Module({
-  imports: [IdentityModule, ObservabilityModule],
+  imports: [IdentityModule, ObservabilityModule, OrganizationModule],
   controllers: [MembershipNestController],
   providers: [
     // ----- 传输层用例 token（复用已有应用层；与类 provider 并存，独立实例）-----
@@ -115,6 +126,12 @@ import { MEMBERSHIP_ACCESS_PORT, MEMBERSHIP_NOTIFICATION_PORT } from './applicat
       useClass: InMemoryDepartmentApplicationRepository,
     },
     { provide: MEMBERSHIP_CASDOOR_PORT, useClass: DefaultMembershipCasdoorPort },
+    // A4 Group 写链路收口：激活/补偿确认后同步组织域关系观测（失败不阻断主事务）
+    {
+      provide: MEMBERSHIP_GROUP_OBSERVATION_PORT,
+      useFactory: (registry, writer) => new OrgMembershipGroupObservationAdapter(registry, writer),
+      inject: [GROUP_MAPPING_REGISTRY, MEMBER_GROUP_OBSERVATION_WRITER],
+    },
     // 访问重算（生产绑定组织 CurrentPermissionsPort/Group 映射）与通知事实（IFC-TX-002）
     { provide: MEMBERSHIP_ACCESS_PORT, useClass: InMemoryMembershipAccessPort },
     { provide: RELATION_DIRECTORY_PORT, useClass: InMemoryRelationDirectoryPort },

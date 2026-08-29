@@ -40,6 +40,7 @@ function fakeRegistry(): GroupMappingRegistry {
   return {
     save: async () => undefined,
     findByRef: async () => null,
+    findByClubRef: async () => null,
     listByClub: async (clubId: string) => (clubId === 'club-acm' ? records : []),
     listAll: async () => records,
   };

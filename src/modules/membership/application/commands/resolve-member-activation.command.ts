@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import type { MembershipPeriod } from '../../domain/models/membership-period';
 import { ActivationExternalPhase, ActivationProgress } from '../../domain/models/membership-period';
@@ -6,7 +6,13 @@ import { MembershipPeriodStateMachine } from '../../domain/state-machines/member
 import { MEMBERSHIP_CASDOOR_PORT } from '../../infrastructure/casdoor-group.port';
 import type { MembershipCasdoorPort } from '../../infrastructure/casdoor-group.port';
 import { InMemoryMembershipNotificationPort } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_NOTIFICATION_PORT, saveNotificationFact } from '../ports';
+import {
+  MEMBERSHIP_NOTIFICATION_PORT,
+  MEMBERSHIP_GROUP_OBSERVATION_PORT,
+  saveNotificationFact,
+  safeSyncObservation,
+  type MembershipGroupObservationPort,
+} from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
 import type { MembershipRepository } from '../../infrastructure/membership-repository';
@@ -63,6 +69,10 @@ export class ResolveMemberActivationCommand {
     @Inject(MEMBERSHIP_CASDOOR_PORT) private readonly casdoor: MembershipCasdoorPort,
     @Inject(MEMBERSHIP_NOTIFICATION_PORT)
     private readonly notifications: MembershipNotificationPort = new InMemoryMembershipNotificationPort(),
+    /** A4 Group 写链路收口：激活确认后同步组织域关系观测（可选；缺省跳过） */
+    @Optional()
+    @Inject(MEMBERSHIP_GROUP_OBSERVATION_PORT)
+    private readonly groupObservation?: MembershipGroupObservationPort,
     private readonly stateMachine: MembershipPeriodStateMachine = new MembershipPeriodStateMachine(),
   ) {}
 
@@ -183,6 +193,14 @@ export class ResolveMemberActivationCommand {
           { at: now, type: 'ACTIVATION_CONFIRMED', by: 'system', note: 'steps=' + steps.length },
         ],
       };
+      // A4 Group 写链路收口：激活确认后同步组织域关系观测（失败不阻断，对账兜底）
+      await safeSyncObservation(this.groupObservation, () =>
+        this.groupObservation!.syncOnActivationConfirmed(
+          fenced.clubId,
+          fenced.subjectId,
+          fenced.entryTargets,
+        ),
+      );
       return this.close(fenced, updated, true);
     }
 

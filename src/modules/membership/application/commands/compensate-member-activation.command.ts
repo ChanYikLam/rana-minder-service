@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import type { MembershipPeriod } from '../../domain/models/membership-period';
 import { ActivationExternalPhase, ActivationProgress } from '../../domain/models/membership-period';
@@ -6,7 +6,13 @@ import { MembershipPeriodStateMachine } from '../../domain/state-machines/member
 import { MEMBERSHIP_CASDOOR_PORT } from '../../infrastructure/casdoor-group.port';
 import type { MembershipCasdoorPort } from '../../infrastructure/casdoor-group.port';
 import { InMemoryMembershipNotificationPort } from '../../infrastructure/in-memory-stubs';
-import { MEMBERSHIP_NOTIFICATION_PORT, saveNotificationFact } from '../ports';
+import {
+  MEMBERSHIP_NOTIFICATION_PORT,
+  MEMBERSHIP_GROUP_OBSERVATION_PORT,
+  saveNotificationFact,
+  safeSyncObservation,
+  type MembershipGroupObservationPort,
+} from '../ports';
 import type { MembershipNotificationPort } from '../ports';
 import { sanitizeReason } from './sanitize-reason';
 import { MEMBERSHIP_REPOSITORY } from '../../infrastructure/membership-repository';
@@ -62,6 +68,10 @@ export class CompensateMemberActivationCommand {
     @Inject(MEMBERSHIP_CASDOOR_PORT) private readonly casdoor: MembershipCasdoorPort,
     @Inject(MEMBERSHIP_NOTIFICATION_PORT)
     private readonly notifications: MembershipNotificationPort = new InMemoryMembershipNotificationPort(),
+    /** A4 Group 写链路收口：激活确认后同步组织域关系观测（可选；缺省跳过） */
+    @Optional()
+    @Inject(MEMBERSHIP_GROUP_OBSERVATION_PORT)
+    private readonly groupObservation?: MembershipGroupObservationPort,
     private readonly stateMachine: MembershipPeriodStateMachine = new MembershipPeriodStateMachine(),
   ) {}
 
@@ -248,6 +258,10 @@ export class CompensateMemberActivationCommand {
       if (latest === null) throw new CompensateActivationError('成员经历不存在');
       return { period: latest, compensated: latest.status === 'ENTRY_COMPENSATED' };
     }
+    // A4 Group 写链路收口：补偿移除全部确认 → 清除该主体在该社团的关系观测
+    await safeSyncObservation(this.groupObservation, () =>
+      this.groupObservation!.clearOnDepartureConfirmed(fenced.clubId, fenced.subjectId),
+    );
     await saveNotificationFact(this.notifications, {
       kind: 'MEMBER_ENTRY_COMPENSATED',
       toUserIds: [fenced.subjectId],

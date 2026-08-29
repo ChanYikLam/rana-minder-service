@@ -61,6 +61,7 @@ import {
   PERMISSION_TEMPLATE_QUERY,
   ORG_CONTEXT_QUERY,
   ORG_SESSION_AUTHZ_SOURCE,
+  MEMBER_GROUP_OBSERVATION_WRITER,
   type CasdoorGroupPort,
   type ClubStore,
   type CurrentPermissionsPort,
@@ -90,6 +91,7 @@ import {
   PostgresPermissionTemplateStore,
 } from './infrastructure/postgres/postgres-config.stores';
 import { PostgresCurrentPermissionsPort } from './infrastructure/postgres/postgres-current-permissions.port';
+import { PostgresMemberGroupObservationWriter } from './infrastructure/postgres/postgres-member-group-observation.writer';
 import { HttpCasdoorGroupAdapter } from './infrastructure/http/http-casdoor-group.adapter';
 import { TaskRepositoryJobScheduler } from './infrastructure/task-repository.scheduler';
 import { NotifyChannelNotificationPort } from './infrastructure/notify-channel.notification-port';
@@ -109,6 +111,7 @@ import {
   InMemoryRelationCommandAuditStore,
   MemoryCurrentPermissionsPort,
   MemoryOrgSessionAuthzSource,
+  InMemoryMemberGroupObservationWriter,
   SystemClock,
 } from './infrastructure/in-memory/memory-implementations';
 import { DEMO_CASDOOR_SEED } from './infrastructure/in-memory/demo-seed';
@@ -355,6 +358,11 @@ const STUB_PERMISSION_CONFIG = {
             inject: [DB_ADAPTER, ORG_UNIT_OF_WORK],
           },
           {
+            provide: MEMBER_GROUP_OBSERVATION_WRITER,
+            useFactory: (db: DbAdapter) => new PostgresMemberGroupObservationWriter(db),
+            inject: [DB_ADAPTER],
+          },
+          {
             // ORG-M6 已知缺口（评审④）：RELATION_COMMAND_AUDIT_PORT 的 PG 审计仓储
             // 尚未实现。真实 DB 分支下：非生产以内存审计降级（重启即丢，仅开发联调）；
             // 生产 fail-fast 显式报错——禁止以进程内存审计对外服务（审计持久化要求）。
@@ -389,6 +397,10 @@ const STUB_PERMISSION_CONFIG = {
             useFactory: () => new InMemoryPermissionTemplateStore(),
           },
           { provide: GROUP_MAPPING_REGISTRY, useFactory: () => new InMemoryGroupMappingRegistry() },
+          {
+            provide: MEMBER_GROUP_OBSERVATION_WRITER,
+            useFactory: () => new InMemoryMemberGroupObservationWriter(),
+          },
         ]),
     // ---- 对账（真实检测逻辑，跑在任意 CasdoorGroupPort 上）----
     {
@@ -506,6 +518,7 @@ const STUB_PERMISSION_CONFIG = {
     GROUP_MAPPING_REGISTRY,
     PERMISSION_TEMPLATE_STORE,
     ORG_SESSION_AUTHZ_SOURCE,
+    MEMBER_GROUP_OBSERVATION_WRITER,
   ],
 })
 export class OrganizationModule {}

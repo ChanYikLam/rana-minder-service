@@ -125,6 +125,16 @@ export interface GroupMappingRegistry {
   findByRef(ref: GroupStableRef): Promise<GroupMappingRecord | null>;
   listByClub(clubId: string): Promise<GroupMappingRecord[]>;
   listAll(): Promise<GroupMappingRecord[]>;
+  /**
+   * 按 (club, purpose, refId) 查映射（A4 Group 写链路收口：membership 激活后写观测表用）。
+   * purpose: 'club'/'department'/'position'；refId 与 GroupMappingRecord.position_id/department_id 对应
+   * （purpose='club' 时该值为社团自身 id）。
+   */
+  findByClubRef(
+    clubId: string,
+    purpose: 'club' | 'department' | 'position',
+    refId: string,
+  ): Promise<GroupMappingRecord | null>;
 }
 
 // --------------------------------------------------------------------------
@@ -312,6 +322,46 @@ export const JOB_SCHEDULER = Symbol('ORG_JOB_SCHEDULER');
 export const NOTIFICATION_PORT = Symbol('ORG_NOTIFICATION_PORT');
 export const CURRENT_PERMISSIONS_PORT = Symbol('ORG_CURRENT_PERMISSIONS_PORT');
 export const CONTROLLED_BATCH_PORT = Symbol('ORG_CONTROLLED_BATCH_PORT');
+// --------------------------------------------------------------------------
+// 成员当前 Group 关系观测（A4 Group 写链路收口；ORG-013/017、ADR-009、CAS-MAP-004）
+//
+// 数据权威：Casdoor 当前 Group 关系（由 membership Casdoor 写链路 + 对账任务刷新）；
+// 本接口为组织域观测表的轻量写入端口——membership 域在成员生效/补偿/退出等转换
+// 确认后同步该观测表，让权限解析（PostgresCurrentPermissionsPort 读 org_member_group_current）
+// 在不回访 Casdoor 的前提下解析当前有效关系。
+// --------------------------------------------------------------------------
+
+export interface MemberGroupRelationObservation {
+  readonly groupOwner: string;
+  readonly groupName: string;
+  readonly clubId: string;
+  readonly departmentId: string | null;
+  readonly purpose: 'club' | 'department' | 'position';
+}
+
+export interface MemberGroupObservationWriter {
+  /**
+   * 同步主体当前 Group 关系（upsert，按 (subject_id, group_owner, group_name) PK）。
+   * 用于成员生效/补偿/部门任命等写后回读确认场景——已写入即视为权威观测的当前快照。
+   */
+  upsertCurrentRelations(
+    subjectId: string,
+    relations: readonly MemberGroupRelationObservation[],
+  ): Promise<void>;
+
+  /**
+   * 退出/移除时清空该主体在指定社团 Group 的观测（CAS-WR-* 退出执行的回读确认）：
+   * 仅删除 subject_id+club_id 范围内目的=club/department/position 的行；调用方按目的过滤。
+   */
+  removeCurrentRelationsForClub(
+    subjectId: string,
+    clubId: string,
+    purpose: 'club' | 'department' | 'position',
+  ): Promise<void>;
+}
+
+export const MEMBER_GROUP_OBSERVATION_WRITER = Symbol('ORG_MEMBER_GROUP_OBSERVATION_WRITER');
+
 /**
  * 会话授权视图源（A4 接线；identity 通过 SESSION_AUTHZ_PORT 适配消费本端口）。
  */

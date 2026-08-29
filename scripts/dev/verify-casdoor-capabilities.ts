@@ -84,10 +84,22 @@ async function main(): Promise<number> {
       authorizationEndpoint = String(doc['authorization_endpoint'] ?? '');
       tokenEndpoint = String(doc['token_endpoint'] ?? '');
       const userinfo = String(doc['userinfo_endpoint'] ?? '');
-      const endSession = typeof doc['end_session_endpoint'] === 'string' ? doc['end_session_endpoint'] : null;
-      const endpointsOk = Boolean(issuer && jwksUri && authorizationEndpoint && tokenEndpoint && userinfo);
+      const endSession =
+        typeof doc['end_session_endpoint'] === 'string' ? doc['end_session_endpoint'] : null;
+      const endpointsOk = Boolean(
+        issuer && jwksUri && authorizationEndpoint && tokenEndpoint && userinfo,
+      );
       fingerprint = createHash('sha256')
-        .update(JSON.stringify([issuer, authorizationEndpoint, tokenEndpoint, userinfo, jwksUri, endSession]))
+        .update(
+          JSON.stringify([
+            issuer,
+            authorizationEndpoint,
+            tokenEndpoint,
+            userinfo,
+            jwksUri,
+            endSession,
+          ]),
+        )
         .digest('hex');
       results.push({
         name: '发现文档可取（五端点 + issuer）',
@@ -111,7 +123,12 @@ async function main(): Promise<number> {
     try {
       const res = await fetchWithTimeout(jwksUri);
       if (!res.ok) {
-        results.push({ name: 'JWKS 可取', required: true, ok: false, detail: `HTTP ${res.status}` });
+        results.push({
+          name: 'JWKS 可取',
+          required: true,
+          ok: false,
+          detail: `HTTP ${res.status}`,
+        });
       } else {
         const doc = (await res.json()) as { keys?: Array<Record<string, unknown>> };
         const keys = Array.isArray(doc.keys) ? doc.keys : [];
@@ -196,7 +213,10 @@ async function main(): Promise<number> {
         const user = body.data;
         const isForbidden = user?.['isForbidden'];
         const isDeleted = user?.['isDeleted'];
-        const ok = body.status === 'ok' && typeof isForbidden === 'boolean' && typeof isDeleted === 'boolean';
+        const ok =
+          body.status === 'ok' &&
+          typeof isForbidden === 'boolean' &&
+          typeof isDeleted === 'boolean';
         results.push({
           name: '账号状态字段（isForbidden/isDeleted 为 boolean）',
           required: false,
